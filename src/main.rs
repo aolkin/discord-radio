@@ -1,7 +1,9 @@
 mod audio;
 mod commands;
 mod handlers;
+mod persistence;
 mod shutdown;
+mod startup;
 mod state;
 
 use crate::state::BotState;
@@ -49,8 +51,12 @@ struct Handler {
 
 #[serenity::async_trait]
 impl serenity::EventHandler for Handler {
-    async fn ready(&self, _: serenity::Context, ready: serenity::Ready) {
+    async fn ready(&self, ctx: serenity::Context, ready: serenity::Ready) {
         tracing::info!("{} is connected!", ready.user.name);
+
+        if let Err(e) = crate::startup::restore_voice_channels(&ctx, self.data.clone()).await {
+            tracing::error!("Failed to restore voice channels: {:?}", e);
+        }
     }
 
     async fn voice_state_update(
@@ -123,7 +129,14 @@ async fn main() -> Result<(), Error> {
 
     tracing::info!("Using audio file: {}", audio_file_path);
 
-    let data = Arc::new(BotState::new(audio_file_path));
+    let state_store_path = std::path::PathBuf::from(
+        std::env::var("STATE_STORE_PATH").unwrap_or_else(|_| "./bot-state".to_string()),
+    );
+    tracing::info!("Using state store path: {:?}", state_store_path);
+
+    let state_store = Arc::new(persistence::FileStore::new(state_store_path));
+
+    let data = Arc::new(BotState::new(audio_file_path, state_store));
 
     let data_for_setup = data.clone();
     let framework = poise::Framework::builder()
@@ -154,6 +167,13 @@ async fn main() -> Result<(), Error> {
         .event_handler(Handler { data: data.clone() })
         .register_songbird()
         .await?;
+
+    // Restore saved state (excluding voice channels which need Context)
+    tracing::info!("Restoring saved state...");
+    let http_for_restore = client.http.clone();
+    if let Err(e) = startup::restore_state(http_for_restore, data.clone()).await {
+        tracing::error!("Failed to restore state: {:?}", e);
+    }
 
     // Set up graceful shutdown handling
     shutdown::setup_shutdown_handler(data.clone()).await;

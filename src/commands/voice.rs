@@ -45,50 +45,30 @@ pub async fn join_voice_channel(
     match manager.join(guild_id, channel).await {
         Ok(handle_lock) => {
             tracing::info!("Joined voice channel");
-            let mut voice_connections = ctx.data().voice_connections.write().await;
-            voice_connections.insert(guild_id, handle_lock.clone());
 
-            // Register connection event handlers
-            let mut call = handle_lock.lock().await;
-            let event_handler = crate::handlers::voice::ConnectionEventHandler {
-                data: ctx.data().clone(),
-            };
+            if let Err(e) = crate::audio::connection::setup_voice_connection(
+                handle_lock,
+                guild_id,
+                ctx.data().clone(),
+            )
+            .await
+            {
+                ctx.say(format!("Failed to setup voice connection: {}", e))
+                    .await?;
+                return Ok(());
+            }
 
-            call.add_global_event(
-                songbird::Event::Core(songbird::events::CoreEvent::DriverConnect),
-                event_handler.clone(),
-            );
-            call.add_global_event(
-                songbird::Event::Core(songbird::events::CoreEvent::DriverDisconnect),
-                event_handler.clone(),
-            );
-            call.add_global_event(
-                songbird::Event::Core(songbird::events::CoreEvent::DriverReconnect),
-                event_handler.clone(),
-            );
-            call.add_global_event(
-                songbird::Event::Core(songbird::events::CoreEvent::ClientDisconnect),
-                event_handler,
-            );
-
-            drop(call);
+            let _ = ctx
+                .data()
+                .state_store
+                .save_voice_channel(guild_id, channel)
+                .await;
 
             ctx.say(format!(
                 "Joined voice channel <#{}> and started broadcasting",
                 channel
             ))
             .await?;
-
-            // Start audio playback with looping
-            if let Ok(track_handle) = crate::audio::manager::start_audio_playback(
-                handle_lock,
-                &ctx.data().audio_file_path,
-            )
-            .await
-            {
-                let mut track_handles = ctx.data().track_handles.write().await;
-                track_handles.insert(guild_id, track_handle);
-            }
         }
         Err(e) => {
             ctx.say(format!("Failed to join the voice channel: {}", e))
@@ -116,6 +96,8 @@ pub async fn leave_voice_channel(ctx: Context<'_>) -> Result<(), Error> {
         guild_id
     );
 
+    ctx.defer_ephemeral().await?;
+
     let manager = songbird::get(ctx.serenity_context())
         .await
         .expect("Songbird Voice client placed in at initialisation.")
@@ -128,6 +110,8 @@ pub async fn leave_voice_channel(ctx: Context<'_>) -> Result<(), Error> {
         } else {
             let mut voice_connections = ctx.data().voice_connections.write().await;
             voice_connections.remove(&guild_id);
+
+            let _ = ctx.data().state_store.remove_voice_channel(guild_id).await;
 
             // Stop any playing tracks
             let mut track_handles = ctx.data().track_handles.write().await;

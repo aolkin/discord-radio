@@ -7,12 +7,14 @@ edition = "2024"
 serenity = { version = "0.12", default-features = false, features = ["client", "gateway", "rustls_backend", "model", "cache"] }
 poise = "0.6"
 songbird = { version = "0.5", features = ["builtin-queue"] }
-tokio = { version = "1.0", features = ["macros", "rt-multi-thread", "signal"] }
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread", "signal", "fs"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
 async-trait = "0.1"
 dotenvy = "0.15.7"
 rand = "0.9.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 
 # Audio codec support via Symphonia
 symphonia = { version = "0.5", features = ["mp3", "vorbis", "wav"] }
