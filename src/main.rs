@@ -8,6 +8,7 @@ use crate::state::BotState;
 use poise::serenity_prelude::{self as serenity, GatewayIntents};
 use songbird::SerenityInit;
 use std::sync::Arc;
+use tracing::info;
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 
@@ -128,8 +129,8 @@ async fn main() -> Result<(), Error> {
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
             commands: vec![
-                commands::admin::join_voice_channel(),
-                commands::admin::leave_voice_channel(),
+                commands::voice::join_voice_channel(),
+                commands::voice::leave_voice_channel(),
             ],
             on_error: |error| Box::pin(on_error(error)),
             ..Default::default()
@@ -137,6 +138,10 @@ async fn main() -> Result<(), Error> {
         .setup(|ctx, _ready, framework| {
             Box::pin(async move {
                 poise::builtins::register_globally(ctx, &framework.options().commands).await?;
+                info!(
+                    "Registered {} commands globally.",
+                    framework.options().commands.len()
+                );
                 Ok(data_for_setup.clone())
             })
         })

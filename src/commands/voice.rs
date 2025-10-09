@@ -1,8 +1,6 @@
-use crate::state::Data;
-use poise::serenity_prelude::{ChannelId, ChannelType};
-
-type Error = Box<dyn std::error::Error + Send + Sync>;
-type Context<'a> = poise::Context<'a, Data, Error>;
+use crate::commands::utils;
+use crate::commands::utils::{Context, Error};
+use serenity::all::{ChannelId, ChannelType};
 
 #[poise::command(
     slash_command,
@@ -27,21 +25,7 @@ pub async fn join_voice_channel(
 
     ctx.defer_ephemeral().await?;
 
-    let channel_info = match channel.to_channel(ctx.serenity_context()).await {
-        Ok(info) => {
-            tracing::debug!("Channel info from API: {:?}", info);
-            info
-        }
-        Err(e) => {
-            tracing::warn!(
-                "Could not fetch channel info for channel {}: {:?}",
-                channel,
-                e
-            );
-            ctx.say("Cannot access channel!").await?;
-            return Ok(());
-        }
-    };
+    let channel_info = utils::get_channel_details(ctx, channel).await?;
 
     if channel_info
         .guild()
