@@ -38,14 +38,5 @@ pub async fn setup_voice_connection(
 
     drop(call);
 
-    if let Ok(track_handle) =
-        crate::audio::manager::start_audio_playback(handle_lock, &bot_state.audio_file_path).await
-    {
-        let mut track_handles = bot_state.track_handles.write().await;
-        track_handles.insert(guild_id, track_handle);
-    } else {
-        return Err("Failed to start audio playback".into());
-    }
-
     Ok(())
 }

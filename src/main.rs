@@ -122,12 +122,12 @@ async fn main() -> Result<(), Error> {
         std::env::var("DISCORD_TOKEN").expect("Expected DISCORD_TOKEN in the environment");
 
     let args: Vec<String> = std::env::args().collect();
-    let audio_file_path = args
+    let hex_audio_dir = args
         .get(1)
-        .expect("Usage: discord-bot <audio_file_path>")
+        .expect("Usage: discord-bot <hex_audio_dir>")
         .clone();
 
-    tracing::info!("Using audio file: {}", audio_file_path);
+    tracing::info!("Using hex audio directory: {}", hex_audio_dir);
 
     let state_store_path = std::path::PathBuf::from(
         std::env::var("STATE_STORE_PATH").unwrap_or_else(|_| "./bot-state".to_string()),
@@ -136,7 +136,7 @@ async fn main() -> Result<(), Error> {
 
     let state_store = Arc::new(persistence::FileStore::new(state_store_path));
 
-    let data = Arc::new(BotState::new(audio_file_path, state_store));
+    let data = Arc::new(BotState::new(hex_audio_dir, state_store));
 
     let data_for_setup = data.clone();
     let framework = poise::Framework::builder()
@@ -144,6 +144,8 @@ async fn main() -> Result<(), Error> {
             commands: vec![
                 commands::voice::join_voice_channel(),
                 commands::voice::leave_voice_channel(),
+                commands::voice::play_message(),
+                commands::voice::stop_message(),
             ],
             on_error: |error| Box::pin(on_error(error)),
             ..Default::default()

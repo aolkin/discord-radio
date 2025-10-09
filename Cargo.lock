@@ -581,6 +581,7 @@ dependencies = [
  "songbird",
  "symphonia",
  "tokio",
+ "tokio-util",
  "tracing",
  "tracing-subscriber",
 ]

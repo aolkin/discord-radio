@@ -36,6 +36,11 @@ impl EventHandler for ConnectionEventHandler {
                     let _ = handle.stop();
                 }
 
+                let mut message_playback_tokens = self.data.message_playback_tokens.write().await;
+                if let Some(cancel_token) = message_playback_tokens.remove(&guild_id) {
+                    cancel_token.cancel();
+                }
+
                 tracing::info!("Cleaned up state for disconnected guild {}", guild_id);
             }
             Ctx::DriverReconnect(data) => {
@@ -44,24 +49,6 @@ impl EventHandler for ConnectionEventHandler {
                     data.guild_id,
                     data.channel_id
                 );
-
-                let guild_id = GuildId::new(data.guild_id.0.into());
-                if let Some(call_lock) = self.data.voice_connections.read().await.get(&guild_id) {
-                    tracing::info!(
-                        "Resuming audio playback for guild {} after reconnect",
-                        guild_id
-                    );
-
-                    if let Ok(track_handle) = crate::audio::manager::start_audio_playback(
-                        call_lock.clone(),
-                        &self.data.audio_file_path,
-                    )
-                    .await
-                    {
-                        let mut track_handles = self.data.track_handles.write().await;
-                        track_handles.insert(guild_id, track_handle);
-                    }
-                }
             }
             Ctx::ClientDisconnect(data) => {
                 let user_id = UserId::new(data.user_id.0);

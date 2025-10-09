@@ -1,11 +1,10 @@
-use songbird::{
-    Event, EventContext, EventHandler as VoiceEventHandler, TrackEvent, input::Input,
-    tracks::TrackHandle,
-};
+use songbird::input::Input;
 use std::path::Path;
 use std::sync::Arc;
+use tokio::time::{Duration, sleep};
+use tokio_util::sync::CancellationToken;
 
-pub async fn create_audio_source(
+async fn create_audio_source(
     audio_file_path: &str,
 ) -> Result<Input, Box<dyn std::error::Error + Send + Sync>> {
     if !Path::new(audio_file_path).exists() {
@@ -17,53 +16,91 @@ pub async fn create_audio_source(
     Ok(source)
 }
 
-pub struct LoopingHandler {
-    pub call_handle: Arc<tokio::sync::Mutex<songbird::Call>>,
-    pub audio_file_path: String,
+pub fn message_to_hex_sequence(message: &str) -> Vec<char> {
+    let mut hex_chars = Vec::new();
+
+    for byte in message.bytes() {
+        let hex = format!("{:02X}", byte);
+        hex_chars.extend(hex.chars());
+    }
+
+    hex_chars
 }
 
-#[async_trait::async_trait]
-impl VoiceEventHandler for LoopingHandler {
-    async fn act(&self, ctx: &EventContext<'_>) -> Option<Event> {
-        use EventContext as Ctx;
+pub async fn play_hex_sequence_looping(
+    call_lock: Arc<tokio::sync::Mutex<songbird::Call>>,
+    hex_audio_dir: String,
+    message: String,
+    cancel_token: CancellationToken,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let hex_chars = message_to_hex_sequence(&message);
 
-        if let Ctx::Track(track_list) = ctx {
-            for (state, _handle) in *track_list {
-                if state.playing == songbird::tracks::PlayMode::Stop {
-                    tracing::info!("Track ended, restarting audio loop");
+    tracing::info!(
+        "Starting looping hex sequence for message: {} -> {:?}",
+        message,
+        hex_chars
+    );
 
-                    if let Ok(source) = create_audio_source(&self.audio_file_path).await {
-                        let mut call = self.call_handle.lock().await;
-                        let _new_handle = call.play_input(source);
+    loop {
+        for (i, hex_char) in hex_chars.iter().enumerate() {
+            if cancel_token.is_cancelled() {
+                tracing::info!("Message playback cancelled");
+                return Ok(());
+            }
+
+            let audio_path = format!("{}/hex_{}.mp3", hex_audio_dir, hex_char);
+
+            if !Path::new(&audio_path).exists() {
+                tracing::warn!("Audio file not found: {}", audio_path);
+                continue;
+            }
+
+            let source = create_audio_source(&audio_path).await?;
+
+            {
+                let mut call = call_lock.lock().await;
+                let handle = call.play_input(source);
+                drop(call);
+
+                let _ = handle.get_info().await?;
+
+                while !handle.get_info().await?.playing.is_done() {
+                    if cancel_token.is_cancelled() {
+                        let _ = handle.stop();
+                        tracing::info!("Message playback cancelled");
+                        return Ok(());
                     }
-                    break;
+                    sleep(Duration::from_millis(50)).await;
+                }
+            }
+
+            if (i + 1) % 2 == 0 && i + 1 < hex_chars.len() {
+                tokio::select! {
+                    _ = sleep(Duration::from_millis(500)) => {}
+                    _ = cancel_token.cancelled() => {
+                        tracing::info!("Message playback cancelled");
+                        return Ok(());
+                    }
+                }
+            } else if i + 1 < hex_chars.len() {
+                tokio::select! {
+                    _ = sleep(Duration::from_millis(200)) => {}
+                    _ = cancel_token.cancelled() => {
+                        tracing::info!("Message playback cancelled");
+                        return Ok(());
+                    }
                 }
             }
         }
 
-        None
+        tracing::info!("Hex sequence iteration complete, pausing before repeat");
+
+        tokio::select! {
+            _ = sleep(Duration::from_secs(3)) => {}
+            _ = cancel_token.cancelled() => {
+                tracing::info!("Message playback cancelled");
+                return Ok(());
+            }
+        }
     }
-}
-
-pub async fn start_audio_playback(
-    call_lock: Arc<tokio::sync::Mutex<songbird::Call>>,
-    audio_file_path: &str,
-) -> Result<TrackHandle, Box<dyn std::error::Error + Send + Sync>> {
-    let mut call = call_lock.lock().await;
-
-    let source = create_audio_source(audio_file_path).await?;
-    let handle = call.play_input(source);
-
-    let looping_handler = LoopingHandler {
-        call_handle: call_lock.clone(),
-        audio_file_path: audio_file_path.to_string(),
-    };
-
-    handle
-        .add_event(Event::Track(TrackEvent::End), looping_handler)
-        .map_err(|e| format!("Failed to add event handler: {}", e))?;
-
-    tracing::info!("Started audio playback with looping");
-
-    Ok(handle)
 }
