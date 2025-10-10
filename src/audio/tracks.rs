@@ -248,6 +248,104 @@ impl TrackManager {
         Ok(())
     }
 
+    pub fn has_track(&self, name: &str) -> bool {
+        self.tracks.contains_key(name)
+    }
+
+    pub async fn update_track_volume(
+        &mut self,
+        name: &str,
+        volume: f32,
+        fade_time: f32,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let track_info = self
+            .tracks
+            .get_mut(name)
+            .ok_or_else(|| format!("Track '{}' not found", name))?;
+
+        tracing::info!(
+            "Updating track '{}' volume from {} to {} (fade: {}s) in guild {}",
+            name,
+            track_info.volume,
+            volume,
+            fade_time,
+            self.guild_id
+        );
+
+        if let Some(cancel_token) = &track_info.fade_cancel {
+            cancel_token.cancel();
+        }
+
+        let handle = track_info.handle.clone();
+        let current_volume = track_info.volume;
+        track_info.volume = volume;
+
+        if fade_time > 0.0 {
+            let cancel_token = CancellationToken::new();
+            let cancel_clone = cancel_token.clone();
+
+            let fade_task = tokio::spawn(async move {
+                if let Err(e) = crate::audio::fade::fade_volume(
+                    handle,
+                    current_volume,
+                    volume,
+                    fade_time,
+                    cancel_clone,
+                )
+                .await
+                {
+                    tracing::warn!("Volume fade failed: {}", e);
+                }
+            });
+
+            track_info.fade_task = Some(fade_task);
+            track_info.fade_cancel = Some(cancel_token);
+        } else {
+            handle.set_volume(volume)?;
+            track_info.fade_task = None;
+            track_info.fade_cancel = None;
+        }
+
+        self.persist_state().await;
+
+        Ok(())
+    }
+
+    pub async fn update_track_loops(
+        &mut self,
+        name: &str,
+        loops: bool,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let track_info = self
+            .tracks
+            .get_mut(name)
+            .ok_or_else(|| format!("Track '{}' not found", name))?;
+
+        if track_info.loops == loops {
+            return Ok(());
+        }
+
+        tracing::info!(
+            "Updating track '{}' loops from {} to {} in guild {}",
+            name,
+            track_info.loops,
+            loops,
+            self.guild_id
+        );
+
+        track_info.loops = loops;
+
+        if loops {
+            track_info.handle.enable_loop()?;
+        } else {
+            track_info.handle.disable_loop()?;
+        }
+
+        self.persist_state().await;
+
+        Ok(())
+    }
+
     pub async fn remove_track(&mut self, name: &str) {
         if self.tracks.remove(name).is_some() {
             tracing::debug!("Removed track '{}' from guild {}", name, self.guild_id);
