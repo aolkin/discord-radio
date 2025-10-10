@@ -617,9 +617,9 @@ pub async fn signal_profile(
 
     ctx.defer_ephemeral().await?;
 
-    let fade_duration = fade_duration.unwrap_or(2.0);
+    let fade_duration_ms = fade_duration.unwrap_or(2.0) * 1000.0;
 
-    if fade_duration < 0.0 {
+    if fade_duration_ms < 0.0 {
         ctx.say("Fade duration must be non-negative").await?;
         return Ok(());
     }
@@ -634,12 +634,46 @@ pub async fn signal_profile(
         return Ok(());
     }
 
-    ctx.say(format!(
-        "Signal profile command received for '{}' with fade {}s.\n\
-        Note: Full DSP integration is not yet complete. This command structure is ready for implementation.",
-        profile, fade_duration
-    ))
-    .await?;
+    let processors = ctx.data().audio_processors.read().await;
+    let processor_arc = processors.get(&guild_id).cloned();
+    drop(processors);
+
+    if let Some(processor_arc) = processor_arc {
+        use crate::audio::profiles::ProfileManager;
+        let profiles_dir = ctx.data().audio_profiles_dir();
+        let mut manager = ProfileManager::new(&profiles_dir);
+
+        if let Err(e) = manager.load_all() {
+            ctx.say(format!("Failed to load profiles: {}", e)).await?;
+            return Ok(());
+        }
+
+        if let Some(new_profile) = manager.get_profile(&profile) {
+            let mut processor = processor_arc.write().await;
+
+            if fade_duration_ms > 0.0 {
+                processor.start_profile_transition(new_profile.clone(), fade_duration_ms);
+            } else {
+                processor.set_profile_immediate(new_profile.clone());
+            }
+
+            drop(processor);
+
+            ctx.say(format!(
+                "Switched to signal profile '{}' with {}s fade",
+                profile,
+                fade_duration_ms / 1000.0
+            ))
+            .await?;
+        } else {
+            ctx.say(format!("Profile '{}' could not be loaded", profile))
+                .await?;
+        }
+    } else {
+        ctx.say("Audio processor not initialized for this guild.\n\
+                Note: Full DSP integration requires refactoring the track system.")
+            .await?;
+    }
 
     Ok(())
 }

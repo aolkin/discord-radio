@@ -1,4 +1,5 @@
 use crate::audio::duration::DurationCache;
+use crate::audio::processing_thread::AudioProcessor;
 use crate::audio::tracks::TrackManager;
 use crate::persistence::StateStore;
 use serenity::model::id::GuildId;
@@ -43,6 +44,8 @@ pub struct BotState {
     pub hex_playback_states: RwLock<HashMap<GuildId, Arc<RwLock<HexPlaybackState>>>>,
     pub hex_playback_tasks: RwLock<HashMap<GuildId, JoinHandle<()>>>,
     pub duration_cache: DurationCache,
+    pub audio_processors: RwLock<HashMap<GuildId, Arc<RwLock<AudioProcessor>>>>,
+    pub audio_processor_tasks: RwLock<HashMap<GuildId, JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>>>>,
 }
 
 impl BotState {
@@ -55,7 +58,13 @@ impl BotState {
             hex_playback_states: RwLock::new(HashMap::new()),
             hex_playback_tasks: RwLock::new(HashMap::new()),
             duration_cache: DurationCache::new(),
+            audio_processors: RwLock::new(HashMap::new()),
+            audio_processor_tasks: RwLock::new(HashMap::new()),
         }
+    }
+
+    pub fn audio_profiles_dir(&self) -> String {
+        "audio_profiles".to_string()
     }
 }
 
