@@ -4,7 +4,7 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 
-pub trait AudioSource: Send {
+pub trait AudioSource: Send + Sync {
     fn next_frame(&mut self) -> Option<[f32; 2]>;
     fn seek(&mut self, position: Duration) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
     fn duration(&self) -> Option<Duration>;

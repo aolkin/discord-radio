@@ -6,5 +6,7 @@ pub mod dsp;
 pub mod events;
 pub mod fade;
 pub mod manager;
+pub mod processing_thread;
 pub mod profiles;
+pub mod raw_adapter;
 pub mod tracks;

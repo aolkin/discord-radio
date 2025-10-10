@@ -1,0 +1,15 @@
+{
+  "name": "locked",
+  "bandpass_low": 800.0,
+  "bandpass_high": 4500.0,
+  "noise_level": 0.05,
+  "noise_type": "white",
+  "tremolo_depth": 0.0,
+  "tremolo_rate": 0.0,
+  "clip_threshold": 0.95,
+  "bitcrush_bits": null,
+  "dropout_probability": 0.0,
+  "dropout_duration_ms": [0.0, 0.0],
+  "pitch_shift_cents": null,
+  "frequency_warble_hz": null
+}

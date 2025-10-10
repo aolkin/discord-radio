@@ -1,27 +1,30 @@
 use atomic_float::AtomicF32;
-use dasp_signal::{self as signal, Signal};
-use rand::{rngs::ThreadRng, Rng};
+use rand::{rngs::StdRng, Rng, SeedableRng};
 use std::collections::VecDeque;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 pub struct LFO {
-    signal: Box<dyn Signal<Frame = f64> + Send>,
+    phase: f64,
+    phase_increment: f64,
 }
 
 impl LFO {
     pub fn new(sample_rate: u32, frequency: f32) -> Self {
+        let phase_increment = (frequency as f64) / (sample_rate as f64);
         Self {
-            signal: Box::new(
-                signal::rate(sample_rate as f64)
-                    .const_hz(frequency as f64)
-                    .sine(),
-            ),
+            phase: 0.0,
+            phase_increment,
         }
     }
 
     pub fn next(&mut self) -> f32 {
-        self.signal.next() as f32
+        let value = (self.phase * 2.0 * std::f64::consts::PI).sin();
+        self.phase += self.phase_increment;
+        if self.phase >= 1.0 {
+            self.phase -= 1.0;
+        }
+        value as f32
     }
 }
 
@@ -108,7 +111,7 @@ pub struct DropoutGenerator {
     sample_rate: f32,
     frames_until_next_check: u32,
     dropout_frames_remaining: u32,
-    rng: ThreadRng,
+    rng: StdRng,
 }
 
 impl DropoutGenerator {
@@ -117,13 +120,18 @@ impl DropoutGenerator {
         duration_range_ms: (f32, f32),
         sample_rate: u32,
     ) -> Self {
+        use rand::RngCore;
+        let mut seed_rng = rand::rng();
+        let mut seed = [0u8; 32];
+        seed_rng.fill_bytes(&mut seed);
+
         Self {
             probability_per_second,
             duration_range_ms,
             sample_rate: sample_rate as f32,
             frames_until_next_check: 0,
             dropout_frames_remaining: 0,
-            rng: rand::rng(),
+            rng: StdRng::from_seed(seed),
         }
     }
 
