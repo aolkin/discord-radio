@@ -31,14 +31,34 @@ impl EventHandler for ConnectionEventHandler {
                 let mut voice_connections = self.data.voice_connections.write().await;
                 voice_connections.remove(&guild_id);
 
-                let mut track_handles = self.data.track_handles.write().await;
-                if let Some(handle) = track_handles.remove(&guild_id) {
-                    let _ = handle.stop();
+                let mut track_managers = self.data.track_managers.write().await;
+                if let Some(manager_arc) = track_managers.remove(&guild_id) {
+                    let mut manager = manager_arc.lock().await;
+                    if let Err(e) = manager.stop_all_tracks(0.0, true).await {
+                        tracing::warn!("Failed to stop tracks during disconnect: {}", e);
+                    }
                 }
 
-                let mut message_playback_tokens = self.data.message_playback_tokens.write().await;
-                if let Some(cancel_token) = message_playback_tokens.remove(&guild_id) {
-                    cancel_token.cancel();
+                let mut hex_playback_states = self.data.hex_playback_states.write().await;
+                if let Some(state_arc) = hex_playback_states.remove(&guild_id) {
+                    let mut state = state_arc.write().await;
+                    *state = crate::state::HexPlaybackState::stopped();
+                    drop(state);
+                    drop(hex_playback_states);
+
+                    if let Err(e) = self
+                        .data
+                        .state_store
+                        .remove_message_playback(guild_id)
+                        .await
+                    {
+                        tracing::warn!("Failed to remove message playback state: {}", e);
+                    }
+                }
+
+                let mut hex_playback_tasks = self.data.hex_playback_tasks.write().await;
+                if let Some(task) = hex_playback_tasks.remove(&guild_id) {
+                    task.abort();
                 }
 
                 tracing::info!("Cleaned up state for disconnected guild {}", guild_id);

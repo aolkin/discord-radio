@@ -1,20 +1,13 @@
-use songbird::input::Input;
+use crate::audio::tracks::{StartTrackArgs, TrackManager};
+use crate::persistence::MessagePlaybackState;
+use crate::state::{Data, HexPlaybackState};
+use serenity::model::id::GuildId;
 use std::path::Path;
 use std::sync::Arc;
+use tokio::sync::{Mutex, RwLock};
 use tokio::time::{Duration, sleep};
-use tokio_util::sync::CancellationToken;
 
-async fn create_audio_source(
-    audio_file_path: &str,
-) -> Result<Input, Box<dyn std::error::Error + Send + Sync>> {
-    if !Path::new(audio_file_path).exists() {
-        return Err(format!("Audio file not found: {}", audio_file_path).into());
-    }
-
-    let path = audio_file_path.to_string();
-    let source = Input::from(songbird::input::File::new(path));
-    Ok(source)
-}
+pub const HEX_PLAYBACK_TRACK_NAME: &str = "hex_playback";
 
 pub fn message_to_hex_sequence(message: &str) -> Vec<char> {
     let mut hex_chars = Vec::new();
@@ -27,80 +20,115 @@ pub fn message_to_hex_sequence(message: &str) -> Vec<char> {
     hex_chars
 }
 
-pub async fn play_hex_sequence_looping(
-    call_lock: Arc<tokio::sync::Mutex<songbird::Call>>,
+pub async fn hex_playback_task(
+    guild_id: GuildId,
+    manager_arc: Arc<Mutex<TrackManager>>,
     hex_audio_dir: String,
-    message: String,
-    cancel_token: CancellationToken,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let hex_chars = message_to_hex_sequence(&message);
-
+    playback_state: Arc<RwLock<HexPlaybackState>>,
+    bot_state: Data,
+) {
     tracing::info!(
-        "Starting looping hex sequence for message: {} -> {:?}",
-        message,
-        hex_chars
+        "Starting hex playback singleton task for guild {}",
+        guild_id
     );
 
     loop {
-        for (i, hex_char) in hex_chars.iter().enumerate() {
-            if cancel_token.is_cancelled() {
-                tracing::info!("Message playback cancelled");
-                return Ok(());
-            }
+        let state = playback_state.read().await.clone();
 
-            let audio_path = format!("{}/hex_{}.mp3", hex_audio_dir, hex_char);
+        let Some(message) = state.message else {
+            sleep(Duration::from_millis(100)).await;
+            continue;
+        };
 
-            if !Path::new(&audio_path).exists() {
-                tracing::warn!("Audio file not found: {}", audio_path);
+        let hex_chars = message_to_hex_sequence(&message);
+        let position = state.current_position;
+        let volume = state.volume;
+
+        if position >= hex_chars.len() {
+            sleep(Duration::from_millis(100)).await;
+            continue;
+        }
+
+        let hex_char = hex_chars[position];
+        let audio_path = format!("{}/hex_{}.wav", hex_audio_dir, hex_char);
+
+        if !Path::new(&audio_path).exists() {
+            tracing::warn!("Audio file not found: {}", audio_path);
+            let next_position = if position + 1 >= hex_chars.len() {
+                0
+            } else {
+                position + 1
+            };
+            playback_state.write().await.current_position = next_position;
+            continue;
+        }
+
+        let notify = Arc::new(tokio::sync::Notify::new());
+        let notify_clone = notify.clone();
+
+        {
+            let mut manager = manager_arc.lock().await;
+            let event_handler = crate::audio::events::HexCharacterEndHandler::new(notify_clone);
+            if let Err(e) = manager
+                .start_track_with_custom_handler(
+                    StartTrackArgs {
+                        name: HEX_PLAYBACK_TRACK_NAME.to_string(),
+                        filename: audio_path,
+                        volume,
+                        fade_time: 0.0,
+                        loops: false,
+                        start_position: None,
+                    },
+                    Some(event_handler),
+                )
+                .await
+            {
+                tracing::warn!("Failed to start hex track for message '{}': {}", message, e);
+                sleep(Duration::from_millis(100)).await;
                 continue;
             }
-
-            let source = create_audio_source(&audio_path).await?;
-
-            {
-                let mut call = call_lock.lock().await;
-                let handle = call.play_input(source);
-                drop(call);
-
-                let _ = handle.get_info().await?;
-
-                while !handle.get_info().await?.playing.is_done() {
-                    if cancel_token.is_cancelled() {
-                        let _ = handle.stop();
-                        tracing::info!("Message playback cancelled");
-                        return Ok(());
-                    }
-                    sleep(Duration::from_millis(50)).await;
-                }
-            }
-
-            if (i + 1) % 2 == 0 && i + 1 < hex_chars.len() {
-                tokio::select! {
-                    _ = sleep(Duration::from_millis(500)) => {}
-                    _ = cancel_token.cancelled() => {
-                        tracing::info!("Message playback cancelled");
-                        return Ok(());
-                    }
-                }
-            } else if i + 1 < hex_chars.len() {
-                tokio::select! {
-                    _ = sleep(Duration::from_millis(200)) => {}
-                    _ = cancel_token.cancelled() => {
-                        tracing::info!("Message playback cancelled");
-                        return Ok(());
-                    }
-                }
-            }
         }
 
-        tracing::info!("Hex sequence iteration complete, pausing before repeat");
+        notify.notified().await;
 
-        tokio::select! {
-            _ = sleep(Duration::from_secs(3)) => {}
-            _ = cancel_token.cancelled() => {
-                tracing::info!("Message playback cancelled");
-                return Ok(());
-            }
+        let next_position = if position + 1 >= hex_chars.len() {
+            0
+        } else {
+            position + 1
+        };
+
+        let current_state = playback_state.read().await.clone();
+        if current_state.message.as_ref() == Some(&message) {
+            playback_state.write().await.current_position = next_position;
+
+            let state = MessagePlaybackState {
+                message: message.clone(),
+                current_position: next_position,
+            };
+            let state_store = bot_state.state_store.clone();
+            let guild_id_copy = guild_id;
+            tokio::spawn(async move {
+                if let Err(e) = state_store
+                    .save_message_playback(guild_id_copy, &state)
+                    .await
+                {
+                    tracing::warn!(
+                        "Failed to save message playback progress for message '{}': {}",
+                        state.message,
+                        e
+                    );
+                }
+            });
         }
+
+        let delay = if (position + 1) % 2 == 0 {
+            Duration::from_millis(800)
+        } else if position + 1 >= hex_chars.len() {
+            Duration::from_secs(3)
+        } else {
+            Duration::from_millis(50)
+        };
+
+        sleep(delay).await;
     }
 }

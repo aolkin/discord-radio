@@ -10,15 +10,27 @@ pub async fn setup_shutdown_handler(data: Data) {
 
         info!("Shutdown signal received, cleaning up...");
 
+        // Abort all hex playback tasks
+        let hex_playback_tasks = data.hex_playback_tasks.write().await;
+        for (guild_id, handle) in hex_playback_tasks.iter() {
+            info!("Aborting hex playback task for guild {}", guild_id);
+            handle.abort();
+        }
+        drop(hex_playback_tasks);
+
         // Stop all audio tracks
-        let track_handles = data.track_handles.read().await;
-        for (guild_id, handle) in track_handles.iter() {
-            info!("Stopping audio track for guild {}", guild_id);
-            if let Err(e) = handle.stop() {
-                error!("Failed to stop track for guild {}: {}", guild_id, e);
+        let track_managers = data.track_managers.read().await;
+        for (guild_id, manager_arc) in track_managers.iter() {
+            info!("Stopping all tracks for guild {}", guild_id);
+            let mut manager = manager_arc.lock().await;
+            if let Err(e) = manager.stop_all_tracks(0.0, false).await {
+                error!("Failed to stop tracks for guild {}: {}", guild_id, e);
             }
         }
-        drop(track_handles);
+        drop(track_managers);
+
+        // Give fade tasks time to complete
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
         // Clear voice connections (they will be cleaned up automatically)
         let voice_connections = data.voice_connections.read().await;

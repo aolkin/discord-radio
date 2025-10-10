@@ -1,4 +1,4 @@
-use super::{Result, StateStore};
+use super::{MessagePlaybackState, MultiTrackPlaybackState, Result, StateStore};
 use async_trait::async_trait;
 use serenity::model::id::{ChannelId, GuildId};
 use std::collections::HashMap;
@@ -90,6 +90,14 @@ impl FileStore {
     fn voice_channels(&self) -> PersistedMap<GuildId, ChannelId> {
         PersistedMap::new(self.base_path.clone(), "voice_channels.json")
     }
+
+    fn message_playbacks(&self) -> PersistedMap<GuildId, MessagePlaybackState> {
+        PersistedMap::new(self.base_path.clone(), "message_playbacks.json")
+    }
+
+    fn multitrack_playbacks(&self) -> PersistedMap<GuildId, MultiTrackPlaybackState> {
+        PersistedMap::new(self.base_path.clone(), "multitrack_playbacks.json")
+    }
 }
 
 #[async_trait]
@@ -104,5 +112,41 @@ impl StateStore for FileStore {
 
     async fn remove_voice_channel(&self, guild_id: GuildId) -> Result<()> {
         self.voice_channels().remove(&guild_id).await
+    }
+
+    async fn save_message_playback(
+        &self,
+        guild_id: GuildId,
+        state: &MessagePlaybackState,
+    ) -> Result<()> {
+        self.message_playbacks()
+            .insert(guild_id, state.clone())
+            .await
+    }
+
+    async fn load_message_playbacks(&self) -> Result<HashMap<GuildId, MessagePlaybackState>> {
+        self.message_playbacks().load_all().await
+    }
+
+    async fn remove_message_playback(&self, guild_id: GuildId) -> Result<()> {
+        self.message_playbacks().remove(&guild_id).await
+    }
+
+    async fn save_multitrack_playback(
+        &self,
+        guild_id: GuildId,
+        state: &MultiTrackPlaybackState,
+    ) -> Result<()> {
+        self.multitrack_playbacks()
+            .insert(guild_id, state.clone())
+            .await
+    }
+
+    async fn load_multitrack_playbacks(&self) -> Result<HashMap<GuildId, MultiTrackPlaybackState>> {
+        self.multitrack_playbacks().load_all().await
+    }
+
+    async fn remove_multitrack_playback(&self, guild_id: GuildId) -> Result<()> {
+        self.multitrack_playbacks().remove(&guild_id).await
     }
 }

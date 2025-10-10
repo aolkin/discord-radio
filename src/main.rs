@@ -114,7 +114,15 @@ impl serenity::EventHandler for Handler {
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                tracing_subscriber::EnvFilter::new("info")
+                    .add_directive("songbird=warn".parse().unwrap())
+                    .add_directive("symphonia_core=warn".parse().unwrap())
+            }),
+        )
+        .init();
 
     dotenvy::dotenv().ok();
 
@@ -146,6 +154,8 @@ async fn main() -> Result<(), Error> {
                 commands::voice::leave_voice_channel(),
                 commands::voice::play_message(),
                 commands::voice::stop_message(),
+                commands::voice::change_track_state(),
+                commands::voice::get_current_tracks(),
             ],
             on_error: |error| Box::pin(on_error(error)),
             ..Default::default()
@@ -153,9 +163,16 @@ async fn main() -> Result<(), Error> {
         .setup(|ctx, _ready, framework| {
             Box::pin(async move {
                 poise::builtins::register_globally(ctx, &framework.options().commands).await?;
+                let command_names: Vec<_> = framework
+                    .options()
+                    .commands
+                    .iter()
+                    .map(|cmd| cmd.name.as_str())
+                    .collect();
                 info!(
-                    "Registered {} commands globally.",
-                    framework.options().commands.len()
+                    "Registered {} commands globally: {}",
+                    framework.options().commands.len(),
+                    command_names.join(", ")
                 );
                 Ok(data_for_setup.clone())
             })

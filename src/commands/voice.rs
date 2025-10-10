@@ -1,8 +1,8 @@
 use crate::commands::utils;
 use crate::commands::utils::{Context, Error};
-use serenity::all::{ChannelId, ChannelType};
+use serenity::all::{ChannelId, ChannelType, GuildId};
+use std::collections::HashMap;
 use std::sync::Arc;
-use tokio_util::sync::CancellationToken;
 
 #[poise::command(
     slash_command,
@@ -39,41 +39,19 @@ pub async fn join_voice_channel(
         return Ok(());
     }
 
-    let manager = songbird::get(ctx.serenity_context())
-        .await
-        .expect("Songbird Voice client placed in at initialisation.")
-        .clone();
-
-    match manager.join(guild_id, channel).await {
-        Ok(handle_lock) => {
-            tracing::info!("Joined voice channel");
-
-            if let Err(e) = crate::audio::connection::setup_voice_connection(
-                handle_lock,
-                guild_id,
-                ctx.data().clone(),
-            )
-            .await
-            {
-                ctx.say(format!("Failed to setup voice connection: {}", e))
-                    .await?;
-                return Ok(());
-            }
-
-            let _ = ctx
-                .data()
-                .state_store
-                .save_voice_channel(guild_id, channel)
-                .await;
-
-            ctx.say(format!("Joined voice channel <#{}>", channel))
-                .await?;
-        }
-        Err(e) => {
-            ctx.say(format!("Failed to join the voice channel: {}", e))
-                .await?;
-        }
+    if let Err(e) = join_voice_channel_helper(ctx, guild_id, channel).await {
+        ctx.say(e).await?;
+        return Ok(());
     }
+
+    let _ = ctx
+        .data()
+        .state_store
+        .save_voice_channel(guild_id, channel)
+        .await;
+
+    ctx.say(format!("Joined voice channel <#{}>", channel))
+        .await?;
 
     Ok(())
 }
@@ -112,17 +90,17 @@ pub async fn leave_voice_channel(ctx: Context<'_>) -> Result<(), Error> {
 
             let _ = ctx.data().state_store.remove_voice_channel(guild_id).await;
 
-            // Stop any playing tracks
-            let mut track_handles = ctx.data().track_handles.write().await;
-            if let Some(handle) = track_handles.remove(&guild_id) {
-                let _ = handle.stop();
+            // Stop all tracks
+            let mut track_managers = ctx.data().track_managers.write().await;
+            if let Some(manager_arc) = track_managers.remove(&guild_id) {
+                let mut manager = manager_arc.lock().await;
+                if let Err(e) = manager.stop_all_tracks(0.0, true).await {
+                    tracing::warn!("Failed to stop all tracks: {}", e);
+                }
             }
 
-            // Cancel any ongoing message playback
-            let mut message_playback_tokens = ctx.data().message_playback_tokens.write().await;
-            if let Some(cancel_token) = message_playback_tokens.remove(&guild_id) {
-                cancel_token.cancel();
-            }
+            // Stop any ongoing message playback
+            stop_hex_playback(ctx, guild_id).await;
 
             ctx.say("Left voice channel").await?;
         }
@@ -142,6 +120,7 @@ pub async fn play_message(
     ctx: Context<'_>,
     #[description = "Message to convert to hex and play"] message: String,
     #[description = "Voice channel to join (optional)"] channel: Option<ChannelId>,
+    #[description = "Volume 0.0-1.0 (default 1.0)"] volume: Option<f32>,
 ) -> Result<(), Error> {
     let guild_id = ctx
         .guild_id()
@@ -182,58 +161,19 @@ pub async fn play_message(
             return Ok(());
         }
 
-        let manager = songbird::get(ctx.serenity_context())
-            .await
-            .expect("Songbird Voice client placed in at initialisation.")
-            .clone();
-
-        match manager.join(guild_id, channel_id).await {
-            Ok(handle_lock) => {
-                tracing::info!("Joined voice channel for play_message");
-                let mut voice_connections = ctx.data().voice_connections.write().await;
-                voice_connections.insert(guild_id, handle_lock.clone());
-
-                let mut call = handle_lock.lock().await;
-                let event_handler = crate::handlers::voice::ConnectionEventHandler {
-                    data: ctx.data().clone(),
-                };
-
-                call.add_global_event(
-                    songbird::Event::Core(songbird::events::CoreEvent::DriverConnect),
-                    event_handler.clone(),
-                );
-                call.add_global_event(
-                    songbird::Event::Core(songbird::events::CoreEvent::DriverDisconnect),
-                    event_handler.clone(),
-                );
-                call.add_global_event(
-                    songbird::Event::Core(songbird::events::CoreEvent::DriverReconnect),
-                    event_handler.clone(),
-                );
-                call.add_global_event(
-                    songbird::Event::Core(songbird::events::CoreEvent::ClientDisconnect),
-                    event_handler,
-                );
-
-                drop(call);
-            }
-            Err(e) => {
-                reply
-                    .edit(
-                        ctx,
-                        poise::CreateReply::default()
-                            .content(format!("Failed to join the voice channel: {}", e))
-                            .ephemeral(true),
-                    )
-                    .await?;
-                return Ok(());
-            }
+        if let Err(e) = join_voice_channel_helper(ctx, guild_id, channel_id).await {
+            reply
+                .edit(
+                    ctx,
+                    poise::CreateReply::default().content(e).ephemeral(true),
+                )
+                .await?;
+            return Ok(());
         }
     }
 
-    let voice_connections = ctx.data().voice_connections.read().await;
-    let call_lock = match voice_connections.get(&guild_id) {
-        Some(lock) => Arc::clone(lock),
+    let call_lock = match get_voice_connection(ctx, guild_id).await {
+        Some(lock) => lock,
         None => {
             reply
                 .edit(
@@ -248,39 +188,50 @@ pub async fn play_message(
             return Ok(());
         }
     };
-    drop(voice_connections);
 
-    let mut track_handles = ctx.data().track_handles.write().await;
-    if let Some(handle) = track_handles.get(&guild_id) {
-        let _ = handle.stop();
+    let volume = volume.unwrap_or(1.0);
+
+    let manager_arc = get_or_create_track_manager(ctx, guild_id, call_lock.clone()).await;
+    let playback_state = get_or_create_hex_playback_state(ctx, guild_id).await;
+
+    ensure_hex_playback_task(ctx, guild_id, manager_arc.clone(), playback_state.clone()).await;
+
+    {
+        let mut state = playback_state.write().await;
+        *state = crate::state::HexPlaybackState::playing(message.clone(), 0, volume);
     }
-    track_handles.remove(&guild_id);
-    drop(track_handles);
 
-    let mut message_playback_tokens = ctx.data().message_playback_tokens.write().await;
-    if let Some(old_token) = message_playback_tokens.get(&guild_id) {
-        old_token.cancel();
-    }
-
-    let cancel_token = CancellationToken::new();
-    message_playback_tokens.insert(guild_id, cancel_token.clone());
-    drop(message_playback_tokens);
-
-    let hex_audio_dir = ctx.data().hex_audio_dir.clone();
-    let message_clone = message.clone();
-
-    tokio::spawn(async move {
-        if let Err(e) = crate::audio::manager::play_hex_sequence_looping(
-            call_lock,
-            hex_audio_dir,
-            message_clone,
-            cancel_token,
-        )
+    let initial_state = crate::persistence::MessagePlaybackState {
+        message: message.clone(),
+        current_position: 0,
+    };
+    if let Err(e) = ctx
+        .data()
+        .state_store
+        .save_message_playback(guild_id, &initial_state)
         .await
+    {
+        tracing::warn!("Failed to save initial message playback state: {}", e);
+    }
+
+    let voice_channel_id = {
+        let call = call_lock.lock().await;
+        call.current_channel()
+            .map(|id| serenity::model::id::ChannelId::new(id.0.get()))
+    };
+
+    if let Some(channel_id) = voice_channel_id {
+        let obfuscated = obfuscate_message(&message);
+        if let Err(e) = channel_id
+            .edit(
+                ctx.http(),
+                serenity::builder::EditChannel::new().status(obfuscated),
+            )
+            .await
         {
-            tracing::error!("Error in message playback loop: {}", e);
+            tracing::warn!("Failed to set voice channel status: {}", e);
         }
-    });
+    }
 
     reply
         .edit(
@@ -314,14 +265,324 @@ pub async fn stop_message(ctx: Context<'_>) -> Result<(), Error> {
         guild_id
     );
 
-    let mut message_playback_tokens = ctx.data().message_playback_tokens.write().await;
+    let is_playing = {
+        let states = ctx.data().hex_playback_states.read().await;
+        states
+            .get(&guild_id)
+            .and_then(|state_arc| {
+                let state = state_arc.blocking_read();
+                state.message.as_ref().map(|_| true)
+            })
+            .unwrap_or(false)
+    };
 
-    if let Some(cancel_token) = message_playback_tokens.remove(&guild_id) {
-        cancel_token.cancel();
+    if is_playing {
+        stop_hex_playback(ctx, guild_id).await;
         ctx.say("Message playback stopped").await?;
     } else {
         ctx.say("No message is currently playing").await?;
     }
 
     Ok(())
+}
+
+#[poise::command(
+    slash_command,
+    guild_only,
+    default_member_permissions = "ADMINISTRATOR"
+)]
+pub async fn change_track_state(
+    ctx: Context<'_>,
+    #[description = "Track state: start or stop"] state: String,
+    #[description = "Track name identifier"] name: String,
+    #[description = "Fade time in seconds"] fade_time: f32,
+    #[description = "Audio filename (required for start)"] filename: Option<String>,
+    #[description = "Volume 0.0-1.0 (default 1.0)"] volume: Option<f32>,
+    #[description = "Loop track (default true)"] loops: Option<bool>,
+) -> Result<(), Error> {
+    let guild_id = ctx
+        .guild_id()
+        .ok_or("This command can only be used in a server")?;
+
+    ctx.defer_ephemeral().await?;
+
+    let call_lock = match get_voice_connection(ctx, guild_id).await {
+        Some(lock) => lock,
+        None => {
+            ctx.say("Not in a voice channel!").await?;
+            return Ok(());
+        }
+    };
+
+    let manager_arc = get_or_create_track_manager(ctx, guild_id, call_lock).await;
+    let mut manager = manager_arc.lock().await;
+
+    match state.to_lowercase().as_str() {
+        "start" => {
+            let Some(filename) = filename else {
+                ctx.say("filename is required for start").await?;
+                return Ok(());
+            };
+            let volume = volume.unwrap_or(1.0);
+            let loops = loops.unwrap_or(true);
+
+            if let Err(e) = manager
+                .start_track(crate::audio::tracks::StartTrackArgs {
+                    name: name.clone(),
+                    filename,
+                    volume,
+                    fade_time,
+                    loops,
+                    start_position: None,
+                })
+                .await
+            {
+                ctx.say(format!("Failed to start track: {}", e)).await?;
+            } else {
+                ctx.say(format!(
+                    "Started track '{}' with volume {}, {} second fade, looping: {}",
+                    name, volume, fade_time, loops
+                ))
+                .await?;
+            }
+        }
+        "stop" => {
+            if let Err(e) = manager.stop_track(&name, fade_time, true).await {
+                ctx.say(format!("Failed to stop track: {}", e)).await?;
+            } else {
+                ctx.say(format!(
+                    "Stopped track '{}' with {} second fade",
+                    name, fade_time
+                ))
+                .await?;
+            }
+        }
+        _ => {
+            ctx.say("Invalid state. Use 'start' or 'stop'").await?;
+        }
+    }
+
+    Ok(())
+}
+
+#[poise::command(
+    slash_command,
+    guild_only,
+    default_member_permissions = "ADMINISTRATOR"
+)]
+pub async fn get_current_tracks(ctx: Context<'_>) -> Result<(), Error> {
+    let guild_id = ctx
+        .guild_id()
+        .ok_or("This command can only be used in a server")?;
+
+    let track_managers = ctx.data().track_managers.read().await;
+
+    let tracks = match track_managers.get(&guild_id) {
+        Some(manager_arc) => {
+            let manager = manager_arc.lock().await;
+            manager.get_all_tracks()
+        }
+        None => Vec::new(),
+    };
+
+    if tracks.is_empty() {
+        ctx.say("No tracks currently playing").await?;
+        return Ok(());
+    }
+
+    let embed = serenity::all::CreateEmbed::default()
+        .title("Currently Playing Tracks")
+        .description(format!("{} track(s) active", tracks.len()))
+        .fields(tracks.iter().map(|track| {
+            (
+                &track.name,
+                format!(
+                    "File: {}\nVolume: {:.2}\nLoops: {}",
+                    track.filename, track.volume, track.loops
+                ),
+                false,
+            )
+        }))
+        .color(0x00ff00);
+
+    ctx.send(poise::CreateReply::default().embed(embed).ephemeral(true))
+        .await?;
+
+    Ok(())
+}
+
+async fn stop_hex_playback(ctx: Context<'_>, guild_id: GuildId) {
+    let hex_playback_states = ctx.data().hex_playback_states.read().await;
+    if let Some(state_arc) = hex_playback_states.get(&guild_id) {
+        let mut state = state_arc.write().await;
+        *state = crate::state::HexPlaybackState::stopped();
+        drop(state);
+        drop(hex_playback_states);
+
+        let track_managers = ctx.data().track_managers.read().await;
+        if let Some(manager_arc) = track_managers.get(&guild_id) {
+            let mut manager = manager_arc.lock().await;
+            let _ = manager
+                .stop_track(crate::audio::manager::HEX_PLAYBACK_TRACK_NAME, 0.0, true)
+                .await;
+        }
+
+        if let Err(e) = ctx
+            .data()
+            .state_store
+            .remove_message_playback(guild_id)
+            .await
+        {
+            tracing::warn!("Failed to remove message playback state: {}", e);
+        }
+
+        clear_voice_channel_status(ctx.http(), &ctx.data().voice_connections, guild_id).await;
+    }
+}
+
+async fn join_voice_channel_helper(
+    ctx: Context<'_>,
+    guild_id: GuildId,
+    channel_id: ChannelId,
+) -> Result<(), String> {
+    let manager = songbird::get(ctx.serenity_context())
+        .await
+        .expect("Songbird Voice client placed in at initialisation.")
+        .clone();
+
+    match manager.join(guild_id, channel_id).await {
+        Ok(handle_lock) => {
+            tracing::info!("Joined voice channel");
+
+            if let Err(e) = crate::audio::connection::setup_voice_connection(
+                handle_lock,
+                guild_id,
+                ctx.data().clone(),
+            )
+            .await
+            {
+                return Err(format!("Failed to setup voice connection: {}", e));
+            }
+
+            Ok(())
+        }
+        Err(e) => Err(format!("Failed to join the voice channel: {}", e)),
+    }
+}
+
+async fn get_voice_connection(
+    ctx: Context<'_>,
+    guild_id: GuildId,
+) -> Option<Arc<tokio::sync::Mutex<songbird::Call>>> {
+    let voice_connections = ctx.data().voice_connections.read().await;
+    voice_connections.get(&guild_id).map(Arc::clone)
+}
+
+async fn get_or_create_track_manager(
+    ctx: Context<'_>,
+    guild_id: GuildId,
+    call_lock: Arc<tokio::sync::Mutex<songbird::Call>>,
+) -> Arc<tokio::sync::Mutex<crate::audio::tracks::TrackManager>> {
+    let mut track_managers = ctx.data().track_managers.write().await;
+    track_managers
+        .entry(guild_id)
+        .or_insert_with(|| {
+            Arc::new(tokio::sync::Mutex::new(
+                crate::audio::tracks::TrackManager::new(
+                    call_lock.clone(),
+                    guild_id,
+                    ctx.data().clone(),
+                ),
+            ))
+        })
+        .clone()
+}
+
+async fn get_or_create_hex_playback_state(
+    ctx: Context<'_>,
+    guild_id: GuildId,
+) -> Arc<tokio::sync::RwLock<crate::state::HexPlaybackState>> {
+    let mut states = ctx.data().hex_playback_states.write().await;
+    states
+        .entry(guild_id)
+        .or_insert_with(|| {
+            Arc::new(tokio::sync::RwLock::new(
+                crate::state::HexPlaybackState::stopped(),
+            ))
+        })
+        .clone()
+}
+
+async fn ensure_hex_playback_task(
+    ctx: Context<'_>,
+    guild_id: GuildId,
+    manager_arc: Arc<tokio::sync::Mutex<crate::audio::tracks::TrackManager>>,
+    playback_state: Arc<tokio::sync::RwLock<crate::state::HexPlaybackState>>,
+) {
+    let tasks = ctx.data().hex_playback_tasks.read().await;
+    if tasks.contains_key(&guild_id) {
+        return;
+    }
+    drop(tasks);
+
+    let guild_id_copy = guild_id;
+    let manager_copy = manager_arc.clone();
+    let hex_audio_dir = ctx.data().hex_audio_dir.clone();
+    let playback_state_copy = playback_state.clone();
+    let bot_state = ctx.data().clone();
+
+    let handle = tokio::spawn(async move {
+        crate::audio::manager::hex_playback_task(
+            guild_id_copy,
+            manager_copy,
+            hex_audio_dir,
+            playback_state_copy,
+            bot_state,
+        )
+        .await;
+    });
+
+    ctx.data()
+        .hex_playback_tasks
+        .write()
+        .await
+        .insert(guild_id, handle);
+}
+
+pub fn obfuscate_message(message: &str) -> String {
+    use rand::Rng;
+    let mut rng = rand::rng();
+
+    message
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() {
+                if rng.random_bool(0.5) { '?' } else { '¿' }
+            } else {
+                c
+            }
+        })
+        .collect()
+}
+
+async fn clear_voice_channel_status(
+    http: &serenity::http::Http,
+    voice_connections: &tokio::sync::RwLock<
+        HashMap<GuildId, Arc<tokio::sync::Mutex<songbird::Call>>>,
+    >,
+    guild_id: GuildId,
+) {
+    let voice_connections_guard = voice_connections.read().await;
+    if let Some(call_lock) = voice_connections_guard.get(&guild_id) {
+        let call = call_lock.lock().await;
+        if let Some(songbird_channel_id) = call.current_channel() {
+            let channel_id = serenity::model::id::ChannelId::new(songbird_channel_id.0.get());
+            if let Err(e) = channel_id
+                .edit(http, serenity::builder::EditChannel::new().status(""))
+                .await
+            {
+                tracing::warn!("Failed to clear voice channel status: {}", e);
+            }
+        }
+    }
 }

@@ -1,3 +1,4 @@
+use crate::audio::tracks::StartTrackArgs;
 use crate::state::Data;
 use poise::serenity_prelude::Http;
 use std::sync::Arc;
@@ -60,6 +61,240 @@ pub async fn restore_voice_channels(
                     e
                 );
                 let _ = bot_state.state_store.remove_voice_channel(guild_id).await;
+            }
+        }
+    }
+
+    restore_message_playback(bot_state.clone()).await?;
+    restore_multitrack_playback(bot_state).await?;
+
+    Ok(())
+}
+
+async fn restore_message_playback(
+    bot_state: Data,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let saved_playbacks = bot_state.state_store.load_message_playbacks().await?;
+
+    if saved_playbacks.is_empty() {
+        tracing::info!("No saved message playbacks found");
+        return Ok(());
+    }
+
+    tracing::info!("Restoring {} message playback(s)", saved_playbacks.len());
+
+    for (guild_id, playback_state) in saved_playbacks {
+        let voice_connections = bot_state.voice_connections.read().await;
+        let call_lock = match voice_connections.get(&guild_id) {
+            Some(lock) => lock.clone(),
+            None => {
+                tracing::warn!(
+                    "Cannot restore message playback for guild {}: not in voice channel",
+                    guild_id
+                );
+                let _ = bot_state
+                    .state_store
+                    .remove_message_playback(guild_id)
+                    .await;
+                continue;
+            }
+        };
+        drop(voice_connections);
+
+        tracing::info!(
+            "Restoring message playback for guild {}: '{}' at position {}",
+            guild_id,
+            playback_state.message,
+            playback_state.current_position
+        );
+
+        let manager_arc = {
+            let mut track_managers = bot_state.track_managers.write().await;
+            track_managers
+                .entry(guild_id)
+                .or_insert_with(|| {
+                    std::sync::Arc::new(tokio::sync::Mutex::new(
+                        crate::audio::tracks::TrackManager::new(
+                            call_lock.clone(),
+                            guild_id,
+                            bot_state.clone(),
+                        ),
+                    ))
+                })
+                .clone()
+        };
+
+        let playback_state_arc = {
+            let mut states = bot_state.hex_playback_states.write().await;
+            states
+                .entry(guild_id)
+                .or_insert_with(|| {
+                    std::sync::Arc::new(tokio::sync::RwLock::new(
+                        crate::state::HexPlaybackState::stopped(),
+                    ))
+                })
+                .clone()
+        };
+
+        let tasks = bot_state.hex_playback_tasks.read().await;
+        if !tasks.contains_key(&guild_id) {
+            drop(tasks);
+
+            let guild_id_copy = guild_id;
+            let manager_copy = manager_arc.clone();
+            let hex_audio_dir = bot_state.hex_audio_dir.clone();
+            let playback_state_copy = playback_state_arc.clone();
+            let bot_state_copy = bot_state.clone();
+
+            let handle = tokio::spawn(async move {
+                crate::audio::manager::hex_playback_task(
+                    guild_id_copy,
+                    manager_copy,
+                    hex_audio_dir,
+                    playback_state_copy,
+                    bot_state_copy,
+                )
+                .await;
+            });
+
+            bot_state
+                .hex_playback_tasks
+                .write()
+                .await
+                .insert(guild_id, handle);
+        }
+
+        {
+            let mut state = playback_state_arc.write().await;
+            *state = crate::state::HexPlaybackState::playing(
+                playback_state.message,
+                playback_state.current_position,
+                1.0,
+            );
+        }
+    }
+
+    Ok(())
+}
+
+async fn restore_multitrack_playback(
+    bot_state: Data,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let saved_multitrack = bot_state.state_store.load_multitrack_playbacks().await?;
+
+    if saved_multitrack.is_empty() {
+        tracing::info!("No saved multitrack playbacks found");
+        return Ok(());
+    }
+
+    tracing::info!(
+        "Restoring {} multitrack playback state(s)",
+        saved_multitrack.len()
+    );
+
+    for (guild_id, multitrack_state) in saved_multitrack {
+        let voice_connections = bot_state.voice_connections.read().await;
+        let call_lock = match voice_connections.get(&guild_id) {
+            Some(lock) => lock.clone(),
+            None => {
+                tracing::warn!(
+                    "Cannot restore multitrack playback for guild {}: not in voice channel",
+                    guild_id
+                );
+                let _ = bot_state
+                    .state_store
+                    .remove_multitrack_playback(guild_id)
+                    .await;
+                continue;
+            }
+        };
+        drop(voice_connections);
+
+        tracing::info!(
+            "Restoring {} track(s) for guild {}",
+            multitrack_state.tracks.len(),
+            guild_id
+        );
+
+        let manager_arc = {
+            let mut track_managers = bot_state.track_managers.write().await;
+            track_managers
+                .entry(guild_id)
+                .or_insert_with(|| {
+                    std::sync::Arc::new(tokio::sync::Mutex::new(
+                        crate::audio::tracks::TrackManager::new(
+                            call_lock.clone(),
+                            guild_id,
+                            bot_state.clone(),
+                        ),
+                    ))
+                })
+                .clone()
+        };
+
+        let mut manager = manager_arc.lock().await;
+
+        for track in multitrack_state.tracks {
+            let start_position = if let Some(start_time) = track.start_time {
+                match start_time.elapsed() {
+                    Ok(elapsed) => {
+                        let duration = bot_state.duration_cache.get_duration(&track.filename).await;
+
+                        let position = if let Some(track_duration) = duration {
+                            if track.loops && track_duration.as_secs() > 0 {
+                                let position_in_loop =
+                                    elapsed.as_secs_f64() % track_duration.as_secs_f64();
+                                let seek_position =
+                                    std::time::Duration::from_secs_f64(position_in_loop);
+                                tracing::info!(
+                                    "Track '{}' was playing for {:.2}s, seeking to {:.2}s (duration: {:.2}s)",
+                                    track.name,
+                                    elapsed.as_secs_f64(),
+                                    position_in_loop,
+                                    track_duration.as_secs_f64()
+                                );
+                                seek_position
+                            } else {
+                                tracing::info!(
+                                    "Track '{}' was playing for {:.2}s before restart",
+                                    track.name,
+                                    elapsed.as_secs_f64()
+                                );
+                                elapsed
+                            }
+                        } else {
+                            tracing::info!(
+                                "Track '{}' was playing for {:.2}s before restart (duration unknown)",
+                                track.name,
+                                elapsed.as_secs_f64()
+                            );
+                            elapsed
+                        };
+
+                        Some(position)
+                    }
+                    Err(_) => None,
+                }
+            } else {
+                None
+            };
+
+            let name = track.name.clone();
+            let filename = track.filename;
+            let volume = track.volume;
+            let loops = track.loops;
+            if let Err(e) = manager
+                .start_track(StartTrackArgs {
+                    name,
+                    filename,
+                    volume,
+                    fade_time: 1.0,
+                    loops,
+                    start_position,
+                })
+                .await
+            {
+                tracing::warn!("Failed to restore track '{}': {}", track.name, e);
             }
         }
     }
