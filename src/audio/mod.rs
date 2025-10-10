@@ -1,6 +1,10 @@
 pub mod connection;
+pub mod custom_mixer;
+pub mod decoder;
 pub mod duration;
+pub mod dsp;
 pub mod events;
 pub mod fade;
 pub mod manager;
+pub mod profiles;
 pub mod tracks;
