@@ -4,6 +4,7 @@ use serenity::all::{ChannelId, ChannelType, GuildId};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+/// Join a voice channel to broadcast audio
 #[poise::command(
     slash_command,
     guild_only,
@@ -56,6 +57,7 @@ pub async fn join_voice_channel(
     Ok(())
 }
 
+/// Leave the current voice channel
 #[poise::command(
     slash_command,
     guild_only,
@@ -85,23 +87,7 @@ pub async fn leave_voice_channel(ctx: Context<'_>) -> Result<(), Error> {
             ctx.say(format!("Failed to leave voice channel: {}", e))
                 .await?;
         } else {
-            let mut voice_connections = ctx.data().voice_connections.write().await;
-            voice_connections.remove(&guild_id);
-
             let _ = ctx.data().state_store.remove_voice_channel(guild_id).await;
-
-            // Stop all tracks
-            let mut track_managers = ctx.data().track_managers.write().await;
-            if let Some(manager_arc) = track_managers.remove(&guild_id) {
-                let mut manager = manager_arc.lock().await;
-                if let Err(e) = manager.stop_all_tracks(0.0, true).await {
-                    tracing::warn!("Failed to stop all tracks: {}", e);
-                }
-            }
-
-            // Stop any ongoing message playback
-            stop_hex_playback(ctx, guild_id).await;
-
             ctx.say("Left voice channel").await?;
         }
     } else {
@@ -111,6 +97,7 @@ pub async fn leave_voice_channel(ctx: Context<'_>) -> Result<(), Error> {
     Ok(())
 }
 
+/// Convert a text message to hex and play it as audio in voice
 #[poise::command(
     slash_command,
     guild_only,
@@ -248,6 +235,7 @@ pub async fn play_message(
     Ok(())
 }
 
+/// Stop the currently playing message
 #[poise::command(
     slash_command,
     guild_only,
@@ -265,15 +253,16 @@ pub async fn stop_message(ctx: Context<'_>) -> Result<(), Error> {
         guild_id
     );
 
+    ctx.defer_ephemeral().await?;
+
     let is_playing = {
         let states = ctx.data().hex_playback_states.read().await;
-        states
-            .get(&guild_id)
-            .and_then(|state_arc| {
-                let state = state_arc.blocking_read();
-                state.message.as_ref().map(|_| true)
-            })
-            .unwrap_or(false)
+        if let Some(state_arc) = states.get(&guild_id) {
+            let state = state_arc.read().await;
+            state.message.is_some()
+        } else {
+            false
+        }
     };
 
     if is_playing {
@@ -286,6 +275,7 @@ pub async fn stop_message(ctx: Context<'_>) -> Result<(), Error> {
     Ok(())
 }
 
+/// Start or stop an audio track with fade transition
 #[poise::command(
     slash_command,
     guild_only,
@@ -365,6 +355,7 @@ pub async fn change_track_state(
     Ok(())
 }
 
+/// Display all currently playing audio tracks
 #[poise::command(
     slash_command,
     guild_only,
