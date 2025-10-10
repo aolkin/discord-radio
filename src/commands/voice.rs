@@ -385,6 +385,8 @@ pub async fn get_current_tracks(ctx: Context<'_>) -> Result<(), Error> {
         None => Vec::new(),
     };
 
+    ctx.defer_ephemeral().await?;
+
     if tracks.is_empty() {
         ctx.say("No tracks currently playing").await?;
         return Ok(());

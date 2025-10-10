@@ -1,7 +1,36 @@
 use crate::audio::tracks::StartTrackArgs;
 use crate::state::Data;
 use poise::serenity_prelude::Http;
+use serenity::model::id::GuildId;
 use std::sync::Arc;
+
+// Helper: fetch the voice Call lock for a guild if connected
+async fn get_call_lock(
+    bot_state: &Data,
+    guild_id: GuildId,
+) -> Option<Arc<tokio::sync::Mutex<songbird::Call>>> {
+    let voice_connections = bot_state.voice_connections.read().await;
+    let lock = voice_connections.get(&guild_id).cloned();
+    drop(voice_connections);
+    lock
+}
+
+// Helper: get or create the TrackManager for a guild
+async fn get_or_create_track_manager(
+    bot_state: &Data,
+    guild_id: GuildId,
+    call_lock: Arc<tokio::sync::Mutex<songbird::Call>>,
+) -> Arc<tokio::sync::Mutex<crate::audio::tracks::TrackManager>> {
+    let mut track_managers = bot_state.track_managers.write().await;
+    track_managers
+        .entry(guild_id)
+        .or_insert_with(|| {
+            Arc::new(tokio::sync::Mutex::new(
+                crate::audio::tracks::TrackManager::new(call_lock, guild_id, bot_state.clone()),
+            ))
+        })
+        .clone()
+}
 
 pub async fn restore_state(
     _http: Arc<Http>,
@@ -84,9 +113,8 @@ async fn restore_message_playback(
     tracing::info!("Restoring {} message playback(s)", saved_playbacks.len());
 
     for (guild_id, playback_state) in saved_playbacks {
-        let voice_connections = bot_state.voice_connections.read().await;
-        let call_lock = match voice_connections.get(&guild_id) {
-            Some(lock) => lock.clone(),
+        let call_lock = match get_call_lock(&bot_state, guild_id).await {
+            Some(lock) => lock,
             None => {
                 tracing::warn!(
                     "Cannot restore message playback for guild {}: not in voice channel",
@@ -99,7 +127,6 @@ async fn restore_message_playback(
                 continue;
             }
         };
-        drop(voice_connections);
 
         tracing::info!(
             "Restoring message playback for guild {}: '{}' at position {}",
@@ -108,21 +135,8 @@ async fn restore_message_playback(
             playback_state.current_position
         );
 
-        let manager_arc = {
-            let mut track_managers = bot_state.track_managers.write().await;
-            track_managers
-                .entry(guild_id)
-                .or_insert_with(|| {
-                    std::sync::Arc::new(tokio::sync::Mutex::new(
-                        crate::audio::tracks::TrackManager::new(
-                            call_lock.clone(),
-                            guild_id,
-                            bot_state.clone(),
-                        ),
-                    ))
-                })
-                .clone()
-        };
+        let manager_arc =
+            get_or_create_track_manager(&bot_state, guild_id, call_lock.clone()).await;
 
         let playback_state_arc = {
             let mut states = bot_state.hex_playback_states.write().await;
@@ -193,9 +207,8 @@ async fn restore_multitrack_playback(
     );
 
     for (guild_id, multitrack_state) in saved_multitrack {
-        let voice_connections = bot_state.voice_connections.read().await;
-        let call_lock = match voice_connections.get(&guild_id) {
-            Some(lock) => lock.clone(),
+        let call_lock = match get_call_lock(&bot_state, guild_id).await {
+            Some(lock) => lock,
             None => {
                 tracing::warn!(
                     "Cannot restore multitrack playback for guild {}: not in voice channel",
@@ -208,7 +221,6 @@ async fn restore_multitrack_playback(
                 continue;
             }
         };
-        drop(voice_connections);
 
         tracing::info!(
             "Restoring {} track(s) for guild {}",
@@ -216,21 +228,8 @@ async fn restore_multitrack_playback(
             guild_id
         );
 
-        let manager_arc = {
-            let mut track_managers = bot_state.track_managers.write().await;
-            track_managers
-                .entry(guild_id)
-                .or_insert_with(|| {
-                    std::sync::Arc::new(tokio::sync::Mutex::new(
-                        crate::audio::tracks::TrackManager::new(
-                            call_lock.clone(),
-                            guild_id,
-                            bot_state.clone(),
-                        ),
-                    ))
-                })
-                .clone()
-        };
+        let manager_arc =
+            get_or_create_track_manager(&bot_state, guild_id, call_lock.clone()).await;
 
         let mut manager = manager_arc.lock().await;
 
