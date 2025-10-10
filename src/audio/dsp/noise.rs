@@ -68,7 +68,7 @@ impl PinkNoiseState {
         let mut pink = 0.0;
 
         for i in 0..7 {
-            if self.counter % (1 << i) == 0 {
+            if self.counter.is_multiple_of(1 << i) {
                 self.state[i] = self.rng.random::<f32>() * 2.0 - 1.0;
             }
             pink += self.state[i];

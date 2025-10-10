@@ -127,7 +127,7 @@ impl ProcessingThread {
 
     pub async fn run(
         &self,
-        mut output_tx: tokio::sync::mpsc::Sender<Vec<i16>>,
+        output_tx: tokio::sync::mpsc::Sender<Vec<i16>>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut timer = interval(Duration::from_millis(FRAME_DURATION_MS));
 

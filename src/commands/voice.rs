@@ -591,6 +591,59 @@ async fn ensure_hex_playback_task(
         .insert(guild_id, handle);
 }
 
+/// Change the audio signal processing profile
+#[poise::command(
+    slash_command,
+    guild_only,
+    default_member_permissions = "ADMINISTRATOR"
+)]
+pub async fn signal_profile(
+    ctx: Context<'_>,
+    #[description = "Profile name (clear, weak_signal, detuned, tuning, locked)"] profile: String,
+    #[description = "Fade duration in seconds (default: 2.0)"] fade_duration: Option<f32>,
+) -> Result<(), Error> {
+    let guild_id = ctx
+        .guild_id()
+        .ok_or("This command can only be used in a server")?;
+    let user_id = ctx.author().id;
+
+    tracing::info!(
+        "User {} executed signal_profile with profile '{}' and fade_duration {:?} in guild {}",
+        user_id,
+        profile,
+        fade_duration,
+        guild_id
+    );
+
+    ctx.defer_ephemeral().await?;
+
+    let fade_duration = fade_duration.unwrap_or(2.0);
+
+    if fade_duration < 0.0 {
+        ctx.say("Fade duration must be non-negative").await?;
+        return Ok(());
+    }
+
+    let profile_path = format!("audio_profiles/{}.json", profile);
+    if !std::path::Path::new(&profile_path).exists() {
+        ctx.say(format!(
+            "Profile '{}' not found. Available profiles: clear, weak_signal, detuned, tuning, locked",
+            profile
+        ))
+        .await?;
+        return Ok(());
+    }
+
+    ctx.say(format!(
+        "Signal profile command received for '{}' with fade {}s.\n\
+        Note: Full DSP integration is not yet complete. This command structure is ready for implementation.",
+        profile, fade_duration
+    ))
+    .await?;
+
+    Ok(())
+}
+
 pub fn obfuscate_message(message: &str) -> String {
     use rand::Rng;
     let mut rng = rand::rng();

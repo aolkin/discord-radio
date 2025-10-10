@@ -156,6 +156,7 @@ async fn main() -> Result<(), Error> {
                 commands::voice::stop_message(),
                 commands::voice::change_track_state(),
                 commands::voice::get_current_tracks(),
+                commands::voice::signal_profile(),
                 commands::messaging::speak(),
                 commands::messaging::set_status(),
             ],

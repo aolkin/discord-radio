@@ -88,10 +88,7 @@ impl SymphoniaSource {
 
     fn decode_next_packet(&mut self) -> Result<(), SymphoniaError> {
         loop {
-            let packet = match self.format.next_packet() {
-                Ok(packet) => packet,
-                Err(e) => return Err(e),
-            };
+            let packet = self.format.next_packet()?;
 
             if packet.track_id() != self.track_id {
                 continue;
@@ -116,15 +113,14 @@ impl SymphoniaSource {
     }
 
     fn get_next_source_frame(&mut self) -> Option<[f32; 2]> {
-        if self.sample_buf.is_none() ||
-           self.current_frame_idx >= self.sample_buf.as_ref().unwrap().len() {
-            if self.decode_next_packet().is_err() {
+        if (self.sample_buf.is_none() ||
+           self.current_frame_idx >= self.sample_buf.as_ref().unwrap().len())
+            && self.decode_next_packet().is_err() {
                 return None;
             }
-        }
 
         let buf = self.sample_buf.as_ref()?;
-        let channels = if buf.len() > 0 { buf.samples().len() / buf.len() } else { 2 };
+        let channels = if !buf.is_empty() { buf.samples().len() / buf.len() } else { 2 };
         let samples = buf.samples();
 
         if self.current_frame_idx >= buf.len() {
