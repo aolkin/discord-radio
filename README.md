@@ -33,6 +33,14 @@ sudo apt update && sudo apt install -y cmake libopus-dev pkg-config
    cargo build --release
    ```
 
+## Usage
+
+```bash
+./target/release/discord-bot <hex_audio_dir>
+```
+
+Where `<hex_audio_dir>` is the path to the directory containing hex message audio files.
+
 ## License
 
 This project is provided as-is for development purposes.
