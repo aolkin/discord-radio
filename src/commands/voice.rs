@@ -526,7 +526,7 @@ async fn get_or_create_track_manager(
     call_lock: Arc<tokio::sync::Mutex<songbird::Call>>,
 ) -> Arc<tokio::sync::Mutex<crate::audio::tracks::TrackManager>> {
     let mut track_managers = ctx.data().track_managers.write().await;
-    track_managers
+    let manager_arc = track_managers
         .entry(guild_id)
         .or_insert_with(|| {
             Arc::new(tokio::sync::Mutex::new(
@@ -537,7 +537,23 @@ async fn get_or_create_track_manager(
                 ),
             ))
         })
-        .clone()
+        .clone();
+
+    // Link audio processor if available
+    link_processor_to_manager(ctx.data(), guild_id, &manager_arc).await;
+
+    manager_arc
+}
+
+async fn link_processor_to_manager(
+    bot_state: &crate::state::Data,
+    guild_id: GuildId,
+    manager_arc: &Arc<tokio::sync::Mutex<crate::audio::tracks::TrackManager>>,
+) {
+    if let Some(processor_arc) = bot_state.audio_processors.read().await.get(&guild_id).cloned() {
+        let mut manager = manager_arc.lock().await;
+        manager.set_audio_processor(processor_arc);
+    }
 }
 
 async fn get_or_create_hex_playback_state(

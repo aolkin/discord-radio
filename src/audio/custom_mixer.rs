@@ -4,6 +4,8 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 
+pub type TrackEndCallback = Arc<dyn Fn() + Send + Sync>;
+
 pub trait AudioSource: Send + Sync {
     fn next_frame(&mut self) -> Option<[f32; 2]>;
     fn seek(&mut self, position: Duration) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
@@ -16,6 +18,7 @@ pub struct MixerTrack {
     pub volume: Arc<AtomicF32>,
     pub loops: bool,
     pub active: bool,
+    pub end_callback: Option<TrackEndCallback>,
 }
 
 impl MixerTrack {
@@ -25,7 +28,13 @@ impl MixerTrack {
             volume: Arc::new(AtomicF32::new(volume)),
             loops,
             active: true,
+            end_callback: None,
         }
+    }
+
+    pub fn with_end_callback(mut self, callback: TrackEndCallback) -> Self {
+        self.end_callback = Some(callback);
+        self
     }
 
     pub fn next_frame(&mut self) -> Option<[f32; 2]> {
@@ -44,6 +53,10 @@ impl MixerTrack {
                     self.next_frame()
                 } else {
                     self.active = false;
+                    // Trigger callback if track ended
+                    if let Some(ref callback) = self.end_callback {
+                        callback();
+                    }
                     Some([0.0, 0.0])
                 }
             }
@@ -73,11 +86,25 @@ impl CustomMixer {
         volume: f32,
         loops: bool,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.add_track_with_callback(name, source, volume, loops, None)
+    }
+
+    pub fn add_track_with_callback(
+        &mut self,
+        name: String,
+        source: Box<dyn AudioSource>,
+        volume: f32,
+        loops: bool,
+        callback: Option<TrackEndCallback>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if self.tracks.contains_key(&name) {
             return Err(format!("Track '{}' already exists", name).into());
         }
 
-        let track = MixerTrack::new(source, volume, loops);
+        let mut track = MixerTrack::new(source, volume, loops);
+        if let Some(cb) = callback {
+            track = track.with_end_callback(cb);
+        }
         self.tracks.insert(name, track);
 
         Ok(())
@@ -146,5 +173,17 @@ impl CustomMixer {
 
     pub fn channels(&self) -> u16 {
         self.channels
+    }
+
+    pub fn seek_track(&mut self, name: &str, position: Duration) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let track = self.tracks.get_mut(name)
+            .ok_or_else(|| format!("Track '{}' not found", name))?;
+
+        track.source.seek(position)?;
+        Ok(())
+    }
+
+    pub fn get_track_volume(&self, name: &str) -> Option<f32> {
+        self.tracks.get(name).map(|t| t.volume.load(Ordering::Relaxed))
     }
 }

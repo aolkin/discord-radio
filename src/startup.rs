@@ -22,14 +22,31 @@ async fn get_or_create_track_manager(
     call_lock: Arc<tokio::sync::Mutex<songbird::Call>>,
 ) -> Arc<tokio::sync::Mutex<crate::audio::tracks::TrackManager>> {
     let mut track_managers = bot_state.track_managers.write().await;
-    track_managers
+    let manager_arc = track_managers
         .entry(guild_id)
         .or_insert_with(|| {
             Arc::new(tokio::sync::Mutex::new(
                 crate::audio::tracks::TrackManager::new(call_lock, guild_id, bot_state.clone()),
             ))
         })
-        .clone()
+        .clone();
+
+    // Link audio processor to TrackManager
+    link_processor_to_manager(bot_state, guild_id, &manager_arc).await;
+
+    manager_arc
+}
+
+// Helper: link audio processor to track manager
+async fn link_processor_to_manager(
+    bot_state: &Data,
+    guild_id: GuildId,
+    manager_arc: &Arc<tokio::sync::Mutex<crate::audio::tracks::TrackManager>>,
+) {
+    if let Some(processor_arc) = bot_state.audio_processors.read().await.get(&guild_id).cloned() {
+        let mut manager = manager_arc.lock().await;
+        manager.set_audio_processor(processor_arc);
+    }
 }
 
 pub async fn restore_state(
@@ -67,7 +84,7 @@ pub async fn restore_voice_channels(
                 );
 
                 if let Err(e) = crate::audio::connection::setup_voice_connection(
-                    handle_lock,
+                    handle_lock.clone(),
                     guild_id,
                     bot_state.clone(),
                 )

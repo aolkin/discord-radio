@@ -68,9 +68,12 @@ pub async fn hex_playback_task(
 
         {
             let mut manager = manager_arc.lock().await;
-            let event_handler = crate::audio::events::HexCharacterEndHandler::new(notify_clone);
+            let callback = Arc::new(move || {
+                notify_clone.notify_one();
+            });
+
             if let Err(e) = manager
-                .start_track_with_custom_handler(
+                .start_track_with_callback(
                     StartTrackArgs {
                         name: HEX_PLAYBACK_TRACK_NAME.to_string(),
                         filename: audio_path,
@@ -79,7 +82,7 @@ pub async fn hex_playback_task(
                         loops: false,
                         start_position: None,
                     },
-                    Some(event_handler),
+                    Some(callback),
                 )
                 .await
             {
