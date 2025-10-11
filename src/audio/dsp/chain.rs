@@ -145,21 +145,21 @@ impl RadioEffectChain {
 
         let mut frame = input;
 
-        // 1. Highpass + Lowpass filters - Simulate radio frequency response
+        // 1. Noise mixing - Add static/interference
+        // Mix in generated noise (white and pink) to simulate poor signal
+        let (white_noise, pink_noise, _brown_noise) = self.noise_gen.next_frame();
+        let white_level = self.white_noise_level.load(Ordering::Relaxed);
+        let pink_level = self.pink_noise_level.load(Ordering::Relaxed);
+        frame[0] += white_noise[0] * white_level + pink_noise[0] * pink_level;
+        frame[1] += white_noise[1] * white_level + pink_noise[1] * pink_level;
+
+        // 2. Highpass + Lowpass filters - Simulate radio frequency response
         // Cuts frequencies outside the desired range
         // e.g., 800Hz highpass + 4500Hz lowpass = "telephone" bandlimiting
         frame[0] = self.highpass_l.run(frame[0]);
         frame[1] = self.highpass_r.run(frame[1]);
         frame[0] = self.lowpass_l.run(frame[0]);
         frame[1] = self.lowpass_r.run(frame[1]);
-
-        // 2. Noise mixing - Add static/interference
-        // Mix in generated noise (white and pink) to simulate poor signal
-        let (white_noise, pink_noise) = self.noise_gen.next_frame();
-        let white_level = self.white_noise_level.load(Ordering::Relaxed);
-        let pink_level = self.pink_noise_level.load(Ordering::Relaxed);
-        frame[0] += white_noise[0] * white_level + pink_noise[0] * pink_level;
-        frame[1] += white_noise[1] * white_level + pink_noise[1] * pink_level;
 
         // 3. Tremolo - Simulate signal strength fluctuation
         // LFO modulates amplitude to create wavering effect

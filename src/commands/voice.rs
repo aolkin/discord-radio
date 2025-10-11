@@ -839,3 +839,147 @@ async fn clear_voice_channel_status(
         }
     }
 }
+
+/// Manage the radio DJ for automated playback
+#[poise::command(
+    slash_command,
+    guild_only,
+    default_member_permissions = "ADMINISTRATOR"
+)]
+pub async fn manage_dj(
+    ctx: Context<'_>,
+    #[description = "DJ configuration name"] config: String,
+    #[description = "Action: start or stop"] action: String,
+) -> Result<(), Error> {
+    let guild_id = ctx
+        .guild_id()
+        .ok_or("This command can only be used in a server")?;
+    let user_id = ctx.author().id;
+
+    tracing::info!(
+        "User {} executed manage_dj with config '{}' and action '{}' in guild {}",
+        user_id,
+        config,
+        action,
+        guild_id
+    );
+
+    ctx.defer_ephemeral().await?;
+
+    let action_lower = action.to_lowercase();
+
+    match action_lower.as_str() {
+        "start" => {
+            let config_path = format!("dj_configs/{}.json", config);
+            let dj_config = match crate::audio::dj::config::DJConfig::load_from_file(&config_path) {
+                Ok(cfg) => cfg,
+                Err(e) => {
+                    ctx.say(format!("Failed to load DJ config '{}': {}", config, e))
+                        .await?;
+                    return Ok(());
+                }
+            };
+
+            let mut dj_managers = ctx.data().dj_managers.write().await;
+            let manager = dj_managers
+                .entry(guild_id)
+                .or_insert_with(|| {
+                    Arc::new(tokio::sync::Mutex::new(
+                        crate::audio::dj::manager::DJManager::new(guild_id),
+                    ))
+                })
+                .clone();
+            drop(dj_managers);
+
+            let mut mgr = manager.lock().await;
+            if mgr.is_running() {
+                ctx.say(
+                    "DJ is already running! Stop it first before starting a new configuration.",
+                )
+                .await?;
+                return Ok(());
+            }
+
+            if let Err(e) = mgr.start(dj_config, ctx.data().clone()).await {
+                ctx.say(format!("Failed to start DJ: {}", e)).await?;
+                return Ok(());
+            }
+
+            ctx.say(format!("DJ started with configuration '{}'", config))
+                .await?;
+        }
+        "stop" => {
+            let dj_managers = ctx.data().dj_managers.read().await;
+            let manager = match dj_managers.get(&guild_id) {
+                Some(mgr) => mgr.clone(),
+                None => {
+                    ctx.say("DJ is not running").await?;
+                    return Ok(());
+                }
+            };
+            drop(dj_managers);
+
+            let mut mgr = manager.lock().await;
+            if !mgr.is_running() {
+                ctx.say("DJ is not running").await?;
+                return Ok(());
+            }
+
+            mgr.stop(ctx.data()).await;
+            ctx.say("DJ stopped").await?;
+        }
+        _ => {
+            ctx.say("Invalid action. Use 'start' or 'stop'").await?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Force the DJ to advance to the next state (for testing)
+#[poise::command(
+    slash_command,
+    guild_only,
+    default_member_permissions = "ADMINISTRATOR"
+)]
+pub async fn advance_dj_state(ctx: Context<'_>) -> Result<(), Error> {
+    let guild_id = ctx
+        .guild_id()
+        .ok_or("This command can only be used in a server")?;
+    let user_id = ctx.author().id;
+
+    tracing::info!(
+        "User {} executed advance_dj_state in guild {}",
+        user_id,
+        guild_id
+    );
+
+    ctx.defer_ephemeral().await?;
+
+    let dj_managers = ctx.data().dj_managers.read().await;
+    let manager = match dj_managers.get(&guild_id) {
+        Some(mgr) => mgr.clone(),
+        None => {
+            ctx.say("DJ is not running").await?;
+            return Ok(());
+        }
+    };
+    drop(dj_managers);
+
+    let mgr = manager.lock().await;
+    if !mgr.is_running() {
+        ctx.say("DJ is not running").await?;
+        return Ok(());
+    }
+    drop(mgr);
+
+    if let Err(e) = crate::audio::dj::manager::force_advance(ctx.data(), guild_id).await {
+        ctx.say(format!("Failed to force DJ state advance: {}", e))
+            .await?;
+        return Ok(());
+    }
+
+    ctx.say("DJ state advance triggered").await?;
+
+    Ok(())
+}

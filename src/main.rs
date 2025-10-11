@@ -129,6 +129,7 @@ async fn main() -> Result<(), Error> {
                 tracing_subscriber::EnvFilter::new("info")
                     .add_directive("songbird=warn".parse().unwrap())
                     .add_directive("symphonia_core=warn".parse().unwrap())
+                    .add_directive("symphonia_format_ogg=warn".parse().unwrap())
             }),
         )
         .init();
@@ -166,6 +167,8 @@ async fn main() -> Result<(), Error> {
                 commands::voice::change_track_state(),
                 commands::voice::get_current_tracks(),
                 commands::voice::signal_profile(),
+                commands::voice::manage_dj(),
+                commands::voice::advance_dj_state(),
                 commands::messaging::speak(),
                 commands::messaging::set_status(),
             ],

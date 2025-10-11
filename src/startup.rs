@@ -118,7 +118,8 @@ pub async fn restore_voice_channels(
     }
 
     restore_message_playback(bot_state.clone()).await?;
-    restore_multitrack_playback(bot_state).await?;
+    restore_multitrack_playback(bot_state.clone()).await?;
+    restore_dj_managers(bot_state).await?;
 
     Ok(())
 }
@@ -318,6 +319,82 @@ async fn restore_multitrack_playback(
             {
                 tracing::warn!("Failed to restore track '{}': {}", track.name, e);
             }
+        }
+    }
+
+    Ok(())
+}
+
+async fn restore_dj_managers(
+    bot_state: Data,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let saved_dj_states = bot_state.state_store.load_dj_states().await?;
+
+    if saved_dj_states.is_empty() {
+        tracing::info!("No saved DJ states found");
+        return Ok(());
+    }
+
+    tracing::info!("Restoring {} DJ manager(s)", saved_dj_states.len());
+
+    for (guild_id, dj_state) in saved_dj_states {
+        if !dj_state.running {
+            tracing::info!("Skipping DJ for guild {} (not running)", guild_id);
+            continue;
+        }
+
+        let call_lock = match get_call_lock(&bot_state, guild_id).await {
+            Some(lock) => lock,
+            None => {
+                tracing::warn!(
+                    "Cannot restore DJ for guild {}: not in voice channel",
+                    guild_id
+                );
+                let _ = bot_state.state_store.remove_dj_state(guild_id).await;
+                continue;
+            }
+        };
+
+        // Ensure track manager exists
+        let _manager_arc =
+            get_or_create_track_manager(&bot_state, guild_id, call_lock.clone()).await;
+
+        let config_path = format!("dj_configs/{}.json", dj_state.config_name);
+        let dj_config = match crate::audio::dj::config::DJConfig::load_from_file(&config_path) {
+            Ok(cfg) => cfg,
+            Err(e) => {
+                tracing::error!(
+                    "Failed to load DJ config '{}' for guild {}: {}",
+                    dj_state.config_name,
+                    guild_id,
+                    e
+                );
+                let _ = bot_state.state_store.remove_dj_state(guild_id).await;
+                continue;
+            }
+        };
+
+        tracing::info!(
+            "Restoring DJ for guild {} with config '{}'",
+            guild_id,
+            dj_state.config_name
+        );
+
+        let mut dj_managers = bot_state.dj_managers.write().await;
+        let manager = dj_managers
+            .entry(guild_id)
+            .or_insert_with(|| {
+                Arc::new(tokio::sync::Mutex::new(
+                    crate::audio::dj::manager::DJManager::new(guild_id),
+                ))
+            })
+            .clone();
+        drop(dj_managers);
+
+        let mut mgr = manager.lock().await;
+        if let Err(e) = mgr.start(dj_config, bot_state.clone()).await {
+            tracing::error!("Failed to start DJ for guild {}: {}", guild_id, e);
+            let _ = bot_state.state_store.remove_dj_state(guild_id).await;
         }
     }
 

@@ -1,0 +1,63 @@
+{
+  "name": "default",
+  "track_pool": [
+    {
+      "filename": "audio/example.mp3",
+      "weight": 1
+    }
+  ],
+  "hex_messages": [
+    {
+      "text": "hello world",
+      "weight": 1
+    }
+  ],
+  "noise_periods": [
+    {
+      "type": "static",
+      "duration_range_seconds": [
+        5.0,
+        15.0
+      ],
+      "weight": 3
+    },
+    {
+      "type": "brown",
+      "duration_range_seconds": [
+        3.0,
+        10.0
+      ],
+      "weight": 2
+    }
+  ],
+  "signal_profiles": [
+    {
+      "profile_name": "clear",
+      "weight": 15,
+      "fade_duration_seconds": 2.0
+    },
+    {
+      "profile_name": "weak_signal",
+      "weight": 10,
+      "fade_duration_seconds": 3.0
+    },
+    {
+      "profile_name": "tuning",
+      "weight": 8,
+      "fade_duration_seconds": 2.5
+    },
+    {
+      "profile_name": "detuned",
+      "weight": 5,
+      "fade_duration_seconds": 2.0
+    }
+  ],
+  "state_weights": {
+    "track": 50,
+    "hex_message": 15,
+    "noise": 10,
+    "profile_change": 25
+  },
+  "recent_history_size": 5,
+  "duplicate_penalty_multiplier": 0.1
+}

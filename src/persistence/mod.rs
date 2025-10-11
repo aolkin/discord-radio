@@ -2,7 +2,7 @@ mod file_store;
 mod types;
 
 pub use file_store::FileStore;
-pub use types::{MessagePlaybackState, MultiTrackPlaybackState, ProfileState, TrackState};
+pub use types::{DJState, MessagePlaybackState, MultiTrackPlaybackState, ProfileState, TrackState};
 
 use async_trait::async_trait;
 use serenity::model::id::{ChannelId, GuildId};
@@ -34,4 +34,8 @@ pub trait StateStore: Send + Sync {
 
     async fn save_profile_state(&self, guild_id: GuildId, state: &ProfileState) -> Result<()>;
     async fn load_profile_states(&self) -> Result<HashMap<GuildId, ProfileState>>;
+
+    async fn save_dj_state(&self, guild_id: GuildId, state: &DJState) -> Result<()>;
+    async fn load_dj_states(&self) -> Result<HashMap<GuildId, DJState>>;
+    async fn remove_dj_state(&self, guild_id: GuildId) -> Result<()>;
 }

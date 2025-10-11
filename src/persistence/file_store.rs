@@ -1,4 +1,6 @@
-use super::{MessagePlaybackState, MultiTrackPlaybackState, ProfileState, Result, StateStore};
+use super::{
+    DJState, MessagePlaybackState, MultiTrackPlaybackState, ProfileState, Result, StateStore,
+};
 use async_trait::async_trait;
 use serenity::model::id::{ChannelId, GuildId};
 use std::collections::HashMap;
@@ -102,6 +104,10 @@ impl FileStore {
     fn profile_states(&self) -> PersistedMap<GuildId, ProfileState> {
         PersistedMap::new(self.base_path.clone(), "profile_states.json")
     }
+
+    fn dj_states(&self) -> PersistedMap<GuildId, DJState> {
+        PersistedMap::new(self.base_path.clone(), "dj_states.json")
+    }
 }
 
 #[async_trait]
@@ -160,5 +166,17 @@ impl StateStore for FileStore {
 
     async fn load_profile_states(&self) -> Result<HashMap<GuildId, ProfileState>> {
         self.profile_states().load_all().await
+    }
+
+    async fn save_dj_state(&self, guild_id: GuildId, state: &DJState) -> Result<()> {
+        self.dj_states().insert(guild_id, state.clone()).await
+    }
+
+    async fn load_dj_states(&self) -> Result<HashMap<GuildId, DJState>> {
+        self.dj_states().load_all().await
+    }
+
+    async fn remove_dj_state(&self, guild_id: GuildId) -> Result<()> {
+        self.dj_states().remove(&guild_id).await
     }
 }

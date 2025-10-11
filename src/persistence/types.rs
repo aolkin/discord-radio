@@ -32,3 +32,9 @@ pub struct ProfileState {
     pub profile_name: String,
     pub bypass: bool,
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct DJState {
+    pub config_name: String,
+    pub running: bool,
+}

@@ -3,6 +3,7 @@ use rand::{Rng, SeedableRng, rngs::StdRng};
 pub struct NoiseGenerator {
     white_state: WhiteNoiseState,
     pink_state: PinkNoiseState,
+    brown_state: BrownNoiseState,
 }
 
 struct WhiteNoiseState {
@@ -21,14 +22,21 @@ struct PinkNoiseState {
     rng: StdRng,
 }
 
+struct BrownNoiseState {
+    last_value: f32,
+    rng: StdRng,
+}
+
 impl NoiseGenerator {
     pub fn new() -> Self {
         use rand::RngCore;
         let mut seed_rng = rand::rng();
         let mut seed1 = [0u8; 32];
         let mut seed2 = [0u8; 32];
+        let mut seed3 = [0u8; 32];
         seed_rng.fill_bytes(&mut seed1);
         seed_rng.fill_bytes(&mut seed2);
+        seed_rng.fill_bytes(&mut seed3);
 
         Self {
             white_state: WhiteNoiseState {
@@ -39,13 +47,22 @@ impl NoiseGenerator {
                 counter: 0,
                 rng: StdRng::from_seed(seed2),
             },
+            brown_state: BrownNoiseState {
+                last_value: 0.0,
+                rng: StdRng::from_seed(seed3),
+            },
         }
     }
 
-    pub fn next_frame(&mut self) -> ([f32; 2], [f32; 2]) {
+    pub fn next_frame(&mut self) -> ([f32; 2], [f32; 2], [f32; 2]) {
         let white_sample = self.white_state.next();
         let pink_sample = self.pink_state.next();
-        ([white_sample, white_sample], [pink_sample, pink_sample])
+        let brown_sample = self.brown_state.next();
+        (
+            [white_sample, white_sample],
+            [pink_sample, pink_sample],
+            [brown_sample, brown_sample],
+        )
     }
 }
 
@@ -63,5 +80,13 @@ impl PinkNoiseState {
         self.counter = self.counter.wrapping_add(1);
 
         pink / 7.0
+    }
+}
+
+impl BrownNoiseState {
+    fn next(&mut self) -> f32 {
+        let white = self.rng.random::<f32>() * 2.0 - 1.0;
+        self.last_value = (self.last_value + white * 0.02).clamp(-1.0, 1.0);
+        self.last_value
     }
 }

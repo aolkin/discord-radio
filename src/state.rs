@@ -1,3 +1,4 @@
+use crate::audio::dj::manager::DJManager;
 use crate::audio::duration::DurationCache;
 use crate::audio::processing_thread::AudioProcessor;
 use crate::audio::profiles::ProfileManager;
@@ -7,7 +8,7 @@ use serenity::model::id::GuildId;
 use songbird::Call;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tokio::task::JoinHandle;
 
 pub type Data = Arc<BotState>;
@@ -38,8 +39,8 @@ impl HexPlaybackState {
 }
 
 pub struct BotState {
-    pub voice_connections: RwLock<HashMap<GuildId, Arc<tokio::sync::Mutex<Call>>>>,
-    pub track_managers: RwLock<HashMap<GuildId, Arc<tokio::sync::Mutex<TrackManager>>>>,
+    pub voice_connections: RwLock<HashMap<GuildId, Arc<Mutex<Call>>>>,
+    pub track_managers: RwLock<HashMap<GuildId, Arc<Mutex<TrackManager>>>>,
     pub hex_audio_dir: String,
     pub state_store: Arc<dyn StateStore>,
     pub hex_playback_states: RwLock<HashMap<GuildId, Arc<RwLock<HexPlaybackState>>>>,
@@ -47,6 +48,7 @@ pub struct BotState {
     pub duration_cache: DurationCache,
     pub audio_processors: RwLock<HashMap<GuildId, Arc<RwLock<AudioProcessor>>>>,
     pub profile_manager: ProfileManager,
+    pub dj_managers: RwLock<HashMap<GuildId, Arc<Mutex<DJManager>>>>,
 }
 
 impl BotState {
@@ -73,6 +75,7 @@ impl BotState {
             duration_cache: DurationCache::new(),
             audio_processors: RwLock::new(HashMap::new()),
             profile_manager,
+            dj_managers: RwLock::new(HashMap::new()),
         }
     }
 
