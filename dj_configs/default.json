@@ -33,7 +33,7 @@
   "signal_profiles": [
     {
       "profile_name": "clear",
-      "weight": 15,
+      "weight": 20,
       "fade_duration_seconds": 2.0
     },
     {
@@ -43,19 +43,19 @@
     },
     {
       "profile_name": "tuning",
-      "weight": 8,
+      "weight": 5,
       "fade_duration_seconds": 2.5
     },
     {
-      "profile_name": "detuned",
-      "weight": 5,
+      "profile_name": "locked",
+      "weight": 10,
       "fade_duration_seconds": 2.0
     }
   ],
   "state_weights": {
     "track": 50,
-    "hex_message": 15,
-    "noise": 10,
+    "hex_message": 0,
+    "noise": 0,
     "profile_change": 25
   },
   "recent_history_size": 5,
