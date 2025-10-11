@@ -6,7 +6,7 @@ use std::sync::Arc;
 use symphonia::core::io::MediaSource;
 use tokio::sync::{mpsc, RwLock};
 
-const CHANNEL_BUFFER_SIZE: usize = 16;
+const CHANNEL_BUFFER_SIZE: usize = 32;
 const SAMPLE_RATE: u32 = 48000;
 const CHANNELS: u16 = 2;
 
@@ -26,10 +26,6 @@ impl ProcessedAudioAdapter {
         }
     }
 
-    pub fn processor(&self) -> Arc<RwLock<AudioProcessor>> {
-        Arc::clone(&self.processor_handle)
-    }
-
     pub async fn spawn(
         self,
         call: Arc<tokio::sync::Mutex<songbird::Call>>,
@@ -38,12 +34,12 @@ impl ProcessedAudioAdapter {
         tokio::task::JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>>,
     ) {
         let processor = self.processor_handle.clone();
-        let (tx, rx) = mpsc::channel::<Vec<i16>>(CHANNEL_BUFFER_SIZE);
+        let (tx, rx) = mpsc::channel::<Vec<f32>>(CHANNEL_BUFFER_SIZE);
 
         // Create audio reader from the receiver
         let reader = AudioChannelReader::new(rx);
 
-        // Create RawAdapter for Songbird
+        // Create RawAdapter for Songbird (expects interleaved f32 PCM)
         let raw_input = RawAdapter::new(reader, SAMPLE_RATE, CHANNELS as u32);
 
         // Play the input through Songbird
@@ -60,13 +56,13 @@ impl ProcessedAudioAdapter {
 
 /// Reader that pulls PCM data from a channel
 struct AudioChannelReader {
-    receiver: mpsc::Receiver<Vec<i16>>,
+    receiver: mpsc::Receiver<Vec<f32>>,
     buffer: Vec<u8>,
     position: usize,
 }
 
 impl AudioChannelReader {
-    fn new(receiver: mpsc::Receiver<Vec<i16>>) -> Self {
+    fn new(receiver: mpsc::Receiver<Vec<f32>>) -> Self {
         Self {
             receiver,
             buffer: Vec::new(),
@@ -75,9 +71,12 @@ impl AudioChannelReader {
     }
 
     fn fill_buffer_from_channel(&mut self) {
-        // Try to receive new audio data (non-blocking)
-        if let Ok(pcm_samples) = self.receiver.try_recv() {
-            // Convert i16 samples to bytes (little-endian)
+        // Block until we receive new audio data
+        // This prevents stuttering by ensuring Songbird waits for real audio
+        if let Some(pcm_samples) = tokio::task::block_in_place(|| {
+            self.receiver.blocking_recv()
+        }) {
+            // Convert f32 samples to bytes (little-endian)
             self.buffer.clear();
             for sample in pcm_samples {
                 self.buffer.extend_from_slice(&sample.to_le_bytes());
@@ -89,15 +88,14 @@ impl AudioChannelReader {
 
 impl Read for AudioChannelReader {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        // If we've consumed the current buffer, try to get more
+        // If we've consumed the current buffer, get more
         if self.position >= self.buffer.len() {
             self.fill_buffer_from_channel();
         }
 
-        // If still no data, return silence
+        // If still no data after blocking, the channel is closed
         if self.buffer.is_empty() {
-            buf.fill(0);
-            return Ok(buf.len());
+            return Ok(0); // EOF
         }
 
         // Copy available data to output buffer
@@ -107,12 +105,7 @@ impl Read for AudioChannelReader {
         buf[..to_copy].copy_from_slice(&self.buffer[self.position..self.position + to_copy]);
         self.position += to_copy;
 
-        // Fill remainder with silence if needed
-        if to_copy < buf.len() {
-            buf[to_copy..].fill(0);
-        }
-
-        Ok(buf.len())
+        Ok(to_copy) // Return actual bytes copied, not buf.len()
     }
 }
 

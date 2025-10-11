@@ -68,6 +68,12 @@ pub async fn hex_playback_task(
 
         {
             let mut manager = manager_arc.lock().await;
+
+            // Remove existing hex track if it exists (shouldn't happen, but guard against it)
+            if manager.has_track(HEX_PLAYBACK_TRACK_NAME) {
+                manager.remove_track(HEX_PLAYBACK_TRACK_NAME).await;
+            }
+
             let callback = Arc::new(move || {
                 notify_clone.notify_one();
             });

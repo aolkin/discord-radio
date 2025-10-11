@@ -9,6 +9,7 @@ pub type TrackEndCallback = Arc<dyn Fn() + Send + Sync>;
 pub trait AudioSource: Send + Sync {
     fn next_frame(&mut self) -> Option<[f32; 2]>;
     fn seek(&mut self, position: Duration) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    #[allow(dead_code)]
     fn duration(&self) -> Option<Duration>;
     fn reset(&mut self);
 }
@@ -42,22 +43,32 @@ impl MixerTrack {
             return Some([0.0, 0.0]);
         }
 
-        match self.source.next_frame() {
-            Some(frame) => {
-                let vol = self.volume.load(Ordering::Relaxed);
-                Some([frame[0] * vol, frame[1] * vol])
-            }
-            None => {
-                if self.loops {
-                    self.source.reset();
-                    self.next_frame()
-                } else {
-                    self.active = false;
-                    // Trigger callback if track ended
-                    if let Some(ref callback) = self.end_callback {
-                        callback();
+        // Limit loop attempts to prevent infinite loops if reset keeps failing
+        const MAX_RESET_ATTEMPTS: u32 = 3;
+        let mut reset_attempts = 0;
+
+        loop {
+            match self.source.next_frame() {
+                Some(frame) => {
+                    let vol = self.volume.load(Ordering::Relaxed);
+                    return Some([frame[0] * vol, frame[1] * vol]);
+                }
+                None => {
+                    if self.loops && reset_attempts < MAX_RESET_ATTEMPTS {
+                        self.source.reset();
+                        reset_attempts += 1;
+                        // Continue loop to try getting a frame from the reset source
+                    } else {
+                        if reset_attempts >= MAX_RESET_ATTEMPTS {
+                            tracing::error!("Track failed to reset after {} attempts, stopping playback", MAX_RESET_ATTEMPTS);
+                        }
+                        self.active = false;
+                        // Trigger end callback if track ended
+                        if let Some(ref callback) = self.end_callback {
+                            callback();
+                        }
+                        return Some([0.0, 0.0]);
                     }
-                    Some([0.0, 0.0])
                 }
             }
         }
@@ -66,7 +77,9 @@ impl MixerTrack {
 
 pub struct CustomMixer {
     tracks: HashMap<String, MixerTrack>,
+    #[allow(dead_code)]
     sample_rate: u32,
+    #[allow(dead_code)]
     channels: u16,
 }
 
@@ -79,6 +92,7 @@ impl CustomMixer {
         }
     }
 
+    #[allow(dead_code)]
     pub fn add_track(
         &mut self,
         name: String,
@@ -114,6 +128,7 @@ impl CustomMixer {
         self.tracks.remove(name);
     }
 
+    #[allow(dead_code)]
     pub fn has_track(&self, name: &str) -> bool {
         self.tracks.contains_key(name)
     }
@@ -163,18 +178,22 @@ impl CustomMixer {
         mixed
     }
 
+    #[allow(dead_code)]
     pub fn fill_buffer(&mut self, frame_count: usize) -> Vec<[f32; 2]> {
         (0..frame_count).map(|_| self.mix_next_frame()).collect()
     }
 
+    #[allow(dead_code)]
     pub fn sample_rate(&self) -> u32 {
         self.sample_rate
     }
 
+    #[allow(dead_code)]
     pub fn channels(&self) -> u16 {
         self.channels
     }
 
+    #[allow(dead_code)]
     pub fn seek_track(&mut self, name: &str, position: Duration) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let track = self.tracks.get_mut(name)
             .ok_or_else(|| format!("Track '{}' not found", name))?;
@@ -183,6 +202,7 @@ impl CustomMixer {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn get_track_volume(&self, name: &str) -> Option<f32> {
         self.tracks.get(name).map(|t| t.volume.load(Ordering::Relaxed))
     }

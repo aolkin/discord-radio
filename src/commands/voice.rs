@@ -318,12 +318,16 @@ pub async fn change_track_state(
             let volume = volume.unwrap_or(1.0);
             let loops = loops.unwrap_or(true);
 
-            if manager.has_track(&name)
-                && let Err(e) = manager.stop_track(&name, fade_time, false).await
-            {
-                ctx.say(format!("Failed to stop existing track: {}", e))
-                    .await?;
-                return Ok(());
+            // If track exists, fade it out in the background
+            if manager.has_track(&name) {
+                let manager_clone = manager_arc.clone();
+                let name_clone = name.clone();
+                tokio::spawn(async move {
+                    let mut mgr = manager_clone.lock().await;
+                    if let Err(e) = mgr.stop_track(&name_clone, fade_time, false).await {
+                        tracing::warn!("Failed to stop existing track '{}': {}", name_clone, e);
+                    }
+                });
             }
 
             if let Err(e) = manager
@@ -607,6 +611,29 @@ async fn ensure_hex_playback_task(
         .insert(guild_id, handle);
 }
 
+async fn autocomplete_profile<'a>(
+    _ctx: Context<'_>,
+    partial: &'a str,
+) -> Vec<String> {
+    let profiles_dir = "audio_profiles";
+    let mut profiles = Vec::new();
+
+    if let Ok(entries) = std::fs::read_dir(profiles_dir) {
+        for entry in entries.flatten() {
+            if let Some(filename) = entry.file_name().to_str()
+                && filename.ends_with(".json") {
+                    let profile_name = filename.trim_end_matches(".json").to_string();
+                    if profile_name.starts_with(partial) {
+                        profiles.push(profile_name);
+                    }
+                }
+        }
+    }
+
+    profiles.sort();
+    profiles
+}
+
 /// Change the audio signal processing profile
 #[poise::command(
     slash_command,
@@ -615,7 +642,9 @@ async fn ensure_hex_playback_task(
 )]
 pub async fn signal_profile(
     ctx: Context<'_>,
-    #[description = "Profile name (clear, weak_signal, detuned, tuning, locked)"] profile: String,
+    #[description = "Profile name"]
+    #[autocomplete = "autocomplete_profile"]
+    profile: String,
     #[description = "Fade duration in seconds (default: 2.0)"] fade_duration: Option<f32>,
 ) -> Result<(), Error> {
     let guild_id = ctx

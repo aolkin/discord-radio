@@ -4,6 +4,7 @@ use std::collections::VecDeque;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
+#[allow(clippy::upper_case_acronyms)]
 pub struct LFO {
     phase: f64,
     phase_increment: f64,

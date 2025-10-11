@@ -127,7 +127,7 @@ impl ProcessingThread {
 
     pub async fn run(
         &self,
-        output_tx: tokio::sync::mpsc::Sender<Vec<i16>>,
+        output_tx: tokio::sync::mpsc::Sender<Vec<f32>>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut timer = interval(Duration::from_millis(FRAME_DURATION_MS));
 
@@ -139,14 +139,10 @@ impl ProcessingThread {
                 processor.process_next_chunk()
             };
 
-            let pcm: Vec<i16> = frames
+            // Flatten stereo frames into interleaved f32 samples
+            let pcm: Vec<f32> = frames
                 .into_iter()
-                .flat_map(|frame| {
-                    [
-                        (frame[0].clamp(-1.0, 1.0) * 32767.0) as i16,
-                        (frame[1].clamp(-1.0, 1.0) * 32767.0) as i16,
-                    ]
-                })
+                .flat_map(|frame| [frame[0], frame[1]])
                 .collect();
 
             if output_tx.send(pcm).await.is_err() {
@@ -159,7 +155,7 @@ impl ProcessingThread {
 
     pub async fn spawn(
         self,
-        output_tx: tokio::sync::mpsc::Sender<Vec<i16>>,
+        output_tx: tokio::sync::mpsc::Sender<Vec<f32>>,
     ) -> tokio::task::JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>> {
         tokio::spawn(async move { self.run(output_tx).await })
     }
