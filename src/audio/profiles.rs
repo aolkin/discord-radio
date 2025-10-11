@@ -15,6 +15,7 @@ pub struct SignalProfile {
     pub tremolo_depth: f32,
     pub tremolo_rate: f32,
 
+    pub clip_pregain: f32,
     pub clip_threshold: f32,
     pub bitcrush_bits: Option<u8>,
 
@@ -37,6 +38,7 @@ impl SignalProfile {
             pink_noise_level: self.pink_noise_level * inv_t + other.pink_noise_level * t,
             tremolo_depth: self.tremolo_depth * inv_t + other.tremolo_depth * t,
             tremolo_rate: self.tremolo_rate * inv_t + other.tremolo_rate * t,
+            clip_pregain: self.clip_pregain * inv_t + other.clip_pregain * t,
             clip_threshold: self.clip_threshold * inv_t + other.clip_threshold * t,
             bitcrush_bits: if t < 0.5 {
                 self.bitcrush_bits

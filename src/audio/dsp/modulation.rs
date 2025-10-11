@@ -4,19 +4,56 @@ use rand::{Rng, SeedableRng, rngs::StdRng};
 pub struct LFO {
     phase: f64,
     phase_increment: f64,
+    base_phase_increment: f64,
+    jitter_amount: f64,
+    sample_rate: u32,
+    rng: StdRng,
+    frames_until_jitter: u32,
 }
 
 impl LFO {
     pub fn new(sample_rate: u32, frequency: f32) -> Self {
+        use rand::RngCore;
+        let mut seed_rng = rand::rng();
+        let mut seed = [0u8; 32];
+        seed_rng.fill_bytes(&mut seed);
+
         let phase_increment = (frequency as f64) / (sample_rate as f64);
         Self {
             phase: 0.0,
             phase_increment,
+            base_phase_increment: phase_increment,
+            jitter_amount: 0.7,
+            sample_rate,
+            rng: StdRng::from_seed(seed),
+            frames_until_jitter: 0,
         }
     }
 
+    pub fn set_frequency(&mut self, sample_rate: u32, frequency: f32) {
+        self.sample_rate = sample_rate;
+        self.base_phase_increment = (frequency as f64) / (sample_rate as f64);
+        self.phase_increment = self.base_phase_increment;
+    }
+
     pub fn next(&mut self) -> f32 {
-        let value = (self.phase * 2.0 * std::f64::consts::PI).sin();
+        if self.frames_until_jitter == 0 {
+            let jitter_range = self.base_phase_increment * self.jitter_amount;
+            let random_offset = (self.rng.random::<f64>() - 0.5) * 2.0 * jitter_range;
+            self.phase_increment = self.base_phase_increment + random_offset;
+
+            let jitter_interval_ms = self.rng.random_range(50.0..=200.0);
+            self.frames_until_jitter =
+                (jitter_interval_ms / 1000.0 * self.sample_rate as f64) as u32;
+        } else {
+            self.frames_until_jitter -= 1;
+        }
+
+        let value = if self.phase < 0.5 {
+            self.phase * 4.0 - 1.0
+        } else {
+            3.0 - self.phase * 4.0
+        };
         self.phase += self.phase_increment;
         if self.phase >= 1.0 {
             self.phase -= 1.0;
@@ -39,8 +76,8 @@ impl Bitcrusher {
     }
 
     pub fn process(&self, sample: f32) -> f32 {
-        let levels = 2.0_f32.powi(self.depth as i32);
-        (sample * levels).round() / levels
+        let step_size = 1.0 / 2.0_f32.powi(self.depth as i32 - 1);
+        (sample / step_size).round() * step_size
     }
 
     pub fn process_frame(&self, frame: [f32; 2]) -> [f32; 2] {

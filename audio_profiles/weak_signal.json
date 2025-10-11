@@ -6,6 +6,7 @@
   "pink_noise_level": 0.06,
   "tremolo_depth": 0.6,
   "tremolo_rate": 2.0,
+  "clip_pregain": 1.0,
   "clip_threshold": 0.7,
   "bitcrush_bits": 8,
   "dropout_probability": 0.3,

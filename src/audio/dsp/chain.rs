@@ -19,6 +19,7 @@ pub struct RadioEffectChain {
     tremolo_lfo: LFO,
     tremolo_depth: Arc<AtomicF32>,
 
+    clip_pregain: Arc<AtomicF32>,
     clip_threshold: Arc<AtomicF32>,
 
     bitcrusher: Option<Bitcrusher>,
@@ -65,6 +66,7 @@ impl RadioEffectChain {
             tremolo_lfo: LFO::new(sample_rate, profile.tremolo_rate),
             tremolo_depth: Arc::new(AtomicF32::new(profile.tremolo_depth)),
 
+            clip_pregain: Arc::new(AtomicF32::new(profile.clip_pregain)),
             clip_threshold: Arc::new(AtomicF32::new(profile.clip_threshold)),
 
             bitcrusher,
@@ -111,6 +113,10 @@ impl RadioEffectChain {
             .store(profile.pink_noise_level, Ordering::Relaxed);
         self.tremolo_depth
             .store(profile.tremolo_depth, Ordering::Relaxed);
+        self.tremolo_lfo
+            .set_frequency(self.sample_rate, profile.tremolo_rate);
+        self.clip_pregain
+            .store(profile.clip_pregain, Ordering::Relaxed);
         self.clip_threshold
             .store(profile.clip_threshold, Ordering::Relaxed);
 
@@ -164,10 +170,11 @@ impl RadioEffectChain {
         frame[1] *= tremolo_gain;
 
         // 4. Soft clipping - Simulate overdriven/distorted signal
-        // Prevents harsh digital clipping while adding subtle saturation
+        // Apply pregain, then clip to threshold to create distortion
+        let pregain = self.clip_pregain.load(Ordering::Relaxed);
         let threshold = self.clip_threshold.load(Ordering::Relaxed);
-        frame[0] = soft_clip(frame[0], threshold);
-        frame[1] = soft_clip(frame[1], threshold);
+        frame[0] = soft_clip(frame[0] * pregain, threshold);
+        frame[1] = soft_clip(frame[1] * pregain, threshold);
 
         // 5. Bitcrushing - Simulate low-quality digital encoding
         // Reduces bit depth to create lo-fi digital artifacts
