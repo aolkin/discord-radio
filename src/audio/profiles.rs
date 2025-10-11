@@ -139,10 +139,4 @@ impl ProfileManager {
     pub fn list_profiles(&self) -> Vec<String> {
         self.profiles.keys().cloned().collect()
     }
-
-    pub fn interpolate(&self, from_name: &str, to_name: &str, t: f32) -> Option<SignalProfile> {
-        let from = self.profiles.get(from_name)?;
-        let to = self.profiles.get(to_name)?;
-        Some(from.interpolate(to, t))
-    }
 }

@@ -1,5 +1,6 @@
 use crate::audio::duration::DurationCache;
 use crate::audio::processing_thread::AudioProcessor;
+use crate::audio::profiles::ProfileManager;
 use crate::audio::tracks::TrackManager;
 use crate::persistence::StateStore;
 use serenity::model::id::GuildId;
@@ -45,10 +46,23 @@ pub struct BotState {
     pub hex_playback_tasks: RwLock<HashMap<GuildId, JoinHandle<()>>>,
     pub duration_cache: DurationCache,
     pub audio_processors: RwLock<HashMap<GuildId, Arc<RwLock<AudioProcessor>>>>,
+    pub profile_manager: ProfileManager,
 }
 
 impl BotState {
     pub fn new(hex_audio_dir: String, state_store: Arc<dyn StateStore>) -> Self {
+        let profiles_dir = "audio_profiles";
+        let mut profile_manager = ProfileManager::new(profiles_dir);
+
+        if let Err(e) = profile_manager.load_all() {
+            tracing::warn!("Failed to load audio profiles at startup: {}", e);
+        } else {
+            tracing::info!(
+                "Loaded {} audio profiles",
+                profile_manager.list_profiles().len()
+            );
+        }
+
         Self {
             voice_connections: RwLock::new(HashMap::new()),
             track_managers: RwLock::new(HashMap::new()),
@@ -58,6 +72,7 @@ impl BotState {
             hex_playback_tasks: RwLock::new(HashMap::new()),
             duration_cache: DurationCache::new(),
             audio_processors: RwLock::new(HashMap::new()),
+            profile_manager,
         }
     }
 

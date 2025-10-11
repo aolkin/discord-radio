@@ -1,7 +1,7 @@
 use atomic_float::AtomicF32;
 use std::collections::HashMap;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 pub type TrackEndCallback = Arc<dyn Fn() + Send + Sync>;
@@ -60,7 +60,10 @@ impl MixerTrack {
                         // Continue loop to try getting a frame from the reset source
                     } else {
                         if reset_attempts >= MAX_RESET_ATTEMPTS {
-                            tracing::error!("Track failed to reset after {} attempts, stopping playback", MAX_RESET_ATTEMPTS);
+                            tracing::error!(
+                                "Track failed to reset after {} attempts, stopping playback",
+                                MAX_RESET_ATTEMPTS
+                            );
                         }
                         self.active = false;
                         // Trigger end callback if track ended
@@ -194,8 +197,14 @@ impl CustomMixer {
     }
 
     #[allow(dead_code)]
-    pub fn seek_track(&mut self, name: &str, position: Duration) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let track = self.tracks.get_mut(name)
+    pub fn seek_track(
+        &mut self,
+        name: &str,
+        position: Duration,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let track = self
+            .tracks
+            .get_mut(name)
             .ok_or_else(|| format!("Track '{}' not found", name))?;
 
         track.source.seek(position)?;
@@ -204,6 +213,8 @@ impl CustomMixer {
 
     #[allow(dead_code)]
     pub fn get_track_volume(&self, name: &str) -> Option<f32> {
-        self.tracks.get(name).map(|t| t.volume.load(Ordering::Relaxed))
+        self.tracks
+            .get(name)
+            .map(|t| t.volume.load(Ordering::Relaxed))
     }
 }

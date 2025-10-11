@@ -37,7 +37,8 @@ impl SymphoniaSource {
         let format_opts = FormatOptions::default();
         let metadata_opts = MetadataOptions::default();
 
-        let probed = symphonia::default::get_probe().format(&hint, mss, &format_opts, &metadata_opts)?;
+        let probed =
+            symphonia::default::get_probe().format(&hint, mss, &format_opts, &metadata_opts)?;
 
         let format = probed.format;
         let track = format
@@ -48,7 +49,10 @@ impl SymphoniaSource {
         let decoder_opts = DecoderOptions::default();
         let decoder = symphonia::default::get_codecs().make(&track.codec_params, &decoder_opts)?;
 
-        let sample_rate = track.codec_params.sample_rate.ok_or("Audio file has no sample rate")?;
+        let sample_rate = track
+            .codec_params
+            .sample_rate
+            .ok_or("Audio file has no sample rate")?;
 
         // Validate sample rate matches required rate
         if sample_rate != required_sample_rate {
@@ -59,7 +63,9 @@ impl SymphoniaSource {
             ).into());
         }
 
-        let channels = track.codec_params.channels
+        let channels = track
+            .codec_params
+            .channels
             .map(|ch| ch.count())
             .unwrap_or(2);
 
@@ -92,8 +98,18 @@ impl SymphoniaSource {
 
             match self.decoder.decode(&packet) {
                 Ok(audio_buf) => {
-                    if self.sample_buf.is_none() || self.sample_buf.as_ref().unwrap().capacity() < audio_buf.capacity() {
-                        self.sample_buf = Some(SampleBuffer::new(audio_buf.capacity() as u64, *audio_buf.spec()));
+                    // Skip empty buffers (can happen after seeking)
+                    if audio_buf.frames() == 0 {
+                        continue;
+                    }
+
+                    if self.sample_buf.is_none()
+                        || self.sample_buf.as_ref().unwrap().capacity() < audio_buf.capacity()
+                    {
+                        self.sample_buf = Some(SampleBuffer::new(
+                            audio_buf.capacity() as u64,
+                            *audio_buf.spec(),
+                        ));
                     }
 
                     if let Some(ref mut buf) = self.sample_buf {
@@ -110,7 +126,9 @@ impl SymphoniaSource {
 
     fn get_next_source_frame(&mut self) -> Option<[f32; 2]> {
         // Need to decode if we don't have a buffer or have consumed current buffer
-        let needs_decode = self.sample_buf.as_ref()
+        let needs_decode = self
+            .sample_buf
+            .as_ref()
             .map(|buf| {
                 let channels = self.channels;
                 let num_frames = buf.len() / channels;
@@ -128,8 +146,13 @@ impl SymphoniaSource {
         let num_frames = buf.len() / channels;
 
         if self.current_frame_idx >= num_frames {
-            tracing::warn!("Frame index {} >= num_frames {} (buf.len={}, channels={})",
-                self.current_frame_idx, num_frames, buf.len(), channels);
+            tracing::warn!(
+                "Frame index {} >= num_frames {} (buf.len={}, channels={})",
+                self.current_frame_idx,
+                num_frames,
+                buf.len(),
+                channels
+            );
             return None;
         }
 
@@ -155,7 +178,26 @@ impl AudioSource for SymphoniaSource {
         self.get_next_source_frame()
     }
 
-    fn seek(&mut self, _position: Duration) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    fn seek(&mut self, position: Duration) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let total_seconds = position.as_secs_f64();
+        let seconds = position.as_secs();
+        let frac = total_seconds - seconds as f64;
+
+        self.format.seek(
+            symphonia::core::formats::SeekMode::Accurate,
+            symphonia::core::formats::SeekTo::Time {
+                time: symphonia::core::units::Time::new(seconds, frac),
+                track_id: None,
+            },
+        )?;
+
+        // Reset decoder to clear any buffered state
+        self.decoder.reset();
+
+        // Reset buffer state after seek
+        self.current_frame_idx = 0;
+        self.sample_buf = None;
+
         Ok(())
     }
 
@@ -165,7 +207,17 @@ impl AudioSource for SymphoniaSource {
 
     fn reset(&mut self) {
         // Try to seek to beginning first
-        if self.format.seek(symphonia::core::formats::SeekMode::Accurate, symphonia::core::formats::SeekTo::Time { time: symphonia::core::units::Time::new(0, 0.0), track_id: None }).is_ok() {
+        if self
+            .format
+            .seek(
+                symphonia::core::formats::SeekMode::Accurate,
+                symphonia::core::formats::SeekTo::Time {
+                    time: symphonia::core::units::Time::new(0, 0.0),
+                    track_id: None,
+                },
+            )
+            .is_ok()
+        {
             self.current_frame_idx = 0;
             self.sample_buf = None;
             tracing::debug!("Reset audio source by seeking to beginning");
@@ -179,7 +231,11 @@ impl AudioSource for SymphoniaSource {
                 *self = new_source;
             }
             Err(e) => {
-                tracing::error!("Failed to reset audio source for '{}': {}", self.file_path, e);
+                tracing::error!(
+                    "Failed to reset audio source for '{}': {}",
+                    self.file_path,
+                    e
+                );
             }
         }
     }

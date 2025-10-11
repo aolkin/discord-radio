@@ -1,4 +1,4 @@
-use crate::audio::profiles::{ProfileManager, SignalProfile};
+use crate::audio::profiles::SignalProfile;
 use crate::audio::raw_adapter::ProcessedAudioAdapter;
 use crate::state::Data;
 use serenity::model::id::GuildId;
@@ -51,6 +51,36 @@ pub async fn setup_voice_connection(
         processors.insert(guild_id, processor.clone());
     }
 
+    // Restore saved profile state if available
+    if let Ok(profile_states) = bot_state.state_store.load_profile_states().await
+        && let Some(profile_state) = profile_states.get(&guild_id)
+    {
+        let mut proc = processor.write().await;
+
+        if profile_state.bypass {
+            proc.set_bypass(true);
+            tracing::info!("Restored bypass state for guild {}", guild_id);
+        } else {
+            // Load the saved profile from ProfileManager
+            if let Some(saved_profile) = bot_state
+                .profile_manager
+                .get_profile(&profile_state.profile_name)
+            {
+                proc.set_profile_immediate(saved_profile.clone());
+                tracing::info!(
+                    "Restored profile '{}' for guild {}",
+                    profile_state.profile_name,
+                    guild_id
+                );
+            } else {
+                tracing::warn!(
+                    "Saved profile '{}' not found, using default",
+                    profile_state.profile_name
+                );
+            }
+        }
+    }
+
     // Link processor to TrackManager if it exists
     {
         let mut track_managers = bot_state.track_managers.write().await;
@@ -65,12 +95,12 @@ pub async fn setup_voice_connection(
     Ok(())
 }
 
-fn load_default_profile(bot_state: &Data) -> Result<SignalProfile, Box<dyn std::error::Error + Send + Sync>> {
-    let profiles_dir = bot_state.audio_profiles_dir();
-    let mut manager = ProfileManager::new(&profiles_dir);
-    manager.load_all()?;
-
-    manager.get_profile("clear")
+fn load_default_profile(
+    bot_state: &Data,
+) -> Result<SignalProfile, Box<dyn std::error::Error + Send + Sync>> {
+    bot_state
+        .profile_manager
+        .get_profile("clear")
         .cloned()
         .ok_or_else(|| "Default 'clear' profile not found".into())
 }

@@ -1,8 +1,8 @@
 pub mod connection;
 pub mod custom_mixer;
 pub mod decoder;
-pub mod duration;
 pub mod dsp;
+pub mod duration;
 pub mod manager;
 pub mod processing_thread;
 pub mod profiles;

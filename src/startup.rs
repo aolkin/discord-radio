@@ -43,7 +43,13 @@ async fn link_processor_to_manager(
     guild_id: GuildId,
     manager_arc: &Arc<tokio::sync::Mutex<crate::audio::tracks::TrackManager>>,
 ) {
-    if let Some(processor_arc) = bot_state.audio_processors.read().await.get(&guild_id).cloned() {
+    if let Some(processor_arc) = bot_state
+        .audio_processors
+        .read()
+        .await
+        .get(&guild_id)
+        .cloned()
+    {
         let mut manager = manager_arc.lock().await;
         manager.set_audio_processor(processor_arc);
     }

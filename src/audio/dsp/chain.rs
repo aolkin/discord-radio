@@ -3,8 +3,8 @@ use crate::audio::dsp::noise::NoiseGenerator;
 use crate::audio::profiles::SignalProfile;
 use atomic_float::AtomicF32;
 use biquad::{Biquad, Coefficients, DirectForm2Transposed, ToHertz};
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 pub struct RadioEffectChain {
     bandpass_l: DirectForm2Transposed<f32>,
@@ -25,6 +25,8 @@ pub struct RadioEffectChain {
     dropout_gen: DropoutGenerator,
 
     sample_rate: u32,
+
+    bypass: bool,
 }
 
 impl RadioEffectChain {
@@ -41,9 +43,9 @@ impl RadioEffectChain {
         )
         .unwrap();
 
-        let pitch_shifter = profile.pitch_shift_cents.map(|cents| {
-            PitchShifter::new(Arc::new(AtomicF32::new(cents)))
-        });
+        let pitch_shifter = profile
+            .pitch_shift_cents
+            .map(|cents| PitchShifter::new(Arc::new(AtomicF32::new(cents))));
 
         let bitcrusher = profile.bitcrush_bits.map(Bitcrusher::new);
 
@@ -70,6 +72,8 @@ impl RadioEffectChain {
             ),
 
             sample_rate,
+
+            bypass: false,
         }
     }
 
@@ -91,8 +95,10 @@ impl RadioEffectChain {
 
         self.noise_gen.set_type(profile.noise_type.clone());
         self.noise_mix.store(profile.noise_level, Ordering::Relaxed);
-        self.tremolo_depth.store(profile.tremolo_depth, Ordering::Relaxed);
-        self.clip_threshold.store(profile.clip_threshold, Ordering::Relaxed);
+        self.tremolo_depth
+            .store(profile.tremolo_depth, Ordering::Relaxed);
+        self.clip_threshold
+            .store(profile.clip_threshold, Ordering::Relaxed);
 
         if let Some(bits) = profile.bitcrush_bits {
             if let Some(ref mut bc) = self.bitcrusher {
@@ -113,9 +119,19 @@ impl RadioEffectChain {
         } else {
             self.pitch_shifter = None;
         }
+
+        self.bypass = false;
+    }
+
+    pub fn set_bypass(&mut self, bypass: bool) {
+        self.bypass = bypass;
     }
 
     pub fn process_frame(&mut self, input: [f32; 2]) -> [f32; 2] {
+        if self.bypass {
+            return input;
+        }
+
         let mut frame = input;
 
         frame[0] = self.bandpass_l.run(frame[0]);
@@ -149,18 +165,6 @@ impl RadioEffectChain {
         }
 
         frame
-    }
-
-    pub fn noise_mix(&self) -> Arc<AtomicF32> {
-        self.noise_mix.clone()
-    }
-
-    pub fn tremolo_depth(&self) -> Arc<AtomicF32> {
-        self.tremolo_depth.clone()
-    }
-
-    pub fn clip_threshold(&self) -> Arc<AtomicF32> {
-        self.clip_threshold.clone()
     }
 }
 

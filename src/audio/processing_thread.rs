@@ -77,6 +77,11 @@ impl AudioProcessor {
         self.transition = None;
     }
 
+    pub fn set_bypass(&mut self, bypass: bool) {
+        self.dsp_chain.set_bypass(bypass);
+        self.transition = None;
+    }
+
     fn process_transitions(&mut self) {
         if let Some(ref mut transition) = self.transition {
             if let Some(interpolated) = transition.advance(FRAME_DURATION_MS as f32) {

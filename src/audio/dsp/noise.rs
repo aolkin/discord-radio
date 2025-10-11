@@ -1,5 +1,5 @@
 use crate::audio::profiles::NoiseType;
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, rngs::StdRng};
 
 pub struct NoiseGenerator {
     noise_type: NoiseType,

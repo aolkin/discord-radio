@@ -275,11 +275,8 @@ pub async fn stop_message(ctx: Context<'_>) -> Result<(), Error> {
     Ok(())
 }
 
-async fn autocomplete_audio_file<'a>(
-    ctx: Context<'_>,
-    partial: &'a str,
-) -> Vec<String> {
-    let content_dir = &ctx.data().content_path;
+async fn autocomplete_audio_file(ctx: Context<'_>, partial: &'_ str) -> Vec<String> {
+    let content_dir = &ctx.data().hex_audio_dir;
     let mut results = Vec::new();
 
     // Split partial into directory and filename parts
@@ -299,21 +296,21 @@ async fn autocomplete_audio_file<'a>(
     if let Ok(entries) = std::fs::read_dir(&search_path) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                if name.starts_with(file_part) {
-                    let full_name = if dir_part.is_empty() {
-                        name.to_string()
-                    } else {
-                        format!("{}{}", dir_part, name)
-                    };
+            if let Some(name) = path.file_name().and_then(|n| n.to_str())
+                && name.starts_with(file_part)
+            {
+                let full_name = if dir_part.is_empty() {
+                    name.to_string()
+                } else {
+                    format!("{}{}", dir_part, name)
+                };
 
-                    if path.is_dir() {
-                        results.push(format!("{}/", full_name));
-                    } else if let Some(ext) = path.extension() {
-                        let ext_str = ext.to_string_lossy().to_lowercase();
-                        if matches!(ext_str.as_str(), "mp3" | "ogg" | "wav" | "flac" | "m4a") {
-                            results.push(full_name);
-                        }
+                if path.is_dir() {
+                    results.push(format!("{}/", full_name));
+                } else if let Some(ext) = path.extension() {
+                    let ext_str = ext.to_string_lossy().to_lowercase();
+                    if matches!(ext_str.as_str(), "mp3" | "ogg" | "wav" | "flac" | "m4a") {
+                        results.push(full_name);
                     }
                 }
             }
@@ -369,7 +366,7 @@ pub async fn change_track_state(
             };
 
             // Prepend content directory to filename
-            let full_path = format!("{}/{}", ctx.data().content_path, filename);
+            let full_path = format!("{}/{}", ctx.data().hex_audio_dir, filename);
 
             let volume = volume.unwrap_or(1.0);
             let loops = loops.unwrap_or(true);
@@ -610,7 +607,13 @@ async fn link_processor_to_manager(
     guild_id: GuildId,
     manager_arc: &Arc<tokio::sync::Mutex<crate::audio::tracks::TrackManager>>,
 ) {
-    if let Some(processor_arc) = bot_state.audio_processors.read().await.get(&guild_id).cloned() {
+    if let Some(processor_arc) = bot_state
+        .audio_processors
+        .read()
+        .await
+        .get(&guild_id)
+        .cloned()
+    {
         let mut manager = manager_arc.lock().await;
         manager.set_audio_processor(processor_arc);
     }
@@ -667,24 +670,21 @@ async fn ensure_hex_playback_task(
         .insert(guild_id, handle);
 }
 
-async fn autocomplete_profile<'a>(
-    _ctx: Context<'_>,
-    partial: &'a str,
-) -> Vec<String> {
-    let profiles_dir = "audio_profiles";
+async fn autocomplete_profile(ctx: Context<'_>, partial: &'_ str) -> Vec<String> {
     let mut profiles = Vec::new();
 
-    if let Ok(entries) = std::fs::read_dir(profiles_dir) {
-        for entry in entries.flatten() {
-            if let Some(filename) = entry.file_name().to_str()
-                && filename.ends_with(".json") {
-                    let profile_name = filename.trim_end_matches(".json").to_string();
-                    if profile_name.starts_with(partial) {
-                        profiles.push(profile_name);
-                    }
-                }
-        }
+    // Add special "bypass" profile
+    if "bypass".starts_with(partial) {
+        profiles.push("bypass".to_string());
     }
+
+    profiles.extend(
+        ctx.data()
+            .profile_manager
+            .list_profiles()
+            .into_iter()
+            .filter(|name| name.starts_with(partial)),
+    );
 
     profiles.sort();
     profiles
@@ -725,31 +725,38 @@ pub async fn signal_profile(
         return Ok(());
     }
 
-    let profile_path = format!("audio_profiles/{}.json", profile);
-    if !std::path::Path::new(&profile_path).exists() {
-        ctx.say(format!(
-            "Profile '{}' not found. Available profiles: clear, weak_signal, detuned, tuning, locked",
-            profile
-        ))
-        .await?;
-        return Ok(());
-    }
-
     let processors = ctx.data().audio_processors.read().await;
     let processor_arc = processors.get(&guild_id).cloned();
     drop(processors);
 
     if let Some(processor_arc) = processor_arc {
-        use crate::audio::profiles::ProfileManager;
-        let profiles_dir = ctx.data().audio_profiles_dir();
-        let mut manager = ProfileManager::new(&profiles_dir);
+        // Handle special "bypass" profile
+        if profile == "bypass" {
+            let mut processor = processor_arc.write().await;
+            processor.set_bypass(true);
+            drop(processor);
 
-        if let Err(e) = manager.load_all() {
-            ctx.say(format!("Failed to load profiles: {}", e)).await?;
+            // Persist bypass state
+            let profile_state = crate::persistence::ProfileState {
+                profile_name: "bypass".to_string(),
+                bypass: true,
+            };
+            if let Err(e) = ctx
+                .data()
+                .state_store
+                .save_profile_state(guild_id, &profile_state)
+                .await
+            {
+                tracing::warn!("Failed to save profile state: {}", e);
+            }
+
+            ctx.say("DSP bypass enabled - audio will pass through unprocessed")
+                .await?;
             return Ok(());
         }
 
-        if let Some(new_profile) = manager.get_profile(&profile) {
+        // Load regular profile from ProfileManager
+        if let Some(new_profile) = ctx.data().profile_manager.get_profile(&profile) {
             let mut processor = processor_arc.write().await;
 
             if fade_duration_ms > 0.0 {
@@ -759,6 +766,20 @@ pub async fn signal_profile(
             }
 
             drop(processor);
+
+            // Persist profile state
+            let profile_state = crate::persistence::ProfileState {
+                profile_name: profile.clone(),
+                bypass: false,
+            };
+            if let Err(e) = ctx
+                .data()
+                .state_store
+                .save_profile_state(guild_id, &profile_state)
+                .await
+            {
+                tracing::warn!("Failed to save profile state: {}", e);
+            }
 
             ctx.say(format!(
                 "Switched to signal profile '{}' with {}s fade",
@@ -771,9 +792,11 @@ pub async fn signal_profile(
                 .await?;
         }
     } else {
-        ctx.say("Audio processor not initialized for this guild.\n\
-                Note: Full DSP integration requires refactoring the track system.")
-            .await?;
+        ctx.say(
+            "Audio processor not initialized for this guild.\n\
+                Note: Full DSP integration requires refactoring the track system.",
+        )
+        .await?;
     }
 
     Ok(())

@@ -1,8 +1,8 @@
 use atomic_float::AtomicF32;
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, rngs::StdRng};
 use std::collections::VecDeque;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 #[allow(clippy::upper_case_acronyms)]
 pub struct LFO {
@@ -153,7 +153,9 @@ impl DropoutGenerator {
         let probability = self.probability_per_second / 10.0;
 
         if self.rng.random::<f32>() < probability {
-            let duration_ms = self.rng.random_range(self.duration_range_ms.0..=self.duration_range_ms.1);
+            let duration_ms = self
+                .rng
+                .random_range(self.duration_range_ms.0..=self.duration_range_ms.1);
             let duration_frames = (duration_ms / 1000.0 * self.sample_rate) as u32;
             self.dropout_frames_remaining = duration_frames;
             return true;

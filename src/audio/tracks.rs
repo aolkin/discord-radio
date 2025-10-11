@@ -121,31 +121,37 @@ impl TrackManager {
                     let bot_state = self.bot_state.clone();
                     let track_name_for_cleanup = args.name.clone();
 
-                    let cleanup_cb: crate::audio::custom_mixer::TrackEndCallback = Arc::new(move || {
-                        let guild_id_copy = guild_id;
-                        let bot_state_copy = bot_state.clone();
-                        let name_copy = track_name_for_cleanup.clone();
+                    let cleanup_cb: crate::audio::custom_mixer::TrackEndCallback =
+                        Arc::new(move || {
+                            let guild_id_copy = guild_id;
+                            let bot_state_copy = bot_state.clone();
+                            let name_copy = track_name_for_cleanup.clone();
 
-                        // Spawn a std::thread that creates its own tokio runtime
-                        std::thread::spawn(move || {
-                            let rt = tokio::runtime::Runtime::new().unwrap();
-                            rt.block_on(async move {
-                                tracing::info!("Track '{}' finished in guild {}, cleaning up", name_copy, guild_id_copy);
-                                let track_managers = bot_state_copy.track_managers.read().await;
-                                if let Some(manager_arc) = track_managers.get(&guild_id_copy) {
-                                    let mut manager = manager_arc.lock().await;
-                                    manager.remove_track(&name_copy).await;
-                                }
+                            // Spawn a std::thread that creates its own tokio runtime
+                            std::thread::spawn(move || {
+                                let rt = tokio::runtime::Runtime::new().unwrap();
+                                rt.block_on(async move {
+                                    tracing::info!(
+                                        "Track '{}' finished in guild {}, cleaning up",
+                                        name_copy,
+                                        guild_id_copy
+                                    );
+                                    let track_managers = bot_state_copy.track_managers.read().await;
+                                    if let Some(manager_arc) = track_managers.get(&guild_id_copy) {
+                                        let mut manager = manager_arc.lock().await;
+                                        manager.remove_track(&name_copy).await;
+                                    }
+                                });
                             });
                         });
-                    });
 
                     // Combine with user callback if provided
                     if let Some(user_cb) = callback {
                         Some(Arc::new(move || {
                             user_cb();
                             cleanup_cb();
-                        }) as crate::audio::custom_mixer::TrackEndCallback)
+                        })
+                            as crate::audio::custom_mixer::TrackEndCallback)
                     } else {
                         Some(cleanup_cb)
                     }
@@ -173,10 +179,14 @@ impl TrackManager {
                 start_time: std::time::SystemTime::now(),
             };
 
-            self.finalize_track_start_dsp(track, args.fade_time, processor_arc.clone()).await
+            self.finalize_track_start_dsp(track, args.fade_time, processor_arc.clone())
+                .await
         } else {
             // Fallback: use Songbird directly (should not happen in normal operation)
-            tracing::warn!("Audio processor not available for guild {}, track won't have DSP effects", self.guild_id);
+            tracing::warn!(
+                "Audio processor not available for guild {}, track won't have DSP effects",
+                self.guild_id
+            );
             Err("Audio processor not initialized".into())
         }
     }
@@ -220,7 +230,8 @@ impl TrackManager {
         } else {
             // Set volume directly in mixer
             let mut proc = processor.write().await;
-            proc.mixer_mut().update_track_volume(&track.name, track.volume)?;
+            proc.mixer_mut()
+                .update_track_volume(&track.name, track.volume)?;
         }
 
         let key = track.name.clone();
@@ -230,7 +241,6 @@ impl TrackManager {
 
         Ok(())
     }
-
 
     async fn validate_and_prepare_track(
         &self,
@@ -507,7 +517,11 @@ async fn fade_volume_dsp(
 
         {
             let mut proc = processor.write().await;
-            if proc.mixer_mut().update_track_volume(&track_name, current_volume).is_err() {
+            if proc
+                .mixer_mut()
+                .update_track_volume(&track_name, current_volume)
+                .is_err()
+            {
                 // Track might have been removed
                 return Ok(());
             }

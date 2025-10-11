@@ -26,3 +26,9 @@ fn default_loops() -> bool {
 pub struct MultiTrackPlaybackState {
     pub tracks: Vec<TrackState>,
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ProfileState {
+    pub profile_name: String,
+    pub bypass: bool,
+}

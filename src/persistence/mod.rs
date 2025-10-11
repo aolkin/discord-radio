@@ -2,7 +2,7 @@ mod file_store;
 mod types;
 
 pub use file_store::FileStore;
-pub use types::{MessagePlaybackState, MultiTrackPlaybackState, TrackState};
+pub use types::{MessagePlaybackState, MultiTrackPlaybackState, ProfileState, TrackState};
 
 use async_trait::async_trait;
 use serenity::model::id::{ChannelId, GuildId};
@@ -31,4 +31,7 @@ pub trait StateStore: Send + Sync {
     ) -> Result<()>;
     async fn load_multitrack_playbacks(&self) -> Result<HashMap<GuildId, MultiTrackPlaybackState>>;
     async fn remove_multitrack_playback(&self, guild_id: GuildId) -> Result<()>;
+
+    async fn save_profile_state(&self, guild_id: GuildId, state: &ProfileState) -> Result<()>;
+    async fn load_profile_states(&self) -> Result<HashMap<GuildId, ProfileState>>;
 }
