@@ -1,8 +1,4 @@
-use atomic_float::AtomicF32;
 use rand::{Rng, SeedableRng, rngs::StdRng};
-use std::collections::VecDeque;
-use std::sync::Arc;
-use std::sync::atomic::Ordering;
 
 #[allow(clippy::upper_case_acronyms)]
 pub struct LFO {
@@ -26,60 +22,6 @@ impl LFO {
             self.phase -= 1.0;
         }
         value as f32
-    }
-}
-
-pub struct PitchShifter {
-    pub cents: Arc<AtomicF32>,
-    buffer: VecDeque<[f32; 2]>,
-    buffer_size: usize,
-    read_pos: f32,
-}
-
-impl PitchShifter {
-    pub fn new(cents: Arc<AtomicF32>) -> Self {
-        Self {
-            cents,
-            buffer: VecDeque::with_capacity(4096),
-            buffer_size: 2048,
-            read_pos: 0.0,
-        }
-    }
-
-    pub fn process(&mut self, frame: [f32; 2]) -> [f32; 2] {
-        self.buffer.push_back(frame);
-
-        if self.buffer.len() > self.buffer_size {
-            self.buffer.pop_front();
-        }
-
-        if self.buffer.len() < self.buffer_size {
-            return frame;
-        }
-
-        let cents = self.cents.load(Ordering::Relaxed);
-        let pitch_ratio = 2.0_f32.powf(cents / 1200.0);
-
-        self.read_pos += pitch_ratio;
-
-        if self.read_pos >= self.buffer.len() as f32 {
-            self.read_pos -= self.buffer.len() as f32;
-        }
-
-        let idx = self.read_pos as usize;
-        let frac = self.read_pos - idx as f32;
-
-        if idx + 1 < self.buffer.len() {
-            let frame1 = self.buffer[idx];
-            let frame2 = self.buffer[idx + 1];
-
-            [
-                frame1[0] * (1.0 - frac) + frame2[0] * frac,
-                frame1[1] * (1.0 - frac) + frame2[1] * frac,
-            ]
-        } else {
-            frame
-        }
     }
 }
 

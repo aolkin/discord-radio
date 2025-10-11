@@ -4,7 +4,6 @@ use crate::audio::profiles::SignalProfile;
 
 const SAMPLE_RATE: u32 = 48000;
 const FRAME_SIZE: usize = 960; // 20ms at 48kHz
-const FRAME_DURATION_MS: u64 = 20;
 
 pub struct ProfileTransition {
     pub from: SignalProfile,
@@ -44,6 +43,7 @@ pub struct AudioProcessor {
     dsp_chain: RadioEffectChain,
     transition: Option<ProfileTransition>,
     current_profile: SignalProfile,
+    samples_processed: u64, // Total stereo frames processed (not individual samples)
 }
 
 impl AudioProcessor {
@@ -56,6 +56,7 @@ impl AudioProcessor {
             dsp_chain,
             transition: None,
             current_profile: initial_profile,
+            samples_processed: 0,
         }
     }
 
@@ -82,9 +83,13 @@ impl AudioProcessor {
         self.transition = None;
     }
 
-    fn process_transitions(&mut self) {
+    fn process_transitions(&mut self, frames_to_render: usize) {
         if let Some(ref mut transition) = self.transition {
-            if let Some(interpolated) = transition.advance(FRAME_DURATION_MS as f32) {
+            // Calculate time delta based on actual frames being rendered
+            // frames_to_render is stereo frames (each frame = L+R sample)
+            let delta_ms = (frames_to_render as f32 / SAMPLE_RATE as f32) * 1000.0;
+
+            if let Some(interpolated) = transition.advance(delta_ms) {
                 self.dsp_chain.update_profile(&interpolated);
             }
 
@@ -95,18 +100,37 @@ impl AudioProcessor {
         }
     }
 
-    pub fn fill_buffer(&mut self, buffer: &mut [[f32; 2]]) {
-        self.process_transitions();
+    pub fn process_next_chunk(&mut self) -> Vec<[f32; 2]> {
+        let start = std::time::Instant::now();
+
+        let mut buffer = vec![[0.0, 0.0]; FRAME_SIZE];
+
+        // Advance transitions based on how many frames we're about to render
+        self.process_transitions(FRAME_SIZE);
 
         for frame in buffer.iter_mut() {
             let mixed = self.mixer.mix_next_frame();
             *frame = self.dsp_chain.process_frame(mixed);
         }
-    }
 
-    pub fn process_next_chunk(&mut self) -> Vec<[f32; 2]> {
-        let mut buffer = vec![[0.0, 0.0]; FRAME_SIZE];
-        self.fill_buffer(&mut buffer);
+        // Track total frames processed (stereo frames, not individual samples)
+        self.samples_processed += FRAME_SIZE as u64;
+
+        // Check if generation is keeping up with real-time
+        let elapsed = start.elapsed();
+        let audio_duration_ms = (FRAME_SIZE as f64 / SAMPLE_RATE as f64) * 1000.0;
+        let generation_time_ms = elapsed.as_secs_f64() * 1000.0;
+
+        // Warn if we're taking longer than the audio duration (not keeping up with real-time)
+        if generation_time_ms > audio_duration_ms {
+            tracing::warn!(
+                "Audio generation too slow: took {:.2}ms to generate {:.2}ms of audio ({}% real-time)",
+                generation_time_ms,
+                audio_duration_ms,
+                (audio_duration_ms / generation_time_ms * 100.0) as u32
+            );
+        }
+
         buffer
     }
 }

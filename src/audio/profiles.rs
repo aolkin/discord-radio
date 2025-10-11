@@ -3,21 +3,14 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
-#[serde(rename_all = "lowercase")]
-pub enum NoiseType {
-    White,
-    Pink,
-}
-
-#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct SignalProfile {
     pub name: String,
 
     pub bandpass_low: f32,
     pub bandpass_high: f32,
 
-    pub noise_level: f32,
-    pub noise_type: NoiseType,
+    pub white_noise_level: f32,
+    pub pink_noise_level: f32,
 
     pub tremolo_depth: f32,
     pub tremolo_rate: f32,
@@ -28,7 +21,6 @@ pub struct SignalProfile {
     pub dropout_probability: f32,
     pub dropout_duration_ms: (f32, f32),
 
-    pub pitch_shift_cents: Option<f32>,
     pub frequency_warble_hz: Option<f32>,
 }
 
@@ -41,12 +33,8 @@ impl SignalProfile {
             name: format!("{}→{}", self.name, other.name),
             bandpass_low: self.bandpass_low * inv_t + other.bandpass_low * t,
             bandpass_high: self.bandpass_high * inv_t + other.bandpass_high * t,
-            noise_level: self.noise_level * inv_t + other.noise_level * t,
-            noise_type: if t < 0.5 {
-                self.noise_type.clone()
-            } else {
-                other.noise_type.clone()
-            },
+            white_noise_level: self.white_noise_level * inv_t + other.white_noise_level * t,
+            pink_noise_level: self.pink_noise_level * inv_t + other.pink_noise_level * t,
             tremolo_depth: self.tremolo_depth * inv_t + other.tremolo_depth * t,
             tremolo_rate: self.tremolo_rate * inv_t + other.tremolo_rate * t,
             clip_threshold: self.clip_threshold * inv_t + other.clip_threshold * t,
@@ -60,12 +48,6 @@ impl SignalProfile {
                 self.dropout_duration_ms.0 * inv_t + other.dropout_duration_ms.0 * t,
                 self.dropout_duration_ms.1 * inv_t + other.dropout_duration_ms.1 * t,
             ),
-            pitch_shift_cents: match (self.pitch_shift_cents, other.pitch_shift_cents) {
-                (Some(a), Some(b)) => Some(a * inv_t + b * t),
-                (Some(a), None) => Some(a * inv_t),
-                (None, Some(b)) => Some(b * t),
-                (None, None) => None,
-            },
             frequency_warble_hz: match (self.frequency_warble_hz, other.frequency_warble_hz) {
                 (Some(a), Some(b)) => Some(a * inv_t + b * t),
                 (Some(a), None) => Some(a * inv_t),

@@ -1,8 +1,6 @@
-use crate::audio::profiles::NoiseType;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 
 pub struct NoiseGenerator {
-    noise_type: NoiseType,
     white_state: WhiteNoiseState,
     pink_state: PinkNoiseState,
 }
@@ -24,7 +22,7 @@ struct PinkNoiseState {
 }
 
 impl NoiseGenerator {
-    pub fn new(noise_type: NoiseType) -> Self {
+    pub fn new() -> Self {
         use rand::RngCore;
         let mut seed_rng = rand::rng();
         let mut seed1 = [0u8; 32];
@@ -33,7 +31,6 @@ impl NoiseGenerator {
         seed_rng.fill_bytes(&mut seed2);
 
         Self {
-            noise_type,
             white_state: WhiteNoiseState {
                 rng: StdRng::from_seed(seed1),
             },
@@ -45,21 +42,10 @@ impl NoiseGenerator {
         }
     }
 
-    pub fn set_type(&mut self, noise_type: NoiseType) {
-        self.noise_type = noise_type;
-    }
-
-    pub fn next_frame(&mut self) -> [f32; 2] {
-        match self.noise_type {
-            NoiseType::White => {
-                let sample = self.white_state.next();
-                [sample, sample]
-            }
-            NoiseType::Pink => {
-                let sample = self.pink_state.next();
-                [sample, sample]
-            }
-        }
+    pub fn next_frame(&mut self) -> ([f32; 2], [f32; 2]) {
+        let white_sample = self.white_state.next();
+        let pink_sample = self.pink_state.next();
+        ([white_sample, white_sample], [pink_sample, pink_sample])
     }
 }
 

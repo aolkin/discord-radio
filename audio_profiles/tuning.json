@@ -2,14 +2,13 @@
   "name": "tuning",
   "bandpass_low": 500.0,
   "bandpass_high": 5000.0,
-  "noise_level": 0.2,
-  "noise_type": "pink",
+  "white_noise_level": 0.0,
+  "pink_noise_level": 0.02,
   "tremolo_depth": 0.2,
   "tremolo_rate": 1.0,
   "clip_threshold": 0.85,
   "bitcrush_bits": null,
   "dropout_probability": 0.05,
   "dropout_duration_ms": [50.0, 100.0],
-  "pitch_shift_cents": null,
   "frequency_warble_hz": null
 }

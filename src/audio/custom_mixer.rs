@@ -180,41 +180,4 @@ impl CustomMixer {
 
         mixed
     }
-
-    #[allow(dead_code)]
-    pub fn fill_buffer(&mut self, frame_count: usize) -> Vec<[f32; 2]> {
-        (0..frame_count).map(|_| self.mix_next_frame()).collect()
-    }
-
-    #[allow(dead_code)]
-    pub fn sample_rate(&self) -> u32 {
-        self.sample_rate
-    }
-
-    #[allow(dead_code)]
-    pub fn channels(&self) -> u16 {
-        self.channels
-    }
-
-    #[allow(dead_code)]
-    pub fn seek_track(
-        &mut self,
-        name: &str,
-        position: Duration,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let track = self
-            .tracks
-            .get_mut(name)
-            .ok_or_else(|| format!("Track '{}' not found", name))?;
-
-        track.source.seek(position)?;
-        Ok(())
-    }
-
-    #[allow(dead_code)]
-    pub fn get_track_volume(&self, name: &str) -> Option<f32> {
-        self.tracks
-            .get(name)
-            .map(|t| t.volume.load(Ordering::Relaxed))
-    }
 }
