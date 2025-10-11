@@ -114,6 +114,15 @@ impl serenity::EventHandler for Handler {
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
+    // Set up panic handler to crash the whole process on any thread panic
+    // This ensures the OS can restart the bot instead of running in a broken state
+    let default_panic = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic_info| {
+        default_panic(panic_info);
+        tracing::error!("Thread panicked, exiting process: {:?}", panic_info);
+        std::process::exit(1);
+    }));
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {

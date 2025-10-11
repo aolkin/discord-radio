@@ -44,12 +44,6 @@ impl EventHandler for ConnectionEventHandler {
                     let mut processors = self.data.audio_processors.write().await;
                     processors.remove(&guild_id);
                 }
-                {
-                    let mut tasks = self.data.audio_processor_tasks.write().await;
-                    if let Some(task) = tasks.remove(&guild_id) {
-                        task.abort();
-                    }
-                }
 
                 let mut hex_playback_states = self.data.hex_playback_states.write().await;
                 if let Some(state_arc) = hex_playback_states.remove(&guild_id) {

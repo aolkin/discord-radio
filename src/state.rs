@@ -45,8 +45,6 @@ pub struct BotState {
     pub hex_playback_tasks: RwLock<HashMap<GuildId, JoinHandle<()>>>,
     pub duration_cache: DurationCache,
     pub audio_processors: RwLock<HashMap<GuildId, Arc<RwLock<AudioProcessor>>>>,
-    #[allow(clippy::type_complexity)]
-    pub audio_processor_tasks: RwLock<HashMap<GuildId, JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>>>>,
 }
 
 impl BotState {
@@ -60,7 +58,6 @@ impl BotState {
             hex_playback_tasks: RwLock::new(HashMap::new()),
             duration_cache: DurationCache::new(),
             audio_processors: RwLock::new(HashMap::new()),
-            audio_processor_tasks: RwLock::new(HashMap::new()),
         }
     }
 

@@ -275,6 +275,56 @@ pub async fn stop_message(ctx: Context<'_>) -> Result<(), Error> {
     Ok(())
 }
 
+async fn autocomplete_audio_file<'a>(
+    ctx: Context<'_>,
+    partial: &'a str,
+) -> Vec<String> {
+    let content_dir = &ctx.data().content_path;
+    let mut results = Vec::new();
+
+    // Split partial into directory and filename parts
+    let (dir_part, file_part) = if let Some(pos) = partial.rfind('/') {
+        (&partial[..=pos], &partial[pos + 1..])
+    } else {
+        ("", partial)
+    };
+
+    // Build the full path to search
+    let search_path = if dir_part.is_empty() {
+        std::path::PathBuf::from(content_dir)
+    } else {
+        std::path::PathBuf::from(format!("{}/{}", content_dir, dir_part))
+    };
+
+    if let Ok(entries) = std::fs::read_dir(&search_path) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                if name.starts_with(file_part) {
+                    let full_name = if dir_part.is_empty() {
+                        name.to_string()
+                    } else {
+                        format!("{}{}", dir_part, name)
+                    };
+
+                    if path.is_dir() {
+                        results.push(format!("{}/", full_name));
+                    } else if let Some(ext) = path.extension() {
+                        let ext_str = ext.to_string_lossy().to_lowercase();
+                        if matches!(ext_str.as_str(), "mp3" | "ogg" | "wav" | "flac" | "m4a") {
+                            results.push(full_name);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    results.sort();
+    results.truncate(25);
+    results
+}
+
 /// Start or stop an audio track with fade transition
 #[poise::command(
     slash_command,
@@ -285,7 +335,9 @@ pub async fn change_track_state(
     ctx: Context<'_>,
     #[description = "Track name identifier"] name: String,
     #[description = "Track state: start or stop (omit to update existing)"] state: Option<String>,
-    #[description = "Audio filename (required for start)"] filename: Option<String>,
+    #[description = "Audio filename (required for start)"]
+    #[autocomplete = "autocomplete_audio_file"]
+    filename: Option<String>,
     #[description = "Volume 0.0-1.0"] volume: Option<f32>,
     #[description = "Loop track"] loops: Option<bool>,
     #[description = "Fade time in seconds (default 1.0)"] fade_time: Option<f32>,
@@ -315,6 +367,10 @@ pub async fn change_track_state(
                 ctx.say("filename is required for start").await?;
                 return Ok(());
             };
+
+            // Prepend content directory to filename
+            let full_path = format!("{}/{}", ctx.data().content_path, filename);
+
             let volume = volume.unwrap_or(1.0);
             let loops = loops.unwrap_or(true);
 
@@ -333,7 +389,7 @@ pub async fn change_track_state(
             if let Err(e) = manager
                 .start_track(crate::audio::tracks::StartTrackArgs {
                     name: name.clone(),
-                    filename,
+                    filename: full_path,
                     volume,
                     fade_time,
                     loops,

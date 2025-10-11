@@ -1,13 +1,8 @@
 use crate::audio::custom_mixer::CustomMixer;
 use crate::audio::dsp::chain::RadioEffectChain;
 use crate::audio::profiles::SignalProfile;
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::RwLock;
-use tokio::time::interval;
 
 const SAMPLE_RATE: u32 = 48000;
-const CHANNELS: u16 = 2;
 const FRAME_SIZE: usize = 960; // 20ms at 48kHz
 const FRAME_DURATION_MS: u64 = 20;
 
@@ -108,55 +103,5 @@ impl AudioProcessor {
         let mut buffer = vec![[0.0, 0.0]; FRAME_SIZE];
         self.fill_buffer(&mut buffer);
         buffer
-    }
-}
-
-pub struct ProcessingThread {
-    processor: Arc<RwLock<AudioProcessor>>,
-}
-
-impl ProcessingThread {
-    pub fn new(initial_profile: SignalProfile) -> Self {
-        let processor = Arc::new(RwLock::new(AudioProcessor::new(initial_profile)));
-        Self { processor }
-    }
-
-    pub fn processor(&self) -> Arc<RwLock<AudioProcessor>> {
-        Arc::clone(&self.processor)
-    }
-
-    pub async fn run(
-        &self,
-        output_tx: tokio::sync::mpsc::Sender<Vec<f32>>,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let mut timer = interval(Duration::from_millis(FRAME_DURATION_MS));
-
-        loop {
-            timer.tick().await;
-
-            let frames = {
-                let mut processor = self.processor.write().await;
-                processor.process_next_chunk()
-            };
-
-            // Flatten stereo frames into interleaved f32 samples
-            let pcm: Vec<f32> = frames
-                .into_iter()
-                .flat_map(|frame| [frame[0], frame[1]])
-                .collect();
-
-            if output_tx.send(pcm).await.is_err() {
-                break;
-            }
-        }
-
-        Ok(())
-    }
-
-    pub async fn spawn(
-        self,
-        output_tx: tokio::sync::mpsc::Sender<Vec<f32>>,
-    ) -> tokio::task::JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>> {
-        tokio::spawn(async move { self.run(output_tx).await })
     }
 }

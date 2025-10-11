@@ -43,16 +43,12 @@ pub async fn setup_voice_connection(
     // Initialize DSP processor with default "clear" profile
     let initial_profile = load_default_profile(&bot_state)?;
     let adapter = ProcessedAudioAdapter::new(initial_profile);
-    let (processor, task_handle) = adapter.spawn(handle_lock.clone()).await;
+    let processor = adapter.start(handle_lock.clone()).await;
 
-    // Store processor and task
+    // Store processor
     {
         let mut processors = bot_state.audio_processors.write().await;
         processors.insert(guild_id, processor.clone());
-    }
-    {
-        let mut tasks = bot_state.audio_processor_tasks.write().await;
-        tasks.insert(guild_id, task_handle);
     }
 
     // Link processor to TrackManager if it exists

@@ -1,43 +1,35 @@
-use crate::audio::processing_thread::{AudioProcessor, ProcessingThread};
+use crate::audio::processing_thread::AudioProcessor;
 use crate::audio::profiles::SignalProfile;
 use songbird::input::RawAdapter;
 use std::io::{Read, Seek, SeekFrom};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use symphonia::core::io::MediaSource;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::RwLock;
 
-const CHANNEL_BUFFER_SIZE: usize = 32;
 const SAMPLE_RATE: u32 = 48000;
 const CHANNELS: u16 = 2;
 
 pub struct ProcessedAudioAdapter {
-    processing_thread: ProcessingThread,
-    processor_handle: Arc<RwLock<AudioProcessor>>,
+    processor: Arc<RwLock<AudioProcessor>>,
 }
 
 impl ProcessedAudioAdapter {
     pub fn new(initial_profile: SignalProfile) -> Self {
-        let processing_thread = ProcessingThread::new(initial_profile);
-        let processor_handle = processing_thread.processor();
+        let processor = Arc::new(RwLock::new(AudioProcessor::new(initial_profile)));
 
-        Self {
-            processing_thread,
-            processor_handle,
-        }
+        Self { processor }
     }
 
-    pub async fn spawn(
+    pub async fn start(
         self,
         call: Arc<tokio::sync::Mutex<songbird::Call>>,
-    ) -> (
-        Arc<RwLock<AudioProcessor>>,
-        tokio::task::JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>>,
-    ) {
-        let processor = self.processor_handle.clone();
-        let (tx, rx) = mpsc::channel::<Vec<f32>>(CHANNEL_BUFFER_SIZE);
+    ) -> Arc<RwLock<AudioProcessor>> {
+        let processor = self.processor.clone();
 
-        // Create audio reader from the receiver
-        let reader = AudioChannelReader::new(rx);
+        // Create audio reader that generates on-demand
+        // Use a std::sync::Mutex wrapper for the processor to allow sync access from Read::read()
+        let sync_processor = Arc::new(Mutex::new(processor.clone()));
+        let reader = AudioChannelReader::new(sync_processor);
 
         // Create RawAdapter for Songbird (expects interleaved f32 PCM)
         let raw_input = RawAdapter::new(reader, SAMPLE_RATE, CHANNELS as u32);
@@ -48,54 +40,56 @@ impl ProcessedAudioAdapter {
             call_guard.play_input(raw_input.into());
         }
 
-        let thread_handle = self.processing_thread.spawn(tx).await;
-
-        (processor, thread_handle)
+        processor
     }
 }
 
-/// Reader that pulls PCM data from a channel
+/// Reader that generates PCM data on-demand when Songbird requests it
 struct AudioChannelReader {
-    receiver: mpsc::Receiver<Vec<f32>>,
+    processor: Arc<Mutex<Arc<RwLock<AudioProcessor>>>>,
     buffer: Vec<u8>,
     position: usize,
 }
 
 impl AudioChannelReader {
-    fn new(receiver: mpsc::Receiver<Vec<f32>>) -> Self {
+    fn new(processor: Arc<Mutex<Arc<RwLock<AudioProcessor>>>>) -> Self {
         Self {
-            receiver,
+            processor,
             buffer: Vec::new(),
             position: 0,
         }
     }
 
-    fn fill_buffer_from_channel(&mut self) {
-        // Block until we receive new audio data
-        // This prevents stuttering by ensuring Songbird waits for real audio
-        if let Some(pcm_samples) = tokio::task::block_in_place(|| {
-            self.receiver.blocking_recv()
-        }) {
-            // Convert f32 samples to bytes (little-endian)
-            self.buffer.clear();
-            for sample in pcm_samples {
-                self.buffer.extend_from_slice(&sample.to_le_bytes());
-            }
-            self.position = 0;
+    fn generate_audio_chunk(&mut self) {
+        // Generate audio on-demand, synchronized with Songbird's playback
+        // This is called from a sync context (Songbird's audio thread)
+        let processor_guard = self.processor.lock().unwrap();
+        let processor_arc = processor_guard.clone();
+        drop(processor_guard);
+
+        // Use try_lock to avoid deadlock, fall back to silence if locked
+        let frames = if let Ok(mut processor) = processor_arc.try_write() {
+            processor.process_next_chunk()
+        } else {
+            // Processor is locked, return silence for this chunk
+            vec![[0.0, 0.0]; 960]
+        };
+
+        // Convert frames to interleaved f32 samples, then to bytes
+        self.buffer.clear();
+        for frame in frames {
+            self.buffer.extend_from_slice(&frame[0].to_le_bytes());
+            self.buffer.extend_from_slice(&frame[1].to_le_bytes());
         }
+        self.position = 0;
     }
 }
 
 impl Read for AudioChannelReader {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        // If we've consumed the current buffer, get more
+        // If we've consumed the current buffer, generate more audio
         if self.position >= self.buffer.len() {
-            self.fill_buffer_from_channel();
-        }
-
-        // If still no data after blocking, the channel is closed
-        if self.buffer.is_empty() {
-            return Ok(0); // EOF
+            self.generate_audio_chunk();
         }
 
         // Copy available data to output buffer
@@ -105,7 +99,7 @@ impl Read for AudioChannelReader {
         buf[..to_copy].copy_from_slice(&self.buffer[self.position..self.position + to_copy]);
         self.position += to_copy;
 
-        Ok(to_copy) // Return actual bytes copied, not buf.len()
+        Ok(to_copy)
     }
 }
 

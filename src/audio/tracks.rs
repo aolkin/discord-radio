@@ -114,6 +114,8 @@ impl TrackManager {
 
                 // Create cleanup callback that removes track from TrackManager when it ends
                 // Only for non-looping tracks
+                // Note: Callbacks are invoked from Songbird's audio thread (no tokio runtime)
+                // We use std::thread::spawn with a runtime handle to bridge to async
                 let final_callback = if !args.loops {
                     let guild_id = self.guild_id;
                     let bot_state = self.bot_state.clone();
@@ -124,13 +126,17 @@ impl TrackManager {
                         let bot_state_copy = bot_state.clone();
                         let name_copy = track_name_for_cleanup.clone();
 
-                        tokio::spawn(async move {
-                            tracing::info!("Track '{}' finished in guild {}, cleaning up", name_copy, guild_id_copy);
-                            let track_managers = bot_state_copy.track_managers.read().await;
-                            if let Some(manager_arc) = track_managers.get(&guild_id_copy) {
-                                let mut manager = manager_arc.lock().await;
-                                manager.remove_track(&name_copy).await;
-                            }
+                        // Spawn a std::thread that creates its own tokio runtime
+                        std::thread::spawn(move || {
+                            let rt = tokio::runtime::Runtime::new().unwrap();
+                            rt.block_on(async move {
+                                tracing::info!("Track '{}' finished in guild {}, cleaning up", name_copy, guild_id_copy);
+                                let track_managers = bot_state_copy.track_managers.read().await;
+                                if let Some(manager_arc) = track_managers.get(&guild_id_copy) {
+                                    let mut manager = manager_arc.lock().await;
+                                    manager.remove_track(&name_copy).await;
+                                }
+                            });
                         });
                     });
 
