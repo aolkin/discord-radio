@@ -1,4 +1,32 @@
 use crate::commands::utils::{Context, Error};
+use poise::serenity_prelude as serenity;
+
+/// Set the bot's custom status
+#[poise::command(
+    slash_command,
+    guild_only,
+    default_member_permissions = "ADMINISTRATOR"
+)]
+pub async fn set_status(
+    ctx: Context<'_>,
+    #[description = "Custom status text"] status: String,
+) -> Result<(), Error> {
+    let user_id = ctx.author().id;
+    let guild_id = ctx
+        .guild_id()
+        .ok_or("This command can only be used in a server")?;
+
+    tracing::info!("User {} executed set_status in guild {}", user_id, guild_id);
+
+    ctx.defer_ephemeral().await?;
+
+    let activity = serenity::ActivityData::custom(status.clone());
+    ctx.serenity_context().set_activity(Some(activity));
+
+    ctx.say(format!("Status set to: {}", status)).await?;
+
+    Ok(())
+}
 
 /// Send a message with optional embed to the current channel
 #[poise::command(

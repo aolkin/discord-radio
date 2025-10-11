@@ -157,6 +157,7 @@ async fn main() -> Result<(), Error> {
                 commands::voice::change_track_state(),
                 commands::voice::get_current_tracks(),
                 commands::messaging::speak(),
+                commands::messaging::set_status(),
             ],
             on_error: |error| Box::pin(on_error(error)),
             ..Default::default()
