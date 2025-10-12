@@ -65,8 +65,19 @@ impl AudioProcessor {
     }
 
     pub fn start_profile_transition(&mut self, to_profile: SignalProfile, duration_ms: f32) {
+        // If already transitioning, start from the current interpolated position
+        // to avoid jarring jumps back to the old profile
+        let from_profile = if let Some(ref transition) = self.transition {
+            // Get current interpolated profile at this point in the transition
+            transition
+                .from
+                .interpolate(&transition.to, transition.progress)
+        } else {
+            self.current_profile.clone()
+        };
+
         self.transition = Some(ProfileTransition::new(
-            self.current_profile.clone(),
+            from_profile,
             to_profile,
             duration_ms,
         ));

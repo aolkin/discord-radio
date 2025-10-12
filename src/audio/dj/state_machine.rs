@@ -16,18 +16,16 @@ pub enum DJState {
         filename: String,
         started_at: std::time::Instant,
         duration: Duration,
+        forced_profile: Option<String>,
     },
     PlayingHexMessage {
         message: String,
         started_at: std::time::Instant,
         target_loops: usize,
+        forced_profile: Option<String>,
     },
     PlayingNoise {
         noise_type: String,
-        started_at: std::time::Instant,
-        duration: Duration,
-    },
-    TransitioningProfile {
         started_at: std::time::Instant,
         duration: Duration,
     },
@@ -52,16 +50,19 @@ impl DJState {
                 duration,
                 ..
             } => started_at.elapsed() >= *duration,
-            DJState::TransitioningProfile {
-                started_at,
-                duration,
-                ..
-            } => started_at.elapsed() >= *duration,
             DJState::Idle {
                 started_at,
                 duration,
             } => started_at.elapsed() >= *duration,
             DJState::Stopped => true,
+        }
+    }
+
+    pub fn forced_profile(&self) -> Option<&str> {
+        match self {
+            DJState::PlayingTrack { forced_profile, .. } => forced_profile.as_deref(),
+            DJState::PlayingHexMessage { forced_profile, .. } => forced_profile.as_deref(),
+            _ => None,
         }
     }
 }
@@ -230,7 +231,6 @@ impl DJStateMachine {
             DJStateType::Track(idx) => self.start_track_state(idx, track_manager, bot_state).await,
             DJStateType::HexMessage(idx) => self.start_hex_message_state(idx, bot_state).await,
             DJStateType::Noise(idx) => self.start_noise_state(idx, track_manager).await,
-            DJStateType::ProfileChange(idx) => self.start_profile_state(idx, bot_state).await,
         }
     }
 
@@ -300,6 +300,7 @@ impl DJStateMachine {
             filename: track_entry.filename.clone(),
             started_at: std::time::Instant::now(),
             duration: play_duration,
+            forced_profile: track_entry.signal_profile.clone(),
         })
     }
 
@@ -389,6 +390,12 @@ impl DJStateMachine {
             message: hex_entry.text.clone(),
             started_at: std::time::Instant::now(),
             target_loops,
+            forced_profile: hex_entry.signal_profile.clone().or(self
+                .scheduler
+                .config()
+                .hex_message_defaults
+                .signal_profile
+                .clone()),
         })
     }
 
@@ -457,43 +464,6 @@ impl DJStateMachine {
             noise_type: noise_type_str.to_string(),
             started_at: std::time::Instant::now(),
             duration,
-        })
-    }
-
-    async fn start_profile_state(
-        &mut self,
-        idx: usize,
-        bot_state: &Data,
-    ) -> Result<DJState, Box<dyn std::error::Error + Send + Sync>> {
-        let profile_entry = self
-            .scheduler
-            .get_profile(idx)
-            .ok_or("Profile index out of bounds")?;
-
-        let processors = bot_state.audio_processors.read().await;
-        let processor_arc = processors.get(&self.guild_id).cloned();
-        drop(processors);
-
-        if let Some(processor_arc) = processor_arc
-            && let Some(new_profile) = bot_state
-                .profile_manager
-                .get_profile(&profile_entry.profile_name)
-        {
-            let mut processor = processor_arc.write().await;
-            let fade_ms = profile_entry.fade_duration_seconds * 1000.0;
-            processor.start_profile_transition(new_profile.clone(), fade_ms);
-
-            tracing::info!(
-                "DJ transitioning to profile '{}' over {:.1}s in guild {}",
-                profile_entry.profile_name,
-                profile_entry.fade_duration_seconds,
-                self.guild_id
-            );
-        }
-
-        Ok(DJState::TransitioningProfile {
-            started_at: std::time::Instant::now(),
-            duration: Duration::from_secs_f32(profile_entry.fade_duration_seconds),
         })
     }
 }

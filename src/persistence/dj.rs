@@ -17,6 +17,7 @@ impl From<&DJState> for DJStateMachineState {
                 filename,
                 started_at,
                 duration,
+                forced_profile: _, // Don't persist forced_profile, it's transient
             } => DJStateMachineState::PlayingTrack {
                 track_name: track_name.clone(),
                 filename: filename.clone(),
@@ -27,6 +28,7 @@ impl From<&DJState> for DJStateMachineState {
                 message,
                 started_at,
                 target_loops,
+                forced_profile: _, // Don't persist forced_profile, it's transient
             } => DJStateMachineState::PlayingHexMessage {
                 message: message.clone(),
                 started_at: instant_to_systime(started_at),
@@ -38,13 +40,6 @@ impl From<&DJState> for DJStateMachineState {
                 duration,
             } => DJStateMachineState::PlayingNoise {
                 noise_type: noise_type.clone(),
-                started_at: instant_to_systime(started_at),
-                duration_secs: duration.as_secs_f32(),
-            },
-            DJState::TransitioningProfile {
-                started_at,
-                duration,
-            } => DJStateMachineState::TransitioningProfile {
                 started_at: instant_to_systime(started_at),
                 duration_secs: duration.as_secs_f32(),
             },
@@ -80,6 +75,7 @@ impl TryFrom<&DJStateMachineState> for DJState {
                 filename: filename.clone(),
                 started_at: systime_to_instant(started_at)?,
                 duration: Duration::from_secs_f32(*duration_secs),
+                forced_profile: None, // Restored state doesn't have forced profile
             }),
             DJStateMachineState::PlayingHexMessage {
                 message,
@@ -89,6 +85,7 @@ impl TryFrom<&DJStateMachineState> for DJState {
                 message: message.clone(),
                 started_at: systime_to_instant(started_at)?,
                 target_loops: *target_loops,
+                forced_profile: None, // Restored state doesn't have forced profile
             }),
             DJStateMachineState::PlayingNoise {
                 noise_type,
@@ -96,13 +93,6 @@ impl TryFrom<&DJStateMachineState> for DJState {
                 duration_secs,
             } => Ok(DJState::PlayingNoise {
                 noise_type: noise_type.clone(),
-                started_at: systime_to_instant(started_at)?,
-                duration: Duration::from_secs_f32(*duration_secs),
-            }),
-            DJStateMachineState::TransitioningProfile {
-                started_at,
-                duration_secs,
-            } => Ok(DJState::TransitioningProfile {
                 started_at: systime_to_instant(started_at)?,
                 duration: Duration::from_secs_f32(*duration_secs),
             }),
@@ -114,6 +104,7 @@ impl TryFrom<&DJStateMachineState> for DJState {
                 duration: Duration::from_secs_f32(*duration_secs),
             }),
             DJStateMachineState::Stopped => Ok(DJState::Stopped),
+            _ => Ok(DJState::Stopped), // Handle any other states (e.g., old TransitioningProfile)
         }
     }
 }

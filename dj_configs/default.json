@@ -14,7 +14,8 @@
   ],
   "hex_message_defaults": {
     "loop_min": 1,
-    "loop_max": 2
+    "loop_max": 2,
+    "signal_profile": "locked"
   },
   "noise_periods": [
     {
@@ -38,29 +39,36 @@
     {
       "profile_name": "clear",
       "weight": 20,
-      "fade_duration_seconds": 2.0
+      "fade_duration_seconds": 2.0,
+      "min_time_seconds": 30.0,
+      "max_time_seconds": 120.0
     },
     {
       "profile_name": "weak_signal",
       "weight": 10,
-      "fade_duration_seconds": 3.0
+      "fade_duration_seconds": 3.0,
+      "min_time_seconds": 20.0,
+      "max_time_seconds": 60.0
     },
     {
       "profile_name": "tuning",
       "weight": 5,
-      "fade_duration_seconds": 2.5
+      "fade_duration_seconds": 2.5,
+      "min_time_seconds": 10.0,
+      "max_time_seconds": 30.0
     },
     {
       "profile_name": "locked",
       "weight": 10,
-      "fade_duration_seconds": 2.0
+      "fade_duration_seconds": 2.0,
+      "min_time_seconds": 40.0,
+      "max_time_seconds": 180.0
     }
   ],
   "state_weights": {
     "track": 50,
     "hex_message": 0,
-    "noise": 0,
-    "profile_change": 25
+    "noise": 0
   },
   "recent_history_size": 5,
   "duplicate_penalty_multiplier": 0.1

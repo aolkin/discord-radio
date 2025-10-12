@@ -22,6 +22,7 @@ pub struct TrackEntry {
     pub weight: u32,
     pub max_duration_seconds: Option<f32>,
     pub allow_subsection: Option<bool>,
+    pub signal_profile: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -30,6 +31,8 @@ pub struct HexMessageDefaults {
     pub loop_min: u32,
     #[serde(default = "default_loop_max")]
     pub loop_max: u32,
+    #[serde(default)]
+    pub signal_profile: Option<String>,
 }
 
 impl Default for HexMessageDefaults {
@@ -37,6 +40,7 @@ impl Default for HexMessageDefaults {
         Self {
             loop_min: default_loop_min(),
             loop_max: default_loop_max(),
+            signal_profile: None,
         }
     }
 }
@@ -53,6 +57,7 @@ fn default_loop_max() -> u32 {
 pub struct HexMessageEntry {
     pub text: String,
     pub weight: u32,
+    pub signal_profile: Option<String>,
     pub loop_min: Option<u32>,
     pub loop_max: Option<u32>,
 }
@@ -77,6 +82,8 @@ pub struct SignalProfileEntry {
     pub profile_name: String,
     pub weight: u32,
     pub fade_duration_seconds: f32,
+    pub min_time_seconds: f32,
+    pub max_time_seconds: f32,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -84,7 +91,6 @@ pub struct StateWeights {
     pub track: u32,
     pub hex_message: u32,
     pub noise: u32,
-    pub profile_change: u32,
 }
 
 impl DJConfig {

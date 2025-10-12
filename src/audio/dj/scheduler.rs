@@ -1,7 +1,5 @@
-use crate::audio::dj::config::{
-    DJConfig, HexMessageEntry, NoisePeriodEntry, SignalProfileEntry, TrackEntry,
-};
-use rand::Rng;
+use crate::audio::dj::config::{DJConfig, HexMessageEntry, NoisePeriodEntry, TrackEntry};
+use crate::audio::dj::weighted_choice::WeightedSelector;
 use std::collections::VecDeque;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -9,19 +7,36 @@ pub enum DJStateType {
     Track(usize),
     HexMessage(usize),
     Noise(usize),
-    ProfileChange(usize),
 }
 
 pub struct WeightedScheduler {
     config: DJConfig,
     recent_history: VecDeque<DJStateType>,
+    track_selector: WeightedSelector,
+    hex_message_selector: WeightedSelector,
+    noise_selector: WeightedSelector,
 }
 
 impl WeightedScheduler {
     pub fn new(config: DJConfig) -> Self {
+        let track_selector = WeightedSelector::new(
+            config.recent_history_size,
+            config.duplicate_penalty_multiplier,
+        );
+        let hex_message_selector = WeightedSelector::new(
+            config.recent_history_size,
+            config.duplicate_penalty_multiplier,
+        );
+        let noise_selector = WeightedSelector::new(
+            config.recent_history_size,
+            config.duplicate_penalty_multiplier,
+        );
         Self {
             recent_history: VecDeque::with_capacity(config.recent_history_size),
             config,
+            track_selector,
+            hex_message_selector,
+            noise_selector,
         }
     }
 
@@ -31,7 +46,6 @@ impl WeightedScheduler {
             StateCategory::Track => self.choose_track(),
             StateCategory::HexMessage => self.choose_hex_message(),
             StateCategory::Noise => self.choose_noise(),
-            StateCategory::ProfileChange => self.choose_profile(),
         };
 
         self.add_to_history(state.clone());
@@ -53,9 +67,9 @@ impl WeightedScheduler {
     }
 
     fn choose_state_type(&self) -> StateCategory {
+        use rand::Rng;
         let weights = &self.config.state_weights;
-        let total: u32 =
-            weights.track + weights.hex_message + weights.noise + weights.profile_change;
+        let total: u32 = weights.track + weights.hex_message + weights.noise;
 
         let mut rng = rand::rng();
         let roll: u32 = rng.random_range(0..total);
@@ -69,85 +83,30 @@ impl WeightedScheduler {
         if roll < (cumulative + weights.hex_message) {
             return StateCategory::HexMessage;
         }
-        cumulative += weights.hex_message;
 
-        if roll < (cumulative + weights.noise) {
-            return StateCategory::Noise;
-        }
-
-        StateCategory::ProfileChange
+        StateCategory::Noise
     }
 
-    fn choose_track(&self) -> DJStateType {
-        let index = self.weighted_choice(&self.config.track_pool, |entry| entry.weight);
+    fn choose_track(&mut self) -> DJStateType {
+        let track_pool = &self.config.track_pool;
+        let index = self.track_selector.choose(track_pool, |entry| entry.weight);
         DJStateType::Track(index)
     }
 
-    fn choose_hex_message(&self) -> DJStateType {
-        let index = self.weighted_choice(&self.config.hex_messages, |entry| entry.weight);
+    fn choose_hex_message(&mut self) -> DJStateType {
+        let hex_messages = &self.config.hex_messages;
+        let index = self
+            .hex_message_selector
+            .choose(hex_messages, |entry| entry.weight);
         DJStateType::HexMessage(index)
     }
 
-    fn choose_noise(&self) -> DJStateType {
-        let index = self.weighted_choice(&self.config.noise_periods, |entry| entry.weight);
+    fn choose_noise(&mut self) -> DJStateType {
+        let noise_periods = &self.config.noise_periods;
+        let index = self
+            .noise_selector
+            .choose(noise_periods, |entry| entry.weight);
         DJStateType::Noise(index)
-    }
-
-    fn choose_profile(&self) -> DJStateType {
-        let index = self.weighted_choice(&self.config.signal_profiles, |entry| entry.weight);
-        DJStateType::ProfileChange(index)
-    }
-
-    fn weighted_choice<T, F>(&self, items: &[T], weight_fn: F) -> usize
-    where
-        F: Fn(&T) -> u32,
-    {
-        let effective_weights: Vec<f32> = items
-            .iter()
-            .enumerate()
-            .map(|(idx, item)| {
-                let base_weight = weight_fn(item) as f32;
-                let penalty = self.get_penalty_for_index(idx);
-                base_weight * penalty
-            })
-            .collect();
-
-        let total: f32 = effective_weights.iter().sum();
-        if total == 0.0 {
-            return 0;
-        }
-
-        let mut rng = rand::rng();
-        let roll: f32 = rng.random::<f32>() * total;
-
-        let mut cumulative = 0.0;
-        for (idx, weight) in effective_weights.iter().enumerate() {
-            cumulative += weight;
-            if roll < cumulative {
-                return idx;
-            }
-        }
-
-        items.len().saturating_sub(1)
-    }
-
-    fn get_penalty_for_index(&self, idx: usize) -> f32 {
-        for (history_idx, state) in self.recent_history.iter().enumerate() {
-            let state_idx = match state {
-                DJStateType::Track(i) => *i,
-                DJStateType::HexMessage(i) => *i,
-                DJStateType::Noise(i) => *i,
-                DJStateType::ProfileChange(i) => *i,
-            };
-
-            if state_idx == idx {
-                let recency_factor = 1.0 - (history_idx as f32 / self.recent_history.len() as f32);
-                return self.config.duplicate_penalty_multiplier * recency_factor
-                    + (1.0 - self.config.duplicate_penalty_multiplier);
-            }
-        }
-
-        1.0
     }
 
     fn add_to_history(&mut self, state: DJStateType) {
@@ -169,10 +128,6 @@ impl WeightedScheduler {
         self.config.noise_periods.get(index)
     }
 
-    pub fn get_profile(&self, index: usize) -> Option<&SignalProfileEntry> {
-        self.config.signal_profiles.get(index)
-    }
-
     pub fn config(&self) -> &DJConfig {
         &self.config
     }
@@ -182,5 +137,4 @@ enum StateCategory {
     Track,
     HexMessage,
     Noise,
-    ProfileChange,
 }

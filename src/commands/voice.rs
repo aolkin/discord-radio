@@ -1056,6 +1056,10 @@ pub async fn get_dj_state(ctx: Context<'_>) -> Result<(), Error> {
     drop(dj_states);
 
     let state = state_arc.read().await;
+    let forced_profile_info = state
+        .forced_profile()
+        .map(|p| format!(" [forced profile: **{}**]", p))
+        .unwrap_or_default();
     let state_description = match &*state {
         crate::audio::dj::state_machine::DJState::PlayingTrack {
             filename,
@@ -1071,6 +1075,7 @@ pub async fn get_dj_state(ctx: Context<'_>) -> Result<(), Error> {
             started_at,
             target_loops,
             message,
+            ..
         } => {
             let elapsed = started_at.elapsed().as_secs();
 
@@ -1115,14 +1120,6 @@ pub async fn get_dj_state(ctx: Context<'_>) -> Result<(), Error> {
             let total = duration.as_secs();
             format!("Playing noise: **{}** ({}/{}s)", noise_type, elapsed, total)
         }
-        crate::audio::dj::state_machine::DJState::TransitioningProfile {
-            started_at,
-            duration,
-        } => {
-            let elapsed = started_at.elapsed().as_secs();
-            let total = duration.as_secs();
-            format!("Transitioning profile ({}/{}s)", elapsed, total)
-        }
         crate::audio::dj::state_machine::DJState::Idle {
             started_at,
             duration,
@@ -1134,7 +1131,11 @@ pub async fn get_dj_state(ctx: Context<'_>) -> Result<(), Error> {
         crate::audio::dj::state_machine::DJState::Stopped => "Stopped".to_string(),
     };
 
-    ctx.say(format!("DJ State: {}", state_description)).await?;
+    ctx.say(format!(
+        "DJ State: {}{}",
+        state_description, forced_profile_info
+    ))
+    .await?;
 
     Ok(())
 }
