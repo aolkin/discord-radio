@@ -39,35 +39,35 @@
     {
       "profile_name": "clear",
       "weight": 20,
-      "fade_duration_seconds": 2.0,
-      "min_time_seconds": 30.0,
-      "max_time_seconds": 120.0
+      "fade_duration_seconds": 8.0,
+      "min_time_seconds": 60.0,
+      "max_time_seconds": 240.0
     },
     {
       "profile_name": "weak_signal",
       "weight": 10,
-      "fade_duration_seconds": 3.0,
-      "min_time_seconds": 20.0,
-      "max_time_seconds": 60.0
+      "fade_duration_seconds": 8.0,
+      "min_time_seconds": 10.0,
+      "max_time_seconds": 40.0
     },
     {
       "profile_name": "tuning",
       "weight": 5,
-      "fade_duration_seconds": 2.5,
+      "fade_duration_seconds": 6.0,
       "min_time_seconds": 10.0,
       "max_time_seconds": 30.0
     },
     {
       "profile_name": "locked",
       "weight": 10,
-      "fade_duration_seconds": 2.0,
+      "fade_duration_seconds": 5.0,
       "min_time_seconds": 40.0,
-      "max_time_seconds": 180.0
+      "max_time_seconds": 60.0
     }
   ],
   "state_weights": {
     "track": 50,
-    "hex_message": 0,
+    "hex_message": 5,
     "noise": 0
   },
   "recent_history_size": 5,

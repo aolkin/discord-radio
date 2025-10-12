@@ -1,6 +1,7 @@
 use crate::audio::dj::config::SignalProfileEntry;
 use crate::audio::dj::weighted_choice::WeightedSelector;
 use rand::Rng;
+use std::ops::Add;
 use std::time::{Duration, Instant};
 
 #[derive(Clone, Debug)]
@@ -95,7 +96,7 @@ impl ProfileStateMachine {
 
         // Immediately set to active state - fade happens in background
         self.current_state = ProfileState::Active {
-            started_at: Instant::now(),
+            started_at: Instant::now().add(Duration::from_secs_f32(fade_duration_secs)),
             duration: Duration::from_secs_f32(duration_secs),
         };
 
