@@ -405,6 +405,13 @@ impl DJStateMachine {
             .get_hex_message(idx)
             .ok_or("Hex message index out of bounds")?;
 
+        let track_managers = bot_state.track_managers.read().await;
+        let manager_arc = track_managers
+            .get(&self.guild_id)
+            .ok_or("Track manager not found for guild")?
+            .clone();
+        drop(track_managers);
+
         let hex_playback_state = bot_state
             .hex_playback_states
             .write()
@@ -416,6 +423,9 @@ impl DJStateMachine {
                 ))
             })
             .clone();
+
+        self.ensure_hex_playback_task(bot_state, manager_arc.clone(), hex_playback_state.clone())
+            .await;
 
         {
             let mut state = hex_playback_state.write().await;
@@ -432,6 +442,37 @@ impl DJStateMachine {
             message: hex_entry.text.clone(),
             started_at: std::time::Instant::now(),
         })
+    }
+
+    async fn ensure_hex_playback_task(
+        &self,
+        bot_state: &Data,
+        manager_arc: Arc<tokio::sync::Mutex<TrackManager>>,
+        playback_state: Arc<tokio::sync::RwLock<crate::state::HexPlaybackState>>,
+    ) {
+        let mut tasks = bot_state.hex_playback_tasks.write().await;
+        if tasks.contains_key(&self.guild_id) {
+            return;
+        }
+
+        let guild_id_copy = self.guild_id;
+        let manager_copy = manager_arc.clone();
+        let hex_audio_dir = format!("{}/audio/hex/", bot_state.content_path);
+        let playback_state_copy = playback_state.clone();
+        let bot_state_copy = bot_state.clone();
+
+        let handle = tokio::spawn(async move {
+            crate::audio::manager::hex_playback_task(
+                guild_id_copy,
+                manager_copy,
+                hex_audio_dir,
+                playback_state_copy,
+                bot_state_copy,
+            )
+            .await;
+        });
+
+        tasks.insert(self.guild_id, handle);
     }
 
     async fn start_noise_state(
