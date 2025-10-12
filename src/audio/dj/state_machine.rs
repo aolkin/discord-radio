@@ -125,9 +125,9 @@ impl DJStateMachine {
         self.announcement_channel = channel;
     }
 
-    pub async fn stop(&mut self, track_manager: &mut TrackManager) {
+    pub async fn stop(&mut self, track_manager: &mut TrackManager, bot_state: &Data) {
         // Clean up current state before stopping
-        if let Err(e) = self.cleanup_current_state(track_manager).await {
+        if let Err(e) = self.cleanup_current_state(track_manager, bot_state).await {
             tracing::error!("Error cleaning up DJ state during stop: {}", e);
         }
         self.current_state = DJState::Stopped;
@@ -169,7 +169,7 @@ impl DJStateMachine {
         track_manager: &mut TrackManager,
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.cleanup_current_state(track_manager).await?;
+        self.cleanup_current_state(track_manager, bot_state).await?;
 
         info!("DJ transitioning to state: {:?}", next_state_type);
         self.current_state = self
@@ -182,11 +182,30 @@ impl DJStateMachine {
     async fn cleanup_current_state(
         &mut self,
         track_manager: &mut TrackManager,
+        bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         match &self.current_state {
             DJState::PlayingTrack { track_name, .. } => {
                 if track_manager.has_track(track_name) {
                     track_manager.stop_track(track_name, 1.0, false).await?;
+                }
+            }
+            DJState::PlayingHexMessage { .. } => {
+                // Reset the hex playback state
+                let hex_playback_states = bot_state.hex_playback_states.read().await;
+                if let Some(state_arc) = hex_playback_states.get(&self.guild_id) {
+                    let mut state = state_arc.write().await;
+                    *state = crate::state::HexPlaybackState::stopped();
+                }
+                drop(hex_playback_states);
+
+                // Remove persisted message playback state
+                if let Err(e) = bot_state
+                    .state_store
+                    .remove_message_playback(self.guild_id)
+                    .await
+                {
+                    tracing::warn!("Failed to remove message playback state: {}", e);
                 }
             }
             DJState::PlayingNoise { noise_type, .. } => {

@@ -526,14 +526,6 @@ async fn stop_hex_playback(ctx: Context<'_>, guild_id: GuildId) {
         drop(state);
         drop(hex_playback_states);
 
-        let track_managers = ctx.data().track_managers.read().await;
-        if let Some(manager_arc) = track_managers.get(&guild_id) {
-            let mut manager = manager_arc.lock().await;
-            let _ = manager
-                .stop_track(crate::audio::manager::HEX_PLAYBACK_TRACK_NAME, 0.0, true)
-                .await;
-        }
-
         if let Err(e) = ctx
             .data()
             .state_store
@@ -857,7 +849,7 @@ async fn clear_voice_channel_status(
 pub async fn manage_dj(
     ctx: Context<'_>,
     #[description = "DJ configuration name"] config: String,
-    #[description = "Action: start or stop"] action: String,
+    #[description = "Action: start, stop, or configure"] action: String,
     #[description = "Text channel for announcements (optional)"] announcement_channel: Option<
         ChannelId,
     >,

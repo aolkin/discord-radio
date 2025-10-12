@@ -153,7 +153,7 @@ pub async fn dj_task(
                 }
                 DJCommand::Stop => {
                     tracing::info!("Processing stop command for DJ in guild {}", guild_id);
-                    state_machine.stop(&mut manager).await;
+                    state_machine.stop(&mut manager, &bot_state).await;
                 }
                 DJCommand::SetAnnouncementChannel(new_channel) => {
                     tracing::info!(
@@ -203,19 +203,21 @@ pub async fn dj_task(
 
         if let DJState::PlayingHexMessage { .. } = current_state {
             let hex_playback_states = bot_state.hex_playback_states.read().await;
-            if let Some(state_arc) = hex_playback_states.get(&guild_id) {
+            let should_advance = if let Some(state_arc) = hex_playback_states.get(&guild_id) {
                 let state = state_arc.read().await;
-                if state.message.is_none() {
-                    drop(state);
-                    drop(hex_playback_states);
+                state.message.is_none()
+            } else {
+                true
+            };
+            drop(hex_playback_states);
 
-                    tracing::info!("DJ detected hex message completion, advancing to next state");
-                    if let Err(e) = state_machine
-                        .force_advance(&mut manager, &bot_state, None)
-                        .await
-                    {
-                        tracing::error!("DJ failed to advance after hex message completion: {}", e);
-                    }
+            if should_advance {
+                tracing::info!("DJ detected hex message completion, advancing to next state");
+                if let Err(e) = state_machine
+                    .force_advance(&mut manager, &bot_state, None)
+                    .await
+                {
+                    tracing::error!("DJ failed to advance after hex message completion: {}", e);
                 }
             }
         }
