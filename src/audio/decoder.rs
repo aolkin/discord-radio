@@ -69,7 +69,7 @@ impl SymphoniaSource {
             .map(|ch| ch.count())
             .unwrap_or(2);
 
-        tracing::info!(
+        tracing::debug!(
             "Loaded audio file: {} (sample rate: {}Hz, channels: {})",
             path_str,
             sample_rate,

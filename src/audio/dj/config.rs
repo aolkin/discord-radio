@@ -5,6 +5,7 @@ pub struct DJConfig {
     pub name: String,
     pub track_pool: Vec<TrackEntry>,
     pub hex_messages: Vec<HexMessageEntry>,
+    pub hex_message_announcements: Option<Vec<String>>,
     pub noise_periods: Vec<NoisePeriodEntry>,
     pub signal_profiles: Vec<SignalProfileEntry>,
     pub state_weights: StateWeights,

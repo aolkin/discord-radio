@@ -850,6 +850,9 @@ pub async fn manage_dj(
     ctx: Context<'_>,
     #[description = "DJ configuration name"] config: String,
     #[description = "Action: start or stop"] action: String,
+    #[description = "Text channel for announcements (optional)"] announcement_channel: Option<
+        ChannelId,
+    >,
 ) -> Result<(), Error> {
     let guild_id = ctx
         .guild_id()
@@ -928,6 +931,9 @@ pub async fn manage_dj(
                 return Ok(());
             }
 
+            // Set announcement channel
+            mgr.set_announcement_channel(announcement_channel);
+
             if let Err(e) = mgr
                 .start(
                     dj_config,
@@ -942,8 +948,17 @@ pub async fn manage_dj(
                 return Ok(());
             }
 
-            ctx.say(format!("DJ started with configuration '{}'", config))
-                .await?;
+            let channel_msg = if let Some(ch_id) = announcement_channel {
+                format!(" (announcements in <#{}>)", ch_id)
+            } else {
+                String::new()
+            };
+
+            ctx.say(format!(
+                "DJ started with configuration '{}'{}",
+                config, channel_msg
+            ))
+            .await?;
         }
         "stop" => {
             let dj_managers = ctx.data().dj_managers.read().await;

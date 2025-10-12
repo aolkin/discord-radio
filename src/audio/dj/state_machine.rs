@@ -3,7 +3,8 @@ use crate::audio::dj::scheduler::{DJStateType, WeightedScheduler};
 use crate::audio::tracks::{StartTrackArgs, TrackManager};
 use crate::state::Data;
 use rand::Rng;
-use serenity::model::id::GuildId;
+use serenity::all::Http;
+use serenity::model::id::{ChannelId, GuildId};
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::info;
@@ -186,14 +187,19 @@ pub struct DJStateMachine {
     current_state: DJState,
     scheduler: WeightedScheduler,
     guild_id: GuildId,
-    hex_audio_dir: String,
+    content_path: String,
+    announcement_channel: Option<ChannelId>,
+    http: Arc<Http>,
+    hex_message_announcements: Vec<String>,
 }
 
 impl DJStateMachine {
     pub fn new(
         config: DJConfig,
         guild_id: GuildId,
-        hex_audio_dir: String,
+        content_path: String,
+        announcement_channel: Option<ChannelId>,
+        http: Arc<Http>,
         restored_state: Option<crate::persistence::DJStateMachineState>,
     ) -> Self {
         let current_state = if let Some(state) = restored_state {
@@ -214,11 +220,16 @@ impl DJStateMachine {
             }
         };
 
+        let hex_message_announcements = config.hex_message_announcements.clone().unwrap_or_default();
+
         Self {
             current_state,
             scheduler: WeightedScheduler::new(config),
             guild_id,
-            hex_audio_dir,
+            content_path,
+            announcement_channel,
+            http,
+            hex_message_announcements,
         }
     }
 
@@ -337,7 +348,7 @@ impl DJStateMachine {
             .get_track(idx)
             .ok_or("Track index out of bounds")?;
 
-        let full_path = format!("{}/{}", self.hex_audio_dir, track_entry.filename);
+        let full_path = format!("{}/{}", self.content_path, track_entry.filename);
         let track_name = format!("dj_track_{}", idx);
 
         let duration = bot_state.duration_cache.get_duration(&full_path).await;
@@ -437,6 +448,23 @@ impl DJStateMachine {
             hex_entry.text,
             self.guild_id
         );
+
+        // Send announcement to text channel if configured
+        if let Some(channel_id) = self.announcement_channel
+            && !self.hex_message_announcements.is_empty()
+        {
+            let mut rng = rand::rng();
+            let announcement_idx = rng.random_range(0..self.hex_message_announcements.len());
+            let announcement = &self.hex_message_announcements[announcement_idx];
+
+            let http_clone = self.http.clone();
+            let announcement_clone = announcement.clone();
+            tokio::spawn(async move {
+                if let Err(e) = channel_id.say(&http_clone, &announcement_clone).await {
+                    tracing::warn!("Failed to send DJ hex message announcement: {}", e);
+                }
+            });
+        }
 
         Ok(DJState::PlayingHexMessage {
             message: hex_entry.text.clone(),

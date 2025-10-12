@@ -38,6 +38,8 @@ pub struct DJState {
     pub config_name: String,
     pub running: bool,
     #[serde(default)]
+    pub announcement_channel_id: Option<u64>,
+    #[serde(default)]
     pub state_machine: Option<DJStateMachineState>,
 }
 

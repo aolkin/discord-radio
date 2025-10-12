@@ -20,6 +20,8 @@ pub async fn dj_task(
     bot_state: Data,
     mut command_rx: mpsc::Receiver<DJCommand>,
     restored_state: Option<crate::persistence::DJStateMachineState>,
+    announcement_channel: Option<ChannelId>,
+    http: Arc<Http>,
 ) {
     tracing::info!(
         "Starting DJ task for guild {} with config '{}'",
@@ -31,6 +33,8 @@ pub async fn dj_task(
         config.clone(),
         guild_id,
         bot_state.content_path.clone(),
+        announcement_channel,
+        http,
         restored_state.clone(),
     );
 
@@ -169,6 +173,7 @@ pub async fn dj_task(
         let persist_state = crate::persistence::DJState {
             config_name: config.name.clone(),
             running: true,
+            announcement_channel_id: announcement_channel.map(|id| id.get()),
             state_machine: Some(state_machine.current_state().to_persistable()),
         };
         if let Err(e) = bot_state
@@ -210,7 +215,8 @@ pub struct DJManager {
     task_handle: Option<tokio::task::JoinHandle<()>>,
     command_tx: Option<mpsc::Sender<DJCommand>>,
     guild_id: GuildId,
-    channel_id: Option<ChannelId>,
+    voice_channel_id: Option<ChannelId>,
+    announcement_channel_id: Option<ChannelId>,
 }
 
 impl DJManager {
@@ -219,8 +225,13 @@ impl DJManager {
             task_handle: None,
             command_tx: None,
             guild_id,
-            channel_id: None,
+            voice_channel_id: None,
+            announcement_channel_id: None,
         }
+    }
+
+    pub fn set_announcement_channel(&mut self, channel_id: Option<ChannelId>) {
+        self.announcement_channel_id = channel_id;
     }
 
     pub async fn start(
@@ -228,7 +239,7 @@ impl DJManager {
         config: DJConfig,
         bot_state: Data,
         http: Arc<Http>,
-        channel_id: ChannelId,
+        voice_channel_id: ChannelId,
         restored_state: Option<crate::persistence::DJStateMachineState>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if self.task_handle.is_some() {
@@ -237,7 +248,7 @@ impl DJManager {
 
         // Set voice channel status if configured
         if let Some(status) = &config.channel_status {
-            if let Err(e) = channel_id
+            if let Err(e) = voice_channel_id
                 .edit(&http, serenity::all::EditChannel::new().status(status))
                 .await
             {
@@ -255,14 +266,25 @@ impl DJManager {
             }
         }
 
-        self.channel_id = Some(channel_id);
+        self.voice_channel_id = Some(voice_channel_id);
 
         let config_name = config.name.clone();
+        let announcement_channel = self.announcement_channel_id;
         let (tx, rx) = mpsc::channel(10);
         let guild_id = self.guild_id;
         let bot_state_clone = bot_state.clone();
+        let http_clone = http.clone();
         let handle = tokio::spawn(async move {
-            dj_task(guild_id, config, bot_state_clone, rx, restored_state).await;
+            dj_task(
+                guild_id,
+                config,
+                bot_state_clone,
+                rx,
+                restored_state,
+                announcement_channel,
+                http_clone,
+            )
+            .await;
         });
 
         self.task_handle = Some(handle);
@@ -272,6 +294,7 @@ impl DJManager {
         let dj_state = crate::persistence::DJState {
             config_name,
             running: true,
+            announcement_channel_id: self.announcement_channel_id.map(|id| id.get()),
             state_machine: Some(crate::persistence::DJStateMachineState::Idle {
                 started_at: std::time::SystemTime::now(),
                 duration_secs: 1.0,
@@ -313,7 +336,7 @@ impl DJManager {
             }
 
             // Clear voice channel status
-            if let Some(channel_id) = self.channel_id {
+            if let Some(channel_id) = self.voice_channel_id {
                 if let Err(e) = channel_id
                     .edit(&http, serenity::all::EditChannel::new().status(""))
                     .await

@@ -412,7 +412,17 @@ async fn restore_dj_managers(
 
         let mut mgr = manager.lock().await;
 
-        // Start DJ with or without restored state machine state
+        // Restore announcement channel if saved
+        if let Some(channel_id_u64) = dj_state.announcement_channel_id {
+            let announcement_channel = poise::serenity_prelude::ChannelId::new(channel_id_u64);
+            mgr.set_announcement_channel(Some(announcement_channel));
+            tracing::info!(
+                "Restored announcement channel {} for DJ in guild {}",
+                announcement_channel,
+                guild_id
+            );
+        }
+
         if let Err(e) = mgr
             .start(
                 dj_config,
