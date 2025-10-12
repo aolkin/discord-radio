@@ -12,6 +12,10 @@
       "weight": 1
     }
   ],
+  "hex_message_defaults": {
+    "loop_min": 1,
+    "loop_max": 2
+  },
   "noise_periods": [
     {
       "type": "static",

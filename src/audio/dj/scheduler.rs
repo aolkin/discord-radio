@@ -172,6 +172,10 @@ impl WeightedScheduler {
     pub fn get_profile(&self, index: usize) -> Option<&SignalProfileEntry> {
         self.config.signal_profiles.get(index)
     }
+
+    pub fn config(&self) -> &DJConfig {
+        &self.config
+    }
 }
 
 enum StateCategory {

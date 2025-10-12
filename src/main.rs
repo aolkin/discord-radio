@@ -127,6 +127,8 @@ async fn main() -> Result<(), Error> {
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
                 tracing_subscriber::EnvFilter::new("info")
+                    .add_directive("discord_bot::audio::dj=debug".parse().unwrap())
+                    .add_directive("discord_bot::audio::tracks=warn".parse().unwrap())
                     .add_directive("songbird=warn".parse().unwrap())
                     .add_directive("symphonia_core=warn".parse().unwrap())
                     .add_directive("symphonia_format_ogg=warn".parse().unwrap())

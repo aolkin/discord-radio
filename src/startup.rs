@@ -208,7 +208,9 @@ async fn restore_message_playback(
                 playback_state.message,
                 playback_state.current_position,
                 1.0,
+                playback_state.target_loops,
             );
+            state.current_loop = playback_state.current_loop;
         }
     }
 

@@ -20,6 +20,7 @@ pub enum DJState {
     PlayingHexMessage {
         message: String,
         started_at: std::time::Instant,
+        target_loops: usize,
     },
     PlayingNoise {
         noise_type: String,
@@ -293,6 +294,22 @@ impl DJStateMachine {
             .get_hex_message(idx)
             .ok_or("Hex message index out of bounds")?;
 
+        let loop_min = hex_entry
+            .loop_min
+            .unwrap_or(self.scheduler.config().hex_message_defaults.loop_min);
+        let loop_max = hex_entry
+            .loop_max
+            .unwrap_or(self.scheduler.config().hex_message_defaults.loop_max);
+
+        let target_loops = {
+            let mut rng = rand::rng();
+            if loop_min == loop_max {
+                loop_min as usize
+            } else {
+                rng.random_range(loop_min..=loop_max) as usize
+            }
+        };
+
         let track_managers = bot_state.track_managers.read().await;
         let manager_arc = track_managers
             .get(&self.guild_id)
@@ -317,12 +334,18 @@ impl DJStateMachine {
 
         {
             let mut state = hex_playback_state.write().await;
-            *state = crate::state::HexPlaybackState::playing(hex_entry.text.clone(), 0, 1.0);
+            *state = crate::state::HexPlaybackState::playing(
+                hex_entry.text.clone(),
+                0,
+                1.0,
+                Some(target_loops),
+            );
         }
 
         tracing::info!(
-            "DJ playing hex message '{}' in guild {}",
+            "DJ playing hex message '{}' ({} loops) in guild {}",
             hex_entry.text,
+            target_loops,
             self.guild_id
         );
 
@@ -346,6 +369,7 @@ impl DJStateMachine {
         Ok(DJState::PlayingHexMessage {
             message: hex_entry.text.clone(),
             started_at: std::time::Instant::now(),
+            target_loops,
         })
     }
 

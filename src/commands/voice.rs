@@ -108,6 +108,7 @@ pub async fn play_message(
     #[description = "Message to convert to hex and play"] message: String,
     #[description = "Voice channel to join (optional)"] channel: Option<ChannelId>,
     #[description = "Volume 0.0-1.0 (default 1.0)"] volume: Option<f32>,
+    #[description = "Number of times to loop the message (default infinite)"] loops: Option<u32>,
 ) -> Result<(), Error> {
     let guild_id = ctx
         .guild_id()
@@ -185,12 +186,19 @@ pub async fn play_message(
 
     {
         let mut state = playback_state.write().await;
-        *state = crate::state::HexPlaybackState::playing(message.clone(), 0, volume);
+        *state = crate::state::HexPlaybackState::playing(
+            message.clone(),
+            0,
+            volume,
+            loops.map(|l| l as usize),
+        );
     }
 
     let initial_state = crate::persistence::MessagePlaybackState {
         message: message.clone(),
         current_position: 0,
+        current_loop: 0,
+        target_loops: loops.map(|l| l as usize),
     };
     if let Err(e) = ctx
         .data()
@@ -1068,14 +1076,43 @@ pub async fn get_dj_state(ctx: Context<'_>) -> Result<(), Error> {
             format!("Playing track: **{}** ({}/{}s)", filename, elapsed, total)
         }
         crate::audio::dj::state_machine::DJState::PlayingHexMessage {
-            message,
             started_at,
+            target_loops,
+            message,
         } => {
             let elapsed = started_at.elapsed().as_secs();
-            format!(
-                "Playing hex message: **{}** ({}s elapsed)",
-                message, elapsed
-            )
+
+            // Try to get current loop from hex playback state
+            if let Some((current_loop, current_position, current_message)) = {
+                let hex_states = ctx.data().hex_playback_states.read().await;
+                if let Some(state_arc) = hex_states.get(&guild_id) {
+                    let state = state_arc.read().await;
+                    Some((
+                        state.current_loop,
+                        state.current_position,
+                        state.message.clone(),
+                    ))
+                } else {
+                    None
+                }
+            } {
+                let msg_len = current_message.as_ref().map(|m| m.len()).unwrap_or(0);
+                let msg_display = current_message.as_deref().unwrap_or("-");
+                format!(
+                    "Playing hex message: **{}** (position {}/{}, loop {}/{}, {}s elapsed)",
+                    msg_display,
+                    current_position,
+                    msg_len * 2,
+                    current_loop + 1,
+                    target_loops,
+                    elapsed
+                )
+            } else {
+                format!(
+                    "Playing hex message: **{}** ({} loops, {}s elapsed)",
+                    message, target_loops, elapsed
+                )
+            }
         }
         crate::audio::dj::state_machine::DJState::PlayingNoise {
             noise_type,

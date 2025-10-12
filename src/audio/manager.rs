@@ -106,24 +106,66 @@ pub async fn hex_playback_task(
             position + 1
         };
 
+        let completed_loop = next_position == 0 && position + 1 >= hex_chars.len();
+
         let current_state = playback_state.read().await.clone();
         if current_state.message.as_ref() == Some(&message) {
-            playback_state.write().await.current_position = next_position;
+            let mut state = playback_state.write().await;
+            state.current_position = next_position;
 
-            let state = MessagePlaybackState {
+            if completed_loop {
+                state.current_loop += 1;
+                tracing::info!(
+                    "Hex message '{}' completed loop {} (target: {:?}) in guild {}",
+                    message,
+                    state.current_loop,
+                    state.target_loops,
+                    guild_id
+                );
+
+                if let Some(target) = state.target_loops
+                    && state.current_loop >= target
+                {
+                    tracing::info!(
+                        "Hex message '{}' completed {} loops in guild {}, stopping playback",
+                        message,
+                        state.current_loop,
+                        guild_id
+                    );
+                    state.message = None;
+                    state.current_position = 0;
+                    state.current_loop = 0;
+
+                    let state_store = bot_state.state_store.clone();
+                    let guild_id_copy = guild_id;
+                    tokio::spawn(async move {
+                        if let Err(e) = state_store.remove_message_playback(guild_id_copy).await {
+                            tracing::warn!("Failed to remove message playback state: {}", e);
+                        }
+                    });
+
+                    continue;
+                }
+            }
+
+            let persist_state = MessagePlaybackState {
                 message: message.clone(),
                 current_position: next_position,
+                current_loop: state.current_loop,
+                target_loops: state.target_loops,
             };
+            drop(state);
+
             let state_store = bot_state.state_store.clone();
             let guild_id_copy = guild_id;
             tokio::spawn(async move {
                 if let Err(e) = state_store
-                    .save_message_playback(guild_id_copy, &state)
+                    .save_message_playback(guild_id_copy, &persist_state)
                     .await
                 {
                     tracing::warn!(
                         "Failed to save message playback progress for message '{}': {}",
-                        state.message,
+                        persist_state.message,
                         e
                     );
                 }
@@ -133,7 +175,7 @@ pub async fn hex_playback_task(
         let delay = if (position + 1) % 2 == 0 {
             Duration::from_millis(800)
         } else if position + 1 >= hex_chars.len() {
-            Duration::from_secs(3)
+            Duration::from_secs(5)
         } else {
             Duration::from_millis(50)
         };

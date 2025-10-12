@@ -6,6 +6,8 @@ pub struct DJConfig {
     pub track_pool: Vec<TrackEntry>,
     pub hex_messages: Vec<HexMessageEntry>,
     pub hex_message_announcements: Option<Vec<String>>,
+    #[serde(default)]
+    pub hex_message_defaults: HexMessageDefaults,
     pub noise_periods: Vec<NoisePeriodEntry>,
     pub signal_profiles: Vec<SignalProfileEntry>,
     pub state_weights: StateWeights,
@@ -23,9 +25,36 @@ pub struct TrackEntry {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct HexMessageDefaults {
+    #[serde(default = "default_loop_min")]
+    pub loop_min: u32,
+    #[serde(default = "default_loop_max")]
+    pub loop_max: u32,
+}
+
+impl Default for HexMessageDefaults {
+    fn default() -> Self {
+        Self {
+            loop_min: default_loop_min(),
+            loop_max: default_loop_max(),
+        }
+    }
+}
+
+fn default_loop_min() -> u32 {
+    1
+}
+
+fn default_loop_max() -> u32 {
+    1
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct HexMessageEntry {
     pub text: String,
     pub weight: u32,
+    pub loop_min: Option<u32>,
+    pub loop_max: Option<u32>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]

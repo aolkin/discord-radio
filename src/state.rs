@@ -19,6 +19,8 @@ pub struct HexPlaybackState {
     pub message: Option<String>,
     pub current_position: usize,
     pub volume: f32,
+    pub current_loop: usize,
+    pub target_loops: Option<usize>,
 }
 
 impl HexPlaybackState {
@@ -27,14 +29,23 @@ impl HexPlaybackState {
             message: None,
             current_position: 0,
             volume: 1.0,
+            current_loop: 0,
+            target_loops: None,
         }
     }
 
-    pub fn playing(message: String, position: usize, volume: f32) -> Self {
+    pub fn playing(
+        message: String,
+        position: usize,
+        volume: f32,
+        target_loops: Option<usize>,
+    ) -> Self {
         Self {
             message: Some(message),
             current_position: position,
             volume,
+            current_loop: 0,
+            target_loops,
         }
     }
 }

@@ -201,15 +201,19 @@ pub async fn dj_task(
 
         let current_state = state_machine.current_state();
 
-        if let DJState::PlayingHexMessage { message, .. } = current_state {
+        if let DJState::PlayingHexMessage { .. } = current_state {
             let hex_playback_states = bot_state.hex_playback_states.read().await;
             if let Some(state_arc) = hex_playback_states.get(&guild_id) {
                 let state = state_arc.read().await;
-                if state.message.is_none() || state.message.as_ref() != Some(message) {
+                if state.message.is_none() {
                     drop(state);
                     drop(hex_playback_states);
 
-                    if let Err(e) = state_machine.advance(&mut manager, &bot_state).await {
+                    tracing::info!("DJ detected hex message completion, advancing to next state");
+                    if let Err(e) = state_machine
+                        .force_advance(&mut manager, &bot_state, None)
+                        .await
+                    {
                         tracing::error!("DJ failed to advance after hex message completion: {}", e);
                     }
                 }

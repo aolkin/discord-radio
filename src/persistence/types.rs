@@ -5,6 +5,10 @@ use std::time::SystemTime;
 pub struct MessagePlaybackState {
     pub message: String,
     pub current_position: usize,
+    #[serde(default)]
+    pub current_loop: usize,
+    #[serde(default)]
+    pub target_loops: Option<usize>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -20,6 +24,10 @@ pub struct TrackState {
 
 fn default_loops() -> bool {
     true
+}
+
+fn default_target_loops() -> usize {
+    1
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -54,6 +62,8 @@ pub enum DJStateMachineState {
     PlayingHexMessage {
         message: String,
         started_at: SystemTime,
+        #[serde(default = "default_target_loops")]
+        target_loops: usize,
     },
     PlayingNoise {
         noise_type: String,
