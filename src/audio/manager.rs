@@ -175,7 +175,7 @@ pub async fn hex_playback_task(
         let delay = if (position + 1) % 2 == 0 {
             Duration::from_millis(800)
         } else if position + 1 >= hex_chars.len() {
-            Duration::from_secs(5)
+            Duration::from_secs(8)
         } else {
             Duration::from_millis(50)
         };

@@ -13,8 +13,8 @@
     }
   ],
   "hex_message_defaults": {
-    "loop_min": 1,
-    "loop_max": 2,
+    "loop_min": 2,
+    "loop_max": 3,
     "signal_profile": "locked"
   },
   "noise_periods": [
@@ -66,10 +66,10 @@
     }
   ],
   "state_weights": {
-    "track": 50,
-    "hex_message": 5,
+    "track": 100,
+    "hex_message": 2,
     "noise": 0
   },
-  "recent_history_size": 5,
-  "duplicate_penalty_multiplier": 0.1
+  "recent_history_size": 12,
+  "duplicate_penalty_multiplier": 0.5
 }
