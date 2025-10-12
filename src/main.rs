@@ -138,10 +138,18 @@ async fn main() -> Result<(), Error> {
 
     dotenvy::dotenv().ok();
 
+    // Check for --version flag
+    let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(|s| s.as_str()) == Some("--version") {
+        let run_number = env!("BUILD_RUN_NUMBER");
+        let commit_hash = env!("BUILD_COMMIT_HASH");
+        println!("discord-bot-{} ({})", run_number, commit_hash);
+        return Ok(());
+    }
+
     let discord_token =
         std::env::var("DISCORD_TOKEN").expect("Expected DISCORD_TOKEN in the environment");
 
-    let args: Vec<String> = std::env::args().collect();
     let content_path = args
         .get(1)
         .expect("Usage: discord-bot <content_path>")
