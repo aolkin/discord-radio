@@ -38,6 +38,20 @@ impl WeightedScheduler {
         state
     }
 
+    pub fn next_state_of_type(
+        &mut self,
+        filter: crate::audio::dj::manager::DJStateTypeFilter,
+    ) -> DJStateType {
+        let state = match filter {
+            crate::audio::dj::manager::DJStateTypeFilter::Track => self.choose_track(),
+            crate::audio::dj::manager::DJStateTypeFilter::HexMessage => self.choose_hex_message(),
+            crate::audio::dj::manager::DJStateTypeFilter::Noise => self.choose_noise(),
+        };
+
+        self.add_to_history(state.clone());
+        state
+    }
+
     fn choose_state_type(&self) -> StateCategory {
         let weights = &self.config.state_weights;
         let total: u32 =

@@ -10,8 +10,15 @@ use tokio::time::{Duration, sleep};
 const DJ_TICK_INTERVAL_MS: u64 = 100;
 
 pub enum DJCommand {
-    ForceAdvance,
+    ForceAdvance(Option<DJStateTypeFilter>),
     Stop,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum DJStateTypeFilter {
+    Track,
+    HexMessage,
+    Noise,
 }
 
 pub async fn dj_task(
@@ -19,14 +26,16 @@ pub async fn dj_task(
     config: DJConfig,
     bot_state: Data,
     mut command_rx: mpsc::Receiver<DJCommand>,
-    restored_state: Option<crate::persistence::DJStateMachineState>,
     announcement_channel: Option<ChannelId>,
     http: Arc<Http>,
+    restored_state: Option<crate::persistence::DJStateMachineState>,
 ) {
+    let config_name = config.name.clone();
+
     tracing::info!(
         "Starting DJ task for guild {} with config '{}'",
         guild_id,
-        config.name
+        config_name
     );
 
     let mut state_machine = DJStateMachine::new(
@@ -109,24 +118,8 @@ pub async fn dj_task(
             .clone()
     };
 
-    let mut pending_stop = false;
-
     loop {
-        tokio::select! {
-            _ = sleep(Duration::from_millis(DJ_TICK_INTERVAL_MS)) => {},
-            Some(cmd) = command_rx.recv() => {
-                match cmd {
-                    DJCommand::ForceAdvance => {
-                        tracing::info!("Force advancing DJ state for guild {}", guild_id);
-                        state_machine.force_complete();
-                    }
-                    DJCommand::Stop => {
-                        tracing::info!("Received stop command for DJ in guild {}", guild_id);
-                        pending_stop = true;
-                    }
-                }
-            }
-        }
+        sleep(Duration::from_millis(DJ_TICK_INTERVAL_MS)).await;
 
         let track_managers = bot_state.track_managers.read().await;
         let manager_arc = match track_managers.get(&guild_id) {
@@ -145,11 +138,23 @@ pub async fn dj_task(
 
         let mut manager = manager_arc.lock().await;
 
-        // Handle pending stop command now that we have the track manager
-        if pending_stop {
-            tracing::info!("Processing stop command for DJ in guild {}", guild_id);
-            state_machine.stop(&mut manager).await;
-            pending_stop = false;
+        // Process any pending commands
+        while let Ok(cmd) = command_rx.try_recv() {
+            match cmd {
+                DJCommand::ForceAdvance(state_type_filter) => {
+                    tracing::info!("Processing force advance for DJ in guild {}", guild_id);
+                    if let Err(e) = state_machine
+                        .force_advance(&mut manager, &bot_state, state_type_filter)
+                        .await
+                    {
+                        tracing::error!("DJ failed to force advance: {}", e);
+                    }
+                }
+                DJCommand::Stop => {
+                    tracing::info!("Processing stop command for DJ in guild {}", guild_id);
+                    state_machine.stop(&mut manager).await;
+                }
+            }
         }
 
         // Check for stop state
@@ -171,10 +176,10 @@ pub async fn dj_task(
 
         // Persist DJ state periodically (including state machine state)
         let persist_state = crate::persistence::DJState {
-            config_name: config.name.clone(),
+            config_name: config_name.clone(),
             running: true,
             announcement_channel_id: announcement_channel.map(|id| id.get()),
-            state_machine: Some(state_machine.current_state().to_persistable()),
+            state_machine: Some(state_machine.current_state().into()),
         };
         if let Err(e) = bot_state
             .state_store
@@ -280,9 +285,9 @@ impl DJManager {
                 config,
                 bot_state_clone,
                 rx,
-                restored_state,
                 announcement_channel,
                 http_clone,
+                restored_state,
             )
             .await;
         });
@@ -366,9 +371,12 @@ impl DJManager {
         self.task_handle.is_some()
     }
 
-    pub async fn force_advance(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn force_advance(
+        &self,
+        state_type_filter: Option<DJStateTypeFilter>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if let Some(tx) = &self.command_tx {
-            tx.send(DJCommand::ForceAdvance).await?;
+            tx.send(DJCommand::ForceAdvance(state_type_filter)).await?;
             Ok(())
         } else {
             Err("DJ is not running".into())
@@ -379,6 +387,7 @@ impl DJManager {
 pub async fn force_advance(
     bot_state: &Data,
     guild_id: GuildId,
+    state_type_filter: Option<DJStateTypeFilter>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let dj_managers = bot_state.dj_managers.read().await;
     let manager = dj_managers
@@ -388,5 +397,5 @@ pub async fn force_advance(
     drop(dj_managers);
 
     let mgr = manager.lock().await;
-    mgr.force_advance().await
+    mgr.force_advance(state_type_filter).await
 }

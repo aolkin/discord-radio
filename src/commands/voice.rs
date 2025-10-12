@@ -1087,7 +1087,12 @@ pub async fn get_dj_state(ctx: Context<'_>) -> Result<(), Error> {
     guild_only,
     default_member_permissions = "ADMINISTRATOR"
 )]
-pub async fn advance_dj_state(ctx: Context<'_>) -> Result<(), Error> {
+pub async fn advance_dj_state(
+    ctx: Context<'_>,
+    #[description = "State type to advance to: track, hex, or noise (optional)"] state_type: Option<
+        String,
+    >,
+) -> Result<(), Error> {
     let guild_id = ctx
         .guild_id()
         .ok_or("This command can only be used in a server")?;
@@ -1118,13 +1123,42 @@ pub async fn advance_dj_state(ctx: Context<'_>) -> Result<(), Error> {
     }
     drop(mgr);
 
-    if let Err(e) = crate::audio::dj::manager::force_advance(ctx.data(), guild_id).await {
+    // Parse state type filter
+    let state_type_filter = if let Some(type_str) = state_type {
+        match type_str.to_lowercase().as_str() {
+            "track" => Some(crate::audio::dj::manager::DJStateTypeFilter::Track),
+            "hex" | "hex_message" | "hexmessage" => {
+                Some(crate::audio::dj::manager::DJStateTypeFilter::HexMessage)
+            }
+            "noise" => Some(crate::audio::dj::manager::DJStateTypeFilter::Noise),
+            _ => {
+                ctx.say(format!(
+                    "Invalid state type '{}'. Valid types: track, hex, noise",
+                    type_str
+                ))
+                .await?;
+                return Ok(());
+            }
+        }
+    } else {
+        None
+    };
+
+    if let Err(e) =
+        crate::audio::dj::manager::force_advance(ctx.data(), guild_id, state_type_filter).await
+    {
         ctx.say(format!("Failed to force DJ state advance: {}", e))
             .await?;
         return Ok(());
     }
 
-    ctx.say("DJ state advance triggered").await?;
+    let message = if let Some(filter) = state_type_filter {
+        format!("DJ advancing to {:?} state", filter)
+    } else {
+        "DJ state advance triggered".to_string()
+    };
+
+    ctx.say(message).await?;
 
     Ok(())
 }

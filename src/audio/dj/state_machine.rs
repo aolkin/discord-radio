@@ -63,124 +63,6 @@ impl DJState {
             DJState::Stopped => true,
         }
     }
-
-    /// Convert to a persistable state
-    pub fn to_persistable(&self) -> crate::persistence::DJStateMachineState {
-        use crate::persistence::DJStateMachineState as PersistState;
-        use std::time::SystemTime;
-
-        // Helper to convert Instant to SystemTime
-        let instant_to_systime = |instant: &std::time::Instant| -> SystemTime {
-            let elapsed = instant.elapsed();
-            SystemTime::now()
-                .checked_sub(elapsed)
-                .unwrap_or_else(SystemTime::now)
-        };
-
-        match self {
-            DJState::PlayingTrack {
-                track_name,
-                filename,
-                started_at,
-                duration,
-            } => PersistState::PlayingTrack {
-                track_name: track_name.clone(),
-                filename: filename.clone(),
-                started_at: instant_to_systime(started_at),
-                duration_secs: duration.as_secs_f32(),
-            },
-            DJState::PlayingHexMessage {
-                message,
-                started_at,
-            } => PersistState::PlayingHexMessage {
-                message: message.clone(),
-                started_at: instant_to_systime(started_at),
-            },
-            DJState::PlayingNoise {
-                noise_type,
-                started_at,
-                duration,
-            } => PersistState::PlayingNoise {
-                noise_type: noise_type.clone(),
-                started_at: instant_to_systime(started_at),
-                duration_secs: duration.as_secs_f32(),
-            },
-            DJState::TransitioningProfile {
-                started_at,
-                duration,
-            } => PersistState::TransitioningProfile {
-                started_at: instant_to_systime(started_at),
-                duration_secs: duration.as_secs_f32(),
-            },
-            DJState::Idle {
-                started_at,
-                duration,
-            } => PersistState::Idle {
-                started_at: instant_to_systime(started_at),
-                duration_secs: duration.as_secs_f32(),
-            },
-            DJState::Stopped => PersistState::Stopped,
-        }
-    }
-
-    /// Create from a persistable state
-    pub fn from_persistable(
-        persist_state: &crate::persistence::DJStateMachineState,
-    ) -> Option<Self> {
-        use crate::persistence::DJStateMachineState as PersistState;
-        use std::time::{Duration, Instant};
-
-        // Helper to convert SystemTime to Instant
-        let systime_to_instant = |systime: &std::time::SystemTime| -> Option<Instant> {
-            let elapsed = systime.elapsed().ok()?;
-            Instant::now().checked_sub(elapsed)
-        };
-
-        match persist_state {
-            PersistState::PlayingTrack {
-                track_name,
-                filename,
-                started_at,
-                duration_secs,
-            } => Some(DJState::PlayingTrack {
-                track_name: track_name.clone(),
-                filename: filename.clone(),
-                started_at: systime_to_instant(started_at)?,
-                duration: Duration::from_secs_f32(*duration_secs),
-            }),
-            PersistState::PlayingHexMessage {
-                message,
-                started_at,
-            } => Some(DJState::PlayingHexMessage {
-                message: message.clone(),
-                started_at: systime_to_instant(started_at)?,
-            }),
-            PersistState::PlayingNoise {
-                noise_type,
-                started_at,
-                duration_secs,
-            } => Some(DJState::PlayingNoise {
-                noise_type: noise_type.clone(),
-                started_at: systime_to_instant(started_at)?,
-                duration: Duration::from_secs_f32(*duration_secs),
-            }),
-            PersistState::TransitioningProfile {
-                started_at,
-                duration_secs,
-            } => Some(DJState::TransitioningProfile {
-                started_at: systime_to_instant(started_at)?,
-                duration: Duration::from_secs_f32(*duration_secs),
-            }),
-            PersistState::Idle {
-                started_at,
-                duration_secs,
-            } => Some(DJState::Idle {
-                started_at: systime_to_instant(started_at)?,
-                duration: Duration::from_secs_f32(*duration_secs),
-            }),
-            PersistState::Stopped => Some(DJState::Stopped),
-        }
-    }
 }
 
 pub struct DJStateMachine {
@@ -203,7 +85,7 @@ impl DJStateMachine {
         restored_state: Option<crate::persistence::DJStateMachineState>,
     ) -> Self {
         let current_state = if let Some(state) = restored_state {
-            DJState::from_persistable(&state).unwrap_or_else(|| {
+            (&state).try_into().unwrap_or_else(|_| {
                 tracing::warn!(
                     "Failed to restore DJ state for guild {}, starting from idle",
                     guild_id
@@ -220,7 +102,8 @@ impl DJStateMachine {
             }
         };
 
-        let hex_message_announcements = config.hex_message_announcements.clone().unwrap_or_default();
+        let hex_message_announcements =
+            config.hex_message_announcements.clone().unwrap_or_default();
 
         Self {
             current_state,
@@ -245,40 +128,20 @@ impl DJStateMachine {
         self.current_state = DJState::Stopped;
     }
 
-    pub fn force_complete(&mut self) {
-        match &mut self.current_state {
-            DJState::PlayingTrack {
-                started_at,
-                duration,
-                ..
-            } => {
-                *started_at = std::time::Instant::now() - *duration;
-            }
-            DJState::PlayingNoise {
-                started_at,
-                duration,
-                ..
-            } => {
-                *started_at = std::time::Instant::now() - *duration;
-            }
-            DJState::TransitioningProfile {
-                started_at,
-                duration,
-                ..
-            } => {
-                *started_at = std::time::Instant::now() - *duration;
-            }
-            DJState::Idle {
-                started_at,
-                duration,
-            } => {
-                *started_at = std::time::Instant::now() - *duration;
-            }
-            DJState::PlayingHexMessage { started_at, .. } => {
-                *started_at = std::time::Instant::now() - Duration::from_secs(999);
-            }
-            DJState::Stopped => {}
-        }
+    pub async fn force_advance(
+        &mut self,
+        track_manager: &mut TrackManager,
+        bot_state: &Data,
+        state_type_filter: Option<crate::audio::dj::manager::DJStateTypeFilter>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let next_state_type = if let Some(filter) = state_type_filter {
+            self.scheduler.next_state_of_type(filter)
+        } else {
+            self.scheduler.next_state()
+        };
+
+        self.transition_to_state(next_state_type, track_manager, bot_state)
+            .await
     }
 
     pub async fn advance(
@@ -290,9 +153,19 @@ impl DJStateMachine {
             return Ok(());
         }
 
+        let next_state_type = self.scheduler.next_state();
+        self.transition_to_state(next_state_type, track_manager, bot_state)
+            .await
+    }
+
+    async fn transition_to_state(
+        &mut self,
+        next_state_type: DJStateType,
+        track_manager: &mut TrackManager,
+        bot_state: &Data,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         self.cleanup_current_state(track_manager).await?;
 
-        let next_state_type = self.scheduler.next_state();
         info!("DJ transitioning to state: {:?}", next_state_type);
         self.current_state = self
             .create_next_state(next_state_type, track_manager, bot_state)
