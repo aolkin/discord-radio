@@ -120,6 +120,10 @@ impl DJStateMachine {
         &self.current_state
     }
 
+    pub fn set_announcement_channel(&mut self, channel: Option<ChannelId>) {
+        self.announcement_channel = channel;
+    }
+
     pub async fn stop(&mut self, track_manager: &mut TrackManager) {
         // Clean up current state before stopping
         if let Err(e) = self.cleanup_current_state(track_manager).await {

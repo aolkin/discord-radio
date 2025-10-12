@@ -413,12 +413,14 @@ async fn restore_dj_managers(
         let mut mgr = manager.lock().await;
 
         // Restore announcement channel if saved
-        if let Some(channel_id_u64) = dj_state.announcement_channel_id {
-            let announcement_channel = poise::serenity_prelude::ChannelId::new(channel_id_u64);
-            mgr.set_announcement_channel(Some(announcement_channel));
+        let announcement_channel = dj_state
+            .announcement_channel_id
+            .map(poise::serenity_prelude::ChannelId::new);
+
+        if let Some(channel) = announcement_channel {
             tracing::info!(
-                "Restored announcement channel {} for DJ in guild {}",
-                announcement_channel,
+                "Restoring announcement channel {} for DJ in guild {}",
+                channel,
                 guild_id
             );
         }
@@ -429,6 +431,7 @@ async fn restore_dj_managers(
                 bot_state.clone(),
                 http.clone(),
                 channel_id,
+                announcement_channel,
                 dj_state.state_machine,
             )
             .await

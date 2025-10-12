@@ -931,15 +931,13 @@ pub async fn manage_dj(
                 return Ok(());
             }
 
-            // Set announcement channel
-            mgr.set_announcement_channel(announcement_channel);
-
             if let Err(e) = mgr
                 .start(
                     dj_config,
                     ctx.data().clone(),
                     ctx.serenity_context().http.clone(),
                     channel_id,
+                    announcement_channel,
                     None,
                 )
                 .await
@@ -981,8 +979,39 @@ pub async fn manage_dj(
                 .await;
             ctx.say("DJ stopped").await?;
         }
+        "configure" => {
+            let dj_managers = ctx.data().dj_managers.read().await;
+            let manager = match dj_managers.get(&guild_id) {
+                Some(mgr) => mgr.clone(),
+                None => {
+                    ctx.say("DJ is not running").await?;
+                    return Ok(());
+                }
+            };
+            drop(dj_managers);
+
+            let mgr = manager.lock().await;
+            if !mgr.is_running() {
+                ctx.say("DJ is not running").await?;
+                return Ok(());
+            }
+
+            if let Err(e) = mgr.set_announcement_channel(announcement_channel).await {
+                ctx.say(format!("Failed to configure DJ: {}", e)).await?;
+                return Ok(());
+            }
+
+            let msg = if let Some(ch_id) = announcement_channel {
+                format!("DJ configured: announcements will be sent to <#{}>", ch_id)
+            } else {
+                "DJ configured: announcements disabled".to_string()
+            };
+
+            ctx.say(msg).await?;
+        }
         _ => {
-            ctx.say("Invalid action. Use 'start' or 'stop'").await?;
+            ctx.say("Invalid action. Use 'start', 'stop', or 'configure'")
+                .await?;
         }
     }
 
