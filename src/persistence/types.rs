@@ -37,4 +37,34 @@ pub struct ProfileState {
 pub struct DJState {
     pub config_name: String,
     pub running: bool,
+    #[serde(default)]
+    pub state_machine: Option<DJStateMachineState>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub enum DJStateMachineState {
+    PlayingTrack {
+        track_name: String,
+        filename: String,
+        started_at: SystemTime,
+        duration_secs: f32,
+    },
+    PlayingHexMessage {
+        message: String,
+        started_at: SystemTime,
+    },
+    PlayingNoise {
+        noise_type: String,
+        started_at: SystemTime,
+        duration_secs: f32,
+    },
+    TransitioningProfile {
+        started_at: SystemTime,
+        duration_secs: f32,
+    },
+    Idle {
+        started_at: SystemTime,
+        duration_secs: f32,
+    },
+    Stopped,
 }

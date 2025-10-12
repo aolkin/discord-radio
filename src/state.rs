@@ -42,7 +42,7 @@ impl HexPlaybackState {
 pub struct BotState {
     pub voice_connections: RwLock<HashMap<GuildId, Arc<Mutex<Call>>>>,
     pub track_managers: RwLock<HashMap<GuildId, Arc<Mutex<TrackManager>>>>,
-    pub hex_audio_dir: String,
+    pub content_path: String,
     pub state_store: Arc<dyn StateStore>,
     pub hex_playback_states: RwLock<HashMap<GuildId, Arc<RwLock<HexPlaybackState>>>>,
     pub hex_playback_tasks: RwLock<HashMap<GuildId, JoinHandle<()>>>,
@@ -54,7 +54,7 @@ pub struct BotState {
 }
 
 impl BotState {
-    pub fn new(hex_audio_dir: String, state_store: Arc<dyn StateStore>) -> Self {
+    pub fn new(content_path: String, state_store: Arc<dyn StateStore>) -> Self {
         let profiles_dir = "audio_profiles";
         let mut profile_manager = ProfileManager::new(profiles_dir);
 
@@ -70,7 +70,7 @@ impl BotState {
         Self {
             voice_connections: RwLock::new(HashMap::new()),
             track_managers: RwLock::new(HashMap::new()),
-            hex_audio_dir,
+            content_path,
             state_store,
             hex_playback_states: RwLock::new(HashMap::new()),
             hex_playback_tasks: RwLock::new(HashMap::new()),
@@ -85,12 +85,16 @@ impl BotState {
     pub fn audio_profiles_dir(&self) -> String {
         "audio_profiles".to_string()
     }
+
+    pub fn hex_audio_dir(&self) -> String {
+        format!("{}/audio/hex/", self.content_path)
+    }
 }
 
 impl std::fmt::Debug for BotState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("BotState")
-            .field("hex_audio_dir", &self.hex_audio_dir)
+            .field("content_path", &self.content_path)
             .field("state_store", &"<dyn StateStore>")
             .finish_non_exhaustive()
     }

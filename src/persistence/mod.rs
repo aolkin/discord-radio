@@ -2,7 +2,10 @@ mod file_store;
 mod types;
 
 pub use file_store::FileStore;
-pub use types::{DJState, MessagePlaybackState, MultiTrackPlaybackState, ProfileState, TrackState};
+pub use types::{
+    DJState, DJStateMachineState, MessagePlaybackState, MultiTrackPlaybackState, ProfileState,
+    TrackState,
+};
 
 use async_trait::async_trait;
 use serenity::model::id::{ChannelId, GuildId};

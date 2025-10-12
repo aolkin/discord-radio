@@ -180,7 +180,7 @@ async fn restore_message_playback(
 
             let guild_id_copy = guild_id;
             let manager_copy = manager_arc.clone();
-            let hex_audio_dir = bot_state.hex_audio_dir.clone();
+            let hex_audio_dir = bot_state.hex_audio_dir();
             let playback_state_copy = playback_state_arc.clone();
             let bot_state_copy = bot_state.clone();
 
@@ -411,8 +411,16 @@ async fn restore_dj_managers(
         drop(dj_managers);
 
         let mut mgr = manager.lock().await;
+
+        // Start DJ with or without restored state machine state
         if let Err(e) = mgr
-            .start(dj_config, bot_state.clone(), http.clone(), channel_id)
+            .start(
+                dj_config,
+                bot_state.clone(),
+                http.clone(),
+                channel_id,
+                dj_state.state_machine,
+            )
             .await
         {
             tracing::error!("Failed to start DJ for guild {}: {}", guild_id, e);

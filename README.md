@@ -36,10 +36,10 @@ sudo apt update && sudo apt install -y cmake libopus-dev pkg-config
 ## Usage
 
 ```bash
-./target/release/discord-bot <hex_audio_dir>
+./target/release/discord-bot <content_path>
 ```
 
-Where `<hex_audio_dir>` is the path to the directory containing hex message audio files.
+Where `<content_path>` is the path to the directory containing bot content (e.g. hex message audio files).
 
 ## License
 

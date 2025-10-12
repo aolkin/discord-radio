@@ -19,6 +19,7 @@ pub async fn dj_task(
     config: DJConfig,
     bot_state: Data,
     mut command_rx: mpsc::Receiver<DJCommand>,
+    restored_state: Option<crate::persistence::DJStateMachineState>,
 ) {
     tracing::info!(
         "Starting DJ task for guild {} with config '{}'",
@@ -26,7 +27,69 @@ pub async fn dj_task(
         config.name
     );
 
-    let mut state_machine = DJStateMachine::new(config, guild_id, bot_state.hex_audio_dir.clone());
+    let mut state_machine = DJStateMachine::new(
+        config.clone(),
+        guild_id,
+        bot_state.content_path.clone(),
+        restored_state.clone(),
+    );
+
+    // If we restored a PlayingTrack state, check if the track was already restored by TrackManager
+    // The track should have been restored by restore_multitrack_playback, so we just need to verify it exists
+    if let Some(state) = restored_state {
+        match state {
+            crate::persistence::DJStateMachineState::PlayingTrack { track_name, .. } => {
+                tracing::debug!(
+                    "Checking for restored DJ track '{}' in guild {}",
+                    track_name,
+                    guild_id
+                );
+
+                // Wait for track manager to be available
+                let manager_arc = loop {
+                    let track_managers = bot_state.track_managers.read().await;
+                    if let Some(arc) = track_managers.get(&guild_id) {
+                        let arc_clone = arc.clone();
+                        drop(track_managers);
+                        break arc_clone;
+                    }
+                    drop(track_managers);
+                    tracing::debug!(
+                        "Waiting for track manager for guild {} during DJ restoration",
+                        guild_id
+                    );
+                    sleep(Duration::from_millis(100)).await;
+                };
+
+                {
+                    let manager = manager_arc.lock().await;
+
+                    // Check if track exists (should have been restored by TrackManager)
+                    if manager.has_track(&track_name) {
+                        tracing::info!(
+                            "DJ track '{}' already restored by TrackManager in guild {}",
+                            track_name,
+                            guild_id
+                        );
+                    } else {
+                        tracing::warn!(
+                            "DJ track '{}' was not restored by TrackManager in guild {}, will advance to next state",
+                            track_name,
+                            guild_id
+                        );
+                    }
+                }
+            }
+            crate::persistence::DJStateMachineState::PlayingNoise { noise_type, .. } => {
+                tracing::info!(
+                    "DJ was playing noise '{}', will continue from current state",
+                    noise_type
+                );
+                // Noise doesn't need track restoration, it's generated
+            }
+            _ => {}
+        }
+    }
 
     // Create shared state for this DJ
     let state_arc = {
@@ -102,6 +165,20 @@ pub async fn dj_task(
             *state = state_machine.current_state().clone();
         }
 
+        // Persist DJ state periodically (including state machine state)
+        let persist_state = crate::persistence::DJState {
+            config_name: config.name.clone(),
+            running: true,
+            state_machine: Some(state_machine.current_state().to_persistable()),
+        };
+        if let Err(e) = bot_state
+            .state_store
+            .save_dj_state(guild_id, &persist_state)
+            .await
+        {
+            tracing::warn!("Failed to persist DJ state for guild {}: {}", guild_id, e);
+        }
+
         let current_state = state_machine.current_state();
 
         if let DJState::PlayingHexMessage { message, .. } = current_state {
@@ -152,6 +229,7 @@ impl DJManager {
         bot_state: Data,
         http: Arc<Http>,
         channel_id: ChannelId,
+        restored_state: Option<crate::persistence::DJStateMachineState>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if self.task_handle.is_some() {
             return Err("DJ is already running".into());
@@ -184,16 +262,20 @@ impl DJManager {
         let guild_id = self.guild_id;
         let bot_state_clone = bot_state.clone();
         let handle = tokio::spawn(async move {
-            dj_task(guild_id, config, bot_state_clone, rx).await;
+            dj_task(guild_id, config, bot_state_clone, rx, restored_state).await;
         });
 
         self.task_handle = Some(handle);
         self.command_tx = Some(tx);
 
-        // Save DJ state to persistence
+        // Save DJ state to persistence (initial state will be Idle)
         let dj_state = crate::persistence::DJState {
             config_name,
             running: true,
+            state_machine: Some(crate::persistence::DJStateMachineState::Idle {
+                started_at: std::time::SystemTime::now(),
+                duration_secs: 1.0,
+            }),
         };
         if let Err(e) = bot_state
             .state_store

@@ -276,7 +276,7 @@ pub async fn stop_message(ctx: Context<'_>) -> Result<(), Error> {
 }
 
 async fn autocomplete_audio_file(ctx: Context<'_>, partial: &'_ str) -> Vec<String> {
-    let content_dir = &ctx.data().hex_audio_dir;
+    let content_dir = &ctx.data().content_path;
     let mut results = Vec::new();
 
     // Split partial into directory and filename parts
@@ -366,7 +366,7 @@ pub async fn change_track_state(
             };
 
             // Prepend content directory to filename
-            let full_path = format!("{}/{}", ctx.data().hex_audio_dir, filename);
+            let full_path = format!("{}/{}", ctx.data().content_path, filename);
 
             let volume = volume.unwrap_or(1.0);
             let loops = loops.unwrap_or(true);
@@ -648,7 +648,7 @@ async fn ensure_hex_playback_task(
 
     let guild_id_copy = guild_id;
     let manager_copy = manager_arc.clone();
-    let hex_audio_dir = ctx.data().hex_audio_dir.clone();
+    let hex_audio_dir = ctx.data().hex_audio_dir();
     let playback_state_copy = playback_state.clone();
     let bot_state = ctx.data().clone();
 
@@ -934,6 +934,7 @@ pub async fn manage_dj(
                     ctx.data().clone(),
                     ctx.serenity_context().http.clone(),
                     channel_id,
+                    None,
                 )
                 .await
             {
