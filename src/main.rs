@@ -168,6 +168,7 @@ async fn main() -> Result<(), Error> {
                 commands::voice::get_current_tracks(),
                 commands::voice::signal_profile(),
                 commands::voice::manage_dj(),
+                commands::voice::get_dj_state(),
                 commands::voice::advance_dj_state(),
                 commands::messaging::speak(),
                 commands::messaging::set_status(),

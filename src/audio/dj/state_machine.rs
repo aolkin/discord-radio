@@ -12,6 +12,7 @@ use tracing::info;
 pub enum DJState {
     PlayingTrack {
         track_name: String,
+        filename: String,
         started_at: std::time::Instant,
         duration: Duration,
     },
@@ -250,6 +251,7 @@ impl DJStateMachine {
 
         Ok(DJState::PlayingTrack {
             track_name,
+            filename: track_entry.filename.clone(),
             started_at: std::time::Instant::now(),
             duration: play_duration,
         })

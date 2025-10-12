@@ -10,6 +10,7 @@ pub struct DJConfig {
     pub state_weights: StateWeights,
     pub recent_history_size: usize,
     pub duplicate_penalty_multiplier: f32,
+    pub channel_status: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]

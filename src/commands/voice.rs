@@ -880,6 +880,34 @@ pub async fn manage_dj(
                 }
             };
 
+            // Ensure we have a voice connection and track manager before starting DJ
+            let call_lock = match get_voice_connection(ctx, guild_id).await {
+                Some(lock) => lock,
+                None => {
+                    ctx.say("Bot is not in a voice channel! Join a voice channel first.")
+                        .await?;
+                    return Ok(());
+                }
+            };
+
+            // Get the channel ID from the call
+            let channel_id = {
+                let call = call_lock.lock().await;
+                match call.current_channel() {
+                    Some(songbird_channel_id) => {
+                        serenity::all::ChannelId::new(songbird_channel_id.0.into())
+                    }
+                    None => {
+                        ctx.say("Bot is not in a voice channel! Join a voice channel first.")
+                            .await?;
+                        return Ok(());
+                    }
+                }
+            };
+
+            // Create track manager if it doesn't exist
+            let _track_manager = get_or_create_track_manager(ctx, guild_id, call_lock).await;
+
             let mut dj_managers = ctx.data().dj_managers.write().await;
             let manager = dj_managers
                 .entry(guild_id)
@@ -900,7 +928,15 @@ pub async fn manage_dj(
                 return Ok(());
             }
 
-            if let Err(e) = mgr.start(dj_config, ctx.data().clone()).await {
+            if let Err(e) = mgr
+                .start(
+                    dj_config,
+                    ctx.data().clone(),
+                    ctx.serenity_context().http.clone(),
+                    channel_id,
+                )
+                .await
+            {
                 ctx.say(format!("Failed to start DJ: {}", e)).await?;
                 return Ok(());
             }
@@ -925,13 +961,106 @@ pub async fn manage_dj(
                 return Ok(());
             }
 
-            mgr.stop(ctx.data()).await;
+            mgr.stop(ctx.data(), ctx.serenity_context().http.clone())
+                .await;
             ctx.say("DJ stopped").await?;
         }
         _ => {
             ctx.say("Invalid action. Use 'start' or 'stop'").await?;
         }
     }
+
+    Ok(())
+}
+
+/// Get the current state of the DJ
+#[poise::command(
+    slash_command,
+    guild_only,
+    default_member_permissions = "ADMINISTRATOR"
+)]
+pub async fn get_dj_state(ctx: Context<'_>) -> Result<(), Error> {
+    let guild_id = ctx
+        .guild_id()
+        .ok_or("This command can only be used in a server")?;
+    let user_id = ctx.author().id;
+
+    tracing::info!(
+        "User {} executed get_dj_state in guild {}",
+        user_id,
+        guild_id
+    );
+
+    ctx.defer_ephemeral().await?;
+
+    let dj_managers = ctx.data().dj_managers.read().await;
+    if !dj_managers.contains_key(&guild_id) {
+        ctx.say("DJ is not running").await?;
+        return Ok(());
+    }
+    drop(dj_managers);
+
+    let dj_states = ctx.data().dj_states.read().await;
+    let state_arc = match dj_states.get(&guild_id) {
+        Some(arc) => arc.clone(),
+        None => {
+            ctx.say("DJ state not available").await?;
+            return Ok(());
+        }
+    };
+    drop(dj_states);
+
+    let state = state_arc.read().await;
+    let state_description = match &*state {
+        crate::audio::dj::state_machine::DJState::PlayingTrack {
+            filename,
+            started_at,
+            duration,
+            ..
+        } => {
+            let elapsed = started_at.elapsed().as_secs();
+            let total = duration.as_secs();
+            format!("Playing track: **{}** ({}/{}s)", filename, elapsed, total)
+        }
+        crate::audio::dj::state_machine::DJState::PlayingHexMessage {
+            message,
+            started_at,
+        } => {
+            let elapsed = started_at.elapsed().as_secs();
+            format!(
+                "Playing hex message: **{}** ({}s elapsed)",
+                message, elapsed
+            )
+        }
+        crate::audio::dj::state_machine::DJState::PlayingNoise {
+            noise_type,
+            started_at,
+            duration,
+        } => {
+            let elapsed = started_at.elapsed().as_secs();
+            let total = duration.as_secs();
+            format!("Playing noise: **{}** ({}/{}s)", noise_type, elapsed, total)
+        }
+        crate::audio::dj::state_machine::DJState::TransitioningProfile {
+            started_at,
+            duration,
+        } => {
+            let elapsed = started_at.elapsed().as_secs();
+            let total = duration.as_secs();
+            format!("Transitioning profile ({}/{}s)", elapsed, total)
+        }
+        crate::audio::dj::state_machine::DJState::Idle {
+            started_at,
+            duration,
+        } => {
+            let elapsed = started_at.elapsed().as_secs();
+            let total = duration.as_secs();
+            format!("Idle ({}/{}s)", elapsed, total)
+        }
+        crate::audio::dj::state_machine::DJState::Stopped => "Stopped".to_string(),
+    };
+
+    ctx.say(format!("DJ State: {}", state_description)).await?;
 
     Ok(())
 }

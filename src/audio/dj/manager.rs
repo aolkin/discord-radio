@@ -1,7 +1,9 @@
 use crate::audio::dj::config::DJConfig;
 use crate::audio::dj::state_machine::{DJState, DJStateMachine};
 use crate::state::Data;
-use serenity::model::id::GuildId;
+use serenity::all::Http;
+use serenity::model::id::{ChannelId, GuildId};
+use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::time::{Duration, sleep};
 
@@ -25,6 +27,20 @@ pub async fn dj_task(
     );
 
     let mut state_machine = DJStateMachine::new(config, guild_id, bot_state.hex_audio_dir.clone());
+
+    // Create shared state for this DJ
+    let state_arc = {
+        let mut dj_states = bot_state.dj_states.write().await;
+
+        dj_states
+            .entry(guild_id)
+            .or_insert_with(|| {
+                std::sync::Arc::new(tokio::sync::RwLock::new(
+                    state_machine.current_state().clone(),
+                ))
+            })
+            .clone()
+    };
 
     let mut pending_stop = false;
 
@@ -80,6 +96,12 @@ pub async fn dj_task(
             tracing::error!("DJ state machine error in guild {}: {}", guild_id, e);
         }
 
+        // Update shared state
+        {
+            let mut state = state_arc.write().await;
+            *state = state_machine.current_state().clone();
+        }
+
         let current_state = state_machine.current_state();
 
         if let DJState::PlayingHexMessage { message, .. } = current_state {
@@ -98,6 +120,12 @@ pub async fn dj_task(
         }
     }
 
+    // Clean up shared state
+    {
+        let mut dj_states = bot_state.dj_states.write().await;
+        dj_states.remove(&guild_id);
+    }
+
     tracing::info!("DJ task terminated for guild {}", guild_id);
 }
 
@@ -105,6 +133,7 @@ pub struct DJManager {
     task_handle: Option<tokio::task::JoinHandle<()>>,
     command_tx: Option<mpsc::Sender<DJCommand>>,
     guild_id: GuildId,
+    channel_id: Option<ChannelId>,
 }
 
 impl DJManager {
@@ -113,6 +142,7 @@ impl DJManager {
             task_handle: None,
             command_tx: None,
             guild_id,
+            channel_id: None,
         }
     }
 
@@ -120,10 +150,34 @@ impl DJManager {
         &mut self,
         config: DJConfig,
         bot_state: Data,
+        http: Arc<Http>,
+        channel_id: ChannelId,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if self.task_handle.is_some() {
             return Err("DJ is already running".into());
         }
+
+        // Set voice channel status if configured
+        if let Some(status) = &config.channel_status {
+            if let Err(e) = channel_id
+                .edit(&http, serenity::all::EditChannel::new().status(status))
+                .await
+            {
+                tracing::warn!(
+                    "Failed to set voice channel status for guild {}: {}",
+                    self.guild_id,
+                    e
+                );
+            } else {
+                tracing::info!(
+                    "Set voice channel status to '{}' for guild {}",
+                    status,
+                    self.guild_id
+                );
+            }
+        }
+
+        self.channel_id = Some(channel_id);
 
         let config_name = config.name.clone();
         let (tx, rx) = mpsc::channel(10);
@@ -152,7 +206,7 @@ impl DJManager {
         Ok(())
     }
 
-    pub async fn stop(&mut self, bot_state: &Data) {
+    pub async fn stop(&mut self, bot_state: &Data, http: Arc<Http>) {
         if let Some(handle) = self.task_handle.take() {
             // Send graceful stop command
             if let Some(tx) = &self.command_tx
@@ -173,6 +227,22 @@ impl DJManager {
                 }
                 _ = tokio::time::sleep(Duration::from_secs(5)) => {
                     tracing::warn!("DJ shutdown timeout for guild {}, task may have hung", self.guild_id);
+                }
+            }
+
+            // Clear voice channel status
+            if let Some(channel_id) = self.channel_id {
+                if let Err(e) = channel_id
+                    .edit(&http, serenity::all::EditChannel::new().status(""))
+                    .await
+                {
+                    tracing::warn!(
+                        "Failed to clear voice channel status for guild {}: {}",
+                        self.guild_id,
+                        e
+                    );
+                } else {
+                    tracing::info!("Cleared voice channel status for guild {}", self.guild_id);
                 }
             }
 

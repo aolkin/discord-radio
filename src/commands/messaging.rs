@@ -10,20 +10,47 @@ use poise::serenity_prelude as serenity;
 pub async fn set_status(
     ctx: Context<'_>,
     #[description = "Custom status text"] status: String,
+    #[description = "Activity type (listening, playing, streaming, or custom)"]
+    #[rename = "type"]
+    activity_type: Option<String>,
 ) -> Result<(), Error> {
     let user_id = ctx.author().id;
     let guild_id = ctx
         .guild_id()
         .ok_or("This command can only be used in a server")?;
 
-    tracing::info!("User {} executed set_status in guild {}", user_id, guild_id);
+    tracing::info!(
+        "User {} executed set_status in guild {} with type {:?}",
+        user_id,
+        guild_id,
+        activity_type
+    );
 
     ctx.defer_ephemeral().await?;
 
-    let activity = serenity::ActivityData::custom(status.clone());
+    let activity = match activity_type.as_deref() {
+        Some("listening") => serenity::ActivityData::listening(status.clone()),
+        Some("playing") => serenity::ActivityData::playing(status.clone()),
+        Some("streaming") => {
+            serenity::ActivityData::streaming(status.clone(), "https://twitch.tv/")
+                .unwrap_or_else(|_| serenity::ActivityData::custom(status.clone()))
+        }
+        Some("custom") | None => serenity::ActivityData::custom(status.clone()),
+        Some(invalid) => {
+            ctx.say(format!(
+                "Invalid activity type '{}'. Valid types: listening, playing, streaming, custom",
+                invalid
+            ))
+            .await?;
+            return Ok(());
+        }
+    };
+
     ctx.serenity_context().set_activity(Some(activity));
 
-    ctx.say(format!("Status set to: {}", status)).await?;
+    let type_str = activity_type.as_deref().unwrap_or("custom");
+    ctx.say(format!("Status set to: {} ({})", status, type_str))
+        .await?;
 
     Ok(())
 }

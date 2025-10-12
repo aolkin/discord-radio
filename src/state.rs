@@ -1,4 +1,5 @@
 use crate::audio::dj::manager::DJManager;
+use crate::audio::dj::state_machine::DJState;
 use crate::audio::duration::DurationCache;
 use crate::audio::processing_thread::AudioProcessor;
 use crate::audio::profiles::ProfileManager;
@@ -49,6 +50,7 @@ pub struct BotState {
     pub audio_processors: RwLock<HashMap<GuildId, Arc<RwLock<AudioProcessor>>>>,
     pub profile_manager: ProfileManager,
     pub dj_managers: RwLock<HashMap<GuildId, Arc<Mutex<DJManager>>>>,
+    pub dj_states: RwLock<HashMap<GuildId, Arc<RwLock<DJState>>>>,
 }
 
 impl BotState {
@@ -76,6 +78,7 @@ impl BotState {
             audio_processors: RwLock::new(HashMap::new()),
             profile_manager,
             dj_managers: RwLock::new(HashMap::new()),
+            dj_states: RwLock::new(HashMap::new()),
         }
     }
 

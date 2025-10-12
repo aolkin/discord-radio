@@ -119,7 +119,7 @@ pub async fn restore_voice_channels(
 
     restore_message_playback(bot_state.clone()).await?;
     restore_multitrack_playback(bot_state.clone()).await?;
-    restore_dj_managers(bot_state).await?;
+    restore_dj_managers(bot_state, ctx.http.clone()).await?;
 
     Ok(())
 }
@@ -327,6 +327,7 @@ async fn restore_multitrack_playback(
 
 async fn restore_dj_managers(
     bot_state: Data,
+    http: Arc<poise::serenity_prelude::Http>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let saved_dj_states = bot_state.state_store.load_dj_states().await?;
 
@@ -352,6 +353,24 @@ async fn restore_dj_managers(
                 );
                 let _ = bot_state.state_store.remove_dj_state(guild_id).await;
                 continue;
+            }
+        };
+
+        // Get channel ID from call
+        let channel_id = {
+            let call = call_lock.lock().await;
+            match call.current_channel() {
+                Some(songbird_channel_id) => {
+                    poise::serenity_prelude::ChannelId::new(songbird_channel_id.0.into())
+                }
+                None => {
+                    tracing::warn!(
+                        "Cannot restore DJ for guild {}: not in voice channel (no channel ID)",
+                        guild_id
+                    );
+                    let _ = bot_state.state_store.remove_dj_state(guild_id).await;
+                    continue;
+                }
             }
         };
 
@@ -392,7 +411,10 @@ async fn restore_dj_managers(
         drop(dj_managers);
 
         let mut mgr = manager.lock().await;
-        if let Err(e) = mgr.start(dj_config, bot_state.clone()).await {
+        if let Err(e) = mgr
+            .start(dj_config, bot_state.clone(), http.clone(), channel_id)
+            .await
+        {
             tracing::error!("Failed to start DJ for guild {}: {}", guild_id, e);
             let _ = bot_state.state_store.remove_dj_state(guild_id).await;
         }
