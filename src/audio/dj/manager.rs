@@ -348,6 +348,7 @@ pub struct DJManager {
     command_tx: Option<mpsc::Sender<DJCommand>>,
     guild_id: GuildId,
     voice_channel_id: Option<ChannelId>,
+    status_message: Option<String>,
 }
 
 impl DJManager {
@@ -357,6 +358,7 @@ impl DJManager {
             command_tx: None,
             guild_id,
             voice_channel_id: None,
+            status_message: None,
         }
     }
 
@@ -386,24 +388,19 @@ impl DJManager {
             return Err("DJ is already running".into());
         }
 
-        // Set voice channel status if configured
+        // Set voice channel status if configured using the status stack
         if let Some(status) = &config.channel_status {
-            if let Err(e) = voice_channel_id
-                .edit(&http, serenity::all::EditChannel::new().status(status))
-                .await
-            {
-                tracing::warn!(
-                    "Failed to set voice channel status for guild {}: {}",
-                    self.guild_id,
-                    e
-                );
-            } else {
-                tracing::info!(
-                    "Set voice channel status to '{}' for guild {}",
-                    status,
-                    self.guild_id
-                );
-            }
+            bot_state
+                .voice_status_manager
+                .push_status(self.guild_id, status.clone(), &http)
+                .await;
+            tracing::info!(
+                "Pushed DJ voice channel status '{}' for guild {}",
+                status,
+                self.guild_id
+            );
+            // Store the status message so we can remove it later
+            self.status_message = Some(status.clone());
         }
 
         self.voice_channel_id = Some(voice_channel_id);
@@ -474,21 +471,18 @@ impl DJManager {
                 }
             }
 
-            // Clear voice channel status
-            if let Some(channel_id) = self.voice_channel_id {
-                if let Err(e) = channel_id
-                    .edit(&http, serenity::all::EditChannel::new().status(""))
-                    .await
-                {
-                    tracing::warn!(
-                        "Failed to clear voice channel status for guild {}: {}",
-                        self.guild_id,
-                        e
-                    );
-                } else {
-                    tracing::info!("Cleared voice channel status for guild {}", self.guild_id);
-                }
+            // Remove the DJ's voice channel status from the stack
+            if let Some(status_msg) = &self.status_message {
+                bot_state
+                    .voice_status_manager
+                    .remove_status(self.guild_id, status_msg, &http)
+                    .await;
+                tracing::info!(
+                    "Removed DJ voice channel status for guild {}",
+                    self.guild_id
+                );
             }
+            self.status_message = None;
 
             // Remove DJ state from persistence
             if let Err(e) = bot_state.state_store.remove_dj_state(self.guild_id).await {

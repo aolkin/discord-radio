@@ -29,6 +29,7 @@ impl From<&DJState> for DJStateMachineState {
                 started_at,
                 target_loops,
                 forced_profile: _, // Don't persist forced_profile, it's transient
+                status_message: _, // Don't persist status_message, it will be regenerated
             } => DJStateMachineState::PlayingHexMessage {
                 message: message.clone(),
                 started_at: instant_to_systime(started_at),
@@ -86,6 +87,7 @@ impl TryFrom<&DJStateMachineState> for DJState {
                 started_at: systime_to_instant(started_at)?,
                 target_loops: *target_loops,
                 forced_profile: None, // Restored state doesn't have forced profile
+                status_message: None, // Restored state doesn't have status message, will be regenerated
             }),
             DJStateMachineState::PlayingNoise {
                 noise_type,

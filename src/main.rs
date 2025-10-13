@@ -5,6 +5,7 @@ mod persistence;
 mod shutdown;
 mod startup;
 mod state;
+mod voice_status;
 
 use crate::state::BotState;
 use poise::serenity_prelude::{self as serenity, GatewayIntents};

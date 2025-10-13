@@ -5,6 +5,7 @@ use crate::audio::processing_thread::AudioProcessor;
 use crate::audio::profiles::ProfileManager;
 use crate::audio::tracks::TrackManager;
 use crate::persistence::StateStore;
+use crate::voice_status::VoiceChannelStatusManager;
 use serenity::model::id::GuildId;
 use songbird::Call;
 use std::collections::HashMap;
@@ -21,6 +22,7 @@ pub struct HexPlaybackState {
     pub volume: f32,
     pub current_loop: usize,
     pub target_loops: Option<usize>,
+    pub status_message: Option<String>, // The obfuscated message pushed to status stack
 }
 
 impl HexPlaybackState {
@@ -31,6 +33,7 @@ impl HexPlaybackState {
             volume: 1.0,
             current_loop: 0,
             target_loops: None,
+            status_message: None,
         }
     }
 
@@ -39,6 +42,7 @@ impl HexPlaybackState {
         position: usize,
         volume: f32,
         target_loops: Option<usize>,
+        status_message: Option<String>,
     ) -> Self {
         Self {
             message: Some(message),
@@ -46,12 +50,13 @@ impl HexPlaybackState {
             volume,
             current_loop: 0,
             target_loops,
+            status_message,
         }
     }
 }
 
 pub struct BotState {
-    pub voice_connections: RwLock<HashMap<GuildId, Arc<Mutex<Call>>>>,
+    pub voice_connections: Arc<RwLock<HashMap<GuildId, Arc<Mutex<Call>>>>>,
     pub track_managers: RwLock<HashMap<GuildId, Arc<Mutex<TrackManager>>>>,
     pub content_path: String,
     pub state_store: Arc<dyn StateStore>,
@@ -62,6 +67,7 @@ pub struct BotState {
     pub profile_manager: ProfileManager,
     pub dj_managers: RwLock<HashMap<GuildId, Arc<Mutex<DJManager>>>>,
     pub dj_states: RwLock<HashMap<GuildId, Arc<RwLock<DJState>>>>,
+    pub voice_status_manager: VoiceChannelStatusManager,
 }
 
 impl BotState {
@@ -78,8 +84,10 @@ impl BotState {
             );
         }
 
+        let voice_connections = Arc::new(RwLock::new(HashMap::new()));
+
         Self {
-            voice_connections: RwLock::new(HashMap::new()),
+            voice_connections: voice_connections.clone(),
             track_managers: RwLock::new(HashMap::new()),
             content_path,
             state_store,
@@ -90,6 +98,7 @@ impl BotState {
             profile_manager,
             dj_managers: RwLock::new(HashMap::new()),
             dj_states: RwLock::new(HashMap::new()),
+            voice_status_manager: VoiceChannelStatusManager::new(voice_connections),
         }
     }
 

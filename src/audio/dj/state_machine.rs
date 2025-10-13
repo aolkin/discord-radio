@@ -23,6 +23,7 @@ pub enum DJState {
         started_at: std::time::Instant,
         target_loops: usize,
         forced_profile: Option<String>,
+        status_message: Option<String>, // The obfuscated message pushed to status stack
     },
     PlayingNoise {
         noise_type: String,
@@ -191,7 +192,7 @@ impl DJStateMachine {
                     track_manager.stop_track(track_name, 1.0, false).await?;
                 }
             }
-            DJState::PlayingHexMessage { .. } => {
+            DJState::PlayingHexMessage { status_message, .. } => {
                 // Reset the hex playback state
                 let hex_playback_states = bot_state.hex_playback_states.read().await;
                 if let Some(state_arc) = hex_playback_states.get(&self.guild_id) {
@@ -199,6 +200,14 @@ impl DJStateMachine {
                     *state = crate::state::HexPlaybackState::stopped();
                 }
                 drop(hex_playback_states);
+
+                // Remove the hex message status from the stack
+                if let Some(status_msg) = status_message {
+                    bot_state
+                        .voice_status_manager
+                        .remove_status(self.guild_id, status_msg, &self.http)
+                        .await;
+                }
 
                 // Remove persisted message playback state
                 if let Err(e) = bot_state
@@ -352,6 +361,20 @@ impl DJStateMachine {
         self.ensure_hex_playback_task(bot_state, manager_arc.clone(), hex_playback_state.clone())
             .await;
 
+        tracing::info!(
+            "DJ playing hex message '{}' ({} loops) in guild {}",
+            hex_entry.text,
+            target_loops,
+            self.guild_id
+        );
+
+        // Push hex message status onto the voice channel status stack
+        let obfuscated = crate::commands::voice::obfuscate_message(&hex_entry.text);
+        bot_state
+            .voice_status_manager
+            .push_status(self.guild_id, obfuscated.clone(), &self.http)
+            .await;
+
         {
             let mut state = hex_playback_state.write().await;
             *state = crate::state::HexPlaybackState::playing(
@@ -359,15 +382,9 @@ impl DJStateMachine {
                 0,
                 1.0,
                 Some(target_loops),
+                Some(obfuscated.clone()),
             );
         }
-
-        tracing::info!(
-            "DJ playing hex message '{}' ({} loops) in guild {}",
-            hex_entry.text,
-            target_loops,
-            self.guild_id
-        );
 
         // Send announcement to text channel if configured
         if let Some(channel_id) = self.announcement_channel
@@ -396,6 +413,7 @@ impl DJStateMachine {
                 .hex_message_defaults
                 .signal_profile
                 .clone()),
+            status_message: Some(obfuscated),
         })
     }
 

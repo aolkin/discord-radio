@@ -1,7 +1,6 @@
 use crate::commands::utils;
 use crate::commands::utils::{Context, Error};
 use serenity::all::{ChannelId, ChannelType, GuildId};
-use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Join a voice channel to broadcast audio
@@ -184,6 +183,13 @@ pub async fn play_message(
 
     ensure_hex_playback_task(ctx, guild_id, manager_arc.clone(), playback_state.clone()).await;
 
+    // Push status and get the obfuscated message
+    let obfuscated = obfuscate_message(&message);
+    ctx.data()
+        .voice_status_manager
+        .push_status(guild_id, obfuscated.clone(), ctx.http())
+        .await;
+
     {
         let mut state = playback_state.write().await;
         *state = crate::state::HexPlaybackState::playing(
@@ -191,6 +197,7 @@ pub async fn play_message(
             0,
             volume,
             loops.map(|l| l as usize),
+            Some(obfuscated),
         );
     }
 
@@ -207,25 +214,6 @@ pub async fn play_message(
         .await
     {
         tracing::warn!("Failed to save initial message playback state: {}", e);
-    }
-
-    let voice_channel_id = {
-        let call = call_lock.lock().await;
-        call.current_channel()
-            .map(|id| serenity::model::id::ChannelId::new(id.0.get()))
-    };
-
-    if let Some(channel_id) = voice_channel_id {
-        let obfuscated = obfuscate_message(&message);
-        if let Err(e) = channel_id
-            .edit(
-                ctx.http(),
-                serenity::builder::EditChannel::new().status(obfuscated),
-            )
-            .await
-        {
-            tracing::warn!("Failed to set voice channel status: {}", e);
-        }
     }
 
     reply
@@ -521,6 +509,11 @@ pub async fn get_current_tracks(ctx: Context<'_>) -> Result<(), Error> {
 async fn stop_hex_playback(ctx: Context<'_>, guild_id: GuildId) {
     let hex_playback_states = ctx.data().hex_playback_states.read().await;
     if let Some(state_arc) = hex_playback_states.get(&guild_id) {
+        let status_message = {
+            let state = state_arc.read().await;
+            state.status_message.clone()
+        };
+
         let mut state = state_arc.write().await;
         *state = crate::state::HexPlaybackState::stopped();
         drop(state);
@@ -535,7 +528,13 @@ async fn stop_hex_playback(ctx: Context<'_>, guild_id: GuildId) {
             tracing::warn!("Failed to remove message playback state: {}", e);
         }
 
-        clear_voice_channel_status(ctx.http(), &ctx.data().voice_connections, guild_id).await;
+        // Remove status from stack if we had pushed one
+        if let Some(status_msg) = status_message {
+            ctx.data()
+                .voice_status_manager
+                .remove_status(guild_id, &status_msg, ctx.http())
+                .await;
+        }
     }
 }
 
@@ -816,28 +815,6 @@ pub fn obfuscate_message(message: &str) -> String {
             }
         })
         .collect()
-}
-
-async fn clear_voice_channel_status(
-    http: &serenity::http::Http,
-    voice_connections: &tokio::sync::RwLock<
-        HashMap<GuildId, Arc<tokio::sync::Mutex<songbird::Call>>>,
-    >,
-    guild_id: GuildId,
-) {
-    let voice_connections_guard = voice_connections.read().await;
-    if let Some(call_lock) = voice_connections_guard.get(&guild_id) {
-        let call = call_lock.lock().await;
-        if let Some(songbird_channel_id) = call.current_channel() {
-            let channel_id = serenity::model::id::ChannelId::new(songbird_channel_id.0.get());
-            if let Err(e) = channel_id
-                .edit(http, serenity::builder::EditChannel::new().status(""))
-                .await
-            {
-                tracing::warn!("Failed to clear voice channel status: {}", e);
-            }
-        }
-    }
 }
 
 /// Manage the radio DJ for automated playback
