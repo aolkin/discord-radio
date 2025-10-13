@@ -60,6 +60,7 @@ pub struct HexMessageEntry {
     pub signal_profile: Option<String>,
     pub loop_min: Option<u32>,
     pub loop_max: Option<u32>,
+    pub announcement: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]

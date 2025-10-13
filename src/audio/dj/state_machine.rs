@@ -387,20 +387,26 @@ impl DJStateMachine {
         }
 
         // Send announcement to text channel if configured
-        if let Some(channel_id) = self.announcement_channel
-            && !self.hex_message_announcements.is_empty()
-        {
-            let mut rng = rand::rng();
-            let announcement_idx = rng.random_range(0..self.hex_message_announcements.len());
-            let announcement = &self.hex_message_announcements[announcement_idx];
+        if let Some(channel_id) = self.announcement_channel {
+            // Use custom announcement if present, otherwise choose randomly from defaults
+            let announcement = if let Some(custom_announcement) = &hex_entry.announcement {
+                Some(custom_announcement.clone())
+            } else if !self.hex_message_announcements.is_empty() {
+                let mut rng = rand::rng();
+                let announcement_idx = rng.random_range(0..self.hex_message_announcements.len());
+                Some(self.hex_message_announcements[announcement_idx].clone())
+            } else {
+                None
+            };
 
-            let http_clone = self.http.clone();
-            let announcement_clone = announcement.clone();
-            tokio::spawn(async move {
-                if let Err(e) = channel_id.say(&http_clone, &announcement_clone).await {
-                    tracing::warn!("Failed to send DJ hex message announcement: {}", e);
-                }
-            });
+            if let Some(announcement_text) = announcement {
+                let http_clone = self.http.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = channel_id.say(&http_clone, &announcement_text).await {
+                        tracing::warn!("Failed to send DJ hex message announcement: {}", e);
+                    }
+                });
+            }
         }
 
         Ok(DJState::PlayingHexMessage {
