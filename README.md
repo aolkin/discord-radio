@@ -21,10 +21,11 @@ sudo apt update && sudo apt install -y cmake libopus-dev pkg-config
 ## Setup
 
 1. **Environment Variables**
-   Create a `.env` file or set the following environment variable:
+   Create a `.env` file or set the following environment variables:
 
    ```
    DISCORD_TOKEN=your_discord_bot_token_here
+   WEB_PORT=3000  # Optional, defaults to 3000
    ```
 
 2. **Build the Project**
@@ -48,6 +49,23 @@ To check the build version:
 ```
 
 This will display the GitHub Actions run number and commit hash that the binary was built from.
+
+## Web Portal
+
+The bot includes a built-in web portal for monitoring status and configuration. Once the bot is running, access it at:
+
+```
+http://localhost:3000
+```
+
+The portal provides:
+- Real-time status updates via WebSocket
+- Guild overview showing all active guilds
+- Audio track monitoring with volume indicators
+- Hex playback status with loop counters
+- DJ state visualization
+
+See [WEB_PORTAL.md](WEB_PORTAL.md) for more details.
 
 ## License
 

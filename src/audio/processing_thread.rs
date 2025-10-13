@@ -94,6 +94,10 @@ impl AudioProcessor {
         self.transition = None;
     }
 
+    pub fn current_profile_name(&self) -> &str {
+        &self.current_profile.name
+    }
+
     fn process_transitions(&mut self, frames_to_render: usize) {
         if let Some(ref mut transition) = self.transition {
             // Calculate time delta based on actual frames being rendered

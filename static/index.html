@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Discord Bot Portal</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: white;
+            border-radius: 12px;
+            padding: 20px 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: #667eea;
+            font-size: 2rem;
+            margin-bottom: 5px;
+        }
+
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #22c55e;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .status-dot.disconnected {
+            background: #ef4444;
+            animation: none;
+        }
+
+        .guilds-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+            gap: 20px;
+        }
+
+        .guild-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .guild-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .guild-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .guild-id {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .voice-badge {
+            background: #22c55e;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .section {
+            margin-bottom: 20px;
+        }
+
+        .section:last-child {
+            margin-bottom: 0;
+        }
+
+        .section-title {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #666;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+            letter-spacing: 0.5px;
+        }
+
+        .track-item, .info-item {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .track-name {
+            font-weight: 600;
+            color: #333;
+            font-size: 0.95rem;
+        }
+
+        .track-details {
+            font-size: 0.85rem;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .volume-bar {
+            background: #e0e0e0;
+            height: 4px;
+            border-radius: 2px;
+            margin-top: 6px;
+            overflow: hidden;
+        }
+
+        .volume-fill {
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            height: 100%;
+            transition: width 0.3s;
+        }
+
+        .dj-state {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+        }
+
+        .dj-type {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .dj-details {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
+        .empty-state {
+            color: #999;
+            font-style: italic;
+            font-size: 0.9rem;
+        }
+
+        .no-guilds {
+            background: white;
+            border-radius: 12px;
+            padding: 60px 20px;
+            text-align: center;
+            color: #999;
+        }
+
+        .no-guilds-icon {
+            font-size: 4rem;
+            margin-bottom: 15px;
+        }
+
+        @media (max-width: 768px) {
+            .guilds-grid {
+                grid-template-columns: 1fr;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎵 Discord Bot Portal</h1>
+            <div class="status-indicator">
+                <span class="status-dot" id="statusDot"></span>
+                <span id="statusText">Connecting...</span>
+            </div>
+        </header>
+
+        <div id="guildsContainer" class="guilds-grid">
+            <div class="no-guilds">
+                <div class="no-guilds-icon">🔌</div>
+                <p>Connecting to bot...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws;
+        let reconnectTimeout;
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const guildsContainer = document.getElementById('guildsContainer');
+
+        function connect() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws`;
+            
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                statusDot.classList.remove('disconnected');
+                statusText.textContent = 'Connected';
+                clearTimeout(reconnectTimeout);
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    updateGuilds(data);
+                } catch (e) {
+                    console.error('Failed to parse message:', e);
+                }
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+
+            ws.onclose = () => {
+                statusDot.classList.add('disconnected');
+                statusText.textContent = 'Disconnected - Reconnecting...';
+                reconnectTimeout = setTimeout(connect, 3000);
+            };
+        }
+
+        function updateGuilds(snapshot) {
+            if (!snapshot.guilds || snapshot.guilds.length === 0) {
+                guildsContainer.innerHTML = `
+                    <div class="no-guilds">
+                        <div class="no-guilds-icon">💤</div>
+                        <p>No active guilds</p>
+                    </div>
+                `;
+                return;
+            }
+
+            guildsContainer.innerHTML = snapshot.guilds.map(guild => `
+                <div class="guild-card">
+                    <div class="guild-header">
+                        <div class="guild-id">Guild: ${guild.guild_id}</div>
+                        ${guild.in_voice ? '<span class="voice-badge">In Voice</span>' : ''}
+                    </div>
+
+                    ${guild.tracks && guild.tracks.length > 0 ? `
+                        <div class="section">
+                            <div class="section-title">Audio Tracks</div>
+                            ${guild.tracks.map(track => `
+                                <div class="track-item">
+                                    <div style="flex: 1;">
+                                        <div class="track-name">${escapeHtml(track.name)}</div>
+                                        <div class="track-details">
+                                            ${escapeHtml(track.filename.split('/').pop())} • 
+                                            ${track.loops ? '🔁 Looping' : '▶️ Once'}
+                                        </div>
+                                        <div class="volume-bar">
+                                            <div class="volume-fill" style="width: ${track.volume * 100}%"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+
+                    ${guild.hex_playback && guild.hex_playback.message ? `
+                        <div class="section">
+                            <div class="section-title">Hex Playback</div>
+                            <div class="info-item">
+                                <div style="flex: 1;">
+                                    <div class="track-name">${escapeHtml(guild.hex_playback.message)}</div>
+                                    <div class="track-details">
+                                        Position: ${guild.hex_playback.current_position} • 
+                                        Loop: ${guild.hex_playback.current_loop}${guild.hex_playback.target_loops ? `/${guild.hex_playback.target_loops}` : ''}
+                                    </div>
+                                    <div class="volume-bar">
+                                        <div class="volume-fill" style="width: ${guild.hex_playback.volume * 100}%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    ${guild.dj_state ? `
+                        <div class="section">
+                            <div class="section-title">DJ State</div>
+                            <div class="dj-state">
+                                <div class="dj-type">${guild.dj_state.state_type}</div>
+                                <div class="dj-details">${escapeHtml(guild.dj_state.details)}</div>
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    ${guild.audio_profile ? `
+                        <div class="section">
+                            <div class="section-title">Audio Profile</div>
+                            <div class="info-item">
+                                <div style="flex: 1;">
+                                    <div class="track-name">${escapeHtml(guild.audio_profile.name)}</div>
+                                    <div class="track-details">
+                                        ${guild.audio_profile.forced ? '🔒 Locked by DJ' : '🔓 Normal'}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    ${!guild.tracks.length && !guild.hex_playback?.message && !guild.dj_state && !guild.audio_profile ? `
+                        <div class="empty-state">No active features</div>
+                    ` : ''}
+                </div>
+            `).join('');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Start connection
+        connect();
+    </script>
+</body>
+</html>

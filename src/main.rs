@@ -6,6 +6,7 @@ mod shutdown;
 mod startup;
 mod state;
 mod voice_status;
+mod web;
 
 use crate::state::BotState;
 use poise::serenity_prelude::{self as serenity, GatewayIntents};
@@ -153,6 +154,11 @@ async fn main() -> Result<(), Error> {
     let discord_token =
         std::env::var("DISCORD_TOKEN").expect("Expected DISCORD_TOKEN in the environment");
 
+    let web_port = std::env::var("WEB_PORT")
+        .ok()
+        .and_then(|s| s.parse::<u16>().ok())
+        .unwrap_or(3000);
+
     let content_path = args
         .get(1)
         .expect("Usage: discord-bot <content_path>")
@@ -227,6 +233,14 @@ async fn main() -> Result<(), Error> {
 
     // Set up graceful shutdown handling
     shutdown::setup_shutdown_handler(data.clone()).await;
+
+    // Start web server in background
+    let web_data = data.clone();
+    tokio::spawn(async move {
+        if let Err(e) = web::run_web_server(web_data, web_port).await {
+            tracing::error!("Web server error: {}", e);
+        }
+    });
 
     client.start().await?;
 
