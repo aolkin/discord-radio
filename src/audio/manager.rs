@@ -87,6 +87,7 @@ pub async fn hex_playback_task(
                         fade_time: 0.0,
                         loops: false,
                         start_position: None,
+                        persist: true,
                     },
                     Some(callback),
                 )

@@ -28,6 +28,7 @@ pub struct TrackInfo {
     pub fade_cancel: Option<CancellationToken>,
     pub loops: bool,
     pub start_time: std::time::SystemTime,
+    pub persist: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -38,6 +39,7 @@ pub struct StartTrackArgs {
     pub fade_time: f32,
     pub loops: bool,
     pub start_position: Option<Duration>,
+    pub persist: bool,
 }
 
 pub struct TrackManager {
@@ -177,6 +179,7 @@ impl TrackManager {
                 fade_cancel: None,
                 loops: args.loops,
                 start_time: std::time::SystemTime::now(),
+                persist: args.persist,
             };
 
             self.finalize_track_start_dsp(track, args.fade_time, processor_arc.clone())
@@ -475,6 +478,7 @@ impl TrackManager {
             tracks: self
                 .tracks
                 .values()
+                .filter(|info| info.persist)
                 .map(|info| crate::persistence::TrackState {
                     name: info.name.clone(),
                     filename: info.filename.clone(),

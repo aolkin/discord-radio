@@ -424,6 +424,7 @@ pub async fn change_track_state(
                     fade_time,
                     loops,
                     start_position: None,
+                    persist: true,
                 })
                 .await
             {

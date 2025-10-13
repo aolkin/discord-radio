@@ -317,6 +317,7 @@ async fn restore_multitrack_playback(
                     fade_time: 1.0,
                     loops,
                     start_position,
+                    persist: true,
                 })
                 .await
             {

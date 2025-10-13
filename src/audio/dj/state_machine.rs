@@ -125,6 +125,10 @@ impl DJStateMachine {
         &self.current_state
     }
 
+    pub fn scheduler(&self) -> &WeightedScheduler {
+        &self.scheduler
+    }
+
     pub fn set_announcement_channel(&mut self, channel: Option<ChannelId>) {
         self.announcement_channel = channel;
     }
@@ -325,6 +329,7 @@ impl DJStateMachine {
                 fade_time: 1.0,
                 loops: false,
                 start_position,
+                persist: false,
             })
             .await?;
 
