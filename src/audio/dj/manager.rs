@@ -12,6 +12,7 @@ const DJ_TICK_INTERVAL_MS: u64 = 100;
 
 pub enum DJCommand {
     ForceAdvance(Option<DJStateTypeFilter>),
+    ForceHexMessage(String),
     Stop,
     SetAnnouncementChannel(Option<ChannelId>),
 }
@@ -258,6 +259,15 @@ pub async fn dj_task(
                         .await
                     {
                         tracing::error!("DJ failed to force advance: {}", e);
+                    }
+                }
+                DJCommand::ForceHexMessage(message) => {
+                    tracing::info!("Processing force hex message for DJ in guild {}", guild_id);
+                    if let Err(e) = state_machine
+                        .force_hex_message(&mut manager, &bot_state, message)
+                        .await
+                    {
+                        tracing::error!("DJ failed to force hex message: {}", e);
                     }
                 }
                 DJCommand::Stop => {
@@ -557,6 +567,18 @@ impl DJManager {
             Err("DJ is not running".into())
         }
     }
+
+    pub async fn force_hex_message(
+        &self,
+        message: String,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        if let Some(tx) = &self.command_tx {
+            tx.send(DJCommand::ForceHexMessage(message)).await?;
+            Ok(())
+        } else {
+            Err("DJ is not running".into())
+        }
+    }
 }
 
 pub async fn force_advance(
@@ -573,4 +595,20 @@ pub async fn force_advance(
 
     let mgr = manager.lock().await;
     mgr.force_advance(state_type_filter).await
+}
+
+pub async fn force_hex_message(
+    bot_state: &Data,
+    guild_id: GuildId,
+    message: String,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let dj_managers = bot_state.dj_managers.read().await;
+    let manager = dj_managers
+        .get(&guild_id)
+        .ok_or("DJ manager not found")?
+        .clone();
+    drop(dj_managers);
+
+    let mgr = manager.lock().await;
+    mgr.force_hex_message(message).await
 }

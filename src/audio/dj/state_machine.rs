@@ -153,6 +153,25 @@ impl DJStateMachine {
             .await
     }
 
+    pub async fn force_hex_message(
+        &mut self,
+        track_manager: &mut TrackManager,
+        bot_state: &Data,
+        message: String,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.cleanup_current_state(track_manager, bot_state).await?;
+
+        info!(
+            "DJ force transitioning to hex message with custom text: {}",
+            message
+        );
+        self.current_state = self
+            .start_custom_hex_message_state(message, bot_state)
+            .await?;
+
+        Ok(())
+    }
+
     pub async fn advance(
         &mut self,
         track_manager: &mut TrackManager,
@@ -355,6 +374,79 @@ impl DJStateMachine {
             .loop_max
             .unwrap_or(self.scheduler.config().hex_message_defaults.loop_max);
 
+        let forced_profile = hex_entry.signal_profile.clone().or(self
+            .scheduler
+            .config()
+            .hex_message_defaults
+            .signal_profile
+            .clone());
+
+        // Use custom announcement if present, otherwise choose randomly from defaults
+        let announcement = if let Some(custom_announcement) = &hex_entry.announcement {
+            Some(custom_announcement.clone())
+        } else {
+            self.pick_random_announcement()
+        };
+
+        self.play_hex_message(
+            hex_entry.text.clone(),
+            loop_min,
+            loop_max,
+            forced_profile,
+            announcement,
+            bot_state,
+        )
+        .await
+    }
+
+    async fn start_custom_hex_message_state(
+        &mut self,
+        message: String,
+        bot_state: &Data,
+    ) -> Result<DJState, Box<dyn std::error::Error + Send + Sync>> {
+        // Use defaults from the DJ config
+        let loop_min = self.scheduler.config().hex_message_defaults.loop_min;
+        let loop_max = self.scheduler.config().hex_message_defaults.loop_max;
+        let forced_profile = self
+            .scheduler
+            .config()
+            .hex_message_defaults
+            .signal_profile
+            .clone();
+
+        // Use random default announcement if available
+        let announcement = self.pick_random_announcement();
+
+        self.play_hex_message(
+            message,
+            loop_min,
+            loop_max,
+            forced_profile,
+            announcement,
+            bot_state,
+        )
+        .await
+    }
+
+    fn pick_random_announcement(&self) -> Option<String> {
+        if !self.hex_message_announcements.is_empty() {
+            let mut rng = rand::rng();
+            let announcement_idx = rng.random_range(0..self.hex_message_announcements.len());
+            Some(self.hex_message_announcements[announcement_idx].clone())
+        } else {
+            None
+        }
+    }
+
+    async fn play_hex_message(
+        &mut self,
+        message: String,
+        loop_min: u32,
+        loop_max: u32,
+        forced_profile: Option<String>,
+        announcement: Option<String>,
+        bot_state: &Data,
+    ) -> Result<DJState, Box<dyn std::error::Error + Send + Sync>> {
         let target_loops = {
             let mut rng = rand::rng();
             if loop_min == loop_max {
@@ -388,13 +480,13 @@ impl DJStateMachine {
 
         tracing::info!(
             "DJ playing hex message '{}' ({} loops) in guild {}",
-            hex_entry.text,
+            message,
             target_loops,
             self.guild_id
         );
 
         // Push hex message status onto the voice channel status stack
-        let obfuscated = crate::commands::voice::obfuscate_message(&hex_entry.text);
+        let obfuscated = crate::commands::voice::obfuscate_message(&message);
         bot_state
             .voice_status_manager
             .push_status(self.guild_id, obfuscated.clone(), &self.http)
@@ -403,7 +495,7 @@ impl DJStateMachine {
         {
             let mut state = hex_playback_state.write().await;
             *state = crate::state::HexPlaybackState::playing(
-                hex_entry.text.clone(),
+                message.clone(),
                 0,
                 1.0,
                 Some(target_loops),
@@ -412,38 +504,22 @@ impl DJStateMachine {
         }
 
         // Send announcement to text channel if configured
-        if let Some(channel_id) = self.announcement_channel {
-            // Use custom announcement if present, otherwise choose randomly from defaults
-            let announcement = if let Some(custom_announcement) = &hex_entry.announcement {
-                Some(custom_announcement.clone())
-            } else if !self.hex_message_announcements.is_empty() {
-                let mut rng = rand::rng();
-                let announcement_idx = rng.random_range(0..self.hex_message_announcements.len());
-                Some(self.hex_message_announcements[announcement_idx].clone())
-            } else {
-                None
-            };
-
-            if let Some(announcement_text) = announcement {
-                let http_clone = self.http.clone();
-                tokio::spawn(async move {
-                    if let Err(e) = channel_id.say(&http_clone, &announcement_text).await {
-                        tracing::warn!("Failed to send DJ hex message announcement: {}", e);
-                    }
-                });
-            }
+        if let Some(channel_id) = self.announcement_channel
+            && let Some(announcement_text) = announcement
+        {
+            let http_clone = self.http.clone();
+            tokio::spawn(async move {
+                if let Err(e) = channel_id.say(&http_clone, &announcement_text).await {
+                    tracing::warn!("Failed to send DJ hex message announcement: {}", e);
+                }
+            });
         }
 
         Ok(DJState::PlayingHexMessage {
-            message: hex_entry.text.clone(),
+            message,
             started_at: std::time::Instant::now(),
             target_loops,
-            forced_profile: hex_entry.signal_profile.clone().or(self
-                .scheduler
-                .config()
-                .hex_message_defaults
-                .signal_profile
-                .clone()),
+            forced_profile,
             status_message: Some(obfuscated),
         })
     }

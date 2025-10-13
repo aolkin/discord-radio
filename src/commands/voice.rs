@@ -109,6 +109,8 @@ pub async fn play_message(
     #[description = "Volume 0.0-2.0 (0=silence, 1.0=unity, 2.0=+6dB boost, default 1.0)"]
     volume: Option<f32>,
     #[description = "Number of times to loop the message (default infinite)"] loops: Option<u32>,
+    #[description = "Force DJ to play this message using default settings (default false)"]
+    use_dj: Option<bool>,
 ) -> Result<(), Error> {
     let guild_id = ctx
         .guild_id()
@@ -176,6 +178,40 @@ pub async fn play_message(
             return Ok(());
         }
     };
+
+    // Check if use_dj is set to true
+    if use_dj.unwrap_or(false) {
+        // Use DJ to play the message
+        match crate::audio::dj::manager::force_hex_message(ctx.data(), guild_id, message.clone())
+            .await
+        {
+            Ok(_) => {
+                reply
+                    .edit(
+                        ctx,
+                        poise::CreateReply::default()
+                            .content(format!(
+                                "DJ is now playing message: \"{}\"\nLoop count and announcement will use DJ defaults.",
+                                message
+                            ))
+                            .ephemeral(true),
+                    )
+                    .await?;
+                return Ok(());
+            }
+            Err(e) => {
+                reply
+                    .edit(
+                        ctx,
+                        poise::CreateReply::default()
+                            .content(format!("Failed to use DJ for message playback: {}\nNote: The DJ must be running to use this option.", e))
+                            .ephemeral(true),
+                    )
+                    .await?;
+                return Ok(());
+            }
+        }
+    }
 
     let volume = volume.unwrap_or(1.0);
 
