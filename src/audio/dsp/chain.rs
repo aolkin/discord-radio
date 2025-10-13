@@ -73,7 +73,7 @@ impl RadioEffectChain {
                 profile.brown_noise_level,
             ))),
 
-            tremolo_lfo: LFO::new(sample_rate, profile.tremolo_rate),
+            tremolo_lfo: LFO::new(sample_rate, profile.tremolo_rate, profile.tremolo_jitter),
             tremolo_depth: Arc::new(AtomicF32::new(profile.tremolo_depth)),
 
             clip_pregain: Arc::new(AtomicF32::new(profile.clip_pregain)),

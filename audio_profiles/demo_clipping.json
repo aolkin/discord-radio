@@ -7,6 +7,7 @@
   "brown_noise_level": 0.0,
   "tremolo_depth": 0.0,
   "tremolo_rate": 0.0,
+  "tremolo_jitter": 0.0,
   "clip_pregain": 3.0,
   "clip_threshold": 0.3,
   "bitcrush_bits": null,

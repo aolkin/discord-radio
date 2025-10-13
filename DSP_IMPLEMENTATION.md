@@ -38,7 +38,7 @@ Applies radio signal effects in sequence:
 
 1. **Bandpass Filter** - Limits frequency range (typically 500Hz-5kHz for AM radio)
 2. **Noise Mixing** - Adds white, pink, or brown noise
-3. **Tremolo/Amplitude Modulation** - Simulates signal fading
+3. **Tremolo/Amplitude Modulation** - Simulates signal fading with frequency and amplitude jitter
 4. **Pitch Shifting** (optional) - Frequency detuning
 5. **Soft Clipping** - Signal distortion
 6. **Bitcrushing** (optional) - Reduces bit depth
@@ -67,7 +67,9 @@ Noise levels use perceptual (dB-based) scaling for natural-sounding volume contr
 
 #### Modulation (`audio/dsp/modulation.rs`)
 
-- **LFO**: Low-frequency oscillator for tremolo
+- **LFO**: Low-frequency oscillator for tremolo with dual jitter:
+  - Frequency jitter: Randomly varies LFO rate (±70% at 50-200ms intervals)
+  - Amplitude jitter: Randomly varies LFO depth (±30% at 30-150ms intervals) to make tremolo less predictable
 - **PitchShifter**: Simple time-domain pitch shifting
 - **Bitcrusher**: Reduces sample bit depth
 - **DropoutGenerator**: Random silence periods

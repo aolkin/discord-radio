@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Discord Bot Portal</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -177,6 +178,179 @@
             opacity: 0.9;
         }
 
+        /* Modal styles */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 700px;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-header {
+            padding: 20px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 12px 12px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .close {
+            color: white;
+            font-size: 2rem;
+            font-weight: bold;
+            cursor: pointer;
+            line-height: 1;
+            opacity: 0.8;
+            background: none;
+            border: none;
+        }
+
+        .close:hover {
+            opacity: 1;
+        }
+
+        .modal-body {
+            padding: 30px;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .modal-section {
+            margin-bottom: 30px;
+        }
+
+        .modal-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .modal-section-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-label {
+            display: block;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+            font-size: 0.9rem;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            transition: border-color 0.2s;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #d0d0d0;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .error-message, .success-message {
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+        }
+
+        .error-message {
+            background: #fee;
+            color: #ef4444;
+            border: 1px solid #ef4444;
+        }
+
+        .success-message {
+            background: #dcfce7;
+            color: #22c55e;
+            border: 1px solid #22c55e;
+        }
+
         .empty-state {
             color: #999;
             font-style: italic;
@@ -204,161 +378,160 @@
             h1 {
                 font-size: 1.5rem;
             }
+
+            .form-row {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
-<body>
+<body x-data="botPortal()" x-init="init()">
     <div class="container">
         <header>
             <h1>🎵 Discord Bot Portal</h1>
             <div class="status-indicator">
-                <span class="status-dot" id="statusDot"></span>
-                <span id="statusText">Connecting...</span>
+                <span class="status-dot" :class="{ 'disconnected': !connected }"></span>
+                <span x-text="statusText"></span>
             </div>
         </header>
 
-        <div id="guildsContainer" class="guilds-grid">
-            <div class="no-guilds">
-                <div class="no-guilds-icon">🔌</div>
-                <p>Connecting to bot...</p>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        let ws;
-        let reconnectTimeout;
-        const statusDot = document.getElementById('statusDot');
-        const statusText = document.getElementById('statusText');
-        const guildsContainer = document.getElementById('guildsContainer');
-
-        function connect() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/ws`;
-            
-            ws = new WebSocket(wsUrl);
-
-            ws.onopen = () => {
-                statusDot.classList.remove('disconnected');
-                statusText.textContent = 'Connected';
-                clearTimeout(reconnectTimeout);
-            };
-
-            ws.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    updateGuilds(data);
-                } catch (e) {
-                    console.error('Failed to parse message:', e);
-                }
-            };
-
-            ws.onerror = (error) => {
-                console.error('WebSocket error:', error);
-            };
-
-            ws.onclose = () => {
-                statusDot.classList.add('disconnected');
-                statusText.textContent = 'Disconnected - Reconnecting...';
-                reconnectTimeout = setTimeout(connect, 3000);
-            };
-        }
-
-        function updateGuilds(snapshot) {
-            if (!snapshot.guilds || snapshot.guilds.length === 0) {
-                guildsContainer.innerHTML = `
-                    <div class="no-guilds">
-                        <div class="no-guilds-icon">💤</div>
-                        <p>No active guilds</p>
-                    </div>
-                `;
-                return;
-            }
-
-            guildsContainer.innerHTML = snapshot.guilds.map(guild => `
+        <div class="guilds-grid" x-show="guilds.length > 0">
+            <template x-for="guild in guilds" :key="guild.guild_id">
                 <div class="guild-card">
                     <div class="guild-header">
-                        <div class="guild-id">Guild: ${guild.guild_id}</div>
-                        ${guild.in_voice ? '<span class="voice-badge">In Voice</span>' : ''}
+                        <div class="guild-id" x-text="'Guild: ' + guild.guild_id"></div>
+                        <span class="voice-badge" x-show="guild.in_voice">In Voice</span>
                     </div>
 
-                    ${guild.tracks && guild.tracks.length > 0 ? `
+                    <!-- Audio Tracks -->
+                    <template x-if="guild.tracks && guild.tracks.length > 0">
                         <div class="section">
                             <div class="section-title">Audio Tracks</div>
-                            ${guild.tracks.map(track => `
+                            <template x-for="track in guild.tracks" :key="track.filename">
                                 <div class="track-item">
                                     <div style="flex: 1;">
-                                        <div class="track-name">${escapeHtml(track.name)}</div>
+                                        <div class="track-name" x-text="track.name"></div>
                                         <div class="track-details">
-                                            ${escapeHtml(track.filename.split('/').pop())} • 
-                                            ${track.loops ? '🔁 Looping' : '▶️ Once'}
+                                            <span x-text="track.filename.split('/').pop()"></span> • 
+                                            <span x-text="track.loops ? '🔁 Looping' : '▶️ Once'"></span> •
+                                            <span x-text="'Volume: ' + Math.round(track.volume * 100) + '%'"></span>
                                         </div>
                                         <div class="volume-bar">
-                                            <div class="volume-fill" style="width: ${track.volume * 100}%"></div>
+                                            <div class="volume-fill" :style="'width: ' + (track.volume * 100) + '%'"></div>
                                         </div>
                                     </div>
                                 </div>
-                            `).join('')}
+                            </template>
                         </div>
-                    ` : ''}
+                    </template>
 
-                    ${guild.hex_playback && guild.hex_playback.message ? `
+                    <!-- Hex Playback -->
+                    <template x-if="guild.hex_playback && guild.hex_playback.message">
                         <div class="section">
                             <div class="section-title">Hex Playback</div>
                             <div class="info-item">
                                 <div style="flex: 1;">
-                                    <div class="track-name">${escapeHtml(guild.hex_playback.message)}</div>
+                                    <div class="track-name" x-text="guild.hex_playback.message"></div>
                                     <div class="track-details">
-                                        Position: ${guild.hex_playback.current_position} • 
-                                        Loop: ${guild.hex_playback.current_loop}${guild.hex_playback.target_loops ? `/${guild.hex_playback.target_loops}` : ''}
+                                        Position: <span x-text="guild.hex_playback.current_position"></span> • 
+                                        Loop: <span x-text="guild.hex_playback.current_loop"></span><template x-if="guild.hex_playback.target_loops">/<span x-text="guild.hex_playback.target_loops"></span></template> •
+                                        Volume: <span x-text="Math.round(guild.hex_playback.volume * 100) + '%'"></span>
                                     </div>
                                     <div class="volume-bar">
-                                        <div class="volume-fill" style="width: ${guild.hex_playback.volume * 100}%"></div>
+                                        <div class="volume-fill" :style="'width: ' + (guild.hex_playback.volume * 100) + '%'"></div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    ` : ''}
+                    </template>
 
-                    ${guild.dj_state ? `
+                    <!-- DJ State -->
+                    <template x-if="guild.dj_state">
                         <div class="section">
                             <div class="section-title">DJ State</div>
                             <div class="dj-state">
-                                <div class="dj-type">${guild.dj_state.state_type}</div>
-                                <div class="dj-details">${escapeHtml(guild.dj_state.details)}</div>
+                                <div class="dj-type" x-text="guild.dj_state.state_type"></div>
+                                <div class="dj-details" x-text="guild.dj_state.details"></div>
                             </div>
                         </div>
-                    ` : ''}
+                    </template>
 
-                    ${guild.audio_profile ? `
+                    <!-- Audio Profile -->
+                    <template x-if="guild.audio_profile">
                         <div class="section">
                             <div class="section-title">Audio Profile</div>
                             <div class="info-item">
                                 <div style="flex: 1;">
-                                    <div class="track-name">${escapeHtml(guild.audio_profile.name)}</div>
-                                    <div class="track-details">
-                                        ${guild.audio_profile.forced ? '🔒 Locked by DJ' : '🔓 Normal'}
-                                    </div>
+                                    <div class="track-name" x-text="guild.audio_profile.name"></div>
+                                    <div class="track-details" x-text="guild.audio_profile.forced ? '🔒 Locked by DJ' : '🔓 Normal'"></div>
                                 </div>
                             </div>
                         </div>
-                    ` : ''}
+                    </template>
 
-                    ${!guild.tracks.length && !guild.hex_playback?.message && !guild.dj_state && !guild.audio_profile ? `
+                    <!-- Empty State -->
+                    <template x-if="!guild.tracks.length && !guild.hex_playback?.message && !guild.dj_state && !guild.audio_profile">
                         <div class="empty-state">No active features</div>
-                    ` : ''}
+                    </template>
                 </div>
-            `).join('');
-        }
+            </template>
+        </div>
 
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
+        <div class="no-guilds" x-show="guilds.length === 0">
+            <div class="no-guilds-icon">💤</div>
+            <p x-text="connected ? 'No active guilds' : 'Connecting to bot...'"></p>
+        </div>
+    </div>
 
-        // Start connection
-        connect();
+    <script>
+        function botPortal() {
+            return {
+                ws: null,
+                connected: false,
+                statusText: 'Connecting...',
+                guilds: [],
+                reconnectTimeout: null,
+
+                init() {
+                    this.connect();
+                },
+
+                connect() {
+                    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                    const wsUrl = `${protocol}//${window.location.host}/ws`;
+                    
+                    this.ws = new WebSocket(wsUrl);
+
+                    this.ws.onopen = () => {
+                        this.connected = true;
+                        this.statusText = 'Connected';
+                        if (this.reconnectTimeout) {
+                            clearTimeout(this.reconnectTimeout);
+                            this.reconnectTimeout = null;
+                        }
+                    };
+
+                    this.ws.onmessage = (event) => {
+                        try {
+                            const data = JSON.parse(event.data);
+                            this.guilds = data.guilds || [];
+                        } catch (e) {
+                            console.error('Failed to parse message:', e);
+                        }
+                    };
+
+                    this.ws.onerror = (error) => {
+                        console.error('WebSocket error:', error);
+                    };
+
+                    this.ws.onclose = () => {
+                        this.connected = false;
+                        this.statusText = 'Disconnected - Reconnecting...';
+                        this.reconnectTimeout = setTimeout(() => this.connect(), 3000);
+                    };
+                }
+            };
+        }
     </script>
 </body>
 </html>

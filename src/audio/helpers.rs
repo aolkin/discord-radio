@@ -9,11 +9,11 @@ const MAX_DB: f32 = 18.0;
 /// - 0.0 → silence (effectively -60dB, amplitude ≈ 0.001)
 /// - 0.5 → moderate (-30dB, amplitude ≈ 0.032)
 /// - 1.0 → reference level (0dB, amplitude = 1.0)
-/// - 2.0 → boosted (+6dB, amplitude ≈ 2.0)
+/// - 2.0 → boosted (+18dB, amplitude ≈ 7.94)
 ///
 /// The mapping provides perceptual (logarithmic) scaling that matches human loudness perception:
 /// - For values below 1.0: dB = -60 + (value × 60)
-/// - For values at or above 1.0: dB = (value - 1.0) × 6
+/// - For values at or above 1.0: dB = (value - 1.0) × 18
 /// - Then: amplitude = 10^(dB / 20)
 pub fn perceptual_level_to_amplitude(level: f32) -> f32 {
     if level <= 0.0 {
@@ -24,12 +24,12 @@ pub fn perceptual_level_to_amplitude(level: f32) -> f32 {
     // 0.0 -> -60dB
     // 0.5 -> -30dB
     // 1.0 -> 0dB
-    // 2.0 -> +6dB
+    // 2.0 -> +18dB
     let db = if level < 1.0 {
         // Below 1.0: interpolate from -60dB to 0dB
         -MIN_DB + (level * MIN_DB)
     } else {
-        // Above 1.0: interpolate from 0dB to +6dB
+        // Above 1.0: interpolate from 0dB to +18dB
         (level - 1.0) * MAX_DB
     };
 
@@ -64,10 +64,10 @@ mod tests {
     #[test]
     fn test_max_boost() {
         let amp = perceptual_level_to_amplitude(2.0);
-        // +6 dB = 10^(6/20) = 10^0.3 ≈ 1.995
+        // +18 dB = 10^(18/20) = 10^0.9 ≈ 7.943
         assert!(
-            (amp - 1.995).abs() < 0.01,
-            "2.0 level should produce ~2x amplitude"
+            (amp - 7.943).abs() < 0.01,
+            "2.0 level should produce ~8x amplitude"
         );
     }
 

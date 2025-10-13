@@ -20,6 +20,7 @@ pub struct SignalProfile {
 
     pub tremolo_depth: f32,
     pub tremolo_rate: f32,
+    pub tremolo_jitter: f32,
 
     pub clip_pregain: f32,
     pub clip_threshold: f32,
@@ -48,6 +49,7 @@ impl SignalProfile {
             brown_noise_level: self.brown_noise_level * inv_t + other.brown_noise_level * t,
             tremolo_depth: self.tremolo_depth * inv_t + other.tremolo_depth * t,
             tremolo_rate: self.tremolo_rate * inv_t + other.tremolo_rate * t,
+            tremolo_jitter: self.tremolo_jitter * inv_t + other.tremolo_jitter * t,
             clip_pregain: self.clip_pregain * inv_t + other.clip_pregain * t,
             clip_threshold: self.clip_threshold * inv_t + other.clip_threshold * t,
             bitcrush_bits: if t < 0.5 {

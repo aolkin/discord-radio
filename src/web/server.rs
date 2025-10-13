@@ -34,7 +34,7 @@ pub async fn run_web_server(
         // Default: only allow localhost
         CorsLayer::new().allow_origin(localhost_predicate)
     }
-    .allow_methods([http::Method::GET])
+    .allow_methods(tower_http::cors::Any)
     .allow_headers([CONTENT_TYPE, AUTHORIZATION]);
 
     let app = Router::new()
