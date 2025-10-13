@@ -1,5 +1,8 @@
 //! Audio utility functions and helpers.
 
+const MIN_DB: f32 = 60.0;
+const MAX_DB: f32 = 18.0;
+
 /// Convert a perceptual level value (0.0-2.0) to linear amplitude using dB scaling.
 ///
 /// This function maps user-friendly config values to perceptual (logarithmic) amplitude:
@@ -24,10 +27,10 @@ pub fn perceptual_level_to_amplitude(level: f32) -> f32 {
     // 2.0 -> +6dB
     let db = if level < 1.0 {
         // Below 1.0: interpolate from -60dB to 0dB
-        -60.0 + (level * 60.0)
+        -MIN_DB + (level * MIN_DB)
     } else {
         // Above 1.0: interpolate from 0dB to +6dB
-        (level - 1.0) * 6.0
+        (level - 1.0) * MAX_DB
     };
 
     // Convert dB to amplitude: amplitude = 10^(dB/20)
