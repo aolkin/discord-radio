@@ -68,10 +68,15 @@ pub struct BotState {
     pub dj_managers: RwLock<HashMap<GuildId, Arc<Mutex<DJManager>>>>,
     pub dj_states: RwLock<HashMap<GuildId, Arc<RwLock<DJState>>>>,
     pub voice_status_manager: VoiceChannelStatusManager,
+    pub shutdown_tx: tokio::sync::broadcast::Sender<String>,
 }
 
 impl BotState {
-    pub fn new(content_path: String, state_store: Arc<dyn StateStore>) -> Self {
+    pub fn new(
+        content_path: String,
+        state_store: Arc<dyn StateStore>,
+        shutdown_tx: tokio::sync::broadcast::Sender<String>,
+    ) -> Self {
         let profiles_dir = "audio_profiles";
         let mut profile_manager = ProfileManager::new(profiles_dir);
 
@@ -99,6 +104,7 @@ impl BotState {
             dj_managers: RwLock::new(HashMap::new()),
             dj_states: RwLock::new(HashMap::new()),
             voice_status_manager: VoiceChannelStatusManager::new(voice_connections),
+            shutdown_tx,
         }
     }
 

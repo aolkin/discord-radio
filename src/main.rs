@@ -139,13 +139,15 @@ async fn main() -> Result<(), Error> {
 
     dotenvy::dotenv().ok();
 
-    // Check for --version flag
+    let run_number = env!("BUILD_RUN_NUMBER");
+    let commit_hash = env!("BUILD_COMMIT_HASH");
+
     let args: Vec<String> = std::env::args().collect();
     if args.get(1).map(|s| s.as_str()) == Some("--version") {
-        let run_number = env!("BUILD_RUN_NUMBER");
-        let commit_hash = env!("BUILD_COMMIT_HASH");
         println!("discord-bot-{} ({})", run_number, commit_hash);
         return Ok(());
+    } else {
+        info!("Starting discord-bot-{} ({})", run_number, commit_hash);
     }
 
     let discord_token =
@@ -165,7 +167,9 @@ async fn main() -> Result<(), Error> {
 
     let state_store = Arc::new(persistence::FileStore::new(state_store_path));
 
-    let data = Arc::new(BotState::new(content_path, state_store));
+    let (shutdown_tx, _shutdown_rx) = tokio::sync::broadcast::channel(16);
+
+    let data = Arc::new(BotState::new(content_path, state_store, shutdown_tx));
 
     let data_for_setup = data.clone();
     let framework = poise::Framework::builder()

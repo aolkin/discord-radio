@@ -3,12 +3,32 @@ use tokio::signal;
 use tracing::{error, info};
 
 pub async fn setup_shutdown_handler(data: Data) {
-    tokio::spawn(async move {
-        if let Err(e) = wait_for_shutdown_signal().await {
-            error!("Error waiting for shutdown signal: {}", e);
-        }
+    let mut shutdown_rx = data.shutdown_tx.subscribe();
 
-        info!("Shutdown signal received, cleaning up...");
+    tokio::spawn(async move {
+        let shutdown_reason = tokio::select! {
+            result = wait_for_shutdown_signal() => {
+                if let Err(e) = result {
+                    error!("Error waiting for shutdown signal: {}", e);
+                }
+                "OS signal (SIGTERM/SIGINT/Ctrl+C)".to_string()
+            }
+            reason = shutdown_rx.recv() => {
+                match reason {
+                    Ok(r) => {
+                        info!("Emergency shutdown requested: {}", r);
+                        r
+                    }
+                    Err(e) => {
+                        error!("Error receiving shutdown signal: {}", e);
+                        "Emergency shutdown (channel error)".to_string()
+                    }
+                }
+            }
+        };
+
+        info!("Shutdown triggered by: {}", shutdown_reason);
+        info!("Cleaning up...");
 
         // Abort all hex playback tasks
         let hex_playback_tasks = data.hex_playback_tasks.write().await;
