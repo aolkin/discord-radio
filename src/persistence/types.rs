@@ -58,12 +58,16 @@ pub enum DJStateMachineState {
         filename: String,
         started_at: SystemTime,
         duration_secs: f32,
+        #[serde(default)]
+        forced_profile: Option<String>,
     },
     PlayingHexMessage {
         message: String,
         started_at: SystemTime,
         #[serde(default = "default_target_loops")]
         target_loops: usize,
+        #[serde(default)]
+        forced_profile: Option<String>,
     },
     PlayingNoise {
         noise_profile: String,

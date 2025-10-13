@@ -54,21 +54,34 @@ pub async fn dj_task(
 
     // Initialize profile state machine
     let mut profile_machine = if !signal_profiles.is_empty() {
-        // Try to restore the saved profile state
-        let initial_profile_name =
-            if let Ok(profile_states) = bot_state.state_store.load_profile_states().await {
-                profile_states
-                    .get(&guild_id)
-                    .filter(|ps| !ps.bypass)
-                    .map(|ps| ps.profile_name.clone())
-            } else {
-                None
-            };
+        // Check if the restored DJ state has a forced profile
+        let forced_profile_name = restored_state.as_ref().and_then(|state| match state {
+            crate::persistence::DJStateMachineState::PlayingTrack { forced_profile, .. } => {
+                forced_profile.as_ref()
+            }
+            crate::persistence::DJStateMachineState::PlayingHexMessage {
+                forced_profile, ..
+            } => forced_profile.as_ref(),
+            crate::persistence::DJStateMachineState::PlayingNoise { noise_profile, .. } => {
+                Some(noise_profile)
+            }
+            _ => None,
+        });
 
-        Some(ProfileStateMachine::new(
-            signal_profiles,
-            initial_profile_name.as_deref(),
-        ))
+        let mut machine =
+            ProfileStateMachine::new(signal_profiles, forced_profile_name.map(|s| s.as_str()));
+
+        // If the DJ state had a forced profile, set the machine to ForcedProfile state
+        if let Some(profile_name) = forced_profile_name {
+            machine.force_profile(profile_name.clone());
+            tracing::info!(
+                "Restored forced profile '{}' for DJ in guild {}",
+                profile_name,
+                guild_id
+            );
+        }
+
+        Some(machine)
     } else {
         None
     };
@@ -153,20 +166,6 @@ pub async fn dj_task(
                     reason,
                     guild_id
                 );
-            }
-            drop(processors);
-
-            // Persist the profile state
-            let profile_state = crate::persistence::ProfileState {
-                profile_name: profile_name.to_string(),
-                bypass: false,
-            };
-            if let Err(e) = bot_state
-                .state_store
-                .save_profile_state(guild_id, &profile_state)
-                .await
-            {
-                tracing::warn!("Failed to save profile state for guild {}: {}", guild_id, e);
             }
         }
     }
