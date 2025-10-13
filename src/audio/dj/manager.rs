@@ -119,12 +119,12 @@ pub async fn dj_task(
                     }
                 }
             }
-            crate::persistence::DJStateMachineState::PlayingNoise { noise_type, .. } => {
+            crate::persistence::DJStateMachineState::PlayingNoise { noise_profile, .. } => {
                 tracing::info!(
-                    "DJ was playing noise '{}', will continue from current state",
-                    noise_type
+                    "DJ was in playing noise state with profile '{}', will continue from current state",
+                    noise_profile
                 );
-                // Noise doesn't need track restoration, it's generated
+                // PlayingNoise doesn't need track restoration, it just forces a profile
             }
             _ => {}
         }

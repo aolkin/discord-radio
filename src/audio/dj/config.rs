@@ -65,18 +65,10 @@ pub struct HexMessageEntry {
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct NoisePeriodEntry {
-    #[serde(rename = "type")]
-    pub noise_type: NoiseTypeConfig,
-    pub duration_range_seconds: (f32, f32),
+    pub noise_profile: String,
+    pub min_duration_seconds: f32,
+    pub max_duration_seconds: f32,
     pub weight: u32,
-}
-
-#[derive(Deserialize, Serialize, Clone, Debug)]
-#[serde(rename_all = "lowercase")]
-pub enum NoiseTypeConfig {
-    Static,
-    Pink,
-    Brown,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]

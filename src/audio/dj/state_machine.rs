@@ -1,4 +1,4 @@
-use crate::audio::dj::config::{DJConfig, NoiseTypeConfig};
+use crate::audio::dj::config::DJConfig;
 use crate::audio::dj::scheduler::{DJStateType, WeightedScheduler};
 use crate::audio::tracks::{StartTrackArgs, TrackManager};
 use crate::state::Data;
@@ -26,7 +26,7 @@ pub enum DJState {
         status_message: Option<String>, // The obfuscated message pushed to status stack
     },
     PlayingNoise {
-        noise_type: String,
+        noise_profile: String,
         started_at: std::time::Instant,
         duration: Duration,
     },
@@ -63,6 +63,7 @@ impl DJState {
         match self {
             DJState::PlayingTrack { forced_profile, .. } => forced_profile.as_deref(),
             DJState::PlayingHexMessage { forced_profile, .. } => forced_profile.as_deref(),
+            DJState::PlayingNoise { noise_profile, .. } => Some(noise_profile.as_str()),
             _ => None,
         }
     }
@@ -218,11 +219,9 @@ impl DJStateMachine {
                     tracing::warn!("Failed to remove message playback state: {}", e);
                 }
             }
-            DJState::PlayingNoise { noise_type, .. } => {
-                let track_name = format!("dj_noise_{}", noise_type);
-                if track_manager.has_track(&track_name) {
-                    track_manager.stop_track(&track_name, 1.0, false).await?;
-                }
+            DJState::PlayingNoise { .. } => {
+                // PlayingNoise doesn't play any tracks, it just forces a profile
+                // No cleanup needed
             }
             _ => {}
         }
@@ -239,7 +238,7 @@ impl DJStateMachine {
         match state_type {
             DJStateType::Track(idx) => self.start_track_state(idx, track_manager, bot_state).await,
             DJStateType::HexMessage(idx) => self.start_hex_message_state(idx, bot_state).await,
-            DJStateType::Noise(idx) => self.start_noise_state(idx, track_manager).await,
+            DJStateType::Noise(idx) => self.start_noise_state(idx).await,
         }
     }
 
@@ -457,36 +456,29 @@ impl DJStateMachine {
     async fn start_noise_state(
         &mut self,
         idx: usize,
-        _track_manager: &mut TrackManager,
     ) -> Result<DJState, Box<dyn std::error::Error + Send + Sync>> {
         let noise_entry = self
             .scheduler
             .get_noise_period(idx)
             .ok_or("Noise period index out of bounds")?;
 
-        let mut rng = rand::rng();
-        let duration_secs = rng.random_range(
-            noise_entry.duration_range_seconds.0..noise_entry.duration_range_seconds.1,
-        );
+        let duration_secs = {
+            let mut rng = rand::rng();
+            rng.random_range(noise_entry.min_duration_seconds..noise_entry.max_duration_seconds)
+        };
         let duration = Duration::from_secs_f32(duration_secs);
 
-        let noise_type_str = match noise_entry.noise_type {
-            NoiseTypeConfig::Static => "static",
-            NoiseTypeConfig::Pink => "pink",
-            NoiseTypeConfig::Brown => "brown",
-        };
-
-        let _track_name = format!("dj_noise_{}", noise_type_str);
+        let noise_profile = noise_entry.noise_profile.clone();
 
         tracing::info!(
-            "DJ playing {} noise for {:.1}s in guild {}",
-            noise_type_str,
+            "DJ playing noise with profile '{}' for {:.1}s in guild {}",
+            noise_profile,
             duration_secs,
             self.guild_id
         );
 
         Ok(DJState::PlayingNoise {
-            noise_type: noise_type_str.to_string(),
+            noise_profile,
             started_at: std::time::Instant::now(),
             duration,
         })

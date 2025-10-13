@@ -66,7 +66,7 @@ pub enum DJStateMachineState {
         target_loops: usize,
     },
     PlayingNoise {
-        noise_type: String,
+        noise_profile: String,
         started_at: SystemTime,
         duration_secs: f32,
     },

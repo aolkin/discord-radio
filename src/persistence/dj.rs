@@ -36,11 +36,11 @@ impl From<&DJState> for DJStateMachineState {
                 target_loops: *target_loops,
             },
             DJState::PlayingNoise {
-                noise_type,
+                noise_profile,
                 started_at,
                 duration,
             } => DJStateMachineState::PlayingNoise {
-                noise_type: noise_type.clone(),
+                noise_profile: noise_profile.clone(),
                 started_at: instant_to_systime(started_at),
                 duration_secs: duration.as_secs_f32(),
             },
@@ -90,11 +90,11 @@ impl TryFrom<&DJStateMachineState> for DJState {
                 status_message: None, // Restored state doesn't have status message, will be regenerated
             }),
             DJStateMachineState::PlayingNoise {
-                noise_type,
+                noise_profile,
                 started_at,
                 duration_secs,
             } => Ok(DJState::PlayingNoise {
-                noise_type: noise_type.clone(),
+                noise_profile: noise_profile.clone(),
                 started_at: systime_to_instant(started_at)?,
                 duration: Duration::from_secs_f32(*duration_secs),
             }),

@@ -1107,13 +1107,17 @@ pub async fn get_dj_state(ctx: Context<'_>) -> Result<(), Error> {
             }
         }
         crate::audio::dj::state_machine::DJState::PlayingNoise {
-            noise_type,
+            noise_profile,
             started_at,
             duration,
+            ..
         } => {
             let elapsed = started_at.elapsed().as_secs();
             let total = duration.as_secs();
-            format!("Playing noise: **{}** ({}/{}s)", noise_type, elapsed, total)
+            format!(
+                "Playing noise with profile: **{}** ({}/{}s)",
+                noise_profile, elapsed, total
+            )
         }
         crate::audio::dj::state_machine::DJState::Idle {
             started_at,
