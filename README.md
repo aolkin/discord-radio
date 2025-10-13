@@ -50,6 +50,26 @@ To check the build version:
 
 This will display the GitHub Actions run number and commit hash that the binary was built from.
 
+## Development
+
+Run these before committing:
+
+1. **Format your code**
+   ```bash
+   cargo fmt
+   ```
+
+2. **Run the linter**
+   ```bash
+   cargo clippy --all-targets --all-features -- -D warnings
+   ```
+   All warnings must be fixed before committing.
+
+3. **Run the tests**
+   ```bash
+   cargo test
+   ```
+
 ## Web Portal
 
 The bot includes a built-in web portal for monitoring status and configuration. Once the bot is running, access it at:
