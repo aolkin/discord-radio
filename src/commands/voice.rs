@@ -1056,10 +1056,28 @@ pub async fn get_dj_state(ctx: Context<'_>) -> Result<(), Error> {
     drop(dj_states);
 
     let state = state_arc.read().await;
-    let forced_profile_info = state
-        .forced_profile()
-        .map(|p| format!(" [forced profile: **{}**]", p))
-        .unwrap_or_default();
+
+    // Get current signal profile information
+    let profile_info = {
+        let profile_states = ctx.data().state_store.load_profile_states().await.ok();
+        if let Some(states) = profile_states
+            && let Some(profile_state) = states.get(&guild_id)
+            && !profile_state.bypass
+        {
+            let forced_indicator = if state.forced_profile().is_some() {
+                " (forced)"
+            } else {
+                ""
+            };
+            format!(
+                "\nSignal Profile: **{}**{}",
+                profile_state.profile_name, forced_indicator
+            )
+        } else {
+            String::new()
+        }
+    };
+
     let state_description = match &*state {
         crate::audio::dj::state_machine::DJState::PlayingTrack {
             filename,
@@ -1131,11 +1149,8 @@ pub async fn get_dj_state(ctx: Context<'_>) -> Result<(), Error> {
         crate::audio::dj::state_machine::DJState::Stopped => "Stopped".to_string(),
     };
 
-    ctx.say(format!(
-        "DJ State: {}{}",
-        state_description, forced_profile_info
-    ))
-    .await?;
+    ctx.say(format!("DJ State: {}{}", state_description, profile_info))
+        .await?;
 
     Ok(())
 }
