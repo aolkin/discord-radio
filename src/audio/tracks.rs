@@ -17,6 +17,8 @@ pub struct TrackSnapshot {
     pub filename: String,
     pub volume: f32,
     pub loops: bool,
+    pub start_time: std::time::SystemTime,
+    pub duration: Option<Duration>,
 }
 
 pub struct TrackInfo {
@@ -444,16 +446,24 @@ impl TrackManager {
         Ok(())
     }
 
-    pub fn get_all_tracks(&self) -> Vec<TrackSnapshot> {
-        self.tracks
-            .values()
-            .map(|info| TrackSnapshot {
+    pub async fn get_all_tracks(&self) -> Vec<TrackSnapshot> {
+        let mut snapshots = Vec::new();
+        for info in self.tracks.values() {
+            let duration = self
+                .bot_state
+                .duration_cache
+                .get_duration(&info.filename)
+                .await;
+            snapshots.push(TrackSnapshot {
                 name: info.name.clone(),
                 filename: info.filename.clone(),
                 volume: info.volume,
                 loops: info.loops,
-            })
-            .collect()
+                start_time: info.start_time,
+                duration,
+            });
+        }
+        snapshots
     }
 
     pub async fn stop_all_tracks(

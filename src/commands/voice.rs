@@ -455,7 +455,7 @@ pub async fn get_current_tracks(ctx: Context<'_>) -> Result<(), Error> {
     let tracks = match track_managers.get(&guild_id) {
         Some(manager_arc) => {
             let manager = manager_arc.lock().await;
-            manager.get_all_tracks()
+            manager.get_all_tracks().await
         }
         None => Vec::new(),
     };

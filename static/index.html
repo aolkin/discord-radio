@@ -80,7 +80,6 @@
         }
 
         .guild-card:hover {
-            transform: translateY(-2px);
             box-shadow: 0 8px 12px rgba(0, 0, 0, 0.15);
         }
 
@@ -145,6 +144,27 @@
             font-size: 0.85rem;
             color: #666;
             margin-top: 4px;
+        }
+
+        .progress-bar {
+            background: #e0e0e0;
+            height: 6px;
+            border-radius: 3px;
+            margin-top: 6px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-fill {
+            background: linear-gradient(90deg, #22c55e, #16a34a);
+            height: 100%;
+            transition: width 0.5s linear;
+        }
+
+        .progress-time {
+            font-size: 0.75rem;
+            color: #999;
+            margin-top: 2px;
         }
 
         .volume-bar {
@@ -403,28 +423,6 @@
                         <span class="voice-badge" x-show="guild.in_voice">In Voice</span>
                     </div>
 
-                    <!-- Audio Tracks -->
-                    <template x-if="guild.tracks && guild.tracks.length > 0">
-                        <div class="section">
-                            <div class="section-title">Audio Tracks</div>
-                            <template x-for="track in guild.tracks" :key="track.filename">
-                                <div class="track-item">
-                                    <div style="flex: 1;">
-                                        <div class="track-name" x-text="track.name"></div>
-                                        <div class="track-details">
-                                            <span x-text="track.filename.split('/').pop()"></span> • 
-                                            <span x-text="track.loops ? '🔁 Looping' : '▶️ Once'"></span> •
-                                            <span x-text="'Volume: ' + Math.round(track.volume * 100) + '%'"></span>
-                                        </div>
-                                        <div class="volume-bar">
-                                            <div class="volume-fill" :style="'width: ' + (track.volume * 100) + '%'"></div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </template>
-                        </div>
-                    </template>
-
                     <!-- Hex Playback -->
                     <template x-if="guild.hex_playback && guild.hex_playback.message">
                         <div class="section">
@@ -433,12 +431,13 @@
                                 <div style="flex: 1;">
                                     <div class="track-name" x-text="guild.hex_playback.message"></div>
                                     <div class="track-details">
-                                        Position: <span x-text="guild.hex_playback.current_position"></span> • 
-                                        Loop: <span x-text="guild.hex_playback.current_loop"></span><template x-if="guild.hex_playback.target_loops">/<span x-text="guild.hex_playback.target_loops"></span></template> •
-                                        Volume: <span x-text="Math.round(guild.hex_playback.volume * 100) + '%'"></span>
+                                        Position: <span x-text="guild.hex_playback.current_position"></span> •
+                                        Loop: <span x-text="guild.hex_playback.current_loop"></span><template x-if="guild.hex_playback.target_loops">/<span x-text="guild.hex_playback.target_loops"></span></template>
                                     </div>
-                                    <div class="volume-bar">
-                                        <div class="volume-fill" :style="'width: ' + (guild.hex_playback.volume * 100) + '%'"></div>
+                                    <div class="track-details">
+                                        🔊 <div class="volume-bar" style="display: inline-block; width: 100px; vertical-align: middle;">
+                                            <div class="volume-fill" :style="'width: ' + (guild.hex_playback.volume * 100) + '%'"></div>
+                                        </div> <span x-text="Math.round(guild.hex_playback.volume * 100) + '%'"></span>
                                     </div>
                                 </div>
                             </div>
@@ -469,6 +468,37 @@
                         </div>
                     </template>
 
+                    <!-- Audio Tracks -->
+                    <template x-if="guild.tracks && guild.tracks.length > 0">
+                        <div class="section">
+                            <div class="section-title">Audio Tracks</div>
+                            <template x-for="track in guild.tracks" :key="track.filename">
+                                <div class="track-item">
+                                    <div style="flex: 1;">
+                                        <div class="track-name" x-text="track.name"></div>
+                                        <div class="track-details">
+                                            <span x-text="track.filename.split('/').pop()"></span>
+                                        </div>
+                                        <template x-if="track.duration_secs && !track.loops">
+                                            <div>
+                                                <div class="progress-bar">
+                                                    <div class="progress-fill" :style="'width: ' + getTrackProgress(track) + '%'"></div>
+                                                </div>
+                                                <div class="progress-time" x-text="getTrackTimeDisplay(track)"></div>
+                                            </div>
+                                        </template>
+                                        <div class="track-details">
+                                            <span x-text="track.loops ? '🔁 Looping' : '▶️ Once'"></span> •
+                                            🔊 <div class="volume-bar" style="display: inline-block; width: 100px; vertical-align: middle;">
+                                                <div class="volume-fill" :style="'width: ' + (track.volume * 100) + '%'"></div>
+                                            </div> <span x-text="Math.round(track.volume * 100) + '%'"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+
                     <!-- Empty State -->
                     <template x-if="!guild.tracks.length && !guild.hex_playback?.message && !guild.dj_state && !guild.audio_profile">
                         <div class="empty-state">No active features</div>
@@ -491,15 +521,41 @@
                 statusText: 'Connecting...',
                 guilds: [],
                 reconnectTimeout: null,
+                currentTime: Date.now(),
+
+                getTrackProgress(track) {
+                    if (!track.duration_secs || track.loops) return 0;
+                    const elapsedMs = this.currentTime - (track.start_time.secs_since_epoch * 1000 + track.start_time.nanos_since_epoch / 1000000);
+                    const elapsedSecs = elapsedMs / 1000;
+                    const progress = Math.min((elapsedSecs / track.duration_secs) * 100, 100);
+                    return Math.max(0, progress);
+                },
+
+                getTrackTimeDisplay(track) {
+                    if (!track.duration_secs) return '';
+                    const elapsedMs = this.currentTime - (track.start_time.secs_since_epoch * 1000 + track.start_time.nanos_since_epoch / 1000000);
+                    const elapsedSecs = Math.max(0, Math.min(elapsedMs / 1000, track.duration_secs));
+                    return this.formatTime(elapsedSecs) + ' / ' + this.formatTime(track.duration_secs);
+                },
+
+                formatTime(seconds) {
+                    const mins = Math.floor(seconds / 60);
+                    const secs = Math.floor(seconds % 60);
+                    return mins + ':' + secs.toString().padStart(2, '0');
+                },
 
                 init() {
                     this.connect();
+                    // Update current time every 500ms for smooth progress bars
+                    setInterval(() => {
+                        this.currentTime = Date.now();
+                    }, 500);
                 },
 
                 connect() {
                     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
                     const wsUrl = `${protocol}//${window.location.host}/ws`;
-                    
+
                     this.ws = new WebSocket(wsUrl);
 
                     this.ws.onopen = () => {

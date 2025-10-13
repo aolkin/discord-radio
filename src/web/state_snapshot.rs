@@ -8,6 +8,8 @@ pub struct TrackInfo {
     pub filename: String,
     pub volume: f32,
     pub loops: bool,
+    pub start_time: std::time::SystemTime,
+    pub duration_secs: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,7 +71,7 @@ impl BotSnapshot {
             let track_managers = bot_state.track_managers.read().await;
             if let Some(manager_arc) = track_managers.get(&guild_id) {
                 let manager = manager_arc.lock().await;
-                let track_snapshots = manager.get_all_tracks();
+                let track_snapshots = manager.get_all_tracks().await;
                 guild_state.tracks = track_snapshots
                     .iter()
                     .map(|t| TrackInfo {
@@ -77,6 +79,8 @@ impl BotSnapshot {
                         filename: t.filename.clone(),
                         volume: t.volume,
                         loops: t.loops,
+                        start_time: t.start_time,
+                        duration_secs: t.duration.map(|d| d.as_secs_f64()),
                     })
                     .collect();
             }
