@@ -3,12 +3,11 @@ use crate::audio::decoder::SymphoniaSource;
 use crate::audio::processing_thread::AudioProcessor;
 use crate::state::Data;
 use serenity::model::id::GuildId;
-use songbird::Call;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
@@ -50,7 +49,7 @@ pub struct TrackManager {
 }
 
 impl TrackManager {
-    pub fn new(_call_lock: Arc<Mutex<Call>>, guild_id: GuildId, bot_state: Data) -> Self {
+    pub fn new(guild_id: GuildId, bot_state: Data) -> Self {
         Self {
             tracks: HashMap::new(),
             guild_id,

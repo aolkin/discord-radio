@@ -105,7 +105,6 @@ pub async fn leave_voice_channel(ctx: Context<'_>) -> Result<(), Error> {
 pub async fn play_message(
     ctx: Context<'_>,
     #[description = "Message to convert to hex and play"] message: String,
-    #[description = "Voice channel to join (optional)"] channel: Option<ChannelId>,
     #[description = "Volume 0.0-2.0 (0=silence, 1.0=unity, 2.0=+6dB boost, default 1.0)"]
     volume: Option<f32>,
     #[description = "Number of times to loop the message (default infinite)"] loops: Option<u32>,
@@ -131,53 +130,6 @@ pub async fn play_message(
                 .ephemeral(true),
         )
         .await?;
-
-    if let Some(channel_id) = channel {
-        let channel_info = utils::get_channel_details(ctx, channel_id).await?;
-
-        if channel_info
-            .guild()
-            .is_none_or(|guild_channel| guild_channel.kind != ChannelType::Voice)
-        {
-            tracing::warn!("Channel {} is not a voice channel", channel_id);
-            reply
-                .edit(
-                    ctx,
-                    poise::CreateReply::default()
-                        .content("The specified channel is not a voice channel!")
-                        .ephemeral(true),
-                )
-                .await?;
-            return Ok(());
-        }
-
-        if let Err(e) = join_voice_channel_helper(ctx, guild_id, channel_id).await {
-            reply
-                .edit(
-                    ctx,
-                    poise::CreateReply::default().content(e).ephemeral(true),
-                )
-                .await?;
-            return Ok(());
-        }
-    }
-
-    let call_lock = match get_voice_connection(ctx, guild_id).await {
-        Some(lock) => lock,
-        None => {
-            reply
-                .edit(
-                    ctx,
-                    poise::CreateReply::default()
-                        .content(
-                            "Not in a voice channel! Use the channel parameter to join one first.",
-                        )
-                        .ephemeral(true),
-                )
-                .await?;
-            return Ok(());
-        }
-    };
 
     // Check if use_dj is set to true
     if use_dj.unwrap_or(false) {
@@ -215,7 +167,7 @@ pub async fn play_message(
 
     let volume = volume.unwrap_or(1.0);
 
-    let manager_arc = get_or_create_track_manager(ctx, guild_id, call_lock.clone()).await;
+    let manager_arc = get_or_create_track_manager(ctx, guild_id).await;
     let playback_state = get_or_create_hex_playback_state(ctx, guild_id).await;
 
     ensure_hex_playback_task(ctx, guild_id, manager_arc.clone(), playback_state.clone()).await;
@@ -378,15 +330,7 @@ pub async fn change_track_state(
 
     ctx.defer_ephemeral().await?;
 
-    let call_lock = match get_voice_connection(ctx, guild_id).await {
-        Some(lock) => lock,
-        None => {
-            ctx.say("Not in a voice channel!").await?;
-            return Ok(());
-        }
-    };
-
-    let manager_arc = get_or_create_track_manager(ctx, guild_id, call_lock).await;
+    let manager_arc = get_or_create_track_manager(ctx, guild_id).await;
     let mut manager = manager_arc.lock().await;
     let fade_time = fade_time.unwrap_or(1.0);
 
@@ -591,7 +535,7 @@ async fn join_voice_channel_helper(
             tracing::info!("Joined voice channel");
 
             if let Err(e) = crate::audio::connection::setup_voice_connection(
-                handle_lock,
+                handle_lock.clone(),
                 guild_id,
                 ctx.data().clone(),
             )
@@ -600,35 +544,26 @@ async fn join_voice_channel_helper(
                 return Err(format!("Failed to setup voice connection: {}", e));
             }
 
+            // Create track manager for this guild
+            // This ensures any running DJ or other audio features can use it immediately
+            let _track_manager = get_or_create_track_manager(ctx, guild_id).await;
+
             Ok(())
         }
         Err(e) => Err(format!("Failed to join the voice channel: {}", e)),
     }
 }
 
-async fn get_voice_connection(
-    ctx: Context<'_>,
-    guild_id: GuildId,
-) -> Option<Arc<tokio::sync::Mutex<songbird::Call>>> {
-    let voice_connections = ctx.data().voice_connections.read().await;
-    voice_connections.get(&guild_id).map(Arc::clone)
-}
-
 async fn get_or_create_track_manager(
     ctx: Context<'_>,
     guild_id: GuildId,
-    call_lock: Arc<tokio::sync::Mutex<songbird::Call>>,
 ) -> Arc<tokio::sync::Mutex<crate::audio::tracks::TrackManager>> {
     let mut track_managers = ctx.data().track_managers.write().await;
     let manager_arc = track_managers
         .entry(guild_id)
         .or_insert_with(|| {
             Arc::new(tokio::sync::Mutex::new(
-                crate::audio::tracks::TrackManager::new(
-                    call_lock.clone(),
-                    guild_id,
-                    ctx.data().clone(),
-                ),
+                crate::audio::tracks::TrackManager::new(guild_id, ctx.data().clone()),
             ))
         })
         .clone();
@@ -898,33 +833,8 @@ pub async fn manage_dj(
                 }
             };
 
-            // Ensure we have a voice connection and track manager before starting DJ
-            let call_lock = match get_voice_connection(ctx, guild_id).await {
-                Some(lock) => lock,
-                None => {
-                    ctx.say("Bot is not in a voice channel! Join a voice channel first.")
-                        .await?;
-                    return Ok(());
-                }
-            };
-
-            // Get the channel ID from the call
-            let channel_id = {
-                let call = call_lock.lock().await;
-                match call.current_channel() {
-                    Some(songbird_channel_id) => {
-                        serenity::all::ChannelId::new(songbird_channel_id.0.into())
-                    }
-                    None => {
-                        ctx.say("Bot is not in a voice channel! Join a voice channel first.")
-                            .await?;
-                        return Ok(());
-                    }
-                }
-            };
-
-            // Create track manager if it doesn't exist
-            let _track_manager = get_or_create_track_manager(ctx, guild_id, call_lock).await;
+            // Create track manager for this guild (no longer requires voice connection)
+            let _track_manager = get_or_create_track_manager(ctx, guild_id).await;
 
             let mut dj_managers = ctx.data().dj_managers.write().await;
             let manager = dj_managers
@@ -951,7 +861,6 @@ pub async fn manage_dj(
                     dj_config,
                     ctx.data().clone(),
                     ctx.serenity_context().http.clone(),
-                    channel_id,
                     announcement_channel,
                     None,
                 )
@@ -961,17 +870,16 @@ pub async fn manage_dj(
                 return Ok(());
             }
 
-            let channel_msg = if let Some(ch_id) = announcement_channel {
-                format!(" (announcements in <#{}>)", ch_id)
+            let msg = if let Some(ch_id) = announcement_channel {
+                format!(
+                    "DJ started with configuration '{}' (announcements in <#{}>)",
+                    config, ch_id
+                )
             } else {
-                String::new()
+                format!("DJ started with configuration '{}'", config)
             };
 
-            ctx.say(format!(
-                "DJ started with configuration '{}'{}",
-                config, channel_msg
-            ))
-            .await?;
+            ctx.say(msg).await?;
         }
         "stop" => {
             let dj_managers = ctx.data().dj_managers.read().await;

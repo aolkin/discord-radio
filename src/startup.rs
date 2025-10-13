@@ -5,28 +5,17 @@ use serenity::model::id::GuildId;
 use std::sync::Arc;
 
 // Helper: fetch the voice Call lock for a guild if connected
-async fn get_call_lock(
-    bot_state: &Data,
-    guild_id: GuildId,
-) -> Option<Arc<tokio::sync::Mutex<songbird::Call>>> {
-    let voice_connections = bot_state.voice_connections.read().await;
-    let lock = voice_connections.get(&guild_id).cloned();
-    drop(voice_connections);
-    lock
-}
-
 // Helper: get or create the TrackManager for a guild
 async fn get_or_create_track_manager(
     bot_state: &Data,
     guild_id: GuildId,
-    call_lock: Arc<tokio::sync::Mutex<songbird::Call>>,
 ) -> Arc<tokio::sync::Mutex<crate::audio::tracks::TrackManager>> {
     let mut track_managers = bot_state.track_managers.write().await;
     let manager_arc = track_managers
         .entry(guild_id)
         .or_insert_with(|| {
             Arc::new(tokio::sync::Mutex::new(
-                crate::audio::tracks::TrackManager::new(call_lock, guild_id, bot_state.clone()),
+                crate::audio::tracks::TrackManager::new(guild_id, bot_state.clone()),
             ))
         })
         .clone();
@@ -103,6 +92,9 @@ pub async fn restore_voice_channels(
                         e
                     );
                     let _ = bot_state.state_store.remove_voice_channel(guild_id).await;
+                } else {
+                    // Create track manager for this guild so it's available for DJ and other features
+                    let _manager_arc = get_or_create_track_manager(&bot_state, guild_id).await;
                 }
             }
             Err(e) => {
@@ -137,21 +129,6 @@ async fn restore_message_playback(
     tracing::info!("Restoring {} message playback(s)", saved_playbacks.len());
 
     for (guild_id, playback_state) in saved_playbacks {
-        let call_lock = match get_call_lock(&bot_state, guild_id).await {
-            Some(lock) => lock,
-            None => {
-                tracing::warn!(
-                    "Cannot restore message playback for guild {}: not in voice channel",
-                    guild_id
-                );
-                let _ = bot_state
-                    .state_store
-                    .remove_message_playback(guild_id)
-                    .await;
-                continue;
-            }
-        };
-
         tracing::info!(
             "Restoring message playback for guild {}: '{}' at position {}",
             guild_id,
@@ -159,8 +136,7 @@ async fn restore_message_playback(
             playback_state.current_position
         );
 
-        let manager_arc =
-            get_or_create_track_manager(&bot_state, guild_id, call_lock.clone()).await;
+        let manager_arc = get_or_create_track_manager(&bot_state, guild_id).await;
 
         let playback_state_arc = {
             let mut states = bot_state.hex_playback_states.write().await;
@@ -234,29 +210,13 @@ async fn restore_multitrack_playback(
     );
 
     for (guild_id, multitrack_state) in saved_multitrack {
-        let call_lock = match get_call_lock(&bot_state, guild_id).await {
-            Some(lock) => lock,
-            None => {
-                tracing::warn!(
-                    "Cannot restore multitrack playback for guild {}: not in voice channel",
-                    guild_id
-                );
-                let _ = bot_state
-                    .state_store
-                    .remove_multitrack_playback(guild_id)
-                    .await;
-                continue;
-            }
-        };
-
         tracing::info!(
             "Restoring {} track(s) for guild {}",
             multitrack_state.tracks.len(),
             guild_id
         );
 
-        let manager_arc =
-            get_or_create_track_manager(&bot_state, guild_id, call_lock.clone()).await;
+        let manager_arc = get_or_create_track_manager(&bot_state, guild_id).await;
 
         let mut manager = manager_arc.lock().await;
 
@@ -348,39 +308,8 @@ async fn restore_dj_managers(
             continue;
         }
 
-        let call_lock = match get_call_lock(&bot_state, guild_id).await {
-            Some(lock) => lock,
-            None => {
-                tracing::warn!(
-                    "Cannot restore DJ for guild {}: not in voice channel",
-                    guild_id
-                );
-                let _ = bot_state.state_store.remove_dj_state(guild_id).await;
-                continue;
-            }
-        };
-
-        // Get channel ID from call
-        let channel_id = {
-            let call = call_lock.lock().await;
-            match call.current_channel() {
-                Some(songbird_channel_id) => {
-                    poise::serenity_prelude::ChannelId::new(songbird_channel_id.0.into())
-                }
-                None => {
-                    tracing::warn!(
-                        "Cannot restore DJ for guild {}: not in voice channel (no channel ID)",
-                        guild_id
-                    );
-                    let _ = bot_state.state_store.remove_dj_state(guild_id).await;
-                    continue;
-                }
-            }
-        };
-
-        // Ensure track manager exists
-        let _manager_arc =
-            get_or_create_track_manager(&bot_state, guild_id, call_lock.clone()).await;
+        // Create track manager for this guild (no longer requires voice connection)
+        let _manager_arc = get_or_create_track_manager(&bot_state, guild_id).await;
 
         let config_path = format!("dj_configs/{}.json", dj_state.config_name);
         let dj_config = match crate::audio::dj::config::DJConfig::load_from_file(&config_path) {
@@ -434,7 +363,6 @@ async fn restore_dj_managers(
                 dj_config,
                 bot_state.clone(),
                 http.clone(),
-                channel_id,
                 announcement_channel,
                 dj_state.state_machine,
             )

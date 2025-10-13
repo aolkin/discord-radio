@@ -301,18 +301,10 @@ pub async fn dj_task(
         sleep(Duration::from_millis(DJ_TICK_INTERVAL_MS)).await;
 
         let track_managers = bot_state.track_managers.read().await;
-        let manager_arc = match track_managers.get(&guild_id) {
-            Some(arc) => arc.clone(),
-            None => {
-                tracing::warn!(
-                    "No track manager found for guild {} in DJ task, waiting...",
-                    guild_id
-                );
-                drop(track_managers);
-                sleep(Duration::from_secs(1)).await;
-                continue;
-            }
-        };
+        let manager_arc = track_managers
+            .get(&guild_id)
+            .expect("TrackManager should be initialized before DJ starts")
+            .clone();
         drop(track_managers);
 
         let mut manager = manager_arc.lock().await;
@@ -472,7 +464,6 @@ pub struct DJManager {
     task_handle: Option<tokio::task::JoinHandle<()>>,
     command_tx: Option<mpsc::Sender<DJCommand>>,
     guild_id: GuildId,
-    voice_channel_id: Option<ChannelId>,
     status_message: Option<String>,
 }
 
@@ -482,7 +473,6 @@ impl DJManager {
             task_handle: None,
             command_tx: None,
             guild_id,
-            voice_channel_id: None,
             status_message: None,
         }
     }
@@ -505,7 +495,6 @@ impl DJManager {
         config: DJConfig,
         bot_state: Data,
         http: Arc<Http>,
-        voice_channel_id: ChannelId,
         announcement_channel: Option<ChannelId>,
         restored_state: Option<crate::persistence::DJStateMachineState>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -527,8 +516,6 @@ impl DJManager {
             // Store the status message so we can remove it later
             self.status_message = Some(status.clone());
         }
-
-        self.voice_channel_id = Some(voice_channel_id);
 
         let config_name = config.name.clone();
         let (tx, rx) = mpsc::channel(10);

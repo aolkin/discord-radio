@@ -34,6 +34,7 @@ pub trait StateStore: Send + Sync {
         state: &MultiTrackPlaybackState,
     ) -> Result<()>;
     async fn load_multitrack_playbacks(&self) -> Result<HashMap<GuildId, MultiTrackPlaybackState>>;
+    #[allow(dead_code)]
     async fn remove_multitrack_playback(&self, guild_id: GuildId) -> Result<()>;
 
     async fn save_profile_state(&self, guild_id: GuildId, state: &ProfileState) -> Result<()>;
