@@ -106,7 +106,8 @@ pub async fn play_message(
     ctx: Context<'_>,
     #[description = "Message to convert to hex and play"] message: String,
     #[description = "Voice channel to join (optional)"] channel: Option<ChannelId>,
-    #[description = "Volume 0.0-1.0 (default 1.0)"] volume: Option<f32>,
+    #[description = "Volume 0.0-2.0 (0=silence, 1.0=unity, 2.0=+6dB boost, default 1.0)"]
+    volume: Option<f32>,
     #[description = "Number of times to loop the message (default infinite)"] loops: Option<u32>,
 ) -> Result<(), Error> {
     let guild_id = ctx
@@ -331,7 +332,7 @@ pub async fn change_track_state(
     #[description = "Audio filename (required for start)"]
     #[autocomplete = "autocomplete_audio_file"]
     filename: Option<String>,
-    #[description = "Volume 0.0-1.0"] volume: Option<f32>,
+    #[description = "Volume 0.0-2.0 (0=silence, 1.0=unity, 2.0=+6dB boost)"] volume: Option<f32>,
     #[description = "Loop track"] loops: Option<bool>,
     #[description = "Fade time in seconds (default 1.0)"] fade_time: Option<f32>,
 ) -> Result<(), Error> {

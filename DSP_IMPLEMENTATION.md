@@ -201,3 +201,48 @@ This provides natural-feeling volume control matching human loudness perception.
 - DirectForm2Transposed biquad filters for efficiency
 - Custom noise/LFO implementations to avoid non-Sync dasp internals
 - Frame-based processing minimizes overhead
+
+## Volume Scaling
+
+The audio system uses **perceptual (logarithmic) volume scaling** to provide more natural volume control that matches human loudness perception.
+
+### User Volume Range
+
+- **0.0**: Silence (-60 dB)
+- **1.0**: Unity gain (0 dB, original volume)
+- **2.0**: Maximum boost (+6 dB, approximately 2x amplitude)
+
+### Implementation
+
+Volume values are converted to amplitude multipliers using the formula:
+
+```
+For volume in [0.0, 1.0]:
+  dB = -60 + volume * 60
+  
+For volume in [1.0, 2.0]:
+  dB = (volume - 1.0) * 6
+
+amplitude = 10^(dB/20)
+```
+
+This provides:
+- **Perceptually uniform changes**: Moving from 0.5 to 0.6 feels similar to 0.8 to 0.9
+- **Boost capability**: Allows amplifying quiet tracks beyond their original volume
+- **Industry-standard scaling**: Matches behavior of professional audio software
+
+### Usage
+
+All volume parameters in the system (config files, Discord commands, API calls) accept the 0.0-2.0 range:
+
+```json
+{
+  "volume": 1.5  // +3dB boost above original
+}
+```
+
+```
+/change_track_state name:bgm volume:1.5
+```
+
+The conversion to amplitude happens internally in the mixer, so all user-facing interfaces remain simple and consistent.

@@ -496,6 +496,20 @@ impl TrackManager {
     }
 }
 
+/// Fade volume from one level to another over time.
+///
+/// This function interpolates linearly in user volume space (0.0-2.0), then converts
+/// each intermediate value to amplitude using perceptual scaling. The conversion to
+/// amplitude happens in `update_track_volume`.
+///
+/// # Arguments
+///
+/// * `processor` - Audio processor containing the mixer
+/// * `track_name` - Name of the track to fade
+/// * `from_volume` - Starting user volume (0.0-2.0)
+/// * `to_volume` - Target user volume (0.0-2.0)
+/// * `fade_time` - Duration of fade in seconds
+/// * `cancel` - Token to cancel the fade early
 async fn fade_volume_dsp(
     processor: Arc<RwLock<AudioProcessor>>,
     track_name: String,
@@ -513,6 +527,7 @@ async fn fade_volume_dsp(
         }
 
         let progress = i as f32 / steps as f32;
+        // Interpolate in user volume space
         let current_volume = from_volume + (to_volume - from_volume) * progress;
 
         {

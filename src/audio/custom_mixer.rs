@@ -4,6 +4,8 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
+use crate::audio::helpers::perceptual_level_to_amplitude;
+
 pub type TrackEndCallback = Arc<dyn Fn() + Send + Sync>;
 
 pub trait AudioSource: Send + Sync {
@@ -24,9 +26,11 @@ pub struct MixerTrack {
 
 impl MixerTrack {
     pub fn new(source: Box<dyn AudioSource>, volume: f32, loops: bool) -> Self {
+        // Convert user volume to amplitude using logarithmic scaling
+        let amplitude = perceptual_level_to_amplitude(volume);
         Self {
             source,
-            volume: Arc::new(AtomicF32::new(volume)),
+            volume: Arc::new(AtomicF32::new(amplitude)),
             loops,
             active: true,
             end_callback: None,
@@ -95,17 +99,6 @@ impl CustomMixer {
         }
     }
 
-    #[allow(dead_code)]
-    pub fn add_track(
-        &mut self,
-        name: String,
-        source: Box<dyn AudioSource>,
-        volume: f32,
-        loops: bool,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.add_track_with_callback(name, source, volume, loops, None)
-    }
-
     pub fn add_track_with_callback(
         &mut self,
         name: String,
@@ -136,13 +129,26 @@ impl CustomMixer {
         self.tracks.contains_key(name)
     }
 
+    /// Update the volume of a track.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - Name of the track to update
+    /// * `volume` - User-facing volume (0.0-2.0). This is converted to amplitude using
+    ///   perceptual (logarithmic) scaling. 0.0 = silence, 1.0 = unity gain, 2.0 = +6dB boost.
+    ///
+    /// # Returns
+    ///
+    /// Ok(()) if successful, or an error message if the track is not found.
     pub fn update_track_volume(&mut self, name: &str, volume: f32) -> Result<(), String> {
         let track = self
             .tracks
             .get(name)
             .ok_or_else(|| format!("Track '{}' not found", name))?;
 
-        track.volume.store(volume, Ordering::Relaxed);
+        // Convert user volume to amplitude using logarithmic scaling
+        let amplitude = perceptual_level_to_amplitude(volume);
+        track.volume.store(amplitude, Ordering::Relaxed);
         Ok(())
     }
 
