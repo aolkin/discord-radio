@@ -3,7 +3,7 @@
   "bandpass_low": 500.0,
   "bandpass_high": 5000.0,
   "white_noise_level": 0.0,
-  "pink_noise_level": 0.02,
+  "pink_noise_level": 0.434,
   "brown_noise_level": 0.0,
   "tremolo_depth": 0.2,
   "tremolo_rate": 1.0,

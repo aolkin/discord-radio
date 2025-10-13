@@ -2,7 +2,7 @@
   "name": "noise_white",
   "bandpass_low": 20.0,
   "bandpass_high": 20000.0,
-  "white_noise_level": 0.05,
+  "white_noise_level": 0.566,
   "pink_noise_level": 0.0,
   "brown_noise_level": 0.0,
   "tremolo_depth": 0.3,

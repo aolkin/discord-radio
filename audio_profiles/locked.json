@@ -2,7 +2,7 @@
   "name": "locked",
   "bandpass_low": 800.0,
   "bandpass_high": 4500.0,
-  "white_noise_level": 0.01,
+  "white_noise_level": 0.333,
   "pink_noise_level": 0.0,
   "brown_noise_level": 0.0,
   "tremolo_depth": 0.3,

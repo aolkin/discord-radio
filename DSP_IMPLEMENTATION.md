@@ -52,6 +52,19 @@ Applies radio signal effects in sequence:
 - **Pink Noise**: 1/f noise using Voss-McCartney algorithm
 - **Brown Noise**: Brownian noise (random walk), lower frequency emphasis than pink noise
 
+**Perceptual Noise Level Scaling:**
+
+Noise levels use perceptual (dB-based) scaling for natural-sounding volume control:
+
+- Config values range from 0.0 to 2.0 (typical usage 0.0-1.0)
+- Mapping to perceived loudness:
+  - `0.0` = silence (≈-60dB, amplitude ≈ 0.001)
+  - `0.5` = moderate noise (≈-30dB, amplitude ≈ 0.032)
+  - `1.0` = reference level (0dB, amplitude = 1.0)
+  - `2.0` = boosted (+6dB, amplitude ≈ 2.0)
+- Internally converted to amplitude using: `amplitude = 10^(dB/20)`
+- Profile transitions interpolate linearly in the perceptual (0.0-2.0) space, which is equivalent to linear interpolation in dB space
+
 #### Modulation (`audio/dsp/modulation.rs`)
 
 - **LFO**: Low-frequency oscillator for tremolo
@@ -93,28 +106,27 @@ Pre-configured effect presets in `audio_profiles/`:
 
 ### `weak_signal.json`
 
-- Heavy degradation: 50% pink noise, 60% tremolo
+- Heavy degradation: moderate pink noise (≈-24dB), 30% tremolo
 - Frequent dropouts (30% probability)
 - 8-bit bitcrushing
 - Simulates very poor reception
 
 ### `detuned.json`
 
-- -50 cents pitch shift
 - 3Hz frequency warble
-- 40% white noise
+- Light white noise (≈-40dB)
 - Moderate tremolo (40% depth @ 1.5Hz)
 
 ### `tuning.json`
 
-- Moderate effects (20% pink noise, 20% tremolo)
+- Moderate effects: light pink noise (≈-34dB), 20% tremolo
 - Rare dropouts (5% probability)
 - Simulates active tuning
 
 ### `locked.json`
 
 - Narrow bandpass (800Hz-4.5kHz)
-- Minimal noise (5%)
+- Minimal white noise (≈-40dB)
 - Clean locked signal
 
 ## Usage
@@ -137,10 +149,12 @@ Pre-configured effect presets in `audio_profiles/`:
   "name": "profile_name",
   "bandpass_low": 500.0,
   "bandpass_high": 5000.0,
-  "noise_level": 0.3,
-  "noise_type": "pink",
+  "white_noise_level": 0.3,
+  "pink_noise_level": 0.0,
+  "brown_noise_level": 0.0,
   "tremolo_depth": 0.4,
   "tremolo_rate": 2.0,
+  "clip_pregain": 1.0,
   "clip_threshold": 0.8,
   "bitcrush_bits": null,
   "dropout_probability": 0.1,
@@ -149,6 +163,18 @@ Pre-configured effect presets in `audio_profiles/`:
   "frequency_warble_hz": null
 }
 ```
+
+**Noise Level Parameters:**
+
+Noise levels (`white_noise_level`, `pink_noise_level`, `brown_noise_level`) use **perceptual (dB-based) scaling**:
+
+- Range: `0.0` to `2.0` (typical usage: `0.0` to `1.0`)
+- `0.0` = silence (≈-60dB)
+- `0.5` = moderate noise (≈-30dB) 
+- `1.0` = reference level (0dB)
+- `2.0` = boosted (+6dB)
+
+This provides natural-feeling volume control matching human loudness perception. Values are internally converted to linear amplitude for mixing using the formula: `amplitude = 10^(dB/20)`.
 
 ## Technical Specifications
 

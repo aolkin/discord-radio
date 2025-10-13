@@ -9,6 +9,11 @@ pub struct SignalProfile {
     pub bandpass_low: f32,
     pub bandpass_high: f32,
 
+    /// Noise levels (0.0-2.0) use perceptual (dB-based) scaling:
+    /// - 0.0 = silence (-60dB)
+    /// - 0.5 = moderate (-30dB)
+    /// - 1.0 = reference level (0dB)
+    /// - 2.0 = boosted (+6dB)
     pub white_noise_level: f32,
     pub pink_noise_level: f32,
     pub brown_noise_level: f32,
@@ -35,6 +40,9 @@ impl SignalProfile {
             name: format!("{}→{}", self.name, other.name),
             bandpass_low: self.bandpass_low * inv_t + other.bandpass_low * t,
             bandpass_high: self.bandpass_high * inv_t + other.bandpass_high * t,
+            // Interpolate noise levels linearly in perceptual space.
+            // The perceptual scale (0.0-2.0) already maps linearly to dB,
+            // so linear interpolation here gives smooth perceptual transitions.
             white_noise_level: self.white_noise_level * inv_t + other.white_noise_level * t,
             pink_noise_level: self.pink_noise_level * inv_t + other.pink_noise_level * t,
             brown_noise_level: self.brown_noise_level * inv_t + other.brown_noise_level * t,

@@ -1,5 +1,6 @@
 use crate::audio::dsp::modulation::{Bitcrusher, DropoutGenerator, LFO};
 use crate::audio::dsp::noise::NoiseGenerator;
+use crate::audio::helpers::perceptual_level_to_amplitude;
 use crate::audio::profiles::SignalProfile;
 use atomic_float::AtomicF32;
 use biquad::{Biquad, Coefficients, DirectForm1, ToHertz};
@@ -61,9 +62,16 @@ impl RadioEffectChain {
             lowpass_r: DirectForm1::<f32>::new(lp_coeffs),
 
             noise_gen: NoiseGenerator::new(),
-            white_noise_level: Arc::new(AtomicF32::new(profile.white_noise_level)),
-            pink_noise_level: Arc::new(AtomicF32::new(profile.pink_noise_level)),
-            brown_noise_level: Arc::new(AtomicF32::new(profile.brown_noise_level)),
+            // Convert noise levels from config values to perceptual amplitudes
+            white_noise_level: Arc::new(AtomicF32::new(perceptual_level_to_amplitude(
+                profile.white_noise_level,
+            ))),
+            pink_noise_level: Arc::new(AtomicF32::new(perceptual_level_to_amplitude(
+                profile.pink_noise_level,
+            ))),
+            brown_noise_level: Arc::new(AtomicF32::new(perceptual_level_to_amplitude(
+                profile.brown_noise_level,
+            ))),
 
             tremolo_lfo: LFO::new(sample_rate, profile.tremolo_rate),
             tremolo_depth: Arc::new(AtomicF32::new(profile.tremolo_depth)),
@@ -109,12 +117,19 @@ impl RadioEffectChain {
         self.lowpass_l.update_coefficients(lp_coeffs);
         self.lowpass_r.update_coefficients(lp_coeffs);
 
-        self.white_noise_level
-            .store(profile.white_noise_level, Ordering::Relaxed);
-        self.pink_noise_level
-            .store(profile.pink_noise_level, Ordering::Relaxed);
-        self.brown_noise_level
-            .store(profile.brown_noise_level, Ordering::Relaxed);
+        // Convert noise levels from config values to perceptual amplitudes
+        self.white_noise_level.store(
+            perceptual_level_to_amplitude(profile.white_noise_level),
+            Ordering::Relaxed,
+        );
+        self.pink_noise_level.store(
+            perceptual_level_to_amplitude(profile.pink_noise_level),
+            Ordering::Relaxed,
+        );
+        self.brown_noise_level.store(
+            perceptual_level_to_amplitude(profile.brown_noise_level),
+            Ordering::Relaxed,
+        );
         self.tremolo_depth
             .store(profile.tremolo_depth, Ordering::Relaxed);
         self.tremolo_lfo
