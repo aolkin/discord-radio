@@ -68,8 +68,20 @@ pub async fn dj_task(
             _ => None,
         });
 
+        // If no forced profile, try to restore the last active profile from ProfileState
+        let initial_profile_name = if let Some(profile_name) = forced_profile_name {
+            Some(profile_name.to_string())
+        } else if let Ok(profile_states) = bot_state.state_store.load_profile_states().await {
+            profile_states
+                .get(&guild_id)
+                .filter(|ps| !ps.bypass)
+                .map(|ps| ps.profile_name.clone())
+        } else {
+            None
+        };
+
         let mut machine =
-            ProfileStateMachine::new(signal_profiles, forced_profile_name.map(|s| s.as_str()));
+            ProfileStateMachine::new(signal_profiles, initial_profile_name.as_deref());
 
         // If the DJ state had a forced profile, set the machine to ForcedProfile state
         if let Some(profile_name) = forced_profile_name {
@@ -166,6 +178,19 @@ pub async fn dj_task(
                     reason,
                     guild_id
                 );
+            }
+
+            // Persist the profile state for restoration on restart
+            let profile_state = crate::persistence::ProfileState {
+                profile_name: profile_name.to_string(),
+                bypass: false,
+            };
+            if let Err(e) = bot_state
+                .state_store
+                .save_profile_state(guild_id, &profile_state)
+                .await
+            {
+                tracing::warn!("Failed to save profile state for guild {}: {}", guild_id, e);
             }
         }
     }
@@ -275,14 +300,20 @@ pub async fn dj_task(
             // Determine which profile to transition to, if any
             let profile_transition = if new_forced_profile != current_forced_profile {
                 if let Some(ref profile_name) = new_forced_profile {
+                    let fade_secs = if let DJState::PlayingNoise { duration, .. } = current_state {
+                        // Fade over half the duration of the noise state
+                        duration.as_secs_f32() / 2.0
+                    } else {
+                        1.0
+                    };
                     // Force the new profile
                     pm.force_profile(profile_name.clone());
-                    Some((profile_name.clone(), 1.0, "(forced)"))
+                    Some((profile_name.clone(), fade_secs, "(forced)"))
                 } else if current_forced_profile.is_some() {
                     // Release the forced profile and transition to next
                     pm.release_forced_profile()
-                        .map(|(profile_name, fade_secs)| {
-                            (profile_name, fade_secs, "after releasing forced profile")
+                        .map(|(profile_name, _fade_secs)| {
+                            (profile_name, 1.5, "after releasing forced profile")
                         })
                 } else {
                     None

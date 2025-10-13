@@ -19,40 +19,54 @@
   },
   "noise_periods": [
     {
-      "type": "static",
-      "duration_range_seconds": [
-        5.0,
-        15.0
-      ],
-      "weight": 3
+      "noise_profile": "noise_pink",
+      "min_duration_seconds": 0.5,
+      "max_duration_seconds": 1.5,
+      "weight": 15
     },
     {
-      "type": "brown",
-      "duration_range_seconds": [
-        3.0,
-        10.0
-      ],
+      "noise_profile": "noise_pink",
+      "min_duration_seconds": 1.0,
+      "max_duration_seconds": 4.0,
+      "weight": 5
+    },
+    {
+      "noise_profile": "noise_brown",
+      "min_duration_seconds": 2.0,
+      "max_duration_seconds": 6.0,
+      "weight": 2
+    },
+    {
+      "noise_profile": "noise_brown",
+      "min_duration_seconds": 1.0,
+      "max_duration_seconds": 3.0,
+      "weight": 4
+    },
+    {
+      "noise_profile": "noise_white",
+      "min_duration_seconds": 0.5,
+      "max_duration_seconds": 1.0,
       "weight": 2
     }
   ],
   "signal_profiles": [
     {
       "profile_name": "clear",
-      "weight": 20,
+      "weight": 40,
       "fade_duration_seconds": 8.0,
       "min_time_seconds": 60.0,
       "max_time_seconds": 240.0
     },
     {
       "profile_name": "weak_signal",
-      "weight": 10,
+      "weight": 5,
       "fade_duration_seconds": 8.0,
       "min_time_seconds": 4.0,
       "max_time_seconds": 30.0
     },
     {
       "profile_name": "tuning",
-      "weight": 5,
+      "weight": 10,
       "fade_duration_seconds": 6.0,
       "min_time_seconds": 6.0,
       "max_time_seconds": 30.0
@@ -68,7 +82,7 @@
   "state_weights": {
     "track": 100,
     "hex_message": 2,
-    "noise": 0
+    "noise": 100
   },
   "recent_history_size": 12,
   "duplicate_penalty_multiplier": 0.5
