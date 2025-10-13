@@ -23,6 +23,7 @@ pub struct TrackEntry {
     pub max_duration_seconds: Option<f32>,
     pub allow_subsection: Option<bool>,
     pub signal_profile: Option<String>,
+    pub volume: Option<f32>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
