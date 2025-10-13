@@ -11,6 +11,7 @@ pub struct SignalProfile {
 
     pub white_noise_level: f32,
     pub pink_noise_level: f32,
+    pub brown_noise_level: f32,
 
     pub tremolo_depth: f32,
     pub tremolo_rate: f32,
@@ -36,6 +37,7 @@ impl SignalProfile {
             bandpass_high: self.bandpass_high * inv_t + other.bandpass_high * t,
             white_noise_level: self.white_noise_level * inv_t + other.white_noise_level * t,
             pink_noise_level: self.pink_noise_level * inv_t + other.pink_noise_level * t,
+            brown_noise_level: self.brown_noise_level * inv_t + other.brown_noise_level * t,
             tremolo_depth: self.tremolo_depth * inv_t + other.tremolo_depth * t,
             tremolo_rate: self.tremolo_rate * inv_t + other.tremolo_rate * t,
             clip_pregain: self.clip_pregain * inv_t + other.clip_pregain * t,

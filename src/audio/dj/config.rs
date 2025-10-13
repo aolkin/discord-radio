@@ -75,6 +75,7 @@ pub struct NoisePeriodEntry {
 #[serde(rename_all = "lowercase")]
 pub enum NoiseTypeConfig {
     Static,
+    Pink,
     Brown,
 }
 

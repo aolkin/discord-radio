@@ -15,6 +15,7 @@ pub struct RadioEffectChain {
     noise_gen: NoiseGenerator,
     white_noise_level: Arc<AtomicF32>,
     pink_noise_level: Arc<AtomicF32>,
+    brown_noise_level: Arc<AtomicF32>,
 
     tremolo_lfo: LFO,
     tremolo_depth: Arc<AtomicF32>,
@@ -62,6 +63,7 @@ impl RadioEffectChain {
             noise_gen: NoiseGenerator::new(),
             white_noise_level: Arc::new(AtomicF32::new(profile.white_noise_level)),
             pink_noise_level: Arc::new(AtomicF32::new(profile.pink_noise_level)),
+            brown_noise_level: Arc::new(AtomicF32::new(profile.brown_noise_level)),
 
             tremolo_lfo: LFO::new(sample_rate, profile.tremolo_rate),
             tremolo_depth: Arc::new(AtomicF32::new(profile.tremolo_depth)),
@@ -111,6 +113,8 @@ impl RadioEffectChain {
             .store(profile.white_noise_level, Ordering::Relaxed);
         self.pink_noise_level
             .store(profile.pink_noise_level, Ordering::Relaxed);
+        self.brown_noise_level
+            .store(profile.brown_noise_level, Ordering::Relaxed);
         self.tremolo_depth
             .store(profile.tremolo_depth, Ordering::Relaxed);
         self.tremolo_lfo
@@ -146,12 +150,17 @@ impl RadioEffectChain {
         let mut frame = input;
 
         // 1. Noise mixing - Add static/interference
-        // Mix in generated noise (white and pink) to simulate poor signal
-        let (white_noise, pink_noise, _brown_noise) = self.noise_gen.next_frame();
+        // Mix in generated noise (white, pink, and brown) to simulate poor signal
+        let (white_noise, pink_noise, brown_noise) = self.noise_gen.next_frame();
         let white_level = self.white_noise_level.load(Ordering::Relaxed);
         let pink_level = self.pink_noise_level.load(Ordering::Relaxed);
-        frame[0] += white_noise[0] * white_level + pink_noise[0] * pink_level;
-        frame[1] += white_noise[1] * white_level + pink_noise[1] * pink_level;
+        let brown_level = self.brown_noise_level.load(Ordering::Relaxed);
+        frame[0] += white_noise[0] * white_level
+            + pink_noise[0] * pink_level
+            + brown_noise[0] * brown_level;
+        frame[1] += white_noise[1] * white_level
+            + pink_noise[1] * pink_level
+            + brown_noise[1] * brown_level;
 
         // 2. Highpass + Lowpass filters - Simulate radio frequency response
         // Cuts frequencies outside the desired range

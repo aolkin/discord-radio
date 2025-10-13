@@ -4,6 +4,7 @@
   "bandpass_high": 5000.0,
   "white_noise_level": 0.0,
   "pink_noise_level": 0.06,
+  "brown_noise_level": 0.0,
   "tremolo_depth": 0.3,
   "tremolo_rate": 2.0,
   "clip_pregain": 1.0,

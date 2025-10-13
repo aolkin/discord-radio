@@ -472,6 +472,7 @@ impl DJStateMachine {
 
         let noise_type_str = match noise_entry.noise_type {
             NoiseTypeConfig::Static => "static",
+            NoiseTypeConfig::Pink => "pink",
             NoiseTypeConfig::Brown => "brown",
         };
 

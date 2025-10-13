@@ -37,7 +37,7 @@ Wraps Symphonia decoder as an AudioSource.
 Applies radio signal effects in sequence:
 
 1. **Bandpass Filter** - Limits frequency range (typically 500Hz-5kHz for AM radio)
-2. **Noise Mixing** - Adds white or pink noise
+2. **Noise Mixing** - Adds white, pink, or brown noise
 3. **Tremolo/Amplitude Modulation** - Simulates signal fading
 4. **Pitch Shifting** (optional) - Frequency detuning
 5. **Soft Clipping** - Signal distortion
@@ -50,6 +50,7 @@ Applies radio signal effects in sequence:
 
 - **White Noise**: Uniform random noise across all frequencies
 - **Pink Noise**: 1/f noise using Voss-McCartney algorithm
+- **Brown Noise**: Brownian noise (random walk), lower frequency emphasis than pink noise
 
 #### Modulation (`audio/dsp/modulation.rs`)
 
