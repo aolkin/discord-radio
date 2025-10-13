@@ -22,25 +22,25 @@
       "noise_profile": "noise_pink",
       "min_duration_seconds": 0.5,
       "max_duration_seconds": 1.5,
-      "weight": 15
+      "weight": 20
     },
     {
       "noise_profile": "noise_pink",
       "min_duration_seconds": 1.0,
-      "max_duration_seconds": 4.0,
+      "max_duration_seconds": 3.0,
       "weight": 5
     },
     {
       "noise_profile": "noise_brown",
       "min_duration_seconds": 2.0,
-      "max_duration_seconds": 6.0,
+      "max_duration_seconds": 4.0,
       "weight": 2
     },
     {
       "noise_profile": "noise_brown",
-      "min_duration_seconds": 1.0,
-      "max_duration_seconds": 3.0,
-      "weight": 4
+      "min_duration_seconds": 0.5,
+      "max_duration_seconds": 1.5,
+      "weight": 8
     },
     {
       "noise_profile": "noise_white",
@@ -82,7 +82,7 @@
   "state_weights": {
     "track": 100,
     "hex_message": 2,
-    "noise": 100
+    "noise": 50
   },
   "recent_history_size": 12,
   "duplicate_penalty_multiplier": 0.5
