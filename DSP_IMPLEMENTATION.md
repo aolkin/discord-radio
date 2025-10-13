@@ -168,26 +168,6 @@ Pre-configured effect presets in `audio_profiles/`:
 - State management in BotState
 - Profile switching with smooth transitions
 
-### 🔧 Remaining Work
-
-- **TrackManager Integration**: Connect custom mixer to existing track system
-- **Processor Initialization**: Create processors when joining voice channels
-- **Audio Pipeline**: Wire ProcessedAudioAdapter output to Songbird
-
-The DSP infrastructure is complete and ready for integration with the existing audio playback system.
-
-## Dependencies
-
-```toml
-dasp = { version = "0.11", features = ["signal", "interpolate", "ring_buffer"] }
-dasp_signal = "0.11"
-dasp_interpolate = "0.11"
-dasp_sample = "0.11"
-biquad = "0.4"
-rubato = "0.15"
-atomic_float = "1.0"
-```
-
 ## Performance Considerations
 
 - Uses `StdRng` for thread-safe random number generation
@@ -195,15 +175,3 @@ atomic_float = "1.0"
 - DirectForm2Transposed biquad filters for efficiency
 - Custom noise/LFO implementations to avoid non-Sync dasp internals
 - Frame-based processing minimizes overhead
-
-## Future Enhancements
-
-Potential improvements:
-
-- Actual resampling implementation in decoder
-- More sophisticated pitch shifting (FFT-based)
-- Additional filter types (high-pass, low-pass, notch)
-- Compression/limiting
-- Reverb/echo effects
-- Profile scheduling/automation
-- Real-time spectrum analysis
