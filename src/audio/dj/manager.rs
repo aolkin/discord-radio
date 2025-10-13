@@ -102,7 +102,11 @@ pub async fn dj_task(
     // The track should have been restored by restore_multitrack_playback, so we just need to verify it exists
     if let Some(state) = restored_state {
         match state {
-            crate::persistence::DJStateMachineState::PlayingTrack { track_name, .. } => {
+            crate::persistence::DJStateMachineState::PlayingTrack {
+                track_name,
+                status_message,
+                ..
+            } => {
                 tracing::debug!(
                     "Checking for restored DJ track '{}' in guild {}",
                     track_name,
@@ -142,6 +146,19 @@ pub async fn dj_task(
                             guild_id
                         );
                     }
+                }
+
+                // Restore the voice channel status for the restored track if it had one
+                if let Some(ref status_msg) = status_message {
+                    bot_state
+                        .voice_status_manager
+                        .push_status(guild_id, status_msg.clone(), &http)
+                        .await;
+                    tracing::info!(
+                        "Restored track status '{}' for DJ track in guild {}",
+                        status_msg,
+                        guild_id
+                    );
                 }
             }
             crate::persistence::DJStateMachineState::PlayingNoise { noise_profile, .. } => {

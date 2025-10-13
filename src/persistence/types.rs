@@ -60,6 +60,8 @@ pub enum DJStateMachineState {
         duration_secs: f32,
         #[serde(default)]
         forced_profile: Option<String>,
+        #[serde(default)]
+        status_message: Option<String>,
     },
     PlayingHexMessage {
         message: String,

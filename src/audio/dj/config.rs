@@ -33,6 +33,7 @@ pub struct TrackEntry {
     /// This scaling provides more perceptually uniform volume changes
     /// compared to linear scaling.
     pub volume: Option<f32>,
+    pub channel_status: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]

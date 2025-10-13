@@ -17,6 +17,7 @@ pub enum DJState {
         started_at: std::time::Instant,
         duration: Duration,
         forced_profile: Option<String>,
+        status_message: Option<String>, // The channel status pushed to status stack
     },
     PlayingHexMessage {
         message: String,
@@ -188,9 +189,21 @@ impl DJStateMachine {
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         match &self.current_state {
-            DJState::PlayingTrack { track_name, .. } => {
+            DJState::PlayingTrack {
+                track_name,
+                status_message,
+                ..
+            } => {
                 if track_manager.has_track(track_name) {
                     track_manager.stop_track(track_name, 1.0, false).await?;
+                }
+
+                // Remove the track status from the stack if present
+                if let Some(status_msg) = status_message {
+                    bot_state
+                        .voice_status_manager
+                        .remove_status(self.guild_id, status_msg, &self.http)
+                        .await;
                 }
             }
             DJState::PlayingHexMessage { status_message, .. } => {
@@ -303,12 +316,25 @@ impl DJStateMachine {
             self.guild_id
         );
 
+        // Push track channel status onto the voice channel status stack if configured
+        let status_message = if let Some(ref status) = track_entry.channel_status {
+            let status_with_emoji = format!("🔊 {}", status);
+            bot_state
+                .voice_status_manager
+                .push_status(self.guild_id, status_with_emoji.clone(), &self.http)
+                .await;
+            Some(status_with_emoji)
+        } else {
+            None
+        };
+
         Ok(DJState::PlayingTrack {
             track_name,
             filename: track_entry.filename.clone(),
             started_at: std::time::Instant::now(),
             duration: play_duration,
             forced_profile: track_entry.signal_profile.clone(),
+            status_message,
         })
     }
 

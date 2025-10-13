@@ -18,12 +18,14 @@ impl From<&DJState> for DJStateMachineState {
                 started_at,
                 duration,
                 forced_profile,
+                status_message,
             } => DJStateMachineState::PlayingTrack {
                 track_name: track_name.clone(),
                 filename: filename.clone(),
                 started_at: instant_to_systime(started_at),
                 duration_secs: duration.as_secs_f32(),
                 forced_profile: forced_profile.clone(),
+                status_message: status_message.clone(),
             },
             DJState::PlayingHexMessage {
                 message,
@@ -74,12 +76,14 @@ impl TryFrom<&DJStateMachineState> for DJState {
                 started_at,
                 duration_secs,
                 forced_profile,
+                status_message,
             } => Ok(DJState::PlayingTrack {
                 track_name: track_name.clone(),
                 filename: filename.clone(),
                 started_at: systime_to_instant(started_at)?,
                 duration: Duration::from_secs_f32(*duration_secs),
                 forced_profile: forced_profile.clone(),
+                status_message: status_message.clone(),
             }),
             DJStateMachineState::PlayingHexMessage {
                 message,
