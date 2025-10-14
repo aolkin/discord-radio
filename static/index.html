@@ -125,8 +125,8 @@
         }
 
         .guilds-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+            display: flex;
+            flex-direction: column;
             gap: 20px;
         }
 
@@ -136,10 +136,19 @@
             padding: 20px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            flex-direction: column;
         }
 
         .guild-card:hover {
             box-shadow: 0 8px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .guild-content {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 15px;
         }
 
         .guild-header {
@@ -450,7 +459,7 @@
         }
 
         @media (max-width: 768px) {
-            .guilds-grid {
+            .guild-content {
                 grid-template-columns: 1fr;
             }
 
@@ -501,6 +510,7 @@
                         <span class="voice-badge" x-show="guild.in_voice">In Voice</span>
                     </div>
 
+                    <div class="guild-content">
                     <!-- Hex Playback -->
                     <template x-if="guild.hex_playback && guild.hex_playback.message">
                         <div class="section">
@@ -597,6 +607,7 @@
                     <template x-if="!guild.tracks.length && !guild.hex_playback?.message && !guild.dj_state && !guild.audio_profile">
                         <div class="empty-state">No active features</div>
                     </template>
+                    </div>
                 </div>
             </template>
         </div>
