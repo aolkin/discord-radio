@@ -31,43 +31,16 @@ impl EventHandler for ConnectionEventHandler {
                 let mut voice_connections = self.data.voice_connections.write().await;
                 voice_connections.remove(&guild_id);
 
-                let mut track_managers = self.data.track_managers.write().await;
-                if let Some(manager_arc) = track_managers.remove(&guild_id) {
-                    let mut manager = manager_arc.lock().await;
-                    if let Err(e) = manager.stop_all_tracks(0.0, true).await {
-                        tracing::warn!("Failed to stop tracks during disconnect: {}", e);
-                    }
-                }
+                // Note: We no longer clean up TrackManager, audio_processor, hex playback, etc.
+                // since they are now fully decoupled from voice connections.
+                // DJ and other audio features can continue operating in the background.
+                // They won't actually produce audio without Songbird consuming from the processor,
+                // but their state machines and timers continue to run independently.
 
-                // Clean up DSP processor
-                {
-                    let mut processors = self.data.audio_processors.write().await;
-                    processors.remove(&guild_id);
-                }
-
-                let mut hex_playback_states = self.data.hex_playback_states.write().await;
-                if let Some(state_arc) = hex_playback_states.remove(&guild_id) {
-                    let mut state = state_arc.write().await;
-                    *state = crate::state::HexPlaybackState::stopped();
-                    drop(state);
-                    drop(hex_playback_states);
-
-                    if let Err(e) = self
-                        .data
-                        .state_store
-                        .remove_message_playback(guild_id)
-                        .await
-                    {
-                        tracing::warn!("Failed to remove message playback state: {}", e);
-                    }
-                }
-
-                let mut hex_playback_tasks = self.data.hex_playback_tasks.write().await;
-                if let Some(task) = hex_playback_tasks.remove(&guild_id) {
-                    task.abort();
-                }
-
-                tracing::info!("Cleaned up state for disconnected guild {}", guild_id);
+                tracing::info!(
+                    "Voice disconnected for guild {}, audio state preserved",
+                    guild_id
+                );
             }
             Ctx::DriverReconnect(data) => {
                 tracing::info!(
