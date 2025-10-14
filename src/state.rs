@@ -5,7 +5,7 @@ use crate::audio::processing_thread::AudioProcessor;
 use crate::audio::profiles::ProfileManager;
 use crate::audio::tracks::TrackManager;
 use crate::persistence::StateStore;
-use crate::voice_status::VoiceChannelStatusManager;
+use crate::voice_status::{ActivityManager, VoiceChannelStatusManager};
 use serenity::model::id::GuildId;
 use songbird::Call;
 use std::collections::HashMap;
@@ -68,6 +68,7 @@ pub struct BotState {
     pub dj_managers: RwLock<HashMap<GuildId, Arc<Mutex<DJManager>>>>,
     pub dj_states: RwLock<HashMap<GuildId, Arc<RwLock<DJState>>>>,
     pub voice_status_manager: VoiceChannelStatusManager,
+    pub activity_manager: ActivityManager,
     pub shutdown_tx: tokio::sync::broadcast::Sender<String>,
 }
 
@@ -104,6 +105,7 @@ impl BotState {
             dj_managers: RwLock::new(HashMap::new()),
             dj_states: RwLock::new(HashMap::new()),
             voice_status_manager: VoiceChannelStatusManager::new(voice_connections),
+            activity_manager: ActivityManager::new(),
             shutdown_tx,
         }
     }

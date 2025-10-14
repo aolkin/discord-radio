@@ -48,6 +48,45 @@
             gap: 20px;
         }
 
+        .activity-display {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #f8f9fa;
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .activity-display:hover {
+            background: #e9ecef;
+        }
+
+        .activity-icon {
+            font-size: 1.5rem;
+        }
+
+        .activity-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .activity-type {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            font-weight: 600;
+            color: #667eea;
+            letter-spacing: 0.5px;
+        }
+
+        .activity-status {
+            font-size: 0.9rem;
+            color: #333;
+            font-weight: 500;
+        }
+
         .version-info {
             font-size: 0.85rem;
             color: #666;
@@ -436,6 +475,17 @@
                 </div>
             </div>
             <div class="header-right">
+                <!-- Current Activity Display -->
+                <div class="activity-display" x-show="currentActivity.status" @click="openActivityModal()">
+                    <div class="activity-icon" x-text="getActivityIcon(currentActivity.activity_type)"></div>
+                    <div class="activity-info">
+                        <div class="activity-type" x-text="currentActivity.activity_type || 'No Activity'"></div>
+                        <div class="activity-status" x-text="currentActivity.status || 'Not set'"></div>
+                    </div>
+                </div>
+                <button class="btn btn-primary" style="padding: 8px 16px;" @click="openActivityModal()">
+                    Manage Activity
+                </button>
                 <div class="status-indicator">
                     <span class="status-dot" :class="{ 'disconnected': !connected }"></span>
                     <span x-text="statusText"></span>
@@ -747,6 +797,123 @@
                     </div>
                 </form>
             </div>
+        </div>
+    </div>
+
+    <!-- Activity Management Modal -->
+    <div x-show="showActivityModal"
+         x-transition.opacity
+         class="modal-overlay"
+         @click.self="closeActivityModal()"
+         @keydown.escape.window="closeActivityModal()">
+        <div class="modal-content" x-show="showActivityModal" x-transition>
+            <div class="modal-header">
+                <div class="modal-title">Manage Bot Activity</div>
+                <button class="close" @click="closeActivityModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div x-show="activityMessage.text"
+                     :class="activityMessage.type === 'error' ? 'error-message' : 'success-message'"
+                     x-text="activityMessage.text"></div>
+
+                <!-- Current Activity Section -->
+                <div class="modal-section">
+                    <div class="modal-section-title">Current Activity</div>
+                    <template x-if="currentActivity.status">
+                        <div class="info-item" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                            <div style="flex: 1;">
+                                <div style="font-size: 2rem; margin-bottom: 5px;" x-text="getActivityIcon(currentActivity.activity_type)"></div>
+                                <div style="font-size: 0.85rem; text-transform: uppercase; opacity: 0.9;" x-text="currentActivity.activity_type"></div>
+                                <div style="font-size: 1.1rem; font-weight: 600; margin-top: 4px;" x-text="currentActivity.status"></div>
+                            </div>
+                        </div>
+                    </template>
+                    <template x-if="!currentActivity.status">
+                        <div class="empty-state">No activity set</div>
+                    </template>
+                </div>
+
+                <!-- Set Activity Form -->
+                <div class="modal-section">
+                    <div class="modal-section-title">Set New Activity (Clears Stack)</div>
+                    <form @submit.prevent="setActivity()">
+                        <div class="form-group">
+                            <label class="form-label">Activity Type</label>
+                            <select class="form-input" x-model="newActivityType" required>
+                                <option value="playing">🎮 Playing</option>
+                                <option value="listening">🎵 Listening</option>
+                                <option value="streaming">📡 Streaming</option>
+                                <option value="custom">✨ Custom</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Status Text</label>
+                            <input type="text" class="form-input" x-model="newActivityStatus" 
+                                   placeholder="Enter activity status..." required>
+                        </div>
+                        <div class="button-group">
+                            <button type="submit" class="btn btn-primary" :disabled="activitySaving">
+                                <span x-text="activitySaving ? 'Setting...' : 'Set Activity'"></span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Push Activity Form -->
+                <div class="modal-section">
+                    <div class="modal-section-title">Push Activity (Adds to Stack)</div>
+                    <form @submit.prevent="pushActivity()">
+                        <div class="form-group">
+                            <label class="form-label">Activity Type</label>
+                            <select class="form-input" x-model="pushActivityType" required>
+                                <option value="playing">🎮 Playing</option>
+                                <option value="listening">🎵 Listening</option>
+                                <option value="streaming">📡 Streaming</option>
+                                <option value="custom">✨ Custom</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Status Text</label>
+                            <input type="text" class="form-input" x-model="pushActivityStatus" 
+                                   placeholder="Enter activity status..." required>
+                        </div>
+                        <div class="button-group">
+                            <button type="submit" class="btn btn-primary" :disabled="activitySaving">
+                                <span x-text="activitySaving ? 'Pushing...' : 'Push Activity'"></span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Remove Activity Form -->
+                <div class="modal-section">
+                    <div class="modal-section-title">Remove Activity from Stack</div>
+                    <form @submit.prevent="removeActivity()">
+                        <div class="form-group">
+                            <label class="form-label">Activity Type</label>
+                            <select class="form-input" x-model="removeActivityType" required>
+                                <option value="playing">🎮 Playing</option>
+                                <option value="listening">🎵 Listening</option>
+                                <option value="streaming">📡 Streaming</option>
+                                <option value="custom">✨ Custom</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Status Text</label>
+                            <input type="text" class="form-input" x-model="removeActivityStatus" 
+                                   placeholder="Enter activity status to remove..." required>
+                        </div>
+                        <div class="button-group">
+                            <button type="submit" class="btn btn-primary" :disabled="activitySaving">
+                                <span x-text="activitySaving ? 'Removing...' : 'Remove Activity'"></span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         function botPortal() {
             return {
@@ -787,6 +954,17 @@
                 profileSaving: false,
                 profileMessage: { text: '', type: '' },
                 profiles: [],
+                // Activity Modal state
+                showActivityModal: false,
+                currentActivity: { activity_type: null, status: null },
+                newActivityType: 'playing',
+                newActivityStatus: '',
+                pushActivityType: 'playing',
+                pushActivityStatus: '',
+                removeActivityType: 'playing',
+                removeActivityStatus: '',
+                activitySaving: false,
+                activityMessage: { text: '', type: '' },
 
                 getTrackProgress(track) {
                     if (!track.duration_secs || track.loops) return 0;
@@ -807,6 +985,16 @@
                     const mins = Math.floor(seconds / 60);
                     const secs = Math.floor(seconds % 60);
                     return mins + ':' + secs.toString().padStart(2, '0');
+                },
+
+                getActivityIcon(activityType) {
+                    const icons = {
+                        'playing': '🎮',
+                        'listening': '🎵',
+                        'streaming': '📡',
+                        'custom': '✨'
+                    };
+                    return icons[activityType?.toLowerCase()] || '✨';
                 },
 
                 init() {
@@ -863,6 +1051,16 @@
                         try {
                             const data = JSON.parse(event.data);
                             this.guilds = data.guilds || [];
+                            
+                            // Update current activity from websocket data
+                            if (data.current_activity) {
+                                this.currentActivity = {
+                                    activity_type: data.current_activity.activity_type,
+                                    status: data.current_activity.status
+                                };
+                            } else {
+                                this.currentActivity = { activity_type: null, status: null };
+                            }
                             
                             // Update version info
                             if (data.version) {
@@ -1130,6 +1328,97 @@
                     } finally {
                         this.profileSaving = false;
                     }
+                },
+
+                // Activity Management Functions
+                openActivityModal() {
+                    this.showActivityModal = true;
+                    this.activityMessage = { text: '', type: '' };
+                },
+
+                closeActivityModal() {
+                    this.showActivityModal = false;
+                    this.newActivityStatus = '';
+                    this.pushActivityStatus = '';
+                    this.removeActivityStatus = '';
+                    this.activityMessage = { text: '', type: '' };
+                },
+
+                async performActivityAction(endpoint, activityType, status, successMessage, statusField) {
+                    this.activitySaving = true;
+                    this.activityMessage = { text: '', type: '' };
+
+                    try {
+                        const response = await fetch(endpoint, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                activity_type: activityType,
+                                status: status,
+                            }),
+                        });
+
+                        if (response.status === 404 && endpoint === '/api/activity/remove') {
+                            this.activityMessage = {
+                                text: 'Activity not found in stack.',
+                                type: 'error'
+                            };
+                        } else if (!response.ok) {
+                            throw new Error('Failed to perform activity action');
+                        } else {
+                            this.activityMessage = {
+                                text: successMessage,
+                                type: 'success'
+                            };
+
+                            // Clear the status field
+                            if (statusField) {
+                                this[statusField] = '';
+                            }
+
+                            setTimeout(() => {
+                                this.activityMessage = { text: '', type: '' };
+                            }, 2000);
+                        }
+                    } catch (error) {
+                        console.error('Error performing activity action:', error);
+                        this.activityMessage = {
+                            text: 'Failed to perform action. Please try again.',
+                            type: 'error'
+                        };
+                    } finally {
+                        this.activitySaving = false;
+                    }
+                },
+
+                async setActivity() {
+                    await this.performActivityAction(
+                        '/api/activity/set',
+                        this.newActivityType,
+                        this.newActivityStatus,
+                        'Activity set successfully! Stack cleared.',
+                        'newActivityStatus'
+                    );
+                },
+
+                async pushActivity() {
+                    await this.performActivityAction(
+                        '/api/activity/push',
+                        this.pushActivityType,
+                        this.pushActivityStatus,
+                        'Activity pushed successfully!',
+                        'pushActivityStatus'
+                    );
+                },
+
+                async removeActivity() {
+                    await this.performActivityAction(
+                        '/api/activity/remove',
+                        this.removeActivityType,
+                        this.removeActivityStatus,
+                        'Activity removed successfully!',
+                        'removeActivityStatus'
+                    );
                 }
             };
         }

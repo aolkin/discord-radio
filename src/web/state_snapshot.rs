@@ -48,6 +48,13 @@ pub struct BotSnapshot {
     pub guilds: Vec<GuildState>,
     pub version: String,
     pub commit_hash: String,
+    pub current_activity: Option<CurrentActivity>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CurrentActivity {
+    pub activity_type: String,
+    pub status: String,
 }
 
 impl BotSnapshot {
@@ -136,10 +143,25 @@ impl BotSnapshot {
             guilds.push(guild_state);
         }
 
+        // Get current bot activity
+        let current_activity = bot_state.activity_manager.current().await.map(|entry| {
+            let activity_type = match entry.activity_type {
+                crate::voice_status::ActivityType::Listening => "listening",
+                crate::voice_status::ActivityType::Playing => "playing",
+                crate::voice_status::ActivityType::Streaming => "streaming",
+                crate::voice_status::ActivityType::Custom => "custom",
+            };
+            CurrentActivity {
+                activity_type: activity_type.to_string(),
+                status: entry.status,
+            }
+        });
+
         BotSnapshot {
             guilds,
             version: env!("BUILD_RUN_NUMBER").to_string(),
             commit_hash: env!("BUILD_COMMIT_HASH").to_string(),
+            current_activity,
         }
     }
 }

@@ -56,6 +56,9 @@ impl serenity::EventHandler for Handler {
     async fn ready(&self, ctx: serenity::Context, ready: serenity::Ready) {
         tracing::info!("{} is connected!", ready.user.name);
 
+        // Set the context for the activity manager
+        self.data.activity_manager.set_context(ctx.clone()).await;
+
         if let Err(e) = crate::startup::restore_voice_channels(&ctx, self.data.clone()).await {
             tracing::error!("Failed to restore voice channels: {:?}", e);
         }

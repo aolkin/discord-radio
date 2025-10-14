@@ -28,14 +28,12 @@ pub async fn set_status(
 
     ctx.defer_ephemeral().await?;
 
-    let activity = match activity_type.as_deref() {
-        Some("listening") => serenity::ActivityData::listening(status.clone()),
-        Some("playing") => serenity::ActivityData::playing(status.clone()),
-        Some("streaming") => {
-            serenity::ActivityData::streaming(status.clone(), "https://twitch.tv/")
-                .unwrap_or_else(|_| serenity::ActivityData::custom(status.clone()))
-        }
-        Some("custom") | None => serenity::ActivityData::custom(status.clone()),
+    // Parse the activity type
+    let activity_type_enum = match activity_type.as_deref() {
+        Some("listening") => crate::voice_status::ActivityType::Listening,
+        Some("playing") => crate::voice_status::ActivityType::Playing,
+        Some("streaming") => crate::voice_status::ActivityType::Streaming,
+        Some("custom") | None => crate::voice_status::ActivityType::Custom,
         Some(invalid) => {
             ctx.say(format!(
                 "Invalid activity type '{}'. Valid types: listening, playing, streaming, custom",
@@ -46,7 +44,11 @@ pub async fn set_status(
         }
     };
 
-    ctx.serenity_context().set_activity(Some(activity));
+    // Clear the stack and set the new activity
+    ctx.data()
+        .activity_manager
+        .set_activity(activity_type_enum, status.clone())
+        .await;
 
     let type_str = activity_type.as_deref().unwrap_or("custom");
     ctx.say(format!("Status set to: {} ({})", status, type_str))

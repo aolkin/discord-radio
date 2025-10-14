@@ -292,3 +292,66 @@ pub async fn get_audio_files(State(bot_state): State<Data>) -> AxumJson<AudioFil
     files.sort();
     AxumJson(AudioFilesResponse { files })
 }
+
+// Helper function to parse activity type from string
+fn parse_activity_type(type_str: &str) -> Result<crate::voice_status::ActivityType, StatusCode> {
+    match type_str.to_lowercase().as_str() {
+        "listening" => Ok(crate::voice_status::ActivityType::Listening),
+        "playing" => Ok(crate::voice_status::ActivityType::Playing),
+        "streaming" => Ok(crate::voice_status::ActivityType::Streaming),
+        "custom" => Ok(crate::voice_status::ActivityType::Custom),
+        _ => Err(StatusCode::BAD_REQUEST),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ActivityRequest {
+    pub activity_type: String,
+    pub status: String,
+}
+
+pub async fn set_bot_activity(
+    State(bot_state): State<Data>,
+    AxumJson(request): AxumJson<ActivityRequest>,
+) -> Result<StatusCode, StatusCode> {
+    let activity_type = parse_activity_type(&request.activity_type)?;
+
+    bot_state
+        .activity_manager
+        .set_activity(activity_type, request.status)
+        .await;
+
+    Ok(StatusCode::OK)
+}
+
+pub async fn push_bot_activity(
+    State(bot_state): State<Data>,
+    AxumJson(request): AxumJson<ActivityRequest>,
+) -> Result<StatusCode, StatusCode> {
+    let activity_type = parse_activity_type(&request.activity_type)?;
+
+    bot_state
+        .activity_manager
+        .push_activity(activity_type, request.status)
+        .await;
+
+    Ok(StatusCode::OK)
+}
+
+pub async fn remove_bot_activity(
+    State(bot_state): State<Data>,
+    AxumJson(request): AxumJson<ActivityRequest>,
+) -> Result<StatusCode, StatusCode> {
+    let activity_type = parse_activity_type(&request.activity_type)?;
+
+    let was_removed = bot_state
+        .activity_manager
+        .remove_activity(activity_type, &request.status)
+        .await;
+
+    if was_removed {
+        Ok(StatusCode::OK)
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
+}
