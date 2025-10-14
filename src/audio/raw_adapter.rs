@@ -1,5 +1,4 @@
 use crate::audio::processing_thread::AudioProcessor;
-use crate::audio::profiles::SignalProfile;
 use songbird::input::RawAdapter;
 use std::io::{Read, Seek, SeekFrom};
 use std::sync::{Arc, Mutex};
@@ -14,9 +13,8 @@ pub struct ProcessedAudioAdapter {
 }
 
 impl ProcessedAudioAdapter {
-    pub fn new(initial_profile: SignalProfile) -> Self {
-        let processor = Arc::new(RwLock::new(AudioProcessor::new(initial_profile)));
-
+    /// Create a new adapter with an existing processor
+    pub fn new(processor: Arc<RwLock<AudioProcessor>>) -> Self {
         Self { processor }
     }
 

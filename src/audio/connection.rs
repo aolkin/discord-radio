@@ -1,4 +1,3 @@
-use crate::audio::profiles::SignalProfile;
 use crate::audio::raw_adapter::ProcessedAudioAdapter;
 use crate::state::Data;
 use serenity::model::id::GuildId;
@@ -40,16 +39,12 @@ pub async fn setup_voice_connection(
 
     drop(call);
 
-    // Initialize DSP processor with default "clear" profile
-    let initial_profile = load_default_profile(&bot_state)?;
-    let adapter = ProcessedAudioAdapter::new(initial_profile);
-    let processor = adapter.start(handle_lock.clone()).await;
+    // Get or create DSP processor with default "clear" profile
+    let processor = crate::audio::tracks::get_or_create_audio_processor(&bot_state, guild_id).await;
 
-    // Store processor
-    {
-        let mut processors = bot_state.audio_processors.write().await;
-        processors.insert(guild_id, processor.clone());
-    }
+    // Start the adapter with the processor to connect it to Songbird
+    let adapter = ProcessedAudioAdapter::new(processor.clone());
+    adapter.start(handle_lock.clone()).await;
 
     // Restore saved profile state if available
     if let Ok(profile_states) = bot_state.state_store.load_profile_states().await
@@ -81,26 +76,7 @@ pub async fn setup_voice_connection(
         }
     }
 
-    // Link processor to TrackManager if it exists
-    {
-        let mut track_managers = bot_state.track_managers.write().await;
-        if let Some(manager_arc) = track_managers.get_mut(&guild_id) {
-            let mut manager = manager_arc.lock().await;
-            manager.set_audio_processor(processor.clone());
-        }
-    }
-
     tracing::info!("Initialized audio DSP processor for guild {}", guild_id);
 
     Ok(())
-}
-
-fn load_default_profile(
-    bot_state: &Data,
-) -> Result<SignalProfile, Box<dyn std::error::Error + Send + Sync>> {
-    bot_state
-        .profile_manager
-        .get_profile("clear")
-        .cloned()
-        .ok_or_else(|| "Default 'clear' profile not found".into())
 }
