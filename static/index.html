@@ -31,6 +31,26 @@
             padding: 20px 30px;
             margin-bottom: 20px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .header-left {
+            flex: 1;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .version-info {
+            font-size: 0.85rem;
+            color: #666;
         }
 
         h1 {
@@ -408,10 +428,18 @@
 <body x-data="botPortal()" x-init="init()">
     <div class="container">
         <header>
-            <h1>🎵 Discord Bot Portal</h1>
-            <div class="status-indicator">
-                <span class="status-dot" :class="{ 'disconnected': !connected }"></span>
-                <span x-text="statusText"></span>
+            <div class="header-left">
+                <h1>🎵 Discord Bot Portal</h1>
+                <div class="version-info" x-show="version">
+                    Version: <span x-text="version"></span> • 
+                    Commit: <span x-text="commitHash ? commitHash.substring(0, 7) : 'unknown'"></span>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="status-indicator">
+                    <span class="status-dot" :class="{ 'disconnected': !connected }"></span>
+                    <span x-text="statusText"></span>
+                </div>
             </div>
         </header>
 
@@ -452,6 +480,14 @@
                                 <div class="dj-type" x-text="guild.dj_state.state_type"></div>
                                 <div class="dj-details" x-text="guild.dj_state.details"></div>
                             </div>
+                            <div class="button-group" style="margin-top: 12px;">
+                                <button class="btn btn-secondary" @click="openAdvanceDJModal(guild.guild_id)">
+                                    Advance DJ State
+                                </button>
+                                <button class="btn btn-secondary" @click="openPlayHexModal(guild.guild_id)">
+                                    Play Hex Message
+                                </button>
+                            </div>
                         </div>
                     </template>
 
@@ -465,13 +501,21 @@
                                     <div class="track-details" x-text="guild.audio_profile.forced ? '🔒 Locked by DJ' : '🔓 Normal'"></div>
                                 </div>
                             </div>
+                            <button class="btn btn-secondary" style="margin-top: 12px; width: 100%;" @click="openSignalProfileModal(guild.guild_id)">
+                                Change Signal Profile
+                            </button>
                         </div>
                     </template>
 
                     <!-- Audio Tracks -->
                     <template x-if="guild.tracks && guild.tracks.length > 0">
                         <div class="section">
-                            <div class="section-title">Audio Tracks</div>
+                            <div class="section-title">
+                                Audio Tracks
+                                <button class="btn btn-secondary" style="float: right; font-size: 0.85rem; padding: 6px 12px;" @click="openTrackStateModal(guild.guild_id)">
+                                    Manage Tracks
+                                </button>
+                            </div>
                             <template x-for="track in guild.tracks" :key="track.filename">
                                 <div class="track-item">
                                     <div style="flex: 1;">
@@ -513,6 +557,196 @@
         </div>
     </div>
 
+    <!-- Advance DJ State Modal -->
+    <div x-show="showAdvanceDJModal"
+         x-transition.opacity
+         class="modal-overlay"
+         @click.self="closeAdvanceDJModal()"
+         @keydown.escape.window="closeAdvanceDJModal()">
+        <div class="modal-content" x-show="showAdvanceDJModal" x-transition>
+            <div class="modal-header">
+                <div class="modal-title">Advance DJ State</div>
+                <button class="close" @click="closeAdvanceDJModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div x-show="djMessage.text"
+                     :class="djMessage.type === 'error' ? 'error-message' : 'success-message'"
+                     x-text="djMessage.text"></div>
+
+                <form @submit.prevent="advanceDJState()">
+                    <div class="form-group">
+                        <label class="form-label">State Type (Optional)</label>
+                        <select class="form-input" x-model="djStateType">
+                            <option value="">Any (default)</option>
+                            <option value="track">Track</option>
+                            <option value="hex">Hex Message</option>
+                            <option value="noise">Noise</option>
+                        </select>
+                        <small style="color: #666; font-size: 0.85rem;">
+                            Leave as "Any" to advance to the next state, or select a specific state type to force.
+                        </small>
+                    </div>
+                    <div class="button-group">
+                        <button type="button" class="btn btn-secondary" @click="closeAdvanceDJModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary" :disabled="djSaving">
+                            <span x-text="djSaving ? 'Advancing...' : 'Advance State'"></span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Play Hex Message Modal -->
+    <div x-show="showPlayHexModal"
+         x-transition.opacity
+         class="modal-overlay"
+         @click.self="closePlayHexModal()"
+         @keydown.escape.window="closePlayHexModal()">
+        <div class="modal-content" x-show="showPlayHexModal" x-transition>
+            <div class="modal-header">
+                <div class="modal-title">Play Hex Message via DJ</div>
+                <button class="close" @click="closePlayHexModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div x-show="hexMessage.text"
+                     :class="hexMessage.type === 'error' ? 'error-message' : 'success-message'"
+                     x-text="hexMessage.text"></div>
+
+                <form @submit.prevent="playHexMessage()">
+                    <div class="form-group">
+                        <label class="form-label">Message</label>
+                        <input type="text" class="form-input" x-model="hexMessageText" 
+                               placeholder="Enter message to play..." required>
+                        <small style="color: #666; font-size: 0.85rem;">
+                            Message will be played using the DJ with default settings.
+                        </small>
+                    </div>
+                    <div class="button-group">
+                        <button type="button" class="btn btn-secondary" @click="closePlayHexModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary" :disabled="hexSaving">
+                            <span x-text="hexSaving ? 'Playing...' : 'Play Message'"></span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Track State Management Modal -->
+    <div x-show="showTrackStateModal"
+         x-transition.opacity
+         class="modal-overlay"
+         @click.self="closeTrackStateModal()"
+         @keydown.escape.window="closeTrackStateModal()">
+        <div class="modal-content" x-show="showTrackStateModal" x-transition>
+            <div class="modal-header">
+                <div class="modal-title">Manage Track State</div>
+                <button class="close" @click="closeTrackStateModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div x-show="trackMessage.text"
+                     :class="trackMessage.type === 'error' ? 'error-message' : 'success-message'"
+                     x-text="trackMessage.text"></div>
+
+                <form @submit.prevent="changeTrackState()">
+                    <div class="form-group">
+                        <label class="form-label">Track Name</label>
+                        <input type="text" class="form-input" x-model="trackName" 
+                               placeholder="Track identifier..." required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Action</label>
+                        <select class="form-input" x-model="trackState" @change="trackStateChanged()">
+                            <option value="">Update Existing Track</option>
+                            <option value="start">Start New Track</option>
+                            <option value="stop">Stop Track</option>
+                        </select>
+                    </div>
+                    <template x-if="trackState === 'start'">
+                        <div class="form-group">
+                            <label class="form-label">Audio File</label>
+                            <select class="form-input" x-model="trackFilename" required>
+                                <option value="">Select audio file...</option>
+                                <template x-for="file in audioFiles" :key="file">
+                                    <option :value="file" x-text="file"></option>
+                                </template>
+                            </select>
+                        </div>
+                    </template>
+                    <template x-if="trackState !== 'stop'">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Volume</label>
+                                <input type="number" class="form-input" x-model.number="trackVolume" 
+                                       min="0" max="2" step="0.1" placeholder="0.0-2.0">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Loop</label>
+                                <select class="form-input" x-model="trackLoops">
+                                    <option value="">Default</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                        </div>
+                    </template>
+                    <div class="form-group">
+                        <label class="form-label">Fade Time (seconds)</label>
+                        <input type="number" class="form-input" x-model.number="trackFadeTime" 
+                               min="0" step="0.1" placeholder="1.0">
+                    </div>
+                    <div class="button-group">
+                        <button type="button" class="btn btn-secondary" @click="closeTrackStateModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary" :disabled="trackSaving">
+                            <span x-text="trackSaving ? 'Saving...' : 'Apply'"></span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Signal Profile Modal -->
+    <div x-show="showSignalProfileModal"
+         x-transition.opacity
+         class="modal-overlay"
+         @click.self="closeSignalProfileModal()"
+         @keydown.escape.window="closeSignalProfileModal()">
+        <div class="modal-content" x-show="showSignalProfileModal" x-transition>
+            <div class="modal-header">
+                <div class="modal-title">Change Signal Profile</div>
+                <button class="close" @click="closeSignalProfileModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div x-show="profileMessage.text"
+                     :class="profileMessage.type === 'error' ? 'error-message' : 'success-message'"
+                     x-text="profileMessage.text"></div>
+
+                <form @submit.prevent="changeSignalProfile()">
+                    <div class="form-group">
+                        <label class="form-label">Profile</label>
+                        <select class="form-input" x-model="selectedProfile" required>
+                            <option value="">Select profile...</option>
+                            <option value="bypass">Bypass (No Processing)</option>
+                            <template x-for="profile in profiles" :key="profile">
+                                <option :value="profile" x-text="profile"></option>
+                            </template>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Fade Duration (seconds)</label>
+                        <input type="number" class="form-input" x-model.number="profileFadeDuration" 
+                               min="0" step="0.1" placeholder="2.0">
+                    </div>
+                    <div class="button-group">
+                        <button type="button" class="btn btn-secondary" @click="closeSignalProfileModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary" :disabled="profileSaving">
+                            <span x-text="profileSaving ? 'Applying...' : 'Apply Profile'"></span>
+                        </button>
+                    </div>
+                </form>
+            </div>
     <script>
         function botPortal() {
             return {
@@ -520,8 +754,39 @@
                 connected: false,
                 statusText: 'Connecting...',
                 guilds: [],
+                version: '',
+                commitHash: '',
+                lastCommitHash: null,
                 reconnectTimeout: null,
                 currentTime: Date.now(),
+                // DJ Modal state
+                showAdvanceDJModal: false,
+                djStateType: '',
+                djSaving: false,
+                djMessage: { text: '', type: '' },
+                // Hex Message Modal state
+                showPlayHexModal: false,
+                hexMessageText: '',
+                hexSaving: false,
+                hexMessage: { text: '', type: '' },
+                // Track State Modal state
+                showTrackStateModal: false,
+                trackName: '',
+                trackState: '',
+                trackFilename: '',
+                trackVolume: null,
+                trackLoops: '',
+                trackFadeTime: null,
+                trackSaving: false,
+                trackMessage: { text: '', type: '' },
+                audioFiles: [],
+                // Signal Profile Modal state
+                showSignalProfileModal: false,
+                selectedProfile: '',
+                profileFadeDuration: null,
+                profileSaving: false,
+                profileMessage: { text: '', type: '' },
+                profiles: [],
 
                 getTrackProgress(track) {
                     if (!track.duration_secs || track.loops) return 0;
@@ -546,10 +811,37 @@
 
                 init() {
                     this.connect();
+                    // Load audio files and profiles
+                    this.loadAudioFiles();
+                    this.loadProfiles();
                     // Update current time every 500ms for smooth progress bars
                     setInterval(() => {
                         this.currentTime = Date.now();
                     }, 500);
+                },
+
+                async loadAudioFiles() {
+                    try {
+                        const response = await fetch('/api/audio-files');
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.audioFiles = data.files;
+                        }
+                    } catch (error) {
+                        console.error('Failed to load audio files:', error);
+                    }
+                },
+
+                async loadProfiles() {
+                    try {
+                        const response = await fetch('/api/profiles');
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.profiles = data.profiles;
+                        }
+                    } catch (error) {
+                        console.error('Failed to load profiles:', error);
+                    }
                 },
 
                 connect() {
@@ -571,6 +863,20 @@
                         try {
                             const data = JSON.parse(event.data);
                             this.guilds = data.guilds || [];
+                            
+                            // Update version info
+                            if (data.version) {
+                                this.version = data.version;
+                            }
+                            if (data.commit_hash) {
+                                // Check if commit hash changed (page needs reload)
+                                if (this.lastCommitHash && this.lastCommitHash !== data.commit_hash) {
+                                    console.log('Commit hash changed, reloading page...');
+                                    window.location.reload();
+                                }
+                                this.commitHash = data.commit_hash;
+                                this.lastCommitHash = data.commit_hash;
+                            }
                         } catch (e) {
                             console.error('Failed to parse message:', e);
                         }
@@ -585,6 +891,245 @@
                         this.statusText = 'Disconnected - Reconnecting...';
                         this.reconnectTimeout = setTimeout(() => this.connect(), 3000);
                     };
+                },
+                // DJ Modal Functions
+                openAdvanceDJModal(guildId) {
+                    this.currentGuildId = guildId;
+                    this.showAdvanceDJModal = true;
+                    this.djStateType = '';
+                    this.djMessage = { text: '', type: '' };
+                },
+
+                closeAdvanceDJModal() {
+                    this.showAdvanceDJModal = false;
+                    this.currentGuildId = null;
+                    this.djStateType = '';
+                    this.djMessage = { text: '', type: '' };
+                },
+
+                async advanceDJState() {
+                    this.djSaving = true;
+                    this.djMessage = { text: '', type: '' };
+
+                    try {
+                        const response = await fetch(`/api/guilds/${this.currentGuildId}/dj/advance`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                state_type: this.djStateType || null,
+                            }),
+                        });
+
+                        if (!response.ok) {
+                            throw new Error('Failed to advance DJ state');
+                        }
+
+                        this.djMessage = {
+                            text: 'DJ state advanced successfully!',
+                            type: 'success'
+                        };
+
+                        setTimeout(() => this.closeAdvanceDJModal(), 1500);
+                    } catch (error) {
+                        console.error('Error advancing DJ state:', error);
+                        this.djMessage = {
+                            text: 'Failed to advance DJ state. Please try again.',
+                            type: 'error'
+                        };
+                    } finally {
+                        this.djSaving = false;
+                    }
+                },
+
+                // Hex Message Modal Functions
+                openPlayHexModal(guildId) {
+                    this.currentGuildId = guildId;
+                    this.showPlayHexModal = true;
+                    this.hexMessageText = '';
+                    this.hexMessage = { text: '', type: '' };
+                },
+
+                closePlayHexModal() {
+                    this.showPlayHexModal = false;
+                    this.currentGuildId = null;
+                    this.hexMessageText = '';
+                    this.hexMessage = { text: '', type: '' };
+                },
+
+                async playHexMessage() {
+                    this.hexSaving = true;
+                    this.hexMessage = { text: '', type: '' };
+
+                    try {
+                        const response = await fetch(`/api/guilds/${this.currentGuildId}/hex/play`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                message: this.hexMessageText,
+                            }),
+                        });
+
+                        if (!response.ok) {
+                            throw new Error('Failed to play hex message');
+                        }
+
+                        this.hexMessage = {
+                            text: 'Hex message queued successfully!',
+                            type: 'success'
+                        };
+
+                        setTimeout(() => this.closePlayHexModal(), 1500);
+                    } catch (error) {
+                        console.error('Error playing hex message:', error);
+                        this.hexMessage = {
+                            text: 'Failed to play hex message. Please try again.',
+                            type: 'error'
+                        };
+                    } finally {
+                        this.hexSaving = false;
+                    }
+                },
+
+                // Track State Modal Functions
+                openTrackStateModal(guildId) {
+                    this.currentGuildId = guildId;
+                    this.showTrackStateModal = true;
+                    this.trackName = '';
+                    this.trackState = '';
+                    this.trackFilename = '';
+                    this.trackVolume = null;
+                    this.trackLoops = '';
+                    this.trackFadeTime = null;
+                    this.trackMessage = { text: '', type: '' };
+                },
+
+                closeTrackStateModal() {
+                    this.showTrackStateModal = false;
+                    this.currentGuildId = null;
+                    this.trackName = '';
+                    this.trackState = '';
+                    this.trackFilename = '';
+                    this.trackVolume = null;
+                    this.trackLoops = '';
+                    this.trackFadeTime = null;
+                    this.trackMessage = { text: '', type: '' };
+                },
+
+                trackStateChanged() {
+                    // Clear filename when not starting
+                    if (this.trackState !== 'start') {
+                        this.trackFilename = '';
+                    }
+                },
+
+                async changeTrackState() {
+                    this.trackSaving = true;
+                    this.trackMessage = { text: '', type: '' };
+
+                    try {
+                        const body = {
+                            name: this.trackName,
+                            state: this.trackState || null,
+                        };
+
+                        if (this.trackState === 'start' && this.trackFilename) {
+                            body.filename = this.trackFilename;
+                        }
+
+                        if (this.trackVolume !== null && this.trackVolume !== '') {
+                            body.volume = parseFloat(this.trackVolume);
+                        }
+
+                        if (this.trackLoops !== '') {
+                            body.loops = this.trackLoops === 'true';
+                        }
+
+                        if (this.trackFadeTime !== null && this.trackFadeTime !== '') {
+                            body.fade_time = parseFloat(this.trackFadeTime);
+                        }
+
+                        const response = await fetch(`/api/guilds/${this.currentGuildId}/tracks`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(body),
+                        });
+
+                        if (!response.ok) {
+                            throw new Error('Failed to change track state');
+                        }
+
+                        this.trackMessage = {
+                            text: 'Track state updated successfully!',
+                            type: 'success'
+                        };
+
+                        setTimeout(() => this.closeTrackStateModal(), 1500);
+                    } catch (error) {
+                        console.error('Error changing track state:', error);
+                        this.trackMessage = {
+                            text: 'Failed to change track state. Please try again.',
+                            type: 'error'
+                        };
+                    } finally {
+                        this.trackSaving = false;
+                    }
+                },
+
+                // Signal Profile Modal Functions
+                openSignalProfileModal(guildId) {
+                    this.currentGuildId = guildId;
+                    this.showSignalProfileModal = true;
+                    this.selectedProfile = '';
+                    this.profileFadeDuration = null;
+                    this.profileMessage = { text: '', type: '' };
+                },
+
+                closeSignalProfileModal() {
+                    this.showSignalProfileModal = false;
+                    this.currentGuildId = null;
+                    this.selectedProfile = '';
+                    this.profileFadeDuration = null;
+                    this.profileMessage = { text: '', type: '' };
+                },
+
+                async changeSignalProfile() {
+                    this.profileSaving = true;
+                    this.profileMessage = { text: '', type: '' };
+
+                    try {
+                        const body = {
+                            profile: this.selectedProfile,
+                        };
+
+                        if (this.profileFadeDuration !== null && this.profileFadeDuration !== '') {
+                            body.fade_duration = parseFloat(this.profileFadeDuration);
+                        }
+
+                        const response = await fetch(`/api/guilds/${this.currentGuildId}/profile`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(body),
+                        });
+
+                        if (!response.ok) {
+                            throw new Error('Failed to change signal profile');
+                        }
+
+                        this.profileMessage = {
+                            text: 'Signal profile changed successfully!',
+                            type: 'success'
+                        };
+
+                        setTimeout(() => this.closeSignalProfileModal(), 1500);
+                    } catch (error) {
+                        console.error('Error changing signal profile:', error);
+                        this.profileMessage = {
+                            text: 'Failed to change signal profile. Please try again.',
+                            type: 'error'
+                        };
+                    } finally {
+                        this.profileSaving = false;
+                    }
                 }
             };
         }

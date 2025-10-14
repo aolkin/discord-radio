@@ -1,6 +1,9 @@
 use crate::state::Data;
 use crate::web::{routes, websocket};
-use axum::{Router, routing::get};
+use axum::{
+    Router,
+    routing::{get, post},
+};
 use http::header::{AUTHORIZATION, CONTENT_TYPE};
 use std::net::SocketAddr;
 use tower_http::cors::{AllowOrigin, CorsLayer};
@@ -41,6 +44,24 @@ pub async fn run_web_server(
         .route("/", get(routes::index))
         .route("/api/status", get(routes::get_status))
         .route("/api/health", get(routes::health))
+        .route(
+            "/api/guilds/{guild_id}/dj/advance",
+            post(routes::advance_dj_state),
+        )
+        .route(
+            "/api/guilds/{guild_id}/hex/play",
+            post(routes::play_hex_message),
+        )
+        .route(
+            "/api/guilds/{guild_id}/tracks",
+            post(routes::change_track_state),
+        )
+        .route(
+            "/api/guilds/{guild_id}/profile",
+            post(routes::signal_profile),
+        )
+        .route("/api/profiles", get(routes::get_profiles))
+        .route("/api/audio-files", get(routes::get_audio_files))
         .route("/ws", get(websocket::websocket_handler))
         .layer(cors)
         .with_state(bot_state);

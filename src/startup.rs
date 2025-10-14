@@ -1,48 +1,7 @@
 use crate::audio::tracks::StartTrackArgs;
 use crate::state::Data;
 use poise::serenity_prelude::Http;
-use serenity::model::id::GuildId;
 use std::sync::Arc;
-
-// Helper: fetch the voice Call lock for a guild if connected
-// Helper: get or create the TrackManager for a guild
-async fn get_or_create_track_manager(
-    bot_state: &Data,
-    guild_id: GuildId,
-) -> Arc<tokio::sync::Mutex<crate::audio::tracks::TrackManager>> {
-    let mut track_managers = bot_state.track_managers.write().await;
-    let manager_arc = track_managers
-        .entry(guild_id)
-        .or_insert_with(|| {
-            Arc::new(tokio::sync::Mutex::new(
-                crate::audio::tracks::TrackManager::new(guild_id, bot_state.clone()),
-            ))
-        })
-        .clone();
-
-    // Link audio processor to TrackManager
-    link_processor_to_manager(bot_state, guild_id, &manager_arc).await;
-
-    manager_arc
-}
-
-// Helper: link audio processor to track manager
-async fn link_processor_to_manager(
-    bot_state: &Data,
-    guild_id: GuildId,
-    manager_arc: &Arc<tokio::sync::Mutex<crate::audio::tracks::TrackManager>>,
-) {
-    if let Some(processor_arc) = bot_state
-        .audio_processors
-        .read()
-        .await
-        .get(&guild_id)
-        .cloned()
-    {
-        let mut manager = manager_arc.lock().await;
-        manager.set_audio_processor(processor_arc);
-    }
-}
 
 pub async fn restore_state(
     _http: Arc<Http>,
@@ -94,7 +53,9 @@ pub async fn restore_voice_channels(
                     let _ = bot_state.state_store.remove_voice_channel(guild_id).await;
                 } else {
                     // Create track manager for this guild so it's available for DJ and other features
-                    let _manager_arc = get_or_create_track_manager(&bot_state, guild_id).await;
+                    let _manager_arc =
+                        crate::audio::tracks::get_or_create_track_manager(&bot_state, guild_id)
+                            .await;
                 }
             }
             Err(e) => {
@@ -136,7 +97,8 @@ async fn restore_message_playback(
             playback_state.current_position
         );
 
-        let manager_arc = get_or_create_track_manager(&bot_state, guild_id).await;
+        let manager_arc =
+            crate::audio::tracks::get_or_create_track_manager(&bot_state, guild_id).await;
 
         let playback_state_arc = {
             let mut states = bot_state.hex_playback_states.write().await;
@@ -216,7 +178,8 @@ async fn restore_multitrack_playback(
             guild_id
         );
 
-        let manager_arc = get_or_create_track_manager(&bot_state, guild_id).await;
+        let manager_arc =
+            crate::audio::tracks::get_or_create_track_manager(&bot_state, guild_id).await;
 
         let mut manager = manager_arc.lock().await;
 
@@ -309,7 +272,8 @@ async fn restore_dj_managers(
         }
 
         // Create track manager for this guild (no longer requires voice connection)
-        let _manager_arc = get_or_create_track_manager(&bot_state, guild_id).await;
+        let _manager_arc =
+            crate::audio::tracks::get_or_create_track_manager(&bot_state, guild_id).await;
 
         let config_path = format!("dj_configs/{}.json", dj_state.config_name);
         let dj_config = match crate::audio::dj::config::DJConfig::load_from_file(&config_path) {

@@ -46,6 +46,8 @@ pub struct GuildState {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BotSnapshot {
     pub guilds: Vec<GuildState>,
+    pub version: String,
+    pub commit_hash: String,
 }
 
 impl BotSnapshot {
@@ -134,7 +136,11 @@ impl BotSnapshot {
             guilds.push(guild_state);
         }
 
-        BotSnapshot { guilds }
+        BotSnapshot {
+            guilds,
+            version: env!("BUILD_RUN_NUMBER").to_string(),
+            commit_hash: env!("BUILD_COMMIT_HASH").to_string(),
+        }
     }
 }
 

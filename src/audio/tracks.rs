@@ -560,3 +560,43 @@ async fn fade_volume_dsp(
 
     Ok(())
 }
+
+/// Get or create a TrackManager for a guild, linking the audio processor if available
+pub async fn get_or_create_track_manager(
+    bot_state: &Data,
+    guild_id: GuildId,
+) -> Arc<tokio::sync::Mutex<TrackManager>> {
+    let mut track_managers = bot_state.track_managers.write().await;
+    let manager_arc = track_managers
+        .entry(guild_id)
+        .or_insert_with(|| {
+            Arc::new(tokio::sync::Mutex::new(TrackManager::new(
+                guild_id,
+                bot_state.clone(),
+            )))
+        })
+        .clone();
+
+    // Link audio processor if available
+    link_processor_to_manager(bot_state, guild_id, &manager_arc).await;
+
+    manager_arc
+}
+
+/// Link the audio processor to a track manager if available
+pub async fn link_processor_to_manager(
+    bot_state: &Data,
+    guild_id: GuildId,
+    manager_arc: &Arc<tokio::sync::Mutex<TrackManager>>,
+) {
+    if let Some(processor_arc) = bot_state
+        .audio_processors
+        .read()
+        .await
+        .get(&guild_id)
+        .cloned()
+    {
+        let mut manager = manager_arc.lock().await;
+        manager.set_audio_processor(processor_arc);
+    }
+}
