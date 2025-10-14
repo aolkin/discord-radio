@@ -172,6 +172,14 @@ impl TrackManager {
                 )?;
             }
 
+            // If we're starting from a position other than the beginning, adjust start_time
+            // backwards so that elapsed time calculations include the seek position
+            let start_time = if let Some(pos) = args.start_position {
+                std::time::SystemTime::now() - pos
+            } else {
+                std::time::SystemTime::now()
+            };
+
             let track = TrackInfo {
                 name: args.name.clone(),
                 filename: args.filename.clone(),
@@ -179,7 +187,7 @@ impl TrackManager {
                 fade_task: None,
                 fade_cancel: None,
                 loops: args.loops,
-                start_time: std::time::SystemTime::now(),
+                start_time,
                 persist: args.persist,
             };
 
