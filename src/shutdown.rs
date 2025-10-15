@@ -6,22 +6,22 @@ pub async fn setup_shutdown_handler(data: Data) {
     let mut shutdown_rx = data.shutdown_tx.subscribe();
 
     tokio::spawn(async move {
-        let shutdown_reason = tokio::select! {
+        let (clean_shutdown, shutdown_reason) = tokio::select! {
             result = wait_for_shutdown_signal() => {
                 if let Err(e) = result {
                     error!("Error waiting for shutdown signal: {}", e);
                 }
-                "OS signal (SIGTERM/SIGINT/Ctrl+C)".to_string()
+                (true, "OS signal (SIGTERM/SIGINT/Ctrl+C)".to_string())
             }
             reason = shutdown_rx.recv() => {
                 match reason {
                     Ok(r) => {
                         info!("Emergency shutdown requested: {}", r);
-                        r
+                        (false, r)
                     }
                     Err(e) => {
                         error!("Error receiving shutdown signal: {}", e);
-                        "Emergency shutdown (channel error)".to_string()
+                        (false, "Emergency shutdown (channel error)".to_string())
                     }
                 }
             }
@@ -60,7 +60,8 @@ pub async fn setup_shutdown_handler(data: Data) {
         );
 
         info!("Cleanup completed");
-        std::process::exit(0);
+        let exit_code = if clean_shutdown { 0 } else { 1 };
+        std::process::exit(exit_code);
     });
 }
 
