@@ -473,7 +473,7 @@
         }
     </style>
 </head>
-<body x-data="botPortal()" x-init="init()">
+<body x-data="botPortal()">
     <div class="container">
         <header>
             <div class="header-left">
@@ -573,9 +573,10 @@
                             <div class="section-title">Live Audio Stream</div>
                             <div class="info-item">
                                 <div style="flex: 1;">
-                                    <audio 
+                                    <audio
                                         :src="'/api/guilds/' + guild.guild_id + '/audio-stream'"
-                                        controls 
+                                        controls
+                                        preload="none"
                                         style="width: 100%; margin-top: 8px;">
                                         Your browser does not support the audio element.
                                     </audio>
