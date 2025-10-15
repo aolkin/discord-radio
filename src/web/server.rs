@@ -1,5 +1,5 @@
 use crate::state::Data;
-use crate::web::{routes, websocket};
+use crate::web::{audio_stream, routes, websocket};
 use axum::{
     Router,
     routing::{get, post},
@@ -65,6 +65,10 @@ pub async fn run_web_server(
         .route("/api/activity/set", post(routes::set_bot_activity))
         .route("/api/activity/push", post(routes::push_bot_activity))
         .route("/api/activity/remove", post(routes::remove_bot_activity))
+        .route(
+            "/api/guilds/{guild_id}/audio-stream",
+            get(audio_stream::audio_stream),
+        )
         .route("/ws", get(websocket::websocket_handler))
         .layer(cors)
         .with_state(bot_state);

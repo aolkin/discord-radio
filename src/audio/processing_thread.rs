@@ -1,6 +1,9 @@
 use crate::audio::custom_mixer::CustomMixer;
+use crate::audio::distributor::AudioDistributor;
 use crate::audio::dsp::chain::RadioEffectChain;
+use crate::audio::opus_encoder::OpusEncoder;
 use crate::audio::profiles::SignalProfile;
+use std::sync::Arc;
 
 const SAMPLE_RATE: u32 = 48000;
 const FRAME_SIZE: usize = 960; // 20ms at 48kHz
@@ -44,12 +47,15 @@ pub struct AudioProcessor {
     transition: Option<ProfileTransition>,
     current_profile: SignalProfile,
     samples_processed: u64, // Total stereo frames processed (not individual samples)
+    distributor: Arc<AudioDistributor>,
+    opus_encoder: OpusEncoder,
 }
 
 impl AudioProcessor {
     pub fn new(initial_profile: SignalProfile) -> Self {
         let mixer = CustomMixer::new(SAMPLE_RATE);
         let dsp_chain = RadioEffectChain::new(SAMPLE_RATE, &initial_profile);
+        let opus_encoder = OpusEncoder::default();
 
         Self {
             mixer,
@@ -57,11 +63,18 @@ impl AudioProcessor {
             transition: None,
             current_profile: initial_profile,
             samples_processed: 0,
+            distributor: Arc::new(AudioDistributor::new()),
+            opus_encoder,
         }
     }
 
     pub fn mixer_mut(&mut self) -> &mut CustomMixer {
         &mut self.mixer
+    }
+
+    /// Get a reference to the audio distributor for subscribing to audio frames
+    pub fn distributor(&self) -> Arc<AudioDistributor> {
+        self.distributor.clone()
     }
 
     pub fn start_profile_transition(&mut self, to_profile: SignalProfile, duration_ms: f32) {
@@ -130,6 +143,19 @@ impl AudioProcessor {
 
         // Track total frames processed (stereo frames, not individual samples)
         self.samples_processed += FRAME_SIZE as u64;
+
+        // Broadcast PCM frames to Songbird subscribers
+        self.distributor.broadcast_pcm(buffer.clone());
+
+        // Encode to Opus and broadcast to web clients
+        match self.opus_encoder.encode(&buffer) {
+            Ok(opus_packet) => {
+                self.distributor.broadcast_opus(opus_packet);
+            }
+            Err(e) => {
+                tracing::error!("Opus encoding error: {:?}", e);
+            }
+        }
 
         // Check if generation is keeping up with real-time
         let elapsed = start.elapsed();

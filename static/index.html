@@ -567,6 +567,26 @@
                         </div>
                     </template>
 
+                    <!-- Live Audio Stream -->
+                    <template x-if="guild.in_voice">
+                        <div class="section">
+                            <div class="section-title">Live Audio Stream</div>
+                            <div class="info-item">
+                                <div style="flex: 1;">
+                                    <audio 
+                                        :src="'/api/guilds/' + guild.guild_id + '/audio-stream'"
+                                        controls 
+                                        style="width: 100%; margin-top: 8px;">
+                                        Your browser does not support the audio element.
+                                    </audio>
+                                    <div class="track-details" style="margin-top: 8px; text-align: center;">
+                                        🎧 Listen to bot's audio output in real-time
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+
                     <!-- Audio Tracks -->
                     <template x-if="guild.tracks && guild.tracks.length > 0">
                         <div class="section">
