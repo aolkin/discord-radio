@@ -342,7 +342,22 @@ impl DJStateMachine {
 
         // Push track channel status onto the voice channel status stack if configured
         let status_message = if let Some(ref status) = track_entry.channel_status {
-            let status_with_emoji = format!("🔊 {}", status);
+            let starts_with_emoji = status.chars().next().is_some_and(|c| {
+                matches!(c as u32,
+                    0x1F300..=0x1F9FF | // Misc Symbols and Pictographs, Emoticons, Transport and Map, Supplemental Symbols
+                    0x2600..=0x26FF |   // Misc symbols
+                    0x2700..=0x27BF |   // Dingbats
+                    0xFE00..=0xFE0F |   // Variation Selectors
+                    0x1F000..=0x1F02F | // Mahjong Tiles, Domino Tiles
+                    0x1F0A0..=0x1F0FF | // Playing Cards
+                    0x1F100..=0x1F64F   // Enclosed characters, Emoticons
+                )
+            });
+            let status_with_emoji = if starts_with_emoji {
+                status.clone()
+            } else {
+                format!("🔊 {}", status)
+            };
             bot_state
                 .voice_status_manager
                 .push_status(self.guild_id, status_with_emoji.clone(), &self.http)
