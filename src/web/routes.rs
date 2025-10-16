@@ -388,12 +388,19 @@ async fn trigger_dj_config_reload(bot_state: &Data) {
 pub struct DJConfigOverridesResponse {
     pub hex_messages: DJConfigOverrideCategoryResponse,
     pub hex_message_announcements: DJConfigOverrideCategoryResponse,
+    pub state_weights: DJConfigOverrideSingleResponse,
 }
 
 #[derive(Debug, Serialize)]
 pub struct DJConfigOverrideCategoryResponse {
     pub enabled: bool,
     pub items: serde_json::Value,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DJConfigOverrideSingleResponse {
+    pub enabled: bool,
+    pub value: serde_json::Value,
 }
 
 pub async fn get_dj_config_overrides(
@@ -407,6 +414,8 @@ pub async fn get_dj_config_overrides(
     let hex_message_announcements_items =
         serde_json::to_value(&overrides.hex_message_announcements.items)
             .unwrap_or(serde_json::Value::Null);
+    let state_weights_value =
+        serde_json::to_value(&overrides.state_weights.value).unwrap_or(serde_json::Value::Null);
 
     AxumJson(DJConfigOverridesResponse {
         hex_messages: DJConfigOverrideCategoryResponse {
@@ -416,6 +425,10 @@ pub async fn get_dj_config_overrides(
         hex_message_announcements: DJConfigOverrideCategoryResponse {
             enabled: overrides.hex_message_announcements.enabled,
             items: hex_message_announcements_items,
+        },
+        state_weights: DJConfigOverrideSingleResponse {
+            enabled: overrides.state_weights.enabled,
+            value: state_weights_value,
         },
     })
 }
@@ -540,6 +553,50 @@ pub async fn toggle_override_category(
     trigger_dj_config_reload(&bot_state).await;
 
     Ok(StatusCode::OK)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SetStateWeightsRequest {
+    pub track: u32,
+    pub hex_message: u32,
+    pub noise: u32,
+}
+
+pub async fn set_state_weights_override(
+    State(bot_state): State<Data>,
+    AxumJson(request): AxumJson<SetStateWeightsRequest>,
+) -> Result<StatusCode, StatusCode> {
+    use crate::audio::dj::config::StateWeights;
+
+    let weights = StateWeights {
+        track: request.track,
+        hex_message: request.hex_message,
+        noise: request.noise,
+    };
+
+    bot_state
+        .dj_config_overrides
+        .set_state_weights(weights)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Trigger config reload for all running DJs
+    trigger_dj_config_reload(&bot_state).await;
+
+    Ok(StatusCode::OK)
+}
+
+pub async fn get_default_state_weights(
+    State(bot_state): State<Data>,
+) -> Result<AxumJson<crate::audio::dj::config::StateWeights>, StatusCode> {
+    use crate::audio::dj::config::DJConfig;
+
+    // Load the default DJ config
+    let config_path = format!("{}/dj_configs/default.json", bot_state.content_path);
+    let config =
+        DJConfig::load_from_file(&config_path).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(AxumJson(config.state_weights))
 }
 
 // Log retrieval endpoints

@@ -51,6 +51,26 @@ When a guild has DJ enabled, you can control it directly from the web portal:
 
 - **Play Hex Message**: Queue a custom hex message to play via the DJ with default settings
 
+### DJ Config Overrides
+
+Customize DJ behavior by overriding configuration values from the web portal:
+
+- **Hex Messages**: Add, edit, or remove hex messages that the DJ can play
+  - Set custom text, weight, signal profile, loop count, and announcements
+  - Enable/disable the override to switch between custom and default messages
+  
+- **Hex Message Announcements**: Manage announcement text that can be used with hex messages
+  - Add or remove custom announcements
+  - Enable/disable the override independently
+  
+- **State Weights**: Adjust the probability of different DJ states
+  - View default weights from the configuration file
+  - Set custom weights for Track, Hex Message, and Noise states
+  - Enable/disable the override to switch between custom and default weights
+  - Changes trigger automatic config reload for all running DJs
+
+**Note**: All override changes are persisted to storage and take effect immediately.
+
 ### Audio Track Management
 
 Control audio tracks for any guild through the "Manage Tracks" button:
@@ -91,4 +111,12 @@ Switch between different audio processing profiles:
 - `POST /api/guilds/:guild_id/profile` - Change signal profile
 - `GET /api/profiles` - List available signal profiles
 - `GET /api/audio-files` - List available audio files in content directory
+- `GET /api/dj-config/overrides` - Get all DJ config overrides (hex messages, announcements, state weights)
+- `GET /api/dj-config/default-state-weights` - Get default state weights from config file
+- `POST /api/dj-config/overrides/hex-messages` - Add or update a hex message override
+- `DELETE /api/dj-config/overrides/hex-messages/{index}` - Delete a hex message override
+- `POST /api/dj-config/overrides/announcements` - Add or update an announcement override
+- `DELETE /api/dj-config/overrides/announcements/{index}` - Delete an announcement override
+- `POST /api/dj-config/overrides/state-weights` - Set state weights override
+- `POST /api/dj-config/overrides/toggle` - Enable/disable a specific override category
 - `GET /ws` - WebSocket endpoint for live updates (includes version tracking)

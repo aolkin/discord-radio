@@ -93,6 +93,8 @@ pub struct DJConfigOverrides {
     pub hex_messages: DJConfigOverrideCategory<crate::audio::dj::config::HexMessageEntry>,
     #[serde(default)]
     pub hex_message_announcements: DJConfigOverrideCategory<String>,
+    #[serde(default)]
+    pub state_weights: DJConfigOverrideSingle<crate::audio::dj::config::StateWeights>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -106,6 +108,21 @@ impl<T> Default for DJConfigOverrideCategory<T> {
         Self {
             enabled: false,
             items: Vec::new(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct DJConfigOverrideSingle<T> {
+    pub enabled: bool,
+    pub value: Option<T>,
+}
+
+impl<T> Default for DJConfigOverrideSingle<T> {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            value: None,
         }
     }
 }

@@ -95,6 +95,14 @@ pub async fn run_web_server(
             post(routes::toggle_override_category),
         )
         .route(
+            "/api/dj-config/overrides/state-weights",
+            post(routes::set_state_weights_override),
+        )
+        .route(
+            "/api/dj-config/default-state-weights",
+            get(routes::get_default_state_weights),
+        )
+        .route(
             "/api/guilds/{guild_id}/logs/{log_type}",
             get(routes::get_logs),
         )

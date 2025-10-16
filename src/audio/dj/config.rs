@@ -118,6 +118,12 @@ impl DJConfig {
                 Some(overrides.hex_message_announcements.items.clone());
         }
 
+        if overrides.state_weights.enabled
+            && let Some(ref weights) = overrides.state_weights.value
+        {
+            self.state_weights = weights.clone();
+        }
+
         self
     }
 }

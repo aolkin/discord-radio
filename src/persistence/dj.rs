@@ -243,8 +243,22 @@ impl DJConfigOverridesStore {
                 "hex_message_announcements" => {
                     overrides.hex_message_announcements.enabled = enabled;
                 }
+                "state_weights" => {
+                    overrides.state_weights.enabled = enabled;
+                }
                 _ => return Err("Unknown category".into()),
             }
+        }
+        self.save().await
+    }
+
+    pub async fn set_state_weights(
+        &self,
+        weights: crate::audio::dj::config::StateWeights,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        {
+            let mut overrides = self.overrides.write().await;
+            overrides.state_weights.value = Some(weights);
         }
         self.save().await
     }
