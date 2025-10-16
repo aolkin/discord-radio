@@ -112,6 +112,10 @@ impl FileStore {
 
 #[async_trait]
 impl StateStore for FileStore {
+    fn base_path(&self) -> &std::path::Path {
+        &self.base_path
+    }
+
     async fn save_voice_channel(&self, guild_id: GuildId, channel_id: ChannelId) -> Result<()> {
         self.voice_channels().insert(guild_id, channel_id).await
     }

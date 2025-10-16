@@ -69,6 +69,10 @@ pub async fn run_web_server(
             "/api/guilds/{guild_id}/audio-stream",
             get(audio_stream::audio_stream),
         )
+        .route(
+            "/api/guilds/{guild_id}/logs/{log_type}",
+            get(routes::get_logs),
+        )
         .route("/ws", get(websocket::websocket_handler))
         .layer(cors)
         .with_state(bot_state);

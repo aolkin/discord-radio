@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Activity Logs</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: white;
+            border-radius: 12px;
+            padding: 20px 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        h1 {
+            color: #667eea;
+            font-size: 1.8rem;
+        }
+
+        .log-container {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .log-info {
+            font-size: 0.95rem;
+            color: #666;
+        }
+
+        .log-entry {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 4px solid #667eea;
+        }
+
+        .log-entry.dj {
+            border-left-color: #22c55e;
+        }
+
+        .log-time {
+            font-size: 0.85rem;
+            color: #999;
+            margin-bottom: 5px;
+        }
+
+        .log-content {
+            font-size: 0.95rem;
+            color: #333;
+        }
+
+        .log-detail {
+            font-size: 0.85rem;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #d0d0d0;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            font-size: 1.1rem;
+        }
+
+        .error-message {
+            background: #fee;
+            color: #ef4444;
+            border: 1px solid #ef4444;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+            font-size: 1.1rem;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            margin-left: 10px;
+        }
+
+        .badge-info {
+            background: #eff6ff;
+            color: #667eea;
+        }
+
+        .badge-success {
+            background: #dcfce7;
+            color: #22c55e;
+        }
+
+        .badge-warning {
+            background: #fef3c7;
+            color: #f59e0b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div>
+                <h1 id="pageTitle">📜 Activity Logs</h1>
+                <div class="log-info" id="logInfo">Loading...</div>
+            </div>
+            <button class="btn btn-secondary" onclick="window.close()">Close</button>
+        </header>
+
+        <div class="log-container">
+            <div class="log-header">
+                <div>
+                    <strong>Total Entries:</strong> <span id="totalEntries">0</span>
+                    <span class="badge badge-info" id="offsetInfo">Loading...</span>
+                </div>
+                <div>
+                    <label>
+                        <input type="number" id="limitInput" min="10" max="500" value="50" style="width: 70px; padding: 5px; border: 1px solid #ddd; border-radius: 4px;">
+                        entries
+                    </label>
+                </div>
+            </div>
+
+            <div id="loadingState" class="loading">Loading logs...</div>
+            <div id="errorState" class="error-message" style="display: none;"></div>
+            <div id="emptyState" class="empty-state" style="display: none;">No log entries found</div>
+            <div id="logsContent"></div>
+
+            <div class="button-group" id="navigationButtons" style="display: none;">
+                <button class="btn btn-primary" id="prevBtn" onclick="loadPreviousLogs()" disabled>← Previous</button>
+                <button class="btn btn-primary" id="nextBtn" onclick="loadNextLogs()" disabled>Next →</button>
+                <button class="btn btn-secondary" onclick="loadLatestLogs()">Latest</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Parse URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const guildId = urlParams.get('guild');
+        const logType = urlParams.get('type');
+
+        let currentResult = null;
+
+        // Update page title
+        document.getElementById('pageTitle').textContent = logType === 'members' 
+            ? '👥 Member Activity Logs' 
+            : '🎧 DJ Activity Logs';
+        document.getElementById('logInfo').textContent = `Guild: ${guildId}`;
+
+        async function loadLogs(offset = null, direction = 'backward') {
+            const limit = parseInt(document.getElementById('limitInput').value) || 50;
+
+            document.getElementById('loadingState').style.display = 'block';
+            document.getElementById('errorState').style.display = 'none';
+            document.getElementById('emptyState').style.display = 'none';
+            document.getElementById('logsContent').innerHTML = '';
+            document.getElementById('navigationButtons').style.display = 'none';
+
+            try {
+                let url = `/api/guilds/${guildId}/logs/${logType}?limit=${limit}&direction=${direction}`;
+                if (offset !== null) {
+                    url += `&offset=${offset}`;
+                }
+
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                currentResult = await response.json();
+
+                document.getElementById('loadingState').style.display = 'none';
+
+                if (!currentResult.entries || currentResult.entries.length === 0) {
+                    document.getElementById('emptyState').style.display = 'block';
+                    return;
+                }
+
+                renderLogs(currentResult.entries);
+
+                // Update stats
+                document.getElementById('totalEntries').textContent = currentResult.entries.length;
+                document.getElementById('offsetInfo').textContent = 
+                    `Offset: ${currentResult.start_offset} - ${currentResult.end_offset} / ${currentResult.file_size} bytes`;
+
+                // Show navigation buttons
+                document.getElementById('navigationButtons').style.display = 'flex';
+                document.getElementById('prevBtn').disabled = !currentResult.has_previous;
+                document.getElementById('nextBtn').disabled = !currentResult.has_next;
+
+            } catch (error) {
+                document.getElementById('loadingState').style.display = 'none';
+                document.getElementById('errorState').style.display = 'block';
+                document.getElementById('errorState').textContent = `Error loading logs: ${error.message}`;
+            }
+        }
+
+        function renderLogs(entries) {
+            const logsContent = document.getElementById('logsContent');
+
+            entries.forEach(entry => {
+                const logEntry = document.createElement('div');
+                logEntry.className = `log-entry ${logType}`;
+
+                if (logType === 'members') {
+                    renderMemberEntry(logEntry, entry.content);
+                } else if (logType === 'dj') {
+                    renderDJEntry(logEntry, entry.content);
+                }
+
+                logsContent.appendChild(logEntry);
+            });
+        }
+
+        function renderMemberEntry(element, content) {
+            const time = document.createElement('div');
+            time.className = 'log-time';
+            time.textContent = new Date(content.timestamp).toLocaleString();
+
+            const mainContent = document.createElement('div');
+            mainContent.className = 'log-content';
+            
+            const actionEmoji = {
+                'joined': '➕',
+                'left': '➖',
+                'moved': '↔️'
+            };
+            
+            const emoji = actionEmoji[content.action] || '•';
+            const nickname = content.nickname ? ` (${content.nickname})` : '';
+            mainContent.textContent = `${emoji} ${content.username}${nickname} ${content.action}`;
+
+            const detail = document.createElement('div');
+            detail.className = 'log-detail';
+            detail.textContent = `User ID: ${content.user_id}`;
+            if (content.channel_id) {
+                detail.textContent += ` | Channel ID: ${content.channel_id}`;
+            }
+
+            element.appendChild(time);
+            element.appendChild(mainContent);
+            element.appendChild(detail);
+        }
+
+        function renderDJEntry(element, content) {
+            const time = document.createElement('div');
+            time.className = 'log-time';
+            time.textContent = new Date(content.timestamp).toLocaleString();
+
+            const mainContent = document.createElement('div');
+            mainContent.className = 'log-content';
+            
+            const eventEmoji = {
+                'track_started': '🎵',
+                'hex_message_started': '📡',
+                'noise_started': '🔊',
+                'idle_started': '💤',
+                'stopped': '⏹️'
+            };
+            
+            const emoji = eventEmoji[content.event_type] || '•';
+            mainContent.textContent = `${emoji} ${content.event_type.replace(/_/g, ' ').toUpperCase()}`;
+
+            const detail = document.createElement('div');
+            detail.className = 'log-detail';
+            
+            const details = content.details;
+            if (details.track_name) {
+                detail.textContent = `Track: ${details.filename} (${details.duration_secs}s)`;
+                if (details.forced_profile) {
+                    detail.textContent += ` | Profile: ${details.forced_profile}`;
+                }
+            } else if (details.message) {
+                detail.textContent = `Message: "${details.message}" (${details.target_loops} loops)`;
+                if (details.forced_profile) {
+                    detail.textContent += ` | Profile: ${details.forced_profile}`;
+                }
+            } else if (details.noise_profile) {
+                detail.textContent = `Profile: ${details.noise_profile} (${details.duration_secs}s)`;
+            } else if (details.duration_secs) {
+                detail.textContent = `Duration: ${details.duration_secs}s`;
+            }
+
+            element.appendChild(time);
+            element.appendChild(mainContent);
+            element.appendChild(detail);
+        }
+
+        function loadPreviousLogs() {
+            if (currentResult && currentResult.has_previous) {
+                loadLogs(currentResult.start_offset, 'backward');
+            }
+        }
+
+        function loadNextLogs() {
+            if (currentResult && currentResult.has_next) {
+                loadLogs(currentResult.end_offset, 'forward');
+            }
+        }
+
+        function loadLatestLogs() {
+            loadLogs(null, 'backward');
+        }
+
+        // Initial load
+        loadLatestLogs();
+
+        // Add event listener for limit change
+        document.getElementById('limitInput').addEventListener('change', loadLatestLogs);
+    </script>
+</body>
+</html>

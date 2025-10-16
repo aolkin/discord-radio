@@ -16,6 +16,9 @@ pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + S
 
 #[async_trait]
 pub trait StateStore: Send + Sync {
+    /// Get the base path for this state store
+    fn base_path(&self) -> &std::path::Path;
+
     async fn save_voice_channel(&self, guild_id: GuildId, channel_id: ChannelId) -> Result<()>;
     async fn load_voice_channels(&self) -> Result<HashMap<GuildId, ChannelId>>;
     async fn remove_voice_channel(&self, guild_id: GuildId) -> Result<()>;

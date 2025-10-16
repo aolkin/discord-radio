@@ -355,3 +355,82 @@ pub async fn remove_bot_activity(
         Err(StatusCode::NOT_FOUND)
     }
 }
+
+// Log retrieval endpoints
+
+use crate::logging::{LogReader, guild_logs_dir};
+use axum::extract::Query;
+
+#[derive(Debug, Deserialize)]
+pub struct LogQueryParams {
+    /// Number of entries to retrieve (default: 50)
+    #[serde(default = "default_limit")]
+    limit: usize,
+    /// Offset to start reading from (optional)
+    offset: Option<u64>,
+    /// Direction: "forward" or "backward" (default: "backward" for tail behavior)
+    #[serde(default = "default_direction")]
+    direction: String,
+}
+
+fn default_limit() -> usize {
+    50
+}
+
+fn default_direction() -> String {
+    "backward".to_string()
+}
+
+pub async fn get_logs(
+    State(bot_state): State<Data>,
+    Path((guild_id, log_type)): Path<(String, String)>,
+    Query(params): Query<LogQueryParams>,
+) -> Result<AxumJson<crate::logging::LogReadResult>, StatusCode> {
+    // Parse guild_id
+    let guild_id_parsed: u64 = guild_id.parse().map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    // Validate log type (only allow specific log types for security)
+    let log_filename = match log_type.as_str() {
+        "members" => "members.jsonl",
+        "dj" => "dj.jsonl",
+        _ => return Err(StatusCode::BAD_REQUEST),
+    };
+
+    // Build the log file path
+    let log_path = guild_logs_dir(&bot_state.logs_base_path, guild_id_parsed).join(log_filename);
+
+    // Create the log reader
+    let reader = LogReader::new(log_path.clone());
+
+    // Validate that the path is within the logs directory (security check)
+    let logs_dir = crate::logging::logs_dir(&bot_state.logs_base_path);
+    if reader.validate_path(&logs_dir).is_err() {
+        tracing::error!("Attempt to read log outside logs directory: {:?}", log_path);
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    // Read the logs based on parameters
+    let result = match (params.offset, params.direction.as_str()) {
+        (None, "backward") | (None, _) => {
+            // Tail behavior - get the last n entries
+            reader.tail(params.limit).await
+        }
+        (Some(offset), "backward") => {
+            // Read n entries before the offset
+            reader.read_before(offset, params.limit).await
+        }
+        (Some(offset), "forward") => {
+            // Read n entries after the offset
+            reader.read_after(offset, params.limit).await
+        }
+        _ => return Err(StatusCode::BAD_REQUEST),
+    };
+
+    match result {
+        Ok(log_result) => Ok(AxumJson(log_result)),
+        Err(e) => {
+            tracing::error!("Failed to read logs: {:?}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}

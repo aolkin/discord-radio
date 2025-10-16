@@ -139,6 +139,11 @@ impl DJStateMachine {
             tracing::error!("Error cleaning up DJ state during stop: {}", e);
         }
         self.current_state = DJState::Stopped;
+
+        // Log the stop event
+        if let Err(e) = self.log_state_transition(bot_state).await {
+            tracing::error!("Failed to log DJ state transition: {}", e);
+        }
     }
 
     pub async fn force_advance(
@@ -173,6 +178,11 @@ impl DJStateMachine {
             .start_custom_hex_message_state(message, bot_state)
             .await?;
 
+        // Log the forced hex message
+        if let Err(e) = self.log_state_transition(bot_state).await {
+            tracing::error!("Failed to log DJ state transition: {}", e);
+        }
+
         Ok(())
     }
 
@@ -202,6 +212,11 @@ impl DJStateMachine {
         self.current_state = self
             .create_next_state(next_state_type, track_manager, bot_state)
             .await?;
+
+        // Log the DJ state transition
+        if let Err(e) = self.log_state_transition(bot_state).await {
+            tracing::error!("Failed to log DJ state transition: {}", e);
+        }
 
         Ok(())
     }
@@ -604,5 +619,63 @@ impl DJStateMachine {
             started_at: std::time::Instant::now(),
             duration,
         })
+    }
+
+    async fn log_state_transition(
+        &self,
+        bot_state: &Data,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let (event_type, details) = match &self.current_state {
+            DJState::PlayingTrack {
+                track_name,
+                filename,
+                duration,
+                forced_profile,
+                ..
+            } => (
+                "track_started",
+                serde_json::json!({
+                    "track_name": track_name,
+                    "filename": filename,
+                    "duration_secs": duration.as_secs_f32(),
+                    "forced_profile": forced_profile,
+                }),
+            ),
+            DJState::PlayingHexMessage {
+                message,
+                target_loops,
+                forced_profile,
+                ..
+            } => (
+                "hex_message_started",
+                serde_json::json!({
+                    "message": message,
+                    "target_loops": target_loops,
+                    "forced_profile": forced_profile,
+                }),
+            ),
+            DJState::PlayingNoise {
+                noise_profile,
+                duration,
+                ..
+            } => (
+                "noise_started",
+                serde_json::json!({
+                    "noise_profile": noise_profile,
+                    "duration_secs": duration.as_secs_f32(),
+                }),
+            ),
+            DJState::Idle { duration, .. } => (
+                "idle_started",
+                serde_json::json!({
+                    "duration_secs": duration.as_secs_f32(),
+                }),
+            ),
+            DJState::Stopped => ("stopped", serde_json::json!({})),
+        };
+
+        bot_state
+            .log_dj_activity(self.guild_id.get(), event_type, details)
+            .await
     }
 }

@@ -624,6 +624,19 @@
                         </div>
                     </template>
 
+                    <!-- Activity Logs-->
+                    <div class="section">
+                        <div class="section-title">Activity Logs</div>
+                        <div style="display: flex; gap: 10px;">
+                            <a :href="'/logs.html?guild=' + guild.guild_id + '&type=members'" target="_blank" class="btn btn-secondary" style="flex: 1; text-decoration: none; text-align: center; display: block;">
+                                👥 Member Activity
+                            </a>
+                            <a :href="'/logs.html?guild=' + guild.guild_id + '&type=dj'" target="_blank" class="btn btn-secondary" style="flex: 1; text-decoration: none; text-align: center; display: block;">
+                                🎧 DJ Activity
+                            </a>
+                        </div>
+                    </div>
+
                     <!-- Empty State -->
                     <template x-if="!guild.tracks.length && !guild.hex_playback?.message && !guild.dj_state && !guild.audio_profile">
                         <div class="empty-state">No active features</div>

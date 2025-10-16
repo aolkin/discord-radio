@@ -1,6 +1,7 @@
 mod audio;
 mod commands;
 mod handlers;
+mod logging;
 mod persistence;
 mod shutdown;
 mod startup;
@@ -66,7 +67,7 @@ impl serenity::EventHandler for Handler {
 
     async fn voice_state_update(
         &self,
-        _ctx: serenity::Context,
+        ctx: serenity::Context,
         old: Option<serenity::VoiceState>,
         new: serenity::VoiceState,
     ) {
@@ -80,11 +81,17 @@ impl serenity::EventHandler for Handler {
         if !voice_connections.contains_key(&guild_id) {
             return;
         }
+        drop(voice_connections);
 
         let user_id = new.user_id;
-        if user_id == _ctx.cache.current_user().id {
+        if user_id == ctx.cache.current_user().id {
             return;
         }
+
+        // Get user information
+        let member = new.member.as_ref();
+        let username = member.map(|m| m.user.name.clone()).unwrap_or_default();
+        let nickname = member.and_then(|m| m.nick.clone());
 
         match (old.and_then(|o| o.channel_id), new.channel_id) {
             (None, Some(channel_id)) => {
@@ -94,6 +101,22 @@ impl serenity::EventHandler for Handler {
                     channel_id,
                     guild_id
                 );
+
+                // Log the join event
+                if let Err(e) = self
+                    .data
+                    .log_member_activity(
+                        guild_id.get(),
+                        user_id.get(),
+                        &username,
+                        nickname.as_deref(),
+                        "joined",
+                        Some(channel_id.get()),
+                    )
+                    .await
+                {
+                    tracing::error!("Failed to log member join: {}", e);
+                }
             }
             (Some(old_channel), None) => {
                 tracing::info!(
@@ -102,6 +125,22 @@ impl serenity::EventHandler for Handler {
                     old_channel,
                     guild_id
                 );
+
+                // Log the leave event
+                if let Err(e) = self
+                    .data
+                    .log_member_activity(
+                        guild_id.get(),
+                        user_id.get(),
+                        &username,
+                        nickname.as_deref(),
+                        "left",
+                        Some(old_channel.get()),
+                    )
+                    .await
+                {
+                    tracing::error!("Failed to log member leave: {}", e);
+                }
             }
             (Some(old_channel), Some(new_channel)) if old_channel != new_channel => {
                 tracing::info!(
@@ -111,6 +150,22 @@ impl serenity::EventHandler for Handler {
                     new_channel,
                     guild_id
                 );
+
+                // Log the move event
+                if let Err(e) = self
+                    .data
+                    .log_member_activity(
+                        guild_id.get(),
+                        user_id.get(),
+                        &username,
+                        nickname.as_deref(),
+                        "moved",
+                        Some(new_channel.get()),
+                    )
+                    .await
+                {
+                    tracing::error!("Failed to log member move: {}", e);
+                }
             }
             _ => {}
         }
@@ -219,7 +274,8 @@ async fn main() -> Result<(), Error> {
         })
         .build();
 
-    let intents = GatewayIntents::GUILDS | GatewayIntents::GUILD_VOICE_STATES;
+    let intents =
+        GatewayIntents::GUILDS | GatewayIntents::GUILD_VOICE_STATES | GatewayIntents::GUILD_MEMBERS;
 
     let mut client = serenity::Client::builder(&discord_token, intents)
         .framework(framework)
