@@ -129,9 +129,9 @@ impl DJStateMachine {
         &self.scheduler
     }
 
-
     pub fn update_config(&mut self, config: DJConfig) {
-        self.hex_message_announcements = config.hex_message_announcements.clone().unwrap_or_default();
+        self.hex_message_announcements =
+            config.hex_message_announcements.clone().unwrap_or_default();
         self.scheduler.update_config(config);
     }
 

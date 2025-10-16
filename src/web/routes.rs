@@ -364,8 +364,15 @@ async fn trigger_dj_config_reload(bot_state: &Data) {
     for (guild_id, manager_arc) in dj_managers.iter() {
         let manager = manager_arc.lock().await;
         if let Some(tx) = &manager.command_tx {
-            if let Err(e) = tx.send(crate::audio::dj::manager::DJCommand::ReloadConfig).await {
-                tracing::warn!("Failed to send reload command to DJ in guild {}: {}", guild_id, e);
+            if let Err(e) = tx
+                .send(crate::audio::dj::manager::DJCommand::ReloadConfig)
+                .await
+            {
+                tracing::warn!(
+                    "Failed to send reload command to DJ in guild {}: {}",
+                    guild_id,
+                    e
+                );
             } else {
                 tracing::debug!("Sent config reload command to DJ in guild {}", guild_id);
             }

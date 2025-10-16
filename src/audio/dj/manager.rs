@@ -355,13 +355,20 @@ pub async fn dj_task(
                             let overrides = overrides_arc.read().await;
                             let updated_config = base_config.with_overrides(&overrides);
                             drop(overrides);
-                            
+
                             // Update the state machine with new config
                             state_machine.update_config(updated_config);
-                            tracing::info!("DJ config reloaded successfully for guild {}", guild_id);
+                            tracing::info!(
+                                "DJ config reloaded successfully for guild {}",
+                                guild_id
+                            );
                         }
                         Err(e) => {
-                            tracing::error!("Failed to reload DJ config for guild {}: {}", guild_id, e);
+                            tracing::error!(
+                                "Failed to reload DJ config for guild {}: {}",
+                                guild_id,
+                                e
+                            );
                         }
                     }
                 }

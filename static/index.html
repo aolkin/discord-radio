@@ -973,7 +973,7 @@
     <!-- DJ Config Overrides Modal -->
     <div x-show="showDJConfigModal"
          x-transition.opacity
-         class="modal"
+         class="modal-overlay"
          @click.self="closeDJConfigModal()"
          @keydown.escape.window="closeDJConfigModal()">
         <div class="modal-content" style="max-width: 1000px; max-height: 90vh; overflow-y: auto;" x-show="showDJConfigModal" x-transition>
@@ -1073,7 +1073,7 @@
     <!-- Hex Message Form Modal -->
     <div x-show="showHexMessageForm"
          x-transition.opacity
-         class="modal"
+         class="modal-overlay"
          @click.self="closeHexMessageForm()"
          @keydown.escape.window="closeHexMessageForm()">
         <div class="modal-content" x-show="showHexMessageForm" x-transition>
@@ -1125,7 +1125,7 @@
     <!-- Announcement Form Modal -->
     <div x-show="showAnnouncementForm"
          x-transition.opacity
-         class="modal"
+         class="modal-overlay"
          @click.self="closeAnnouncementForm()"
          @keydown.escape.window="closeAnnouncementForm()">
         <div class="modal-content" x-show="showAnnouncementForm" x-transition>
