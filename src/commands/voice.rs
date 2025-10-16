@@ -795,7 +795,12 @@ pub async fn manage_dj(
         "start" => {
             let config_path = format!("dj_configs/{}.json", config);
             let dj_config = match crate::audio::dj::config::DJConfig::load_from_file(&config_path) {
-                Ok(cfg) => cfg,
+                Ok(cfg) => {
+                    // Apply overrides if any are enabled
+                    let overrides_arc = ctx.data().dj_config_overrides.get_arc();
+                    let overrides = overrides_arc.read().await;
+                    cfg.with_overrides(&overrides)
+                }
                 Err(e) => {
                     ctx.say(format!("Failed to load DJ config '{}': {}", config, e))
                         .await?;

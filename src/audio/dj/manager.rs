@@ -14,6 +14,7 @@ const DJ_TICK_INTERVAL_MS: u64 = 100;
 pub enum DJCommand {
     ForceAdvance(Option<DJStateTypeFilter>),
     ForceHexMessage(String),
+    ReloadConfig,
     Stop,
     SetAnnouncementChannel(Option<ChannelId>),
 }
@@ -343,6 +344,27 @@ pub async fn dj_task(
                     announcement_channel = new_channel;
                     state_machine.set_announcement_channel(new_channel);
                 }
+                DJCommand::ReloadConfig => {
+                    tracing::info!("Reloading DJ config with overrides for guild {}", guild_id);
+                    // Load the base config
+                    let config_path = format!("dj_configs/{}.json", config_name);
+                    match DJConfig::load_from_file(&config_path) {
+                        Ok(base_config) => {
+                            // Apply current overrides
+                            let overrides_arc = bot_state.dj_config_overrides.get_arc();
+                            let overrides = overrides_arc.read().await;
+                            let updated_config = base_config.with_overrides(&overrides);
+                            drop(overrides);
+                            
+                            // Update the state machine with new config
+                            state_machine.update_config(updated_config);
+                            tracing::info!("DJ config reloaded successfully for guild {}", guild_id);
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to reload DJ config for guild {}: {}", guild_id, e);
+                        }
+                    }
+                }
             }
         }
 
@@ -462,7 +484,7 @@ pub async fn dj_task(
 
 pub struct DJManager {
     task_handle: Option<tokio::task::JoinHandle<()>>,
-    command_tx: Option<mpsc::Sender<DJCommand>>,
+    pub(crate) command_tx: Option<mpsc::Sender<DJCommand>>,
     guild_id: GuildId,
     status_message: Option<String>,
 }

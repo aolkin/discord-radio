@@ -1,11 +1,13 @@
 mod dj;
 mod file_store;
 mod types;
+mod utils;
 
+pub use dj::DJConfigOverridesStore;
 pub use file_store::FileStore;
 pub use types::{
-    DJState, DJStateMachineState, MessagePlaybackState, MultiTrackPlaybackState, ProfileState,
-    TrackState,
+    DJConfigOverrides, DJState, DJStateMachineState, MessagePlaybackState, MultiTrackPlaybackState,
+    ProfileState, TrackState,
 };
 
 use async_trait::async_trait;

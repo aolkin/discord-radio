@@ -70,6 +70,30 @@ pub async fn run_web_server(
             get(audio_stream::audio_stream),
         )
         .route(
+            "/api/dj-config/overrides",
+            get(routes::get_dj_config_overrides),
+        )
+        .route(
+            "/api/dj-config/overrides/hex-messages",
+            post(routes::set_hex_message_override),
+        )
+        .route(
+            "/api/dj-config/overrides/hex-messages/{index}",
+            axum::routing::delete(routes::delete_hex_message_override),
+        )
+        .route(
+            "/api/dj-config/overrides/announcements",
+            post(routes::set_announcement_override),
+        )
+        .route(
+            "/api/dj-config/overrides/announcements/{index}",
+            axum::routing::delete(routes::delete_announcement_override),
+        )
+        .route(
+            "/api/dj-config/overrides/toggle",
+            post(routes::toggle_override_category),
+        )
+        .route(
             "/api/guilds/{guild_id}/logs/{log_type}",
             get(routes::get_logs),
         )

@@ -86,3 +86,26 @@ pub enum DJStateMachineState {
     },
     Stopped,
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct DJConfigOverrides {
+    #[serde(default)]
+    pub hex_messages: DJConfigOverrideCategory<crate::audio::dj::config::HexMessageEntry>,
+    #[serde(default)]
+    pub hex_message_announcements: DJConfigOverrideCategory<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct DJConfigOverrideCategory<T> {
+    pub enabled: bool,
+    pub items: Vec<T>,
+}
+
+impl<T> Default for DJConfigOverrideCategory<T> {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            items: Vec::new(),
+        }
+    }
+}

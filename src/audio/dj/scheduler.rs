@@ -40,6 +40,10 @@ impl WeightedScheduler {
         }
     }
 
+    pub fn update_config(&mut self, config: DJConfig) {
+        self.config = config;
+    }
+
     pub fn next_state(&mut self) -> DJStateType {
         let state_type = self.choose_state_type();
         let state = match state_type {

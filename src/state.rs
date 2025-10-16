@@ -5,7 +5,7 @@ use crate::audio::processing_thread::AudioProcessor;
 use crate::audio::profiles::ProfileManager;
 use crate::audio::tracks::TrackManager;
 use crate::logging::{JsonLogger, guild_logs_dir};
-use crate::persistence::StateStore;
+use crate::persistence::{DJConfigOverridesStore, StateStore};
 use crate::voice_status::{ActivityManager, VoiceChannelStatusManager};
 use serde::Serialize;
 use serenity::model::id::GuildId;
@@ -59,6 +59,7 @@ impl HexPlaybackState {
 
 pub struct BotState {
     pub voice_connections: Arc<RwLock<HashMap<GuildId, Arc<Mutex<Call>>>>>,
+    pub dj_config_overrides: DJConfigOverridesStore,
     pub track_managers: RwLock<HashMap<GuildId, Arc<Mutex<TrackManager>>>>,
     pub content_path: String,
     pub state_store: Arc<dyn StateStore>,
@@ -78,6 +79,7 @@ pub struct BotState {
 impl BotState {
     pub fn new(
         content_path: String,
+        dj_config_overrides: DJConfigOverridesStore,
         state_store: Arc<dyn StateStore>,
         shutdown_tx: tokio::sync::broadcast::Sender<String>,
     ) -> Self {
@@ -102,6 +104,7 @@ impl BotState {
             voice_connections: voice_connections.clone(),
             track_managers: RwLock::new(HashMap::new()),
             content_path,
+            dj_config_overrides,
             state_store,
             hex_playback_states: RwLock::new(HashMap::new()),
             hex_playback_tasks: RwLock::new(HashMap::new()),

@@ -104,4 +104,20 @@ impl DJConfig {
         let config: DJConfig = serde_json::from_str(&content)?;
         Ok(config)
     }
+
+    /// Apply overrides to this config, replacing specified categories entirely when enabled
+    pub fn with_overrides(mut self, overrides: &crate::persistence::DJConfigOverrides) -> Self {
+        if overrides.hex_messages.enabled && !overrides.hex_messages.items.is_empty() {
+            self.hex_messages = overrides.hex_messages.items.clone();
+        }
+
+        if overrides.hex_message_announcements.enabled
+            && !overrides.hex_message_announcements.items.is_empty()
+        {
+            self.hex_message_announcements =
+                Some(overrides.hex_message_announcements.items.clone());
+        }
+
+        self
+    }
 }

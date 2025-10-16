@@ -278,7 +278,12 @@ async fn restore_dj_managers(
 
         let config_path = format!("dj_configs/{}.json", dj_state.config_name);
         let dj_config = match crate::audio::dj::config::DJConfig::load_from_file(&config_path) {
-            Ok(cfg) => cfg,
+            Ok(cfg) => {
+                // Apply overrides if any are enabled
+                let overrides_arc = bot_state.dj_config_overrides.get_arc();
+                let overrides = overrides_arc.read().await;
+                cfg.with_overrides(&overrides)
+            }
             Err(e) => {
                 tracing::error!(
                     "Failed to load DJ config '{}' for guild {}: {}",

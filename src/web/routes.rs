@@ -356,6 +356,181 @@ pub async fn remove_bot_activity(
     }
 }
 
+// DJ Config Override management endpoints
+
+async fn trigger_dj_config_reload(bot_state: &Data) {
+    // Send reload command to all running DJs
+    let dj_managers = bot_state.dj_managers.read().await;
+    for (guild_id, manager_arc) in dj_managers.iter() {
+        let manager = manager_arc.lock().await;
+        if let Some(tx) = &manager.command_tx {
+            if let Err(e) = tx.send(crate::audio::dj::manager::DJCommand::ReloadConfig).await {
+                tracing::warn!("Failed to send reload command to DJ in guild {}: {}", guild_id, e);
+            } else {
+                tracing::debug!("Sent config reload command to DJ in guild {}", guild_id);
+            }
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct DJConfigOverridesResponse {
+    pub hex_messages: DJConfigOverrideCategoryResponse,
+    pub hex_message_announcements: DJConfigOverrideCategoryResponse,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DJConfigOverrideCategoryResponse {
+    pub enabled: bool,
+    pub items: serde_json::Value,
+}
+
+pub async fn get_dj_config_overrides(
+    State(bot_state): State<Data>,
+) -> AxumJson<DJConfigOverridesResponse> {
+    let overrides_arc = bot_state.dj_config_overrides.get_arc();
+    let overrides = overrides_arc.read().await;
+
+    let hex_messages_items =
+        serde_json::to_value(&overrides.hex_messages.items).unwrap_or(serde_json::Value::Null);
+    let hex_message_announcements_items =
+        serde_json::to_value(&overrides.hex_message_announcements.items)
+            .unwrap_or(serde_json::Value::Null);
+
+    AxumJson(DJConfigOverridesResponse {
+        hex_messages: DJConfigOverrideCategoryResponse {
+            enabled: overrides.hex_messages.enabled,
+            items: hex_messages_items,
+        },
+        hex_message_announcements: DJConfigOverrideCategoryResponse {
+            enabled: overrides.hex_message_announcements.enabled,
+            items: hex_message_announcements_items,
+        },
+    })
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SetHexMessageRequest {
+    pub index: Option<usize>,
+    pub text: String,
+    pub weight: u32,
+    pub signal_profile: Option<String>,
+    pub loop_min: Option<u32>,
+    pub loop_max: Option<u32>,
+    pub announcement: Option<String>,
+}
+
+pub async fn set_hex_message_override(
+    State(bot_state): State<Data>,
+    AxumJson(request): AxumJson<SetHexMessageRequest>,
+) -> Result<StatusCode, StatusCode> {
+    use crate::audio::dj::config::HexMessageEntry;
+
+    if request.text.trim().is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let hex_message = HexMessageEntry {
+        text: request.text,
+        weight: request.weight,
+        signal_profile: request.signal_profile,
+        loop_min: request.loop_min,
+        loop_max: request.loop_max,
+        announcement: request.announcement,
+    };
+
+    bot_state
+        .dj_config_overrides
+        .set_hex_message(request.index, hex_message)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Trigger config reload for all running DJs
+    trigger_dj_config_reload(&bot_state).await;
+
+    Ok(StatusCode::OK)
+}
+
+pub async fn delete_hex_message_override(
+    State(bot_state): State<Data>,
+    Path(index): Path<usize>,
+) -> Result<StatusCode, StatusCode> {
+    bot_state
+        .dj_config_overrides
+        .delete_hex_message(index)
+        .await
+        .map_err(|_| StatusCode::NOT_FOUND)?;
+
+    // Trigger config reload for all running DJs
+    trigger_dj_config_reload(&bot_state).await;
+
+    Ok(StatusCode::OK)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SetAnnouncementRequest {
+    pub index: Option<usize>,
+    pub text: String,
+}
+
+pub async fn set_announcement_override(
+    State(bot_state): State<Data>,
+    AxumJson(request): AxumJson<SetAnnouncementRequest>,
+) -> Result<StatusCode, StatusCode> {
+    if request.text.trim().is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    bot_state
+        .dj_config_overrides
+        .set_announcement(request.index, request.text)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Trigger config reload for all running DJs
+    trigger_dj_config_reload(&bot_state).await;
+
+    Ok(StatusCode::OK)
+}
+
+pub async fn delete_announcement_override(
+    State(bot_state): State<Data>,
+    Path(index): Path<usize>,
+) -> Result<StatusCode, StatusCode> {
+    bot_state
+        .dj_config_overrides
+        .delete_announcement(index)
+        .await
+        .map_err(|_| StatusCode::NOT_FOUND)?;
+
+    // Trigger config reload for all running DJs
+    trigger_dj_config_reload(&bot_state).await;
+
+    Ok(StatusCode::OK)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ToggleOverrideCategoryRequest {
+    pub category: String,
+    pub enabled: bool,
+}
+
+pub async fn toggle_override_category(
+    State(bot_state): State<Data>,
+    AxumJson(request): AxumJson<ToggleOverrideCategoryRequest>,
+) -> Result<StatusCode, StatusCode> {
+    bot_state
+        .dj_config_overrides
+        .toggle_category(&request.category, request.enabled)
+        .await
+        .map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    // Trigger config reload for all running DJs
+    trigger_dj_config_reload(&bot_state).await;
+
+    Ok(StatusCode::OK)
+}
+
 // Log retrieval endpoints
 
 use crate::logging::{LogReader, guild_logs_dir};
