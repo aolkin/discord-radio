@@ -250,9 +250,20 @@ pub fn init_metrics(
         .with_timeout(Duration::from_secs(10))
         .build()?;
 
-    // Create periodic reader that exports every 60 seconds
+    // Read metrics interval from env var, default to 60 seconds
+    let metrics_interval_secs = std::env::var("METRICS_INTERVAL_SECONDS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(60);
+
+    info!(
+        "Metrics collection interval: {} seconds",
+        metrics_interval_secs
+    );
+
+    // Create periodic reader that exports at the configured interval
     let reader = PeriodicReader::builder(exporter, opentelemetry_sdk::runtime::Tokio)
-        .with_interval(Duration::from_secs(60))
+        .with_interval(Duration::from_secs(metrics_interval_secs))
         .build();
 
     // Create meter provider with resource attributes
