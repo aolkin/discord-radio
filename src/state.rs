@@ -5,6 +5,7 @@ use crate::audio::processing_thread::AudioProcessor;
 use crate::audio::profiles::ProfileManager;
 use crate::audio::tracks::TrackManager;
 use crate::logging::{JsonLogger, guild_logs_dir};
+use crate::metrics::MetricsHandle;
 use crate::persistence::{DJConfigOverridesStore, StateStore};
 use crate::voice_status::{ActivityManager, VoiceChannelStatusManager};
 use serde::Serialize;
@@ -74,6 +75,7 @@ pub struct BotState {
     pub activity_manager: ActivityManager,
     pub shutdown_tx: tokio::sync::broadcast::Sender<String>,
     pub logs_base_path: std::path::PathBuf,
+    pub metrics: MetricsHandle,
 }
 
 impl BotState {
@@ -82,6 +84,7 @@ impl BotState {
         dj_config_overrides: DJConfigOverridesStore,
         state_store: Arc<dyn StateStore>,
         shutdown_tx: tokio::sync::broadcast::Sender<String>,
+        metrics: MetricsHandle,
     ) -> Self {
         let profiles_dir = "audio_profiles";
         let mut profile_manager = ProfileManager::new(profiles_dir);
@@ -117,6 +120,7 @@ impl BotState {
             activity_manager: ActivityManager::new(),
             shutdown_tx,
             logs_base_path,
+            metrics,
         }
     }
 

@@ -2,6 +2,7 @@ mod audio;
 mod commands;
 mod handlers;
 mod logging;
+mod metrics;
 mod persistence;
 mod shutdown;
 mod startup;
@@ -251,12 +252,46 @@ async fn main() -> Result<(), Error> {
 
     let (shutdown_tx, _shutdown_rx) = tokio::sync::broadcast::channel(16);
 
+    // Initialize metrics if configured
+    let metrics_handle = metrics::create_metrics_handle();
+    let _metrics_provider = if let (Ok(metrics_url), Ok(api_key)) = (
+        std::env::var("GRAFANA_METRICS_URL"),
+        std::env::var("GRAFANA_API_KEY"),
+    ) {
+        match metrics::init_metrics(metrics_url, api_key) {
+            Ok((provider, bot_metrics)) => {
+                tracing::info!("Metrics initialized successfully");
+                *metrics_handle.write().await = Some(bot_metrics);
+
+                // Start heartbeat task
+                metrics::start_heartbeat_task(metrics_handle.clone()).await;
+                Some(provider)
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to initialize metrics: {}. Continuing without metrics.",
+                    e
+                );
+                None
+            }
+        }
+    } else {
+        tracing::info!("Metrics not configured (GRAFANA_METRICS_URL and GRAFANA_API_KEY not set)");
+        None
+    };
+
     let data = Arc::new(BotState::new(
         content_path,
         dj_config_overrides_store,
         state_store,
         shutdown_tx,
+        metrics_handle.clone(),
     ));
+
+    // Start gauge update task if metrics are configured
+    if metrics_handle.read().await.is_some() {
+        metrics::start_gauge_update_task(metrics_handle.clone(), data.clone()).await;
+    }
 
     let data_for_setup = data.clone();
     let framework = poise::Framework::builder()

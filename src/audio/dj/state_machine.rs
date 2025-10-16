@@ -212,12 +212,21 @@ impl DJStateMachine {
         track_manager: &mut TrackManager,
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // Record the previous state before transitioning
+        let from_state = self.get_state_name(&self.current_state);
+
         self.cleanup_current_state(track_manager, bot_state).await?;
 
         info!("DJ transitioning to state: {:?}", next_state_type);
         self.current_state = self
             .create_next_state(next_state_type, track_manager, bot_state)
             .await?;
+
+        // Record state transition metric
+        let to_state = self.get_state_name(&self.current_state);
+        if let Some(metrics) = bot_state.metrics.read().await.as_ref() {
+            metrics.record_dj_state_transition(self.guild_id.get(), &from_state, &to_state);
+        }
 
         // Log the DJ state transition
         if let Err(e) = self.log_state_transition(bot_state).await {
@@ -236,8 +245,20 @@ impl DJStateMachine {
             DJState::PlayingTrack {
                 track_name,
                 status_message,
+                started_at,
                 ..
             } => {
+                // Record duration metric
+                let duration_secs = started_at.elapsed().as_secs_f64();
+                if let Some(metrics) = bot_state.metrics.read().await.as_ref() {
+                    metrics.record_dj_state_duration(
+                        self.guild_id.get(),
+                        "playing_track",
+                        duration_secs,
+                    );
+                    metrics.record_track_stopped(self.guild_id.get(), track_name);
+                }
+
                 if track_manager.has_track(track_name) {
                     track_manager.stop_track(track_name, 1.0, false).await?;
                 }
@@ -250,7 +271,23 @@ impl DJStateMachine {
                         .await;
                 }
             }
-            DJState::PlayingHexMessage { status_message, .. } => {
+            DJState::PlayingHexMessage {
+                status_message,
+                started_at,
+                target_loops,
+                ..
+            } => {
+                // Record duration metric
+                let duration_secs = started_at.elapsed().as_secs_f64();
+                if let Some(metrics) = bot_state.metrics.read().await.as_ref() {
+                    metrics.record_dj_state_duration(
+                        self.guild_id.get(),
+                        "playing_hex_message",
+                        duration_secs,
+                    );
+                    metrics.record_hex_message_completed(self.guild_id.get(), *target_loops as u64);
+                }
+
                 // Reset the hex playback state
                 let hex_playback_states = bot_state.hex_playback_states.read().await;
                 if let Some(state_arc) = hex_playback_states.get(&self.guild_id) {
@@ -276,9 +313,29 @@ impl DJStateMachine {
                     tracing::warn!("Failed to remove message playback state: {}", e);
                 }
             }
-            DJState::PlayingNoise { .. } => {
+            DJState::PlayingNoise {
+                noise_profile,
+                started_at,
+                ..
+            } => {
+                // Record duration metric
+                let duration_secs = started_at.elapsed().as_secs_f64();
+                if let Some(metrics) = bot_state.metrics.read().await.as_ref() {
+                    metrics.record_noise_state_duration(
+                        self.guild_id.get(),
+                        noise_profile,
+                        duration_secs,
+                    );
+                }
                 // PlayingNoise doesn't play any tracks, it just forces a profile
                 // No cleanup needed
+            }
+            DJState::Idle { started_at, .. } => {
+                // Record duration metric
+                let duration_secs = started_at.elapsed().as_secs_f64();
+                if let Some(metrics) = bot_state.metrics.read().await.as_ref() {
+                    metrics.record_dj_state_duration(self.guild_id.get(), "idle", duration_secs);
+                }
             }
             _ => {}
         }
@@ -295,7 +352,7 @@ impl DJStateMachine {
         match state_type {
             DJStateType::Track(idx) => self.start_track_state(idx, track_manager, bot_state).await,
             DJStateType::HexMessage(idx) => self.start_hex_message_state(idx, bot_state).await,
-            DJStateType::Noise(idx) => self.start_noise_state(idx).await,
+            DJStateType::Noise(idx) => self.start_noise_state(idx, bot_state).await,
         }
     }
 
@@ -360,6 +417,11 @@ impl DJStateMachine {
             play_duration.as_secs_f32(),
             self.guild_id
         );
+
+        // Record track started metric
+        if let Some(metrics) = bot_state.metrics.read().await.as_ref() {
+            metrics.record_track_started(self.guild_id.get(), &track_name);
+        }
 
         // Push track channel status onto the voice channel status stack if configured
         let status_message = if let Some(ref status) = track_entry.channel_status {
@@ -526,6 +588,11 @@ impl DJStateMachine {
             self.guild_id
         );
 
+        // Record hex message started metric
+        if let Some(metrics) = bot_state.metrics.read().await.as_ref() {
+            metrics.record_hex_message_started(self.guild_id.get());
+        }
+
         // Push hex message status onto the voice channel status stack
         let obfuscated = crate::commands::voice::obfuscate_message(&message);
         bot_state
@@ -599,6 +666,7 @@ impl DJStateMachine {
     async fn start_noise_state(
         &mut self,
         idx: usize,
+        bot_state: &Data,
     ) -> Result<DJState, Box<dyn std::error::Error + Send + Sync>> {
         let noise_entry = self
             .scheduler
@@ -619,6 +687,11 @@ impl DJStateMachine {
             duration_secs,
             self.guild_id
         );
+
+        // Record noise state change metric
+        if let Some(metrics) = bot_state.metrics.read().await.as_ref() {
+            metrics.record_noise_state_change(self.guild_id.get(), &noise_profile);
+        }
 
         Ok(DJState::PlayingNoise {
             noise_profile,
@@ -683,5 +756,15 @@ impl DJStateMachine {
         bot_state
             .log_dj_activity(self.guild_id.get(), event_type, details)
             .await
+    }
+
+    fn get_state_name(&self, state: &DJState) -> String {
+        match state {
+            DJState::PlayingTrack { .. } => "playing_track".to_string(),
+            DJState::PlayingHexMessage { .. } => "playing_hex_message".to_string(),
+            DJState::PlayingNoise { .. } => "playing_noise".to_string(),
+            DJState::Idle { .. } => "idle".to_string(),
+            DJState::Stopped => "stopped".to_string(),
+        }
     }
 }
