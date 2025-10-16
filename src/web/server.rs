@@ -42,6 +42,7 @@ pub async fn run_web_server(
 
     let app = Router::new()
         .route("/", get(routes::index))
+        .route("/logs.html", get(routes::logs))
         .route("/api/status", get(routes::get_status))
         .route("/api/health", get(routes::health))
         .route(

@@ -11,6 +11,10 @@ pub async fn index() -> Html<&'static str> {
     Html(include_str!("../../static/index.html"))
 }
 
+pub async fn logs() -> Html<&'static str> {
+    Html(include_str!("../../static/logs.html"))
+}
+
 pub async fn get_status(State(bot_state): State<Data>) -> Json<BotSnapshot> {
     let snapshot = BotSnapshot::capture(&bot_state).await;
     Json(snapshot)
