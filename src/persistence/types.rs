@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serenity::model::id::{ChannelId, GuildId};
 use std::time::SystemTime;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -125,4 +126,12 @@ impl<T> Default for DJConfigOverrideSingle<T> {
             value: None,
         }
     }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct RegisteredChannel {
+    pub channel_id: ChannelId,
+    pub guild_id: GuildId,
+    pub name: String,
+    pub channel_type: String,
 }

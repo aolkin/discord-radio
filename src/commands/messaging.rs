@@ -1,6 +1,71 @@
 use crate::commands::utils::{Context, Error};
 use poise::serenity_prelude as serenity;
 
+/// Register a channel for sending messages from the web portal
+#[poise::command(
+    slash_command,
+    guild_only,
+    default_member_permissions = "ADMINISTRATOR"
+)]
+pub async fn register_channel(
+    ctx: Context<'_>,
+    #[description = "Channel to register"] channel: serenity::Channel,
+) -> Result<(), Error> {
+    let user_id = ctx.author().id;
+    let guild_id = ctx
+        .guild_id()
+        .ok_or("This command can only be used in a server")?;
+
+    tracing::info!(
+        "User {} executed register_channel in guild {}",
+        user_id,
+        guild_id
+    );
+
+    ctx.defer_ephemeral().await?;
+
+    // Get channel info
+    let channel_id = channel.id();
+    let channel_name = match &channel {
+        serenity::Channel::Guild(gc) => gc.name.clone(),
+        _ => channel_id.to_string(),
+    };
+
+    let channel_type = match &channel {
+        serenity::Channel::Guild(gc) => format!("{:?}", gc.kind),
+        serenity::Channel::Private(_) => "Private".to_string(),
+        _ => "Unknown".to_string(),
+    };
+
+    // Create registered channel entry
+    let registered_channel = crate::persistence::RegisteredChannel {
+        channel_id,
+        guild_id,
+        name: channel_name.clone(),
+        channel_type: channel_type.clone(),
+    };
+
+    // Save to persistent storage
+    if let Err(e) = ctx
+        .data()
+        .state_store
+        .save_registered_channel(&registered_channel)
+        .await
+    {
+        tracing::error!("Failed to save registered channel: {}", e);
+        ctx.say("Failed to register channel").await?;
+        return Ok(());
+    }
+
+    ctx.say(format!(
+        "Channel '{}' (type: {}) has been registered for web portal messaging",
+        channel_name, channel_type
+    ))
+    .await?;
+
+    Ok(())
+}
+
 /// Set the bot's custom status
 #[poise::command(
     slash_command,

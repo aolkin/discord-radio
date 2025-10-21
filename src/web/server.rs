@@ -106,6 +106,14 @@ pub async fn run_web_server(
             "/api/guilds/{guild_id}/logs/{log_type}",
             get(routes::get_logs),
         )
+        .route(
+            "/api/registered-channels",
+            get(routes::get_registered_channels),
+        )
+        .route(
+            "/api/registered-channels/{channel_id}/send",
+            post(routes::send_channel_message),
+        )
         .route("/ws", get(websocket::websocket_handler))
         .layer(cors)
         .with_state(bot_state);

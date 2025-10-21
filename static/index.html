@@ -502,6 +502,17 @@
             </div>
         </header>
 
+        <!-- Registered Channels Section -->
+        <div style="background: white; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+            <h2 style="color: #667eea; margin-bottom: 15px; font-size: 1.5rem;">Registered Channels</h2>
+            <button @click="openChannelMessageModal()" 
+                    style="background: #667eea; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 1rem; font-weight: 500; transition: background 0.2s;"
+                    @mouseover="$el.style.background='#5568d3'" 
+                    @mouseout="$el.style.background='#667eea'">
+                📤 Send Message to Registered Channel
+            </button>
+        </div>
+
         <!-- DJ Config Overrides Section -->
         <div style="background: white; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
             <h2 style="color: #667eea; margin-bottom: 15px; font-size: 1.5rem;">DJ Config Overrides</h2>
@@ -1198,6 +1209,76 @@
         </div>
     </div>
 
+    <!-- Channel Message Modal -->
+    <div x-show="showChannelMessageModal"
+         x-transition.opacity
+         class="modal-overlay"
+         @click.self="closeChannelMessageModal()"
+         @keydown.escape.window="closeChannelMessageModal()">
+        <div class="modal-content" x-show="showChannelMessageModal" x-transition>
+            <div class="modal-header">
+                <div class="modal-title">Send Message to Registered Channel</div>
+                <button class="close" @click="closeChannelMessageModal()">&times;</button>
+            </div>
+            
+            <div class="modal-body">
+                <!-- Loading State -->
+                <div x-show="channelsLoading" style="text-align: center; padding: 40px;">
+                    <div style="font-size: 2rem; margin-bottom: 10px;">⏳</div>
+                    <div>Loading channels...</div>
+                </div>
+
+                <!-- Error Message -->
+                <div x-show="channelMessageError" class="error-message" x-text="channelMessageError"></div>
+
+                <!-- Success Message -->
+                <div x-show="channelMessageSuccess" class="success-message" x-text="channelMessageSuccess"></div>
+
+                <!-- Form -->
+                <div x-show="!channelsLoading">
+                    <form @submit.prevent="sendChannelMessage()">
+                        <div class="form-group">
+                            <label class="form-label">Channel *</label>
+                            <select class="form-input" x-model="selectedChannelId" required>
+                                <option value="">Select a channel...</option>
+                                <template x-for="channel in registeredChannels" :key="channel.channel_id">
+                                    <option :value="channel.channel_id" 
+                                            x-text="`${channel.name} (${channel.channel_type}) - Guild: ${channel.guild_id}`">
+                                    </option>
+                                </template>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Message</label>
+                            <textarea class="form-input" x-model="channelMessageText" rows="3" 
+                                      placeholder="Optional plain text message"></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Embed Title (Optional)</label>
+                            <input type="text" class="form-input" x-model="channelMessageTitle" 
+                                   placeholder="Optional embed title">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Embed Description (Optional)</label>
+                            <textarea class="form-input" x-model="channelMessageDescription" rows="4" 
+                                      placeholder="Optional embed description"></textarea>
+                        </div>
+
+                        <div class="button-group">
+                            <button type="button" class="btn btn-secondary" @click="closeChannelMessageModal()">Cancel</button>
+                            <button type="submit" class="btn btn-primary" :disabled="channelMessageSaving || !selectedChannelId">
+                                <span x-text="channelMessageSaving ? 'Sending...' : 'Send Message'"></span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         function botPortal() {
             return {
@@ -1265,6 +1346,17 @@
                 hexMessageFormData: { index: null, text: '', weight: 1, signal_profile: '', loop_min: null, loop_max: null, announcement: '' },
                 showAnnouncementForm: false,
                 announcementFormData: { index: null, text: '' },
+                // Channel Message state
+                showChannelMessageModal: false,
+                registeredChannels: [],
+                channelsLoading: false,
+                selectedChannelId: '',
+                channelMessageText: '',
+                channelMessageTitle: '',
+                channelMessageDescription: '',
+                channelMessageSaving: false,
+                channelMessageError: '',
+                channelMessageSuccess: '',
 
                 getTrackProgress(track) {
                     if (!track.duration_secs || track.loops) return 0;
@@ -2035,6 +2127,99 @@
                         };
                     } finally {
                         this.djConfigSaving = false;
+                    }
+                },
+
+                // Channel Message Functions
+                async openChannelMessageModal() {
+                    this.showChannelMessageModal = true;
+                    this.channelsLoading = true;
+                    this.channelMessageError = '';
+                    this.channelMessageSuccess = '';
+                    this.selectedChannelId = '';
+                    this.channelMessageText = '';
+                    this.channelMessageTitle = '';
+                    this.channelMessageDescription = '';
+                    
+                    try {
+                        const response = await fetch('/api/registered-channels');
+                        if (!response.ok) {
+                            const statusText = response.statusText || 'Unknown error';
+                            throw new Error(`Failed to load registered channels (${response.status}: ${statusText})`);
+                        }
+                        
+                        const data = await response.json();
+                        this.registeredChannels = data.channels;
+                    } catch (error) {
+                        console.error('Error loading registered channels:', error);
+                        this.channelMessageError = error.message || 'Failed to load registered channels. Please try again.';
+                    } finally {
+                        this.channelsLoading = false;
+                    }
+                },
+
+                closeChannelMessageModal() {
+                    this.showChannelMessageModal = false;
+                    this.registeredChannels = [];
+                    this.selectedChannelId = '';
+                    this.channelMessageText = '';
+                    this.channelMessageTitle = '';
+                    this.channelMessageDescription = '';
+                    this.channelMessageError = '';
+                    this.channelMessageSuccess = '';
+                },
+
+                async sendChannelMessage() {
+                    this.channelMessageSaving = true;
+                    this.channelMessageError = '';
+                    this.channelMessageSuccess = '';
+                    
+                    try {
+                        // Validate at least one field is filled
+                        if (!this.channelMessageText && !this.channelMessageTitle && !this.channelMessageDescription) {
+                            this.channelMessageError = 'Please provide at least a message, title, or description.';
+                            return;
+                        }
+                        
+                        const body = {};
+                        if (this.channelMessageText) {
+                            body.message = this.channelMessageText;
+                        }
+                        if (this.channelMessageTitle) {
+                            body.title = this.channelMessageTitle;
+                        }
+                        if (this.channelMessageDescription) {
+                            body.description = this.channelMessageDescription;
+                        }
+                        
+                        const response = await fetch(`/api/registered-channels/${this.selectedChannelId}/send`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify(body),
+                        });
+                        
+                        if (!response.ok) {
+                            const statusText = response.statusText || 'Unknown error';
+                            throw new Error(`Failed to send message (${response.status}: ${statusText})`);
+                        }
+                        
+                        this.channelMessageSuccess = 'Message sent successfully!';
+                        
+                        // Clear form fields after successful send
+                        this.channelMessageText = '';
+                        this.channelMessageTitle = '';
+                        this.channelMessageDescription = '';
+                        
+                        setTimeout(() => {
+                            this.channelMessageSuccess = '';
+                        }, 3000);
+                    } catch (error) {
+                        console.error('Error sending message:', error);
+                        this.channelMessageError = error.message || 'Failed to send message. Please try again.';
+                    } finally {
+                        this.channelMessageSaving = false;
                     }
                 }
             };

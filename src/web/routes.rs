@@ -677,3 +677,124 @@ pub async fn get_logs(
         }
     }
 }
+
+// Registered Channels endpoints
+
+#[derive(Debug, Serialize)]
+pub struct RegisteredChannelResponse {
+    pub channel_id: String,
+    pub guild_id: String,
+    pub name: String,
+    pub channel_type: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RegisteredChannelsResponse {
+    pub channels: Vec<RegisteredChannelResponse>,
+}
+
+pub async fn get_registered_channels(
+    State(bot_state): State<Data>,
+) -> Result<AxumJson<RegisteredChannelsResponse>, StatusCode> {
+    let channels = bot_state
+        .state_store
+        .load_registered_channels()
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to load registered channels: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let response = RegisteredChannelsResponse {
+        channels: channels
+            .into_iter()
+            .map(|c| RegisteredChannelResponse {
+                channel_id: c.channel_id.to_string(),
+                guild_id: c.guild_id.to_string(),
+                name: c.name,
+                channel_type: c.channel_type,
+            })
+            .collect(),
+    };
+
+    Ok(AxumJson(response))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SendChannelMessageRequest {
+    pub message: Option<String>,
+    pub title: Option<String>,
+    pub description: Option<String>,
+}
+
+pub async fn send_channel_message(
+    State(bot_state): State<Data>,
+    Path(channel_id): Path<String>,
+    AxumJson(request): AxumJson<SendChannelMessageRequest>,
+) -> Result<StatusCode, StatusCode> {
+    let channel_id_parsed: u64 = channel_id.parse().map_err(|_| StatusCode::BAD_REQUEST)?;
+    let channel_id = serenity::model::id::ChannelId::new(channel_id_parsed);
+
+    // Verify the channel ID is in the list of registered channels
+    let registered_channels = bot_state
+        .state_store
+        .load_registered_channels()
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to load registered channels: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let registered_channel = registered_channels
+        .iter()
+        .find(|c| c.channel_id == channel_id)
+        .ok_or_else(|| {
+            tracing::warn!(
+                "Attempt to send message to unregistered channel {}",
+                channel_id
+            );
+            StatusCode::FORBIDDEN
+        })?;
+
+    // Get serenity HTTP client from activity manager context
+    let ctx = bot_state.activity_manager.get_context().await;
+    let Some(ctx) = ctx else {
+        tracing::error!("Bot context not available for sending messages");
+        return Err(StatusCode::SERVICE_UNAVAILABLE);
+    };
+
+    let mut create_message = serenity::all::CreateMessage::new();
+
+    if let Some(msg) = request.message {
+        create_message = create_message.content(msg);
+    }
+
+    if request.title.is_some() || request.description.is_some() {
+        let mut embed = serenity::all::CreateEmbed::new();
+
+        if let Some(t) = request.title {
+            embed = embed.title(t);
+        }
+
+        if let Some(d) = request.description {
+            embed = embed.description(d);
+        }
+
+        create_message = create_message.embed(embed);
+    }
+
+    channel_id
+        .send_message(&ctx.http, create_message)
+        .await
+        .map_err(|e| {
+            tracing::error!(
+                "Failed to send message to channel {} in guild {}: {}",
+                channel_id,
+                registered_channel.guild_id,
+                e
+            );
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    Ok(StatusCode::OK)
+}

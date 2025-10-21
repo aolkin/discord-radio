@@ -325,6 +325,11 @@ impl ActivityManager {
         let stack = self.stack.read().await;
         stack.current().cloned()
     }
+
+    /// Get the serenity context
+    pub async fn get_context(&self) -> Option<serenity::all::Context> {
+        self.ctx.read().await.clone()
+    }
 }
 
 impl Default for ActivityManager {

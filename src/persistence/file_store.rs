@@ -1,5 +1,6 @@
 use super::{
-    DJState, MessagePlaybackState, MultiTrackPlaybackState, ProfileState, Result, StateStore,
+    DJState, MessagePlaybackState, MultiTrackPlaybackState, ProfileState, RegisteredChannel,
+    Result, StateStore,
 };
 use async_trait::async_trait;
 use serenity::model::id::{ChannelId, GuildId};
@@ -108,6 +109,10 @@ impl FileStore {
     fn dj_states(&self) -> PersistedMap<GuildId, DJState> {
         PersistedMap::new(self.base_path.clone(), "dj_states.json")
     }
+
+    fn registered_channels_path(&self) -> PathBuf {
+        self.base_path.join("registered_channels.json")
+    }
 }
 
 #[async_trait]
@@ -182,5 +187,45 @@ impl StateStore for FileStore {
 
     async fn remove_dj_state(&self, guild_id: GuildId) -> Result<()> {
         self.dj_states().remove(&guild_id).await
+    }
+
+    async fn save_registered_channel(&self, channel: &RegisteredChannel) -> Result<()> {
+        let mut channels = self.load_registered_channels().await?;
+
+        // Remove existing entry with same channel_id if exists
+        channels.retain(|c| c.channel_id != channel.channel_id);
+
+        // Add new entry
+        channels.push(channel.clone());
+
+        // Save to file using the utility function
+        let file_path = self.registered_channels_path();
+        super::utils::save_json_to_file(&channels, &file_path).await?;
+
+        Ok(())
+    }
+
+    async fn load_registered_channels(&self) -> Result<Vec<RegisteredChannel>> {
+        let file_path = self.registered_channels_path();
+
+        if !file_path.exists() {
+            return Ok(Vec::new());
+        }
+
+        let content = fs::read_to_string(&file_path).await?;
+        let channels = serde_json::from_str(&content)?;
+
+        Ok(channels)
+    }
+
+    async fn remove_registered_channel(&self, channel_id: ChannelId) -> Result<()> {
+        let mut channels = self.load_registered_channels().await?;
+        channels.retain(|c| c.channel_id != channel_id);
+
+        // Save to file using the utility function
+        let file_path = self.registered_channels_path();
+        super::utils::save_json_to_file(&channels, &file_path).await?;
+
+        Ok(())
     }
 }
