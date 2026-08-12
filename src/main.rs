@@ -1,4 +1,5 @@
 mod audio;
+mod bucket;
 mod commands;
 mod handlers;
 mod logging;
@@ -285,12 +286,20 @@ async fn main() -> Result<(), Error> {
         None
     };
 
+    let bucket = bucket::init_from_env();
+    if bucket.is_some() {
+        tracing::info!("Bucket client initialized");
+    } else {
+        tracing::info!("Object storage not configured (BUCKET_* env vars not set)");
+    }
+
     let data = Arc::new(BotState::new(
         content_path,
         dj_config_overrides_store,
         state_store,
         shutdown_tx,
         metrics_handle.clone(),
+        bucket,
     ));
 
     // Start gauge update task if metrics are configured

@@ -76,6 +76,8 @@ pub struct BotState {
     pub shutdown_tx: tokio::sync::broadcast::Sender<String>,
     pub logs_base_path: std::path::PathBuf,
     pub metrics: MetricsHandle,
+    #[allow(dead_code)]
+    pub bucket: Option<Box<s3::Bucket>>,
 }
 
 impl BotState {
@@ -85,6 +87,7 @@ impl BotState {
         state_store: Arc<dyn StateStore>,
         shutdown_tx: tokio::sync::broadcast::Sender<String>,
         metrics: MetricsHandle,
+        bucket: Option<Box<s3::Bucket>>,
     ) -> Self {
         let profiles_dir = "audio_profiles";
         let mut profile_manager = ProfileManager::new(profiles_dir);
@@ -121,6 +124,7 @@ impl BotState {
             shutdown_tx,
             logs_base_path,
             metrics,
+            bucket,
         }
     }
 
