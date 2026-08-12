@@ -128,10 +128,6 @@ impl BotState {
         }
     }
 
-    pub fn audio_profiles_dir(&self) -> String {
-        "audio_profiles".to_string()
-    }
-
     pub fn hex_audio_dir(&self) -> String {
         format!("{}/audio/hex/", self.content_path)
     }

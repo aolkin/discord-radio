@@ -87,6 +87,25 @@ The portal provides:
 
 See [WEB_PORTAL.md](WEB_PORTAL.md) for more details.
 
+## Commands
+
+### Voice Commands
+- `/join_voice_channel` - Join a voice channel to broadcast audio
+- `/leave_voice_channel` - Leave the current voice channel
+- `/play_message` - Convert a text message to hex and play it as audio in voice
+- `/stop_message` - Stop the currently playing message
+- `/change_track_state` - Start or stop an audio track with fade transition
+- `/get_current_tracks` - Display all currently playing audio tracks
+- `/signal_profile` - Change the audio signal processing profile
+- `/manage_dj` - Manage the radio DJ for automated playback
+- `/get_dj_state` - Get the current state of the DJ
+- `/advance_dj_state` - Force the DJ to advance to the next state (for testing)
+
+### Messaging Commands
+- `/register_channel` - Register a channel for sending messages from the web portal
+- `/speak` - Send a message with optional embed to the current channel
+- `/set_status` - Set the bot's custom status
+
 ## License
 
 This project is provided as-is for development purposes.
