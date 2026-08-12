@@ -96,31 +96,27 @@ impl SymphoniaSource {
                 continue;
             }
 
-            match self.decoder.decode(&packet) {
-                Ok(audio_buf) => {
-                    // Skip empty buffers (can happen after seeking)
-                    if audio_buf.frames() == 0 {
-                        continue;
-                    }
-
-                    if self.sample_buf.is_none()
-                        || self.sample_buf.as_ref().unwrap().capacity() < audio_buf.capacity()
-                    {
-                        self.sample_buf = Some(SampleBuffer::new(
-                            audio_buf.capacity() as u64,
-                            *audio_buf.spec(),
-                        ));
-                    }
-
-                    if let Some(ref mut buf) = self.sample_buf {
-                        buf.copy_interleaved_ref(audio_buf);
-                        self.current_frame_idx = 0;
-                    }
-
-                    return Ok(());
-                }
-                Err(e) => return Err(e),
+            let audio_buf = self.decoder.decode(&packet)?;
+            // Skip empty buffers (can happen after seeking)
+            if audio_buf.frames() == 0 {
+                continue;
             }
+
+            if self.sample_buf.is_none()
+                || self.sample_buf.as_ref().unwrap().capacity() < audio_buf.capacity()
+            {
+                self.sample_buf = Some(SampleBuffer::new(
+                    audio_buf.capacity() as u64,
+                    *audio_buf.spec(),
+                ));
+            }
+
+            if let Some(ref mut buf) = self.sample_buf {
+                buf.copy_interleaved_ref(audio_buf);
+                self.current_frame_idx = 0;
+            }
+
+            return Ok(());
         }
     }
 

@@ -37,7 +37,7 @@ where
         self.ensure_directory_exists().await?;
 
         let file_path = self.base_path.join(&self.filename);
-        let temp_path = self.base_path.join(format!("{}.tmp", &self.filename));
+        let temp_path = self.base_path.join(format!("{}.tmp", self.filename));
 
         let json = serde_json::to_string_pretty(data)?;
 
