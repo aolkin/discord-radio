@@ -77,6 +77,28 @@ pub enum ActivityType {
     Custom,
 }
 
+impl ActivityType {
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "listening" => ActivityType::Listening,
+            "playing" => ActivityType::Playing,
+            "streaming" => ActivityType::Streaming,
+            _ => ActivityType::Custom,
+        }
+    }
+}
+
+impl std::fmt::Display for ActivityType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ActivityType::Listening => write!(f, "listening"),
+            ActivityType::Playing => write!(f, "playing"),
+            ActivityType::Streaming => write!(f, "streaming"),
+            ActivityType::Custom => write!(f, "custom"),
+        }
+    }
+}
+
 /// Activity entry stored on the stack (type + status text)
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ActivityEntry {
@@ -250,13 +272,15 @@ impl Default for VoiceChannelStatusManager {
 pub struct ActivityManager {
     stack: Arc<RwLock<ActivityStack>>,
     ctx: Arc<RwLock<Option<serenity::all::Context>>>,
+    state_store: Arc<dyn crate::persistence::StateStore>,
 }
 
 impl ActivityManager {
-    pub fn new() -> Self {
+    pub fn new(state_store: Arc<dyn crate::persistence::StateStore>) -> Self {
         Self {
             stack: Arc::new(RwLock::new(ActivityStack::new())),
             ctx: Arc::new(RwLock::new(None)),
+            state_store,
         }
     }
 
@@ -288,6 +312,7 @@ impl ActivityManager {
         drop(stack);
 
         self.update_activity().await;
+        self.persist_current_activity().await;
         tracing::debug!("Set bot activity and cleared stack");
     }
 
@@ -300,6 +325,7 @@ impl ActivityManager {
         drop(stack);
 
         self.update_activity().await;
+        self.persist_current_activity().await;
         tracing::debug!("Pushed new bot activity");
     }
 
@@ -314,9 +340,30 @@ impl ActivityManager {
 
         if was_removed {
             self.update_activity().await;
+            self.persist_current_activity().await;
             tracing::debug!("Removed bot activity from stack");
         }
         was_removed
+    }
+
+    /// Persist the current top of the stack to disk (or that there is none)
+    async fn persist_current_activity(&self) {
+        let stack = self.stack.read().await;
+        let current = stack.current().cloned();
+        drop(stack);
+
+        let activity_state = current.map(|entry| crate::persistence::ActivityState {
+            activity_type: entry.activity_type.to_string(),
+            status: entry.status,
+        });
+
+        if let Err(e) = self
+            .state_store
+            .save_activity_state(activity_state.as_ref())
+            .await
+        {
+            tracing::error!("Failed to persist activity state: {}", e);
+        }
     }
 
     /// Get the current active activity (top of stack)
@@ -330,11 +377,24 @@ impl ActivityManager {
     pub async fn get_context(&self) -> Option<serenity::all::Context> {
         self.ctx.read().await.clone()
     }
-}
 
-impl Default for ActivityManager {
-    fn default() -> Self {
-        Self::new()
+    /// Restore activity state from disk
+    pub async fn restore_from_disk(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        if let Some(saved_state) = self.state_store.load_activity_state().await? {
+            let activity_type = ActivityType::from_str(&saved_state.activity_type);
+            let entry = ActivityEntry::new(activity_type, saved_state.status);
+
+            let mut stack = self.stack.write().await;
+            stack.clear();
+            stack.push(entry);
+            drop(stack);
+
+            self.update_activity().await;
+            tracing::info!("Restored activity state from disk");
+        } else {
+            tracing::info!("No saved activity state found");
+        }
+        Ok(())
     }
 }
 

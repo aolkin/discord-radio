@@ -113,6 +113,10 @@ impl FileStore {
     fn registered_channels_path(&self) -> PathBuf {
         self.base_path.join("registered_channels.json")
     }
+
+    fn activity_state_path(&self) -> PathBuf {
+        self.base_path.join("activity_state.json")
+    }
 }
 
 #[async_trait]
@@ -227,5 +231,23 @@ impl StateStore for FileStore {
         super::utils::save_json_to_file(&channels, &file_path).await?;
 
         Ok(())
+    }
+
+    async fn save_activity_state(&self, state: Option<&super::ActivityState>) -> Result<()> {
+        let file_path = self.activity_state_path();
+        super::utils::save_json_to_file(&state, &file_path).await
+    }
+
+    async fn load_activity_state(&self) -> Result<Option<super::ActivityState>> {
+        let file_path = self.activity_state_path();
+
+        if !file_path.exists() {
+            return Ok(None);
+        }
+
+        let content = fs::read_to_string(&file_path).await?;
+        let state: Option<super::ActivityState> = serde_json::from_str(&content)?;
+
+        Ok(state)
     }
 }

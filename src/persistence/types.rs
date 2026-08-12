@@ -135,3 +135,9 @@ pub struct RegisteredChannel {
     pub name: String,
     pub channel_type: String,
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ActivityState {
+    pub activity_type: String,
+    pub status: String,
+}

@@ -6,8 +6,8 @@ mod utils;
 pub use dj::DJConfigOverridesStore;
 pub use file_store::FileStore;
 pub use types::{
-    DJConfigOverrides, DJState, DJStateMachineState, MessagePlaybackState, MultiTrackPlaybackState,
-    ProfileState, RegisteredChannel, TrackState,
+    ActivityState, DJConfigOverrides, DJState, DJStateMachineState, MessagePlaybackState,
+    MultiTrackPlaybackState, ProfileState, RegisteredChannel, TrackState,
 };
 
 use async_trait::async_trait;
@@ -53,4 +53,7 @@ pub trait StateStore: Send + Sync {
     async fn load_registered_channels(&self) -> Result<Vec<RegisteredChannel>>;
     #[allow(dead_code)]
     async fn remove_registered_channel(&self, channel_id: ChannelId) -> Result<()>;
+
+    async fn save_activity_state(&self, state: Option<&ActivityState>) -> Result<()>;
+    async fn load_activity_state(&self) -> Result<Option<ActivityState>>;
 }

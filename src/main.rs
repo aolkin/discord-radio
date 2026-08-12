@@ -61,6 +61,11 @@ impl serenity::EventHandler for Handler {
         // Set the context for the activity manager
         self.data.activity_manager.set_context(ctx.clone()).await;
 
+        // Restore activity state from disk
+        if let Err(e) = self.data.activity_manager.restore_from_disk().await {
+            tracing::error!("Failed to restore activity state: {:?}", e);
+        }
+
         if let Err(e) = crate::startup::restore_voice_channels(&ctx, self.data.clone()).await {
             tracing::error!("Failed to restore voice channels: {:?}", e);
         }
