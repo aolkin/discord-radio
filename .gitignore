@@ -1,1 +1,17 @@
 /target/
+
+# Local secrets — never commit a real bot token or storage credentials
+.env
+.env.*
+!.env.example
+
+# Runtime state written next to the binary by default.
+# bot-state/ also holds logs/<guild_id>/*.jsonl, which contain Discord
+# user IDs, usernames and nicknames.
+/bot-state/
+/bucket-cache/
+
+# Audio and other content supplied at runtime
+/content/
+
+.DS_Store
