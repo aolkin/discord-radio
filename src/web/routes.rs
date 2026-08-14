@@ -243,25 +243,6 @@ pub async fn signal_profile(
     Ok(StatusCode::OK)
 }
 
-// TODO: Status setting needs a channel to communicate with the bot's Discord context
-// #[derive(Debug, Deserialize)]
-// pub struct SetStatusRequest {
-//     pub status: String,
-//     pub activity_type: Option<String>,
-// }
-//
-// #[derive(Debug, Serialize)]
-// pub struct SetStatusResponse {
-//     pub message: String,
-// }
-//
-// pub async fn set_status(
-//     State(_bot_state): State<Data>,
-//     AxumJson(_request): AxumJson<SetStatusRequest>,
-// ) -> Result<AxumJson<SetStatusResponse>, StatusCode> {
-//     Err(StatusCode::NOT_IMPLEMENTED)
-// }
-
 #[derive(Debug, Serialize)]
 pub struct ProfilesResponse {
     pub profiles: Vec<String>,
