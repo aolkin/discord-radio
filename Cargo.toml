@@ -2,6 +2,7 @@
 name = "discord-bot"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.88"
 
 [dependencies]
 serenity = { version = "0.12", default-features = false, features = ["client", "gateway", "rustls_backend", "model", "cache"] }

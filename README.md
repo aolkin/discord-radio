@@ -4,7 +4,7 @@ A Discord bot built with Rust using Serenity and Songbird for voice functionalit
 
 ## Prerequisites
 
-- Rust 1.74 or later
+- Rust 1.88 or later
 - System dependencies:
   - `cmake`
   - `libopus-dev`
