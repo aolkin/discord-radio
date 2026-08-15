@@ -14,7 +14,7 @@ Set the following environment variables to enable metrics:
 # Grafana Cloud OTLP endpoint (adjust region as needed)
 GRAFANA_METRICS_URL=https://otlp-gateway-prod-us-central-0.grafana.net/otlp/v1/metrics
 
-# Your Grafana Cloud API key (also called "instance ID" and "token" in some docs)
+# Your Grafana Cloud API key
 GRAFANA_API_KEY=your_grafana_cloud_api_key
 ```
 

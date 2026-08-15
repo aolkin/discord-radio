@@ -96,7 +96,6 @@ Switch between different audio processing profiles:
 ## Technology Stack
 
 - **Backend**: Axum web framework
-- **Frontend**: Vanilla HTML/CSS/JavaScript (no React)
 - **Real-time**: WebSocket with automatic reconnection
 - **Styling**: Gradient-based modern design
 

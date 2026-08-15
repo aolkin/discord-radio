@@ -28,9 +28,8 @@ Mixes multiple audio sources with independent volume controls.
 
 Wraps Symphonia decoder as an AudioSource.
 
-- Decodes various audio formats (WAV, MP3, FLAC, etc.)
+- Decodes various audio formats (WAV, MP3, etc.)
 - Handles mono→stereo conversion
-- Sample rate conversion (placeholder for future implementation)
 
 ### 3. DSP Effects Chain (`audio/dsp/chain.rs`)
 
@@ -39,10 +38,9 @@ Applies radio signal effects in sequence:
 1. **Bandpass Filter** - Limits frequency range (typically 500Hz-5kHz for AM radio)
 2. **Noise Mixing** - Adds white, pink, or brown noise
 3. **Tremolo/Amplitude Modulation** - Simulates signal fading with frequency and amplitude jitter
-4. **Pitch Shifting** (optional) - Frequency detuning
-5. **Soft Clipping** - Signal distortion
-6. **Bitcrushing** (optional) - Reduces bit depth
-7. **Random Dropouts** - Simulates signal interruptions
+4. **Soft Clipping** - Signal distortion
+5. **Bitcrushing** (optional) - Reduces bit depth
+6. **Random Dropouts** - Simulates signal interruptions
 
 ### 4. DSP Modules
 
@@ -70,7 +68,6 @@ Noise levels use perceptual (dB-based) scaling for natural-sounding volume contr
 - **LFO**: Low-frequency oscillator for tremolo with dual jitter:
   - Frequency jitter: Randomly varies LFO rate (±70% at 50-200ms intervals)
   - Amplitude jitter: Randomly varies LFO depth (±30% at 30-150ms intervals) to make tremolo less predictable
-- **PitchShifter**: Simple time-domain pitch shifting
 - **Bitcrusher**: Reduces sample bit depth
 - **DropoutGenerator**: Random silence periods
 
@@ -115,9 +112,7 @@ Pre-configured effect presets in `audio_profiles/`:
 
 ### `detuned.json`
 
-- 3Hz frequency warble
 - Light white noise (≈-40dB)
-- Moderate tremolo (40% depth @ 1.5Hz)
 
 ### `tuning.json`
 
@@ -129,7 +124,6 @@ Pre-configured effect presets in `audio_profiles/`:
 
 - Narrow bandpass (800Hz-4.5kHz)
 - Minimal white noise (≈-40dB)
-- Clean locked signal
 
 ## Usage
 
@@ -161,7 +155,6 @@ Pre-configured effect presets in `audio_profiles/`:
   "bitcrush_bits": null,
   "dropout_probability": 0.1,
   "dropout_duration_ms": [50.0, 150.0],
-  "pitch_shift_cents": null,
   "frequency_warble_hz": null
 }
 ```
@@ -184,7 +177,6 @@ This provides natural-feeling volume control matching human loudness perception.
 - **Channels**: 2 (stereo)
 - **Frame Size**: 960 samples (20ms)
 - **Processing**: Real-time, lock-free parameter updates
-- **Bit Depth**: 16-bit PCM output
 
 ## Implementation Status
 
@@ -200,7 +192,6 @@ This provides natural-feeling volume control matching human loudness perception.
 
 - Uses `StdRng` for thread-safe random number generation
 - Atomic float operations for lock-free parameter updates
-- DirectForm2Transposed biquad filters for efficiency
 - Custom noise/LFO implementations to avoid non-Sync dasp internals
 - Frame-based processing minimizes overhead
 
