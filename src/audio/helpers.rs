@@ -6,7 +6,7 @@ const MAX_DB: f32 = 18.0;
 /// Convert a perceptual level value (0.0-2.0) to linear amplitude using dB scaling.
 ///
 /// This function maps user-friendly config values to perceptual (logarithmic) amplitude:
-/// - 0.0 → silence (effectively -60dB, amplitude ≈ 0.001)
+/// - 0.0 → silence (amplitude 0)
 /// - 0.5 → moderate (-30dB, amplitude ≈ 0.032)
 /// - 1.0 → reference level (0dB, amplitude = 1.0)
 /// - 2.0 → boosted (+18dB, amplitude ≈ 7.94)

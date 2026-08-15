@@ -10,10 +10,10 @@ pub struct SignalProfile {
     pub bandpass_high: f32,
 
     /// Noise levels (0.0-2.0) use perceptual (dB-based) scaling:
-    /// - 0.0 = silence (-60dB)
+    /// - 0.0 = silence
     /// - 0.5 = moderate (-30dB)
     /// - 1.0 = reference level (0dB)
-    /// - 2.0 = boosted (+6dB)
+    /// - 2.0 = boosted (+18dB)
     pub white_noise_level: f32,
     pub pink_noise_level: f32,
     pub brown_noise_level: f32,

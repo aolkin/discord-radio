@@ -135,7 +135,7 @@ impl CustomMixer {
     ///
     /// * `name` - Name of the track to update
     /// * `volume` - User-facing volume (0.0-2.0). This is converted to amplitude using
-    ///   perceptual (logarithmic) scaling. 0.0 = silence, 1.0 = unity gain, 2.0 = +6dB boost.
+    ///   perceptual (logarithmic) scaling. 0.0 = silence, 1.0 = unity gain, 2.0 = +18dB boost.
     ///
     /// # Returns
     ///

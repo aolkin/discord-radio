@@ -58,12 +58,12 @@ Noise levels use perceptual (dB-based) scaling for natural-sounding volume contr
 
 - Config values range from 0.0 to 2.0 (typical usage 0.0-1.0)
 - Mapping to perceived loudness:
-  - `0.0` = silence (≈-60dB, amplitude ≈ 0.001)
+  - `0.0` = silence (amplitude 0)
   - `0.5` = moderate noise (≈-30dB, amplitude ≈ 0.032)
   - `1.0` = reference level (0dB, amplitude = 1.0)
-  - `2.0` = boosted (+6dB, amplitude ≈ 2.0)
+  - `2.0` = boosted (+18dB, amplitude ≈ 7.9)
 - Internally converted to amplitude using: `amplitude = 10^(dB/20)`
-- Profile transitions interpolate linearly in the perceptual (0.0-2.0) space, which is equivalent to linear interpolation in dB space
+- Profile transitions interpolate linearly in the perceptual (0.0-2.0) space. The dB-per-unit slope changes at 1.0, so a transition is linear in dB only while both levels stay on the same side of it
 
 #### Modulation (`audio/dsp/modulation.rs`)
 
@@ -171,10 +171,10 @@ Pre-configured effect presets in `audio_profiles/`:
 Noise levels (`white_noise_level`, `pink_noise_level`, `brown_noise_level`) use **perceptual (dB-based) scaling**:
 
 - Range: `0.0` to `2.0` (typical usage: `0.0` to `1.0`)
-- `0.0` = silence (≈-60dB)
+- `0.0` = silence (amplitude 0)
 - `0.5` = moderate noise (≈-30dB) 
 - `1.0` = reference level (0dB)
-- `2.0` = boosted (+6dB)
+- `2.0` = boosted (+18dB)
 
 This provides natural-feeling volume control matching human loudness perception. Values are internally converted to linear amplitude for mixing using the formula: `amplitude = 10^(dB/20)`.
 
@@ -210,9 +210,9 @@ The audio system uses **perceptual (logarithmic) volume scaling** to provide mor
 
 ### User Volume Range
 
-- **0.0**: Silence (-60 dB)
+- **0.0**: Silence (amplitude 0)
 - **1.0**: Unity gain (0 dB, original volume)
-- **2.0**: Maximum boost (+6 dB, approximately 2x amplitude)
+- **2.0**: Maximum boost (+18 dB, approximately 8x amplitude)
 
 ### Implementation
 
@@ -223,7 +223,7 @@ For volume in [0.0, 1.0]:
   dB = -60 + volume * 60
   
 For volume in [1.0, 2.0]:
-  dB = (volume - 1.0) * 6
+  dB = (volume - 1.0) * 18
 
 amplitude = 10^(dB/20)
 ```
@@ -239,7 +239,7 @@ All volume parameters in the system (config files, Discord commands, API calls) 
 
 ```json
 {
-  "volume": 1.5  // +3dB boost above original
+  "volume": 1.5  // +9dB boost above original
 }
 ```
 

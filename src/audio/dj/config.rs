@@ -26,9 +26,9 @@ pub struct TrackEntry {
     /// Volume level (0.0-2.0).
     ///
     /// Uses perceptual (logarithmic) scaling:
-    /// - 0.0 = silence (-60 dB)
+    /// - 0.0 = silence
     /// - 1.0 = unity gain (0 dB, original volume)
-    /// - 2.0 = maximum boost (+6 dB, ~2x amplitude)
+    /// - 2.0 = maximum boost (+18 dB, ~8x amplitude)
     ///
     /// This scaling provides more perceptually uniform volume changes
     /// compared to linear scaling.
