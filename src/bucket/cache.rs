@@ -28,7 +28,7 @@ pub enum CacheError {
 /// Downloads a single object's bytes from remote storage. Exists so tests can
 /// substitute a stub for a real bucket without real credentials.
 #[async_trait]
-trait ObjectDownloader: Send + Sync {
+pub(crate) trait ObjectDownloader: Send + Sync {
     async fn download(&self, key: &str) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>>;
 }
 
@@ -73,7 +73,10 @@ impl FileCache {
     }
 
     #[cfg(test)]
-    async fn with_downloader(cache_dir: PathBuf, downloader: Arc<dyn ObjectDownloader>) -> Self {
+    pub(crate) async fn with_downloader(
+        cache_dir: PathBuf,
+        downloader: Arc<dyn ObjectDownloader>,
+    ) -> Self {
         Self::build(cache_dir, Some(downloader), None)
             .await
             .expect("the test cache dir is usable")
