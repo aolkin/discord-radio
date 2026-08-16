@@ -286,12 +286,17 @@ async fn main() -> Result<(), Error> {
         None
     };
 
-    let bucket = bucket::init_from_env();
+    let bucket = bucket::init_from_env().map(Arc::from);
     if bucket.is_some() {
         tracing::info!("Bucket client initialized");
     } else {
         tracing::info!("Object storage not configured (BUCKET_* env vars not set)");
     }
+
+    let file_cache_dir = std::path::PathBuf::from(
+        std::env::var("FILE_CACHE_DIR").unwrap_or_else(|_| "./cache".to_string()),
+    );
+    tracing::info!("Using file cache dir: {:?}", file_cache_dir);
 
     let data = Arc::new(BotState::new(
         content_path,
@@ -300,6 +305,7 @@ async fn main() -> Result<(), Error> {
         shutdown_tx,
         metrics_handle.clone(),
         bucket,
+        file_cache_dir,
     ));
 
     // Start gauge update task if metrics are configured

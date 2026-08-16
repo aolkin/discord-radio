@@ -4,6 +4,7 @@ use crate::audio::duration::DurationCache;
 use crate::audio::processing_thread::AudioProcessor;
 use crate::audio::profiles::ProfileManager;
 use crate::audio::tracks::TrackManager;
+use crate::bucket::FileCache;
 use crate::logging::{JsonLogger, guild_logs_dir};
 use crate::metrics::MetricsHandle;
 use crate::persistence::{DJConfigOverridesStore, StateStore};
@@ -77,7 +78,9 @@ pub struct BotState {
     pub logs_base_path: std::path::PathBuf,
     pub metrics: MetricsHandle,
     #[allow(dead_code)]
-    pub bucket: Option<Box<s3::Bucket>>,
+    pub bucket: Option<Arc<s3::Bucket>>,
+    #[allow(dead_code)]
+    pub file_cache: Arc<FileCache>,
 }
 
 impl BotState {
@@ -87,7 +90,8 @@ impl BotState {
         state_store: Arc<dyn StateStore>,
         shutdown_tx: tokio::sync::broadcast::Sender<String>,
         metrics: MetricsHandle,
-        bucket: Option<Box<s3::Bucket>>,
+        bucket: Option<Arc<s3::Bucket>>,
+        file_cache_dir: std::path::PathBuf,
     ) -> Self {
         let profiles_dir = "audio_profiles";
         let mut profile_manager = ProfileManager::new(profiles_dir);
@@ -105,6 +109,8 @@ impl BotState {
 
         // Get logs base path from state store path
         let logs_base_path = state_store.base_path().to_path_buf();
+
+        let file_cache = Arc::new(FileCache::new(file_cache_dir, bucket.clone()));
 
         Self {
             voice_connections: voice_connections.clone(),
@@ -125,6 +131,7 @@ impl BotState {
             logs_base_path,
             metrics,
             bucket,
+            file_cache,
         }
     }
 
