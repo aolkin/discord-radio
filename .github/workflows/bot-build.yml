@@ -30,5 +30,5 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: radio-bot-arm64-${{ github.run_number }}
-          path: target/release/discord-bot
+          path: target/release/radio-bot
           retention-days: 30

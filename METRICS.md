@@ -76,7 +76,7 @@ The metrics implementation:
 1. Uses the `opentelemetry` and `opentelemetry-otlp` crates
 2. Exports metrics via HTTP using the OTLP protocol
 3. Sends metrics to Grafana Cloud every 60 seconds via a periodic reader
-4. Includes resource attributes: `service.name=discord-bot`, `service.version=<build_number>`
+4. Includes resource attributes: `service.name=radio-bot`, `service.version=<build_number>`
 
 ## Example Grafana Queries
 

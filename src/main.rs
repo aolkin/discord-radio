@@ -194,8 +194,8 @@ async fn main() -> Result<(), Error> {
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
                 tracing_subscriber::EnvFilter::new("info")
-                    .add_directive("discord_bot::audio::dj=debug".parse().unwrap())
-                    .add_directive("discord_bot::audio::tracks=warn".parse().unwrap())
+                    .add_directive("radio_bot::audio::dj=debug".parse().unwrap())
+                    .add_directive("radio_bot::audio::tracks=warn".parse().unwrap())
                     .add_directive("songbird=warn".parse().unwrap())
                     .add_directive("symphonia_core=warn".parse().unwrap())
                     .add_directive("symphonia_format_ogg=warn".parse().unwrap())
@@ -210,10 +210,10 @@ async fn main() -> Result<(), Error> {
 
     let args: Vec<String> = std::env::args().collect();
     if args.get(1).map(|s| s.as_str()) == Some("--version") {
-        println!("discord-bot-{} ({})", run_number, commit_hash);
+        println!("radio-bot-{} ({})", run_number, commit_hash);
         return Ok(());
     } else {
-        info!("Starting discord-bot-{} ({})", run_number, commit_hash);
+        info!("Starting radio-bot-{} ({})", run_number, commit_hash);
     }
 
     let discord_token =
@@ -226,7 +226,7 @@ async fn main() -> Result<(), Error> {
 
     let content_path = args
         .get(1)
-        .expect("Usage: discord-bot <content_path>")
+        .expect("Usage: radio-bot <content_path>")
         .clone();
 
     tracing::info!("Using content path: {}", content_path);

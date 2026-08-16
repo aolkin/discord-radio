@@ -31,7 +31,7 @@ fn create_opus_tags() -> Vec<u8> {
     let mut tags = Vec::new();
     tags.extend_from_slice(b"OpusTags"); // Magic signature
 
-    let vendor = b"discord-bot-rs";
+    let vendor = b"radio-bot-rs";
     tags.extend_from_slice(&(vendor.len() as u32).to_le_bytes());
     tags.extend_from_slice(vendor);
 

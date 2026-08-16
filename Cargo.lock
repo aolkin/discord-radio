@@ -778,42 +778,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "discord-bot"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "atomic_float",
- "axum 0.8.9",
- "biquad",
- "chrono",
- "dotenvy",
- "futures-util",
- "http 1.5.0",
- "ogg",
- "opentelemetry",
- "opentelemetry-otlp",
- "opentelemetry_sdk",
- "opus",
- "parking_lot",
- "poise",
- "rand 0.9.5",
- "rust-s3",
- "serde",
- "serde_json",
- "serenity",
- "songbird",
- "symphonia",
- "tempfile",
- "tokio",
- "tokio-stream",
- "tokio-util",
- "tower 0.5.3",
- "tower-http",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "discortp"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2295,6 +2259,42 @@ name = "r-efi"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
+
+[[package]]
+name = "radio-bot"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "atomic_float",
+ "axum 0.8.9",
+ "biquad",
+ "chrono",
+ "dotenvy",
+ "futures-util",
+ "http 1.5.0",
+ "ogg",
+ "opentelemetry",
+ "opentelemetry-otlp",
+ "opentelemetry_sdk",
+ "opus",
+ "parking_lot",
+ "poise",
+ "rand 0.9.5",
+ "rust-s3",
+ "serde",
+ "serde_json",
+ "serenity",
+ "songbird",
+ "symphonia",
+ "tempfile",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tower 0.5.3",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+]
 
 [[package]]
 name = "rand"
