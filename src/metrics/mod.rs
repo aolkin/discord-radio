@@ -270,12 +270,12 @@ pub fn init_metrics(
     let provider = SdkMeterProvider::builder()
         .with_reader(reader)
         .with_resource(Resource::new(vec![
-            KeyValue::new("service.name", "discord-bot"),
+            KeyValue::new("service.name", "radio-bot"),
             KeyValue::new("service.version", env!("BUILD_RUN_NUMBER")),
         ]))
         .build();
 
-    let meter = provider.meter("discord-bot");
+    let meter = provider.meter("radio-bot");
     let metrics = BotMetrics::new(meter);
 
     info!("Metrics initialized successfully");

@@ -37,7 +37,7 @@ sudo apt update && sudo apt install -y cmake libopus-dev pkg-config
 ## Usage
 
 ```bash
-./target/release/discord-bot <content_path>
+./target/release/radio-bot <content_path>
 ```
 
 Where `<content_path>` is the path to the directory containing bot content (e.g. hex message audio files).
@@ -45,7 +45,7 @@ Where `<content_path>` is the path to the directory containing bot content (e.g.
 To check the build version:
 
 ```bash
-./target/release/discord-bot --version
+./target/release/radio-bot --version
 ```
 
 This will display the GitHub Actions run number and commit hash that the binary was built from.
