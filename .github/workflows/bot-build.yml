@@ -13,7 +13,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Rust and cache dependencies
         uses: ./.github/actions/setup-rust-and-cache
@@ -27,8 +27,8 @@ jobs:
         run: cargo build --release
 
       - name: Upload binary artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: discord-bot-arm64-${{ github.run_number }}
+          name: radio-bot-arm64-${{ github.run_number }}
           path: target/release/discord-bot
           retention-days: 30
