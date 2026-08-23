@@ -297,6 +297,7 @@ async fn main() -> Result<(), Error> {
         std::env::var("FILE_CACHE_DIR").unwrap_or_else(|_| "./cache".to_string()),
     );
     tracing::info!("Using file cache dir: {:?}", file_cache_dir);
+    let file_cache = Arc::new(bucket::FileCache::new(file_cache_dir, bucket));
 
     let data = Arc::new(BotState::new(
         content_path,
@@ -304,8 +305,7 @@ async fn main() -> Result<(), Error> {
         state_store,
         shutdown_tx,
         metrics_handle.clone(),
-        bucket,
-        file_cache_dir,
+        file_cache,
     ));
 
     // Start gauge update task if metrics are configured
