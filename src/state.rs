@@ -4,6 +4,7 @@ use crate::audio::duration::DurationCache;
 use crate::audio::processing_thread::AudioProcessor;
 use crate::audio::profiles::ProfileManager;
 use crate::audio::tracks::TrackManager;
+use crate::bucket::FileCache;
 use crate::logging::{JsonLogger, guild_logs_dir};
 use crate::metrics::MetricsHandle;
 use crate::persistence::{DJConfigOverridesStore, StateStore};
@@ -77,7 +78,7 @@ pub struct BotState {
     pub logs_base_path: std::path::PathBuf,
     pub metrics: MetricsHandle,
     #[allow(dead_code)]
-    pub bucket: Option<Box<s3::Bucket>>,
+    pub file_cache: Arc<FileCache>,
 }
 
 impl BotState {
@@ -87,7 +88,7 @@ impl BotState {
         state_store: Arc<dyn StateStore>,
         shutdown_tx: tokio::sync::broadcast::Sender<String>,
         metrics: MetricsHandle,
-        bucket: Option<Box<s3::Bucket>>,
+        file_cache: Arc<FileCache>,
     ) -> Self {
         let profiles_dir = "audio_profiles";
         let mut profile_manager = ProfileManager::new(profiles_dir);
@@ -124,7 +125,7 @@ impl BotState {
             shutdown_tx,
             logs_base_path,
             metrics,
-            bucket,
+            file_cache,
         }
     }
 

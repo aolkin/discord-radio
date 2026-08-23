@@ -286,12 +286,34 @@ async fn main() -> Result<(), Error> {
         None
     };
 
-    let bucket = bucket::init_from_env();
+    let bucket = bucket::init_from_env().map(Arc::from);
     if bucket.is_some() {
         tracing::info!("Bucket client initialized");
     } else {
         tracing::info!("Object storage not configured (BUCKET_* env vars not set)");
     }
+
+    let file_cache_dir = std::path::PathBuf::from(
+        std::env::var("FILE_CACHE_DIR").unwrap_or_else(|_| "./cache".to_string()),
+    );
+    tracing::info!("Using file cache dir: {:?}", file_cache_dir);
+
+    // Startup is the only thing that deletes cached files, so this defaults
+    // to evicting rather than to a cache dir that only ever grows. 0 turns
+    // eviction off.
+    let file_cache_ttl_secs = std::env::var("FILE_CACHE_TTL_SECS")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(30 * 24 * 60 * 60);
+    let file_cache_ttl =
+        (file_cache_ttl_secs > 0).then(|| std::time::Duration::from_secs(file_cache_ttl_secs));
+    tracing::info!("Using file cache ttl: {:?}", file_cache_ttl);
+
+    let file_cache = Arc::new(
+        bucket::FileCache::new(file_cache_dir.clone(), bucket, file_cache_ttl)
+            .await
+            .map_err(|e| format!("Failed to create file cache at {file_cache_dir:?}: {e}"))?,
+    );
 
     let data = Arc::new(BotState::new(
         content_path,
@@ -299,7 +321,7 @@ async fn main() -> Result<(), Error> {
         state_store,
         shutdown_tx,
         metrics_handle.clone(),
-        bucket,
+        file_cache,
     ));
 
     // Start gauge update task if metrics are configured

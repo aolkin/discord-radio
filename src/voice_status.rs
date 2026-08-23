@@ -175,11 +175,12 @@ impl VoiceChannelStatusManager {
         guild_id: GuildId,
         status: &str,
         http: &Http,
-    ) -> Result<bool, serenity::Error> {
+    ) -> Result<bool, Box<serenity::Error>> {
         if let Some(channel_id) = self.get_voice_channel_id(guild_id).await {
             channel_id
                 .edit(http, serenity::builder::EditChannel::new().status(status))
-                .await?;
+                .await
+                .map_err(Box::new)?;
             Ok(true)
         } else {
             Ok(false)
