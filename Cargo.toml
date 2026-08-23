@@ -46,6 +46,8 @@ rust-s3 = { version = "0.35", default-features = false, features = ["tokio-rustl
 opentelemetry = { version = "0.27", features = ["metrics"] }
 opentelemetry_sdk = { version = "0.27", features = ["metrics", "rt-tokio"] }
 opentelemetry-otlp = { version = "0.27", features = ["metrics", "http-proto", "reqwest-client"] }
+moka = { version = "0.12.16", features = ["future"] }
+thiserror = "2.0.20"
 
 [dev-dependencies]
 tempfile = "3.0"

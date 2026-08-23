@@ -3,71 +3,65 @@
 #![allow(dead_code)]
 
 use async_trait::async_trait;
-use std::collections::HashMap;
+use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::sync::{Mutex, Semaphore, broadcast};
+use tokio::sync::Semaphore;
 
 /// How many objects `pre_cache` will download at once.
 const MAX_CONCURRENT_PRE_CACHE_DOWNLOADS: usize = 4;
 
-#[derive(Clone, Debug)]
+/// Upper bound on the keys whose downloads are remembered. Evicting an entry
+/// costs at most one redundant download.
+const MAX_TRACKED_DOWNLOADS: u64 = 10_000;
+
+/// Anything an [`ObjectDownloader`] implementation can fail with.
+type DownloadError = Box<dyn Error + Send + Sync>;
+
+#[derive(Clone, Debug, thiserror::Error)]
 pub enum CacheError {
     /// No object storage client is configured, so nothing can be downloaded.
+    #[error("object storage is not configured")]
     NotConfigured,
     /// The remote request failed or returned a non-2xx status.
-    Remote(String),
+    #[error("remote download failed: {0}")]
+    Remote(Arc<dyn Error + Send + Sync>),
     /// Writing the downloaded object to the local cache failed.
-    Io(String),
+    #[error("local cache i/o failed: {0}")]
+    Local(Arc<std::io::Error>),
 }
-
-impl std::fmt::Display for CacheError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CacheError::NotConfigured => write!(f, "object storage is not configured"),
-            CacheError::Remote(msg) => write!(f, "remote download failed: {msg}"),
-            CacheError::Io(msg) => write!(f, "local cache i/o failed: {msg}"),
-        }
-    }
-}
-
-impl std::error::Error for CacheError {}
 
 /// Downloads a single object's bytes from remote storage. Exists so tests can
-/// substitute a stub for the real R2 bucket without real credentials.
+/// substitute a stub for a real bucket without real credentials.
 #[async_trait]
 trait ObjectDownloader: Send + Sync {
-    async fn download(&self, r2_key: &str) -> Result<Vec<u8>, CacheError>;
+    async fn download(&self, key: &str) -> Result<Vec<u8>, DownloadError>;
 }
 
 #[async_trait]
 impl ObjectDownloader for s3::Bucket {
-    async fn download(&self, r2_key: &str) -> Result<Vec<u8>, CacheError> {
-        let response = self
-            .get_object(r2_key)
-            .await
-            .map_err(|e| CacheError::Remote(e.to_string()))?;
+    async fn download(&self, key: &str) -> Result<Vec<u8>, DownloadError> {
+        let response = self.get_object(key).await?;
 
         let status = response.status_code();
         if !(200..300).contains(&status) {
-            return Err(CacheError::Remote(format!(
-                "unexpected status {status} fetching {r2_key}"
-            )));
+            return Err(format!("unexpected status {status} fetching {key}").into());
         }
 
         Ok(response.bytes().to_vec())
     }
 }
 
-/// Caches R2 objects on local disk, mirroring the R2 key structure
-/// (`{cache_dir}/{r2_key}`).
+/// Caches objects on local disk, mirroring the object storage key structure
+/// (`{cache_dir}/{key}`).
 ///
 /// Concurrent requests for the same key are deduplicated: only the first
 /// caller downloads, and the rest wait on its result.
 pub struct FileCache {
     cache_dir: PathBuf,
     downloader: Option<Arc<dyn ObjectDownloader>>,
-    in_flight: Mutex<HashMap<String, broadcast::Sender<Result<(), CacheError>>>>,
+    /// Keys already downloaded by this process.
+    downloads: moka::future::Cache<String, ()>,
 }
 
 impl FileCache {
@@ -82,7 +76,7 @@ impl FileCache {
         Self {
             cache_dir,
             downloader: bucket.map(|bucket| bucket as Arc<dyn ObjectDownloader>),
-            in_flight: Mutex::new(HashMap::new()),
+            downloads: moka::future::Cache::new(MAX_TRACKED_DOWNLOADS),
         }
     }
 
@@ -91,79 +85,60 @@ impl FileCache {
         Self {
             cache_dir,
             downloader: Some(downloader),
-            in_flight: Mutex::new(HashMap::new()),
+            downloads: moka::future::Cache::new(MAX_TRACKED_DOWNLOADS),
         }
     }
 
-    /// The deterministic local path for an R2 key, regardless of whether
-    /// it's actually cached yet.
-    pub fn cached_path(&self, r2_key: &str) -> PathBuf {
-        self.cache_dir.join(r2_key)
+    /// The deterministic local path for a key, regardless of whether it's
+    /// actually cached yet.
+    pub fn cached_path(&self, key: &str) -> PathBuf {
+        self.cache_dir.join(key)
     }
 
-    /// Returns the local path for `r2_key`, downloading it from R2 first if
-    /// it isn't already cached. Concurrent calls for the same key share a
-    /// single download.
-    pub async fn ensure_cached(&self, r2_key: &str) -> Result<PathBuf, CacheError> {
-        let dest = self.cached_path(r2_key);
+    /// Returns the local path for `key`, downloading the object first if it
+    /// isn't already cached. Concurrent calls for the same key share a single
+    /// download.
+    pub async fn ensure_cached(&self, key: &str) -> Result<PathBuf, CacheError> {
+        let dest = self.cached_path(key);
         if tokio::fs::try_exists(&dest).await.unwrap_or(false) {
             return Ok(dest);
         }
 
-        let mut follower = {
-            let mut in_flight = self.in_flight.lock().await;
-            if let Some(sender) = in_flight.get(r2_key) {
-                Some(sender.subscribe())
-            } else {
-                let (sender, _receiver) = broadcast::channel(1);
-                in_flight.insert(r2_key.to_string(), sender);
-                None
-            }
-        };
+        self.downloads
+            .try_get_with(key.to_string(), self.download(key, &dest))
+            .await
+            .map_err(|e| (*e).clone())?;
 
-        if let Some(receiver) = follower.as_mut() {
-            return match receiver.recv().await {
-                Ok(Ok(())) => Ok(dest),
-                Ok(Err(e)) => Err(e),
-                Err(_) => Err(CacheError::Remote(
-                    "in-flight download ended without a result".to_string(),
-                )),
-            };
-        }
-
-        let result = self.download(r2_key, &dest).await;
-        {
-            let mut in_flight = self.in_flight.lock().await;
-            if let Some(sender) = in_flight.remove(r2_key) {
-                let _ = sender.send(result.clone());
-            }
-        }
-        result.map(|()| dest)
+        Ok(dest)
     }
 
-    async fn download(&self, r2_key: &str, dest: &Path) -> Result<(), CacheError> {
+    async fn download(&self, key: &str, dest: &Path) -> Result<(), CacheError> {
         let downloader = self.downloader.as_ref().ok_or(CacheError::NotConfigured)?;
-        let bytes = downloader.download(r2_key).await?;
+        let bytes = downloader
+            .download(key)
+            .await
+            .map_err(|e| CacheError::Remote(e.into()))?;
 
         if let Some(parent) = dest.parent() {
             tokio::fs::create_dir_all(parent)
                 .await
-                .map_err(|e| CacheError::Io(e.to_string()))?;
+                .map_err(|e| CacheError::Local(Arc::new(e)))?;
         }
 
         tokio::fs::write(dest, bytes)
             .await
-            .map_err(|e| CacheError::Io(e.to_string()))
+            .map_err(|e| CacheError::Local(Arc::new(e)))
     }
 
-    /// Removes the local copy of `r2_key`, if any, so the next
-    /// `ensure_cached` re-downloads it. Used for playlist re-fetch
-    /// scenarios where the remote object may have changed.
-    pub async fn invalidate(&self, r2_key: &str) -> Result<(), CacheError> {
-        match tokio::fs::remove_file(self.cached_path(r2_key)).await {
+    /// Removes the local copy of `key`, if any, so the next `ensure_cached`
+    /// re-downloads it. Used for playlist re-fetch scenarios where the remote
+    /// object may have changed.
+    pub async fn invalidate(&self, key: &str) -> Result<(), CacheError> {
+        self.downloads.invalidate(key).await;
+        match tokio::fs::remove_file(self.cached_path(key)).await {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(e) => Err(CacheError::Io(e.to_string())),
+            Err(e) => Err(CacheError::Local(Arc::new(e))),
         }
     }
 
@@ -213,7 +188,7 @@ mod tests {
 
     #[async_trait]
     impl ObjectDownloader for StubDownloader {
-        async fn download(&self, _r2_key: &str) -> Result<Vec<u8>, CacheError> {
+        async fn download(&self, _key: &str) -> Result<Vec<u8>, DownloadError> {
             self.calls.fetch_add(1, Ordering::SeqCst);
             if !self.delay.is_zero() {
                 tokio::time::sleep(self.delay).await;
@@ -226,8 +201,8 @@ mod tests {
 
     #[async_trait]
     impl ObjectDownloader for FailingDownloader {
-        async fn download(&self, r2_key: &str) -> Result<Vec<u8>, CacheError> {
-            Err(CacheError::Remote(format!("no such object: {r2_key}")))
+        async fn download(&self, key: &str) -> Result<Vec<u8>, DownloadError> {
+            Err(format!("no such object: {key}").into())
         }
     }
 
@@ -274,7 +249,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let cache = FileCache::new(dir.path().to_path_buf(), None);
 
-        cache.invalidate("tracks/never-downloaded.ogg").await.unwrap();
+        cache
+            .invalidate("tracks/never-downloaded.ogg")
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
@@ -314,6 +292,24 @@ mod tests {
         cache.ensure_cached("tracks/song.ogg").await.unwrap();
 
         assert_eq!(calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn ensure_cached_re_downloads_after_invalidate() {
+        let dir = tempfile::tempdir().unwrap();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let downloader = Arc::new(StubDownloader {
+            calls: calls.clone(),
+            payload: b"hello world".to_vec(),
+            delay: Duration::ZERO,
+        });
+        let cache = FileCache::with_downloader(dir.path().to_path_buf(), downloader);
+
+        cache.ensure_cached("tracks/song.ogg").await.unwrap();
+        cache.invalidate("tracks/song.ogg").await.unwrap();
+        cache.ensure_cached("tracks/song.ogg").await.unwrap();
+
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
     }
 
     #[tokio::test]
