@@ -126,7 +126,24 @@ impl FileCache {
                 .map_err(|e| CacheError::Local(Arc::new(e)))?;
         }
 
-        tokio::fs::write(dest, bytes)
+        // Write to a temporary path in the same directory as `dest` and
+        // rename into place only once the write fully succeeds, so a
+        // process kill mid-download can't leave a partial file at `dest`
+        // that a later `fill` would mistake for a completed download.
+        let mut temp_dest = dest.as_os_str().to_owned();
+        temp_dest.push(".tmp");
+        let temp_dest = PathBuf::from(temp_dest);
+
+        if let Err(e) = tokio::fs::write(&temp_dest, bytes).await {
+            if let Err(cleanup_err) = tokio::fs::remove_file(&temp_dest).await
+                && cleanup_err.kind() != std::io::ErrorKind::NotFound
+            {
+                tracing::warn!("Failed to clean up temp file {temp_dest:?}: {cleanup_err}");
+            }
+            return Err(CacheError::Local(Arc::new(e)));
+        }
+
+        tokio::fs::rename(&temp_dest, dest)
             .await
             .map_err(|e| CacheError::Local(Arc::new(e)))
     }
@@ -275,6 +292,42 @@ mod tests {
         cache.ensure_cached("tracks/song.ogg").await.unwrap();
 
         assert_eq!(calls.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn ensure_cached_does_not_leave_a_temp_file_behind() {
+        let dir = tempfile::tempdir().unwrap();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let cache =
+            FileCache::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls));
+
+        cache.ensure_cached("tracks/song.ogg").await.unwrap();
+
+        let mut temp_path = cache.cached_path("tracks/song.ogg").into_os_string();
+        temp_path.push(".tmp");
+        assert!(!Path::new(&temp_path).exists());
+    }
+
+    #[tokio::test]
+    async fn fill_does_not_leave_a_partial_file_when_the_write_fails() {
+        let dir = tempfile::tempdir().unwrap();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let cache =
+            FileCache::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls));
+        let dest = cache.cached_path("tracks/song.ogg");
+        tokio::fs::create_dir_all(dest.parent().unwrap())
+            .await
+            .unwrap();
+
+        // Occupy the temp path with a directory so the write into it fails.
+        let mut temp_path = dest.clone().into_os_string();
+        temp_path.push(".tmp");
+        tokio::fs::create_dir(&temp_path).await.unwrap();
+
+        let err = cache.ensure_cached("tracks/song.ogg").await.unwrap_err();
+
+        assert!(matches!(err, CacheError::Local(_)));
+        assert!(!dest.exists());
     }
 
     #[tokio::test]
