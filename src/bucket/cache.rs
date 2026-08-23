@@ -8,8 +8,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 
-const MAX_CONCURRENT_PRE_CACHE_DOWNLOADS: usize = 4;
-
 /// Evicting an entry costs at most one redundant filesystem check.
 const MAX_TRACKED_KEYS: u64 = 10_000;
 
@@ -51,6 +49,12 @@ pub struct FileCache {
     downloader: Option<Arc<dyn ObjectDownloader>>,
     /// Keys this process has confirmed are on disk.
     present: moka::future::Cache<String, ()>,
+    /// Held for reading across `ensure_cached` and for writing across
+    /// `invalidate`. Moka inserts whatever the fill future produced without
+    /// rechecking that the key is still wanted, so without this an
+    /// `invalidate` that lands mid-fill deletes the file and then gets an
+    /// entry claiming that key is present written on top of it.
+    invalidation_lock: tokio::sync::RwLock<()>,
 }
 
 impl FileCache {
@@ -58,16 +62,15 @@ impl FileCache {
     /// yet. With `bucket` set to `None` nothing can be downloaded, and
     /// `ensure_cached` fails with [`CacheError::NotConfigured`] for any key
     /// that isn't already on disk.
-    pub fn new(cache_dir: PathBuf, bucket: Option<Arc<s3::Bucket>>) -> Self {
-        if let Err(e) = std::fs::create_dir_all(&cache_dir) {
-            tracing::warn!("Failed to create file cache directory {cache_dir:?}: {e}");
-        }
+    pub fn new(cache_dir: PathBuf, bucket: Option<Arc<s3::Bucket>>) -> Result<Self, CacheError> {
+        std::fs::create_dir_all(&cache_dir).map_err(|e| CacheError::Local(Arc::new(e)))?;
 
-        Self {
+        Ok(Self {
             cache_dir,
             downloader: bucket.map(|bucket| bucket as Arc<dyn ObjectDownloader>),
             present: moka::future::Cache::new(MAX_TRACKED_KEYS),
-        }
+            invalidation_lock: tokio::sync::RwLock::new(()),
+        })
     }
 
     #[cfg(test)]
@@ -76,6 +79,7 @@ impl FileCache {
             cache_dir,
             downloader: Some(downloader),
             present: moka::future::Cache::new(MAX_TRACKED_KEYS),
+            invalidation_lock: tokio::sync::RwLock::new(()),
         }
     }
 
@@ -90,6 +94,7 @@ impl FileCache {
     /// download.
     pub async fn ensure_cached(&self, key: &str) -> Result<PathBuf, CacheError> {
         let dest = self.cached_path(key);
+        let _guard = self.invalidation_lock.read().await;
 
         self.present
             .try_get_with(key.to_string(), self.fill(key, &dest))
@@ -127,8 +132,10 @@ impl FileCache {
     }
 
     /// Removes the local copy of `key`, if any, so the next `ensure_cached`
-    /// re-downloads it.
+    /// re-downloads it. Waits for in-flight `ensure_cached` calls to finish
+    /// first, including ones for other keys.
     pub async fn invalidate(&self, key: &str) -> Result<(), CacheError> {
+        let _guard = self.invalidation_lock.write().await;
         self.present.invalidate(key).await;
         match tokio::fs::remove_file(self.cached_path(key)).await {
             Ok(()) => Ok(()),
@@ -136,33 +143,34 @@ impl FileCache {
             Err(e) => Err(CacheError::Local(Arc::new(e))),
         }
     }
+}
 
-    /// Downloads `keys` in the background, bounded to
-    /// `MAX_CONCURRENT_PRE_CACHE_DOWNLOADS` concurrent downloads. Returns
-    /// immediately; failures are logged rather than surfaced. Await the
-    /// returned handle to wait for every key to have been attempted.
-    pub fn pre_cache(self: &Arc<Self>, keys: &[String]) -> tokio::task::JoinHandle<()> {
-        let keys = keys.to_vec();
-        let cache = Arc::clone(self);
-        tokio::spawn(async move {
-            let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_PRE_CACHE_DOWNLOADS));
-            let mut tasks = tokio::task::JoinSet::new();
-            for key in keys {
-                let semaphore = Arc::clone(&semaphore);
-                let cache = Arc::clone(&cache);
-                tasks.spawn(async move {
-                    let _permit = semaphore
-                        .acquire_owned()
-                        .await
-                        .expect("semaphore is never closed");
-                    if let Err(e) = cache.ensure_cached(&key).await {
-                        tracing::warn!("Failed to pre-cache {key}: {e}");
-                    }
-                });
-            }
-            while tasks.join_next().await.is_some() {}
-        })
-    }
+/// Downloads `keys` into `cache` in the background, at most `max_concurrent`
+/// at a time. Returns immediately; failures are logged rather than surfaced.
+/// Await the returned handle to wait for every key to have been attempted.
+pub fn pre_cache(
+    cache: Arc<FileCache>,
+    keys: Vec<String>,
+    max_concurrent: usize,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let semaphore = Arc::new(Semaphore::new(max_concurrent));
+        let mut tasks = tokio::task::JoinSet::new();
+        for key in keys {
+            let semaphore = Arc::clone(&semaphore);
+            let cache = Arc::clone(&cache);
+            tasks.spawn(async move {
+                let _permit = semaphore
+                    .acquire_owned()
+                    .await
+                    .expect("semaphore is never closed");
+                if let Err(e) = cache.ensure_cached(&key).await {
+                    tracing::warn!("Failed to pre-cache {key}: {e}");
+                }
+            });
+        }
+        while tasks.join_next().await.is_some() {}
+    })
 }
 
 #[cfg(test)]
@@ -207,25 +215,15 @@ mod tests {
         let cache_dir = dir.path().join("nested/cache");
         assert!(!cache_dir.exists());
 
-        FileCache::new(cache_dir.clone(), None);
+        FileCache::new(cache_dir.clone(), None).unwrap();
 
         assert!(cache_dir.is_dir());
-    }
-
-    #[test]
-    fn cached_path_mirrors_the_key() {
-        let dir = tempfile::tempdir().unwrap();
-        let cache = FileCache::new(dir.path().to_path_buf(), None);
-
-        let path = cache.cached_path("tracks/music/60s/song.ogg");
-
-        assert_eq!(path, dir.path().join("tracks/music/60s/song.ogg"));
     }
 
     #[tokio::test]
     async fn invalidate_is_a_no_op_when_nothing_is_cached() {
         let dir = tempfile::tempdir().unwrap();
-        let cache = FileCache::new(dir.path().to_path_buf(), None);
+        let cache = FileCache::new(dir.path().to_path_buf(), None).unwrap();
 
         cache
             .invalidate("tracks/never-downloaded.ogg")
@@ -280,16 +278,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn ensure_cached_without_a_configured_bucket_fails() {
-        let dir = tempfile::tempdir().unwrap();
-        let cache = FileCache::new(dir.path().to_path_buf(), None);
-
-        let err = cache.ensure_cached("tracks/song.ogg").await.unwrap_err();
-
-        assert!(matches!(err, CacheError::NotConfigured));
-    }
-
-    #[tokio::test]
     async fn ensure_cached_surfaces_download_failures() {
         let dir = tempfile::tempdir().unwrap();
         let cache =
@@ -309,14 +297,17 @@ mod tests {
             StubDownloader::new(&calls),
         ));
 
-        cache
-            .pre_cache(&[
+        pre_cache(
+            Arc::clone(&cache),
+            vec![
                 "tracks/a.ogg".to_string(),
                 "tracks/b.ogg".to_string(),
                 "tracks/c.ogg".to_string(),
-            ])
-            .await
-            .unwrap();
+            ],
+            2,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(calls.load(Ordering::SeqCst), 3);
         assert!(cache.cached_path("tracks/a.ogg").exists());

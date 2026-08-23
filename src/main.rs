@@ -297,7 +297,10 @@ async fn main() -> Result<(), Error> {
         std::env::var("FILE_CACHE_DIR").unwrap_or_else(|_| "./cache".to_string()),
     );
     tracing::info!("Using file cache dir: {:?}", file_cache_dir);
-    let file_cache = Arc::new(bucket::FileCache::new(file_cache_dir, bucket));
+    let file_cache = Arc::new(
+        bucket::FileCache::new(file_cache_dir.clone(), bucket)
+            .map_err(|e| format!("Failed to create file cache at {file_cache_dir:?}: {e}"))?,
+    );
 
     let data = Arc::new(BotState::new(
         content_path,
