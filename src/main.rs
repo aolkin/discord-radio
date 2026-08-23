@@ -297,8 +297,21 @@ async fn main() -> Result<(), Error> {
         std::env::var("FILE_CACHE_DIR").unwrap_or_else(|_| "./cache".to_string()),
     );
     tracing::info!("Using file cache dir: {:?}", file_cache_dir);
+
+    // Startup is the only thing that deletes cached files, so this defaults
+    // to evicting rather than to a cache dir that only ever grows. 0 turns
+    // eviction off.
+    let file_cache_ttl_secs = std::env::var("FILE_CACHE_TTL_SECS")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(30 * 24 * 60 * 60);
+    let file_cache_ttl =
+        (file_cache_ttl_secs > 0).then(|| std::time::Duration::from_secs(file_cache_ttl_secs));
+    tracing::info!("Using file cache ttl: {:?}", file_cache_ttl);
+
     let file_cache = Arc::new(
-        bucket::FileCache::new(file_cache_dir.clone(), bucket)
+        bucket::FileCache::new(file_cache_dir.clone(), bucket, file_cache_ttl)
+            .await
             .map_err(|e| format!("Failed to create file cache at {file_cache_dir:?}: {e}"))?,
     );
 
