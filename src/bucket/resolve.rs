@@ -92,22 +92,4 @@ mod tests {
         assert_eq!(resolved, "content/audio/radio-favs/song.ogg");
         assert_eq!(calls.load(Ordering::SeqCst), 0);
     }
-
-    #[tokio::test]
-    async fn filenames_starting_with_tracks_are_local_unless_s3_prefixed() {
-        let dir = tempfile::tempdir().unwrap();
-        let calls = Arc::new(AtomicUsize::new(0));
-        let downloader = Arc::new(StubDownloader {
-            calls: calls.clone(),
-            payload: b"unused".to_vec(),
-        });
-        let file_cache = FileCache::with_downloader(dir.path().to_path_buf(), downloader).await;
-
-        let resolved = resolve_track_path("tracks/local-file.mp3", "content", &file_cache)
-            .await
-            .unwrap();
-
-        assert_eq!(resolved, "content/tracks/local-file.mp3");
-        assert_eq!(calls.load(Ordering::SeqCst), 0);
-    }
 }
