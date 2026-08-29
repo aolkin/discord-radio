@@ -6,20 +6,20 @@ use crate::bucket::FileCache;
 
 /// Resolves a playlist entry's `filename` to a local filesystem path.
 ///
-/// Filenames prefixed with `tracks/` are R2 object keys: they're downloaded
-/// into `file_cache` (if not already cached) and the local cache path is
-/// returned. Any other filename is treated as a path relative to
-/// `content_path`, unchanged from how playlists have always resolved local
-/// files. This lets existing playlists keep working while new ones route
-/// through R2 without a migration.
+/// Filenames prefixed with `s3://` are R2 object keys: the prefix is
+/// stripped and the remainder is downloaded into `file_cache` (if not
+/// already cached), returning the local cache path. Any other filename is
+/// treated as a path relative to `content_path`, unchanged from how
+/// playlists have always resolved local files. This lets existing playlists
+/// keep working while new ones route through R2 without a migration.
 pub async fn resolve_track_path(
     filename: &str,
     content_path: &str,
     file_cache: &FileCache,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    if filename.starts_with("tracks/") {
+    if let Some(key) = filename.strip_prefix("s3://") {
         Ok(file_cache
-            .ensure_cached(filename)
+            .ensure_cached(key)
             .await?
             .to_string_lossy()
             .to_string())
@@ -52,7 +52,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn tracks_prefixed_filenames_route_through_the_file_cache() {
+    async fn s3_prefixed_filenames_route_through_the_file_cache() {
         let dir = tempfile::tempdir().unwrap();
         let calls = Arc::new(AtomicUsize::new(0));
         let downloader = Arc::new(StubDownloader {
@@ -61,7 +61,7 @@ mod tests {
         });
         let file_cache = FileCache::with_downloader(dir.path().to_path_buf(), downloader).await;
 
-        let resolved = resolve_track_path("tracks/music/60s/song.ogg", "content", &file_cache)
+        let resolved = resolve_track_path("s3://tracks/music/60s/song.ogg", "content", &file_cache)
             .await
             .unwrap();
 
@@ -90,6 +90,24 @@ mod tests {
             .unwrap();
 
         assert_eq!(resolved, "content/audio/radio-favs/song.ogg");
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn local_filenames_containing_tracks_are_not_routed_to_r2() {
+        let dir = tempfile::tempdir().unwrap();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let downloader = Arc::new(StubDownloader {
+            calls: calls.clone(),
+            payload: b"unused".to_vec(),
+        });
+        let file_cache = FileCache::with_downloader(dir.path().to_path_buf(), downloader).await;
+
+        let resolved = resolve_track_path("content/tracks/local-file.mp3", "content", &file_cache)
+            .await
+            .unwrap();
+
+        assert_eq!(resolved, "content/content/tracks/local-file.mp3");
         assert_eq!(calls.load(Ordering::SeqCst), 0);
     }
 }
