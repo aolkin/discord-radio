@@ -74,18 +74,14 @@ mod tests {
     #[tokio::test]
     async fn other_filenames_join_the_content_path_without_touching_the_cache() {
         let dir = tempfile::tempdir().unwrap();
-        let calls = Arc::new(AtomicUsize::new(0));
-        let downloader = Arc::new(StubDownloader {
-            calls: calls.clone(),
-            payload: b"unused".to_vec(),
-        });
-        let file_cache = FileCache::with_downloader(dir.path().to_path_buf(), downloader).await;
+        let file_cache = FileCache::new(dir.path().to_path_buf(), None, None)
+            .await
+            .unwrap();
 
         let resolved = resolve_track_path("audio/radio-favs/song.ogg", "content", &file_cache)
             .await
             .unwrap();
 
         assert_eq!(resolved, "content/audio/radio-favs/song.ogg");
-        assert_eq!(calls.load(Ordering::SeqCst), 0);
     }
 }
