@@ -2,12 +2,9 @@ use crate::bucket::FileCache;
 
 /// Resolves a playlist entry's `filename` to a local filesystem path.
 ///
-/// Filenames prefixed with `s3://` are R2 object keys: the prefix is
-/// stripped and the remainder is downloaded into `file_cache` (if not
-/// already cached), returning the local cache path. Any other filename is
-/// treated as a path relative to `content_path`, unchanged from how
-/// playlists have always resolved local files. This lets existing playlists
-/// keep working while new ones route through R2 without a migration.
+/// A `s3://`-prefixed filename is an R2 object key: the prefix is stripped
+/// and the remainder is fetched into `file_cache` if not already cached.
+/// Anything else is joined with `content_path` directly.
 pub async fn resolve_track_path(
     filename: &str,
     content_path: &str,
