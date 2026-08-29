@@ -24,6 +24,11 @@ pub struct TrackSnapshot {
 pub struct TrackInfo {
     pub name: String,
     pub filename: String,
+    /// The filename or `s3://` key as originally requested, before
+    /// `resolve_track_path` ran. Persisted in place of `filename` so
+    /// restoration can re-resolve it rather than replay an already-resolved
+    /// local path, which may since have been evicted from the R2 cache.
+    pub original_filename: String,
     pub volume: f32,
     pub fade_task: Option<JoinHandle<()>>,
     pub fade_cancel: Option<CancellationToken>,
@@ -36,6 +41,7 @@ pub struct TrackInfo {
 pub struct StartTrackArgs {
     pub name: String,
     pub filename: String,
+    pub original_filename: String,
     pub volume: f32,
     pub fade_time: f32,
     pub loops: bool,
@@ -179,6 +185,7 @@ impl TrackManager {
         let track = TrackInfo {
             name: args.name.clone(),
             filename: args.filename.clone(),
+            original_filename: args.original_filename.clone(),
             volume: args.volume,
             fade_task: None,
             fade_cancel: None,
@@ -480,7 +487,7 @@ impl TrackManager {
                 .filter(|info| info.persist)
                 .map(|info| crate::persistence::TrackState {
                     name: info.name.clone(),
-                    filename: info.filename.clone(),
+                    filename: info.original_filename.clone(),
                     volume: info.volume,
                     loops: info.loops,
                     start_time: Some(info.start_time),

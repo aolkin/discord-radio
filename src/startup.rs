@@ -185,10 +185,32 @@ async fn restore_multitrack_playback(
         let mut manager = manager_arc.lock().await;
 
         for track in multitrack_state.tracks {
+            let resolved_filename = match crate::bucket::resolve_track_path(
+                &track.filename,
+                &bot_state.content_path,
+                &bot_state.file_cache,
+            )
+            .await
+            {
+                Ok(path) => path,
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to resolve track '{}' (file: {}) during restoration: {}",
+                        track.name,
+                        track.filename,
+                        e
+                    );
+                    continue;
+                }
+            };
+
             let start_position = if let Some(start_time) = track.start_time {
                 match start_time.elapsed() {
                     Ok(elapsed) => {
-                        let duration = bot_state.duration_cache.get_duration(&track.filename).await;
+                        let duration = bot_state
+                            .duration_cache
+                            .get_duration(&resolved_filename)
+                            .await;
 
                         let position = if let Some(track_duration) = duration {
                             if track.loops && track_duration.as_secs() > 0 {
@@ -230,13 +252,14 @@ async fn restore_multitrack_playback(
             };
 
             let name = track.name.clone();
-            let filename = track.filename;
+            let original_filename = track.filename;
             let volume = track.volume;
             let loops = track.loops;
             if let Err(e) = manager
                 .start_track(StartTrackArgs {
                     name,
-                    filename,
+                    filename: resolved_filename,
+                    original_filename,
                     volume,
                     fade_time: 1.0,
                     loops,

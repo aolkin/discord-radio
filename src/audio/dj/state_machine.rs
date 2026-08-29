@@ -409,6 +409,7 @@ impl DJStateMachine {
             .start_track(StartTrackArgs {
                 name: track_name.clone(),
                 filename: full_path,
+                original_filename: track_entry.filename.clone(),
                 volume: track_entry.volume.unwrap_or(1.0),
                 fade_time: 1.0,
                 loops: false,

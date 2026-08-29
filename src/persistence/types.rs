@@ -15,6 +15,8 @@ pub struct MessagePlaybackState {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TrackState {
     pub name: String,
+    /// The filename or `s3://` key as originally requested; pass it through
+    /// `resolve_track_path` before use.
     pub filename: String,
     pub volume: f32,
     #[serde(default = "default_loops")]

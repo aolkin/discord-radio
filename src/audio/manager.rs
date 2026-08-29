@@ -82,7 +82,8 @@ pub async fn hex_playback_task(
                 .start_track_with_callback(
                     StartTrackArgs {
                         name: HEX_PLAYBACK_TRACK_NAME.to_string(),
-                        filename: audio_path,
+                        filename: audio_path.clone(),
+                        original_filename: audio_path,
                         volume,
                         fade_time: 0.0,
                         loops: false,

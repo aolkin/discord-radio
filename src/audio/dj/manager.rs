@@ -191,6 +191,7 @@ pub async fn dj_task(
                                 .start_track(StartTrackArgs {
                                     name: track_name.clone(),
                                     filename: full_path,
+                                    original_filename: filename.clone(),
                                     volume,
                                     fade_time: 1.0,
                                     loops: false,
