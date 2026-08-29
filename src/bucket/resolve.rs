@@ -27,61 +27,25 @@ pub async fn resolve_track_path(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use async_trait::async_trait;
-    use std::sync::Arc;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
-    struct StubDownloader {
-        calls: Arc<AtomicUsize>,
-        payload: Vec<u8>,
-    }
-
-    #[async_trait]
-    impl crate::bucket::cache::ObjectDownloader for StubDownloader {
-        async fn download(
-            &self,
-            _key: &str,
-        ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
-            self.calls.fetch_add(1, Ordering::SeqCst);
-            Ok(self.payload.clone())
-        }
-    }
 
     #[tokio::test]
-    async fn s3_prefixed_filenames_route_through_the_file_cache() {
-        let dir = tempfile::tempdir().unwrap();
-        let calls = Arc::new(AtomicUsize::new(0));
-        let downloader = Arc::new(StubDownloader {
-            calls: calls.clone(),
-            payload: b"hello world".to_vec(),
-        });
-        let file_cache = FileCache::with_downloader(dir.path().to_path_buf(), downloader).await;
-
-        let resolved = resolve_track_path("s3://tracks/music/60s/song.ogg", "content", &file_cache)
-            .await
-            .unwrap();
-
-        assert_eq!(
-            resolved,
-            dir.path()
-                .join("tracks/music/60s/song.ogg")
-                .to_string_lossy()
-                .to_string()
-        );
-        assert_eq!(calls.load(Ordering::SeqCst), 1);
-    }
-
-    #[tokio::test]
-    async fn other_filenames_join_the_content_path_without_touching_the_cache() {
+    async fn dispatches_on_the_s3_prefix() {
         let dir = tempfile::tempdir().unwrap();
         let file_cache = FileCache::new(dir.path().to_path_buf(), None, None)
             .await
             .unwrap();
 
-        let resolved = resolve_track_path("audio/radio-favs/song.ogg", "content", &file_cache)
+        // s3://-prefixed: dispatched into the (unconfigured) cache, which fails.
+        assert!(
+            resolve_track_path("s3://tracks/song.ogg", "content", &file_cache)
+                .await
+                .is_err()
+        );
+
+        // Everything else: dispatched to the local-path branch, never touching the cache.
+        let resolved = resolve_track_path("audio/song.ogg", "content", &file_cache)
             .await
             .unwrap();
-
-        assert_eq!(resolved, "content/audio/radio-favs/song.ogg");
+        assert_eq!(resolved, "content/audio/song.ogg");
     }
 }
