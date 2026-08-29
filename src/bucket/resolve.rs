@@ -1,7 +1,3 @@
-// Nothing calls resolve_track_path yet; the playback and web-serving paths
-// that will (OLK-115/OLK-116) land in later PRs.
-#![allow(dead_code)]
-
 use crate::bucket::FileCache;
 
 /// Resolves a playlist entry's `filename` to a local filesystem path.

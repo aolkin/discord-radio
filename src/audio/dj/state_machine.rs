@@ -1,6 +1,7 @@
 use crate::audio::dj::config::DJConfig;
 use crate::audio::dj::scheduler::{DJStateType, WeightedScheduler};
 use crate::audio::tracks::{StartTrackArgs, TrackManager};
+use crate::bucket::resolve_track_path;
 use crate::state::Data;
 use rand::Rng;
 use serenity::all::Http;
@@ -367,7 +368,12 @@ impl DJStateMachine {
             .get_track(idx)
             .ok_or("Track index out of bounds")?;
 
-        let full_path = format!("{}/{}", self.content_path, track_entry.filename);
+        let full_path = resolve_track_path(
+            &track_entry.filename,
+            &self.content_path,
+            &bot_state.file_cache,
+        )
+        .await?;
         let track_name = format!("dj_track_{}", idx);
 
         let duration = bot_state.duration_cache.get_duration(&full_path).await;

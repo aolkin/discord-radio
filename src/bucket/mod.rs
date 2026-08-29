@@ -2,7 +2,6 @@ pub mod cache;
 pub mod resolve;
 
 pub use cache::FileCache;
-#[allow(unused_imports)]
 pub use resolve::resolve_track_path;
 
 use s3::bucket::Bucket;
