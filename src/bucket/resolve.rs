@@ -94,7 +94,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn local_filenames_containing_tracks_are_not_routed_to_r2() {
+    async fn filenames_starting_with_tracks_are_local_unless_s3_prefixed() {
         let dir = tempfile::tempdir().unwrap();
         let calls = Arc::new(AtomicUsize::new(0));
         let downloader = Arc::new(StubDownloader {
@@ -103,11 +103,11 @@ mod tests {
         });
         let file_cache = FileCache::with_downloader(dir.path().to_path_buf(), downloader).await;
 
-        let resolved = resolve_track_path("content/tracks/local-file.mp3", "content", &file_cache)
+        let resolved = resolve_track_path("tracks/local-file.mp3", "content", &file_cache)
             .await
             .unwrap();
 
-        assert_eq!(resolved, "content/content/tracks/local-file.mp3");
+        assert_eq!(resolved, "content/tracks/local-file.mp3");
         assert_eq!(calls.load(Ordering::SeqCst), 0);
     }
 }
