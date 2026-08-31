@@ -260,6 +260,15 @@ pub async fn stop_message(ctx: Context<'_>) -> Result<(), Error> {
     Ok(())
 }
 
+fn has_audio_extension(path: &std::path::Path) -> bool {
+    path.extension().is_some_and(|ext| {
+        matches!(
+            ext.to_string_lossy().to_lowercase().as_str(),
+            "mp3" | "ogg" | "wav" | "flac" | "m4a"
+        )
+    })
+}
+
 async fn autocomplete_audio_file(ctx: Context<'_>, partial: &'_ str) -> Vec<String> {
     let content_dir = &ctx.data().content_path;
     let mut results = Vec::new();
@@ -292,13 +301,20 @@ async fn autocomplete_audio_file(ctx: Context<'_>, partial: &'_ str) -> Vec<Stri
 
                 if path.is_dir() {
                     results.push(format!("{}/", full_name));
-                } else if let Some(ext) = path.extension() {
-                    let ext_str = ext.to_string_lossy().to_lowercase();
-                    if matches!(ext_str.as_str(), "mp3" | "ogg" | "wav" | "flac" | "m4a") {
-                        results.push(full_name);
-                    }
+                } else if has_audio_extension(&path) {
+                    results.push(full_name);
                 }
             }
+        }
+    }
+
+    // A typed "s3://" prefix narrows the R2 search to what follows it;
+    // otherwise every R2 key is searched, matching how local files are
+    // searched from the content root.
+    let r2_prefix = partial.strip_prefix("s3://").unwrap_or(partial);
+    for key in ctx.data().file_cache.list_remote(r2_prefix).await {
+        if has_audio_extension(std::path::Path::new(&key)) {
+            results.push(format!("s3://{}", key));
         }
     }
 
