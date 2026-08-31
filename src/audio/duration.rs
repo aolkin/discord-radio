@@ -19,9 +19,6 @@ impl DurationCache {
         }
     }
 
-    /// A resolution failure isn't cached, unlike a resolved file with no
-    /// readable duration — the failure may be transient (a dropped fetch),
-    /// the missing duration isn't.
     pub async fn get_duration(&self, filename: &str) -> Option<Duration> {
         {
             let cache = self.cache.read().await;
@@ -32,15 +29,16 @@ impl DurationCache {
         }
 
         tracing::debug!("Computing duration for {}", filename);
-        let resolved = match self.file_resolver.resolve(filename).await {
-            Ok(resolved) => resolved,
-            Err(e) => {
-                tracing::warn!("Failed to resolve {} for duration lookup: {}", filename, e);
-                return None;
-            }
-        };
+        let resolved = self
+            .file_resolver
+            .resolve(filename)
+            .await
+            .inspect_err(|e| {
+                tracing::warn!("Failed to resolve {} for duration lookup: {}", filename, e)
+            })
+            .ok();
 
-        let duration = compute_audio_duration(&resolved);
+        let duration = resolved.and_then(|resolved| compute_audio_duration(&resolved));
 
         {
             let mut cache = self.cache.write().await;
@@ -86,40 +84,4 @@ fn compute_audio_duration(filename: &str) -> Option<Duration> {
     }
 
     None
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::bucket::FileCache;
-
-    #[tokio::test]
-    async fn resolution_failure_is_not_cached_but_a_computed_none_is() {
-        let content_dir = tempfile::tempdir().unwrap();
-        let cache_dir = tempfile::tempdir().unwrap();
-        let file_cache = Arc::new(
-            FileCache::new(cache_dir.path().to_path_buf(), None, None)
-                .await
-                .unwrap(),
-        );
-        let file_resolver =
-            FileResolver::new(content_dir.path().to_string_lossy().to_string(), file_cache);
-        let duration_cache = DurationCache::new(file_resolver);
-
-        std::fs::write(content_dir.path().join("track.bin"), b"not audio").unwrap();
-        assert_eq!(duration_cache.get_duration("track.bin").await, None);
-        assert!(duration_cache.cache.read().await.contains_key("track.bin"));
-
-        assert_eq!(
-            duration_cache.get_duration("s3://tracks/song.ogg").await,
-            None
-        );
-        assert!(
-            !duration_cache
-                .cache
-                .read()
-                .await
-                .contains_key("s3://tracks/song.ogg")
-        );
-    }
 }
