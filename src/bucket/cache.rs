@@ -172,7 +172,7 @@ impl FileCache {
     }
 
     /// Lists remote object keys starting with `prefix`, each ready to use as
-    /// a `resolve_track_path` filename once prefixed with `s3://`. Empty
+    /// a `FileResolver::resolve` filename once prefixed with `s3://`. Empty
     /// when no bucket is configured or the listing request fails.
     pub async fn list_remote(&self, prefix: &str) -> Vec<String> {
         let Some(downloader) = &self.downloader else {

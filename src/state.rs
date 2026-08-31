@@ -4,7 +4,7 @@ use crate::audio::duration::DurationCache;
 use crate::audio::processing_thread::AudioProcessor;
 use crate::audio::profiles::ProfileManager;
 use crate::audio::tracks::TrackManager;
-use crate::bucket::FileCache;
+use crate::bucket::{FileCache, FileResolver};
 use crate::logging::{JsonLogger, guild_logs_dir};
 use crate::metrics::MetricsHandle;
 use crate::persistence::{DJConfigOverridesStore, StateStore};
@@ -78,6 +78,7 @@ pub struct BotState {
     pub logs_base_path: std::path::PathBuf,
     pub metrics: MetricsHandle,
     pub file_cache: Arc<FileCache>,
+    pub file_resolver: FileResolver,
 }
 
 impl BotState {
@@ -106,10 +107,12 @@ impl BotState {
         // Get logs base path from state store path
         let logs_base_path = state_store.base_path().to_path_buf();
 
+        let file_resolver = FileResolver::new(content_path.clone(), file_cache.clone());
+
         Self {
             voice_connections: voice_connections.clone(),
             track_managers: RwLock::new(HashMap::new()),
-            duration_cache: DurationCache::new(content_path.clone(), file_cache.clone()),
+            duration_cache: DurationCache::new(file_resolver.clone()),
             content_path,
             dj_config_overrides,
             state_store: state_store.clone(),
@@ -125,6 +128,7 @@ impl BotState {
             logs_base_path,
             metrics,
             file_cache,
+            file_resolver,
         }
     }
 

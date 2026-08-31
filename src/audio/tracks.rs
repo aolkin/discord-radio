@@ -78,12 +78,7 @@ impl TrackManager {
         args: StartTrackArgs,
         callback: Option<crate::audio::custom_mixer::TrackEndCallback>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let resolved_filename = crate::bucket::resolve_track_path(
-            &args.filename,
-            &self.bot_state.content_path,
-            &self.bot_state.file_cache,
-        )
-        .await?;
+        let resolved_filename = self.bot_state.file_resolver.resolve(&args.filename).await?;
 
         self.validate_and_prepare_track(&args.name, &resolved_filename)
             .await?;

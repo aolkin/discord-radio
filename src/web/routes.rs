@@ -121,13 +121,11 @@ pub async fn change_track_state(
 
             // Resolve here purely to validate the filename before touching any
             // existing track; `start_track` resolves it again to actually play it.
-            crate::bucket::resolve_track_path(
-                &filename,
-                &bot_state.content_path,
-                &bot_state.file_cache,
-            )
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            bot_state
+                .file_resolver
+                .resolve(&filename)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             let volume = request.volume.unwrap_or(1.0);
             let loops = request.loops.unwrap_or(true);
 

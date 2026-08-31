@@ -360,13 +360,7 @@ pub async fn change_track_state(
 
             // Resolve here purely to validate the filename before touching any
             // existing track; `start_track` resolves it again to actually play it.
-            if let Err(e) = crate::bucket::resolve_track_path(
-                &filename,
-                &ctx.data().content_path,
-                &ctx.data().file_cache,
-            )
-            .await
-            {
+            if let Err(e) = ctx.data().file_resolver.resolve(&filename).await {
                 ctx.say(format!("Failed to resolve audio file: {}", e))
                     .await?;
                 return Ok(());

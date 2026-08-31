@@ -1,4 +1,4 @@
-use crate::bucket::{FileCache, resolve_track_path};
+use crate::bucket::FileResolver;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
@@ -11,16 +11,14 @@ use tokio::sync::RwLock;
 #[derive(Clone)]
 pub struct DurationCache {
     cache: Arc<RwLock<HashMap<String, Option<Duration>>>>,
-    content_path: String,
-    file_cache: Arc<FileCache>,
+    file_resolver: FileResolver,
 }
 
 impl DurationCache {
-    pub fn new(content_path: String, file_cache: Arc<FileCache>) -> Self {
+    pub fn new(file_resolver: FileResolver) -> Self {
         Self {
             cache: Arc::new(RwLock::new(HashMap::new())),
-            content_path,
-            file_cache,
+            file_resolver,
         }
     }
 
@@ -42,14 +40,13 @@ impl DurationCache {
         }
 
         tracing::debug!("Computing duration for {}", filename);
-        let resolved =
-            match resolve_track_path(filename, &self.content_path, &self.file_cache).await {
-                Ok(resolved) => resolved,
-                Err(e) => {
-                    tracing::warn!("Failed to resolve {} for duration lookup: {}", filename, e);
-                    return None;
-                }
-            };
+        let resolved = match self.file_resolver.resolve(filename).await {
+            Ok(resolved) => resolved,
+            Err(e) => {
+                tracing::warn!("Failed to resolve {} for duration lookup: {}", filename, e);
+                return None;
+            }
+        };
 
         let duration = compute_audio_duration(&resolved);
 
@@ -102,6 +99,7 @@ fn compute_audio_duration(filename: &str) -> Option<Duration> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::bucket::FileCache;
 
     #[tokio::test]
     async fn resolution_failure_is_not_cached_but_a_computed_none_is() {
@@ -112,8 +110,9 @@ mod tests {
                 .await
                 .unwrap(),
         );
-        let duration_cache =
-            DurationCache::new(content_dir.path().to_string_lossy().to_string(), file_cache);
+        let file_resolver =
+            FileResolver::new(content_dir.path().to_string_lossy().to_string(), file_cache);
+        let duration_cache = DurationCache::new(file_resolver);
 
         // Local path: resolves fine, but the file isn't valid audio, so
         // duration computation fails. That `None` is a real answer and gets

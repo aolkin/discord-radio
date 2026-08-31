@@ -16,7 +16,7 @@ pub struct MessagePlaybackState {
 pub struct TrackState {
     pub name: String,
     /// The filename or `s3://` key as originally requested; pass it through
-    /// `resolve_track_path` before use.
+    /// `FileResolver::resolve` before use.
     pub filename: String,
     pub volume: f32,
     #[serde(default = "default_loops")]
