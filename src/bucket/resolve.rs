@@ -51,10 +51,8 @@ mod tests {
         );
         let resolver = FileResolver::new("content".to_string(), file_cache);
 
-        // s3://-prefixed: dispatched into the (unconfigured) cache, which fails.
         assert!(resolver.resolve("s3://tracks/song.ogg").await.is_err());
 
-        // Everything else: dispatched to the local-path branch, never touching the cache.
         let resolved = resolver.resolve("audio/song.ogg").await.unwrap();
         assert_eq!(resolved, "content/audio/song.ogg");
     }

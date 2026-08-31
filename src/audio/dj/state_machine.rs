@@ -644,7 +644,6 @@ impl DJStateMachine {
 
         let guild_id_copy = self.guild_id;
         let manager_copy = manager_arc.clone();
-        let hex_audio_dir = format!("{}/audio/hex/", bot_state.content_path);
         let playback_state_copy = playback_state.clone();
         let bot_state_copy = bot_state.clone();
 
@@ -652,7 +651,6 @@ impl DJStateMachine {
             crate::audio::manager::hex_playback_task(
                 guild_id_copy,
                 manager_copy,
-                hex_audio_dir,
                 playback_state_copy,
                 bot_state_copy,
             )

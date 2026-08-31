@@ -25,13 +25,12 @@ pub enum CacheError {
     Local(Arc<std::io::Error>),
 }
 
-/// Downloads or lists objects in remote storage. Exists so tests can
-/// substitute a stub for a real bucket without real credentials.
+/// Exists so tests can substitute a stub for a real bucket without real
+/// credentials.
 #[async_trait]
 pub(crate) trait ObjectDownloader: Send + Sync {
     async fn download(&self, key: &str) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>>;
 
-    /// Keys of every object whose key starts with `prefix`.
     async fn list_keys(&self, prefix: &str) -> Result<Vec<String>, Box<dyn Error + Send + Sync>>;
 }
 
@@ -171,9 +170,7 @@ impl FileCache {
             .map_err(|e| CacheError::Local(Arc::new(e)))
     }
 
-    /// Lists remote object keys starting with `prefix`, each ready to use as
-    /// a `FileResolver::resolve` filename once prefixed with `s3://`. Empty
-    /// when no bucket is configured or the listing request fails.
+    /// Empty when no bucket is configured or the listing request fails.
     pub async fn list_remote(&self, prefix: &str) -> Vec<String> {
         let Some(downloader) = &self.downloader else {
             return Vec::new();

@@ -23,10 +23,8 @@ pub struct TrackSnapshot {
 
 pub struct TrackInfo {
     pub name: String,
-    /// The filename or `s3://` key as originally requested. `TrackManager`
-    /// resolves this to a local path itself wherever file access is needed,
-    /// so restoration can re-resolve it rather than replay an already-resolved
-    /// local path, which may since have been evicted from the R2 cache.
+    /// The raw filename or `s3://` key, not a resolved path — persisting the
+    /// resolved form would break restoration after an R2 cache eviction.
     pub filename: String,
     pub volume: f32,
     pub fade_task: Option<JoinHandle<()>>,
@@ -39,7 +37,6 @@ pub struct TrackInfo {
 #[derive(Clone, Debug)]
 pub struct StartTrackArgs {
     pub name: String,
-    /// The filename or `s3://` key as originally requested, resolved to a local path before use.
     pub filename: String,
     pub volume: f32,
     pub fade_time: f32,

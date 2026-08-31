@@ -119,7 +119,6 @@ async fn restore_message_playback(
 
             let guild_id_copy = guild_id;
             let manager_copy = manager_arc.clone();
-            let hex_audio_dir = bot_state.hex_audio_dir();
             let playback_state_copy = playback_state_arc.clone();
             let bot_state_copy = bot_state.clone();
 
@@ -127,7 +126,6 @@ async fn restore_message_playback(
                 crate::audio::manager::hex_playback_task(
                     guild_id_copy,
                     manager_copy,
-                    hex_audio_dir,
                     playback_state_copy,
                     bot_state_copy,
                 )

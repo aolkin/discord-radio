@@ -132,10 +132,6 @@ impl BotState {
         }
     }
 
-    pub fn hex_audio_dir(&self) -> String {
-        format!("{}/audio/hex/", self.content_path)
-    }
-
     /// Log a member activity event
     pub async fn log_member_activity(
         &self,

@@ -610,7 +610,6 @@ async fn ensure_hex_playback_task(
 
     let guild_id_copy = guild_id;
     let manager_copy = manager_arc.clone();
-    let hex_audio_dir = ctx.data().hex_audio_dir();
     let playback_state_copy = playback_state.clone();
     let bot_state = ctx.data().clone();
 
@@ -618,7 +617,6 @@ async fn ensure_hex_playback_task(
         crate::audio::manager::hex_playback_task(
             guild_id_copy,
             manager_copy,
-            hex_audio_dir,
             playback_state_copy,
             bot_state,
         )
