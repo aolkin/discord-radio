@@ -368,7 +368,9 @@ impl DJStateMachine {
             .get_track(idx)
             .ok_or("Track index out of bounds")?;
 
-        let full_path = resolve_track_path(
+        // Resolved here (in addition to inside `start_track`) because the
+        // subsection start position below needs the track's actual duration.
+        let resolved_filename = resolve_track_path(
             &track_entry.filename,
             &self.content_path,
             &bot_state.file_cache,
@@ -376,7 +378,10 @@ impl DJStateMachine {
         .await?;
         let track_name = format!("dj_track_{}", idx);
 
-        let duration = bot_state.duration_cache.get_duration(&full_path).await;
+        let duration = bot_state
+            .duration_cache
+            .get_duration(&resolved_filename)
+            .await;
         let (start_position, play_duration) = if track_entry.allow_subsection.unwrap_or(false) {
             if let Some(total_duration) = duration {
                 if total_duration.as_secs_f32() > 240.0 {
@@ -408,8 +413,7 @@ impl DJStateMachine {
         track_manager
             .start_track(StartTrackArgs {
                 name: track_name.clone(),
-                filename: full_path,
-                original_filename: track_entry.filename.clone(),
+                filename: track_entry.filename.clone(),
                 volume: track_entry.volume.unwrap_or(1.0),
                 fade_time: 1.0,
                 loops: false,

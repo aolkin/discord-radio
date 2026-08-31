@@ -51,6 +51,9 @@ pub async fn hex_playback_task(
 
         let hex_char = hex_chars[position];
         let audio_path = format!("{}/hex_{}.wav", hex_audio_dir, hex_char);
+        // Relative to `content_path`, matching `hex_audio_dir`'s layout, so
+        // `TrackManager` resolves it back to the same file.
+        let relative_filename = format!("audio/hex/hex_{}.wav", hex_char);
 
         if !Path::new(&audio_path).exists() {
             tracing::warn!("Audio file not found: {}", audio_path);
@@ -82,8 +85,7 @@ pub async fn hex_playback_task(
                 .start_track_with_callback(
                     StartTrackArgs {
                         name: HEX_PLAYBACK_TRACK_NAME.to_string(),
-                        filename: audio_path.clone(),
-                        original_filename: audio_path,
+                        filename: relative_filename,
                         volume,
                         fade_time: 0.0,
                         loops: false,

@@ -252,14 +252,13 @@ async fn restore_multitrack_playback(
             };
 
             let name = track.name.clone();
-            let original_filename = track.filename;
+            let filename = track.filename;
             let volume = track.volume;
             let loops = track.loops;
             if let Err(e) = manager
                 .start_track(StartTrackArgs {
                     name,
-                    filename: resolved_filename,
-                    original_filename,
+                    filename,
                     volume,
                     fade_time: 1.0,
                     loops,

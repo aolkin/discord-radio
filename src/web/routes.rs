@@ -119,7 +119,9 @@ pub async fn change_track_state(
                 return Err(StatusCode::BAD_REQUEST);
             };
 
-            let full_path = crate::bucket::resolve_track_path(
+            // Resolve here purely to validate the filename before touching any
+            // existing track; `start_track` resolves it again to actually play it.
+            crate::bucket::resolve_track_path(
                 &filename,
                 &bot_state.content_path,
                 &bot_state.file_cache,
@@ -141,8 +143,7 @@ pub async fn change_track_state(
             manager
                 .start_track(crate::audio::tracks::StartTrackArgs {
                     name: request.name,
-                    filename: full_path,
-                    original_filename: filename,
+                    filename,
                     volume,
                     fade_time,
                     loops,

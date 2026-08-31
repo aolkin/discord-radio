@@ -358,20 +358,19 @@ pub async fn change_track_state(
                 return Ok(());
             };
 
-            let full_path = match crate::bucket::resolve_track_path(
+            // Resolve here purely to validate the filename before touching any
+            // existing track; `start_track` resolves it again to actually play it.
+            if let Err(e) = crate::bucket::resolve_track_path(
                 &filename,
                 &ctx.data().content_path,
                 &ctx.data().file_cache,
             )
             .await
             {
-                Ok(path) => path,
-                Err(e) => {
-                    ctx.say(format!("Failed to resolve audio file: {}", e))
-                        .await?;
-                    return Ok(());
-                }
-            };
+                ctx.say(format!("Failed to resolve audio file: {}", e))
+                    .await?;
+                return Ok(());
+            }
 
             let volume = volume.unwrap_or(1.0);
             let loops = loops.unwrap_or(true);
@@ -391,8 +390,7 @@ pub async fn change_track_state(
             if let Err(e) = manager
                 .start_track(crate::audio::tracks::StartTrackArgs {
                     name: name.clone(),
-                    filename: full_path,
-                    original_filename: filename,
+                    filename,
                     volume,
                     fade_time,
                     loops,

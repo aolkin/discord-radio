@@ -23,12 +23,11 @@ pub struct TrackSnapshot {
 
 pub struct TrackInfo {
     pub name: String,
-    pub filename: String,
-    /// The filename or `s3://` key as originally requested, before
-    /// `resolve_track_path` ran. Persisted in place of `filename` so
-    /// restoration can re-resolve it rather than replay an already-resolved
+    /// The filename or `s3://` key as originally requested. `TrackManager`
+    /// resolves this to a local path itself wherever file access is needed,
+    /// so restoration can re-resolve it rather than replay an already-resolved
     /// local path, which may since have been evicted from the R2 cache.
-    pub original_filename: String,
+    pub filename: String,
     pub volume: f32,
     pub fade_task: Option<JoinHandle<()>>,
     pub fade_cancel: Option<CancellationToken>,
@@ -40,8 +39,9 @@ pub struct TrackInfo {
 #[derive(Clone, Debug)]
 pub struct StartTrackArgs {
     pub name: String,
+    /// The filename or `s3://` key as originally requested; `TrackManager`
+    /// resolves it to a local path before touching the filesystem.
     pub filename: String,
-    pub original_filename: String,
     pub volume: f32,
     pub fade_time: f32,
     pub loops: bool,
@@ -78,12 +78,19 @@ impl TrackManager {
         args: StartTrackArgs,
         callback: Option<crate::audio::custom_mixer::TrackEndCallback>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.validate_and_prepare_track(&args.name, &args.filename)
+        let resolved_filename = crate::bucket::resolve_track_path(
+            &args.filename,
+            &self.bot_state.content_path,
+            &self.bot_state.file_cache,
+        )
+        .await?;
+
+        self.validate_and_prepare_track(&args.name, &resolved_filename)
             .await?;
         let duration = self
             .bot_state
             .duration_cache
-            .get_duration(&args.filename)
+            .get_duration(&resolved_filename)
             .await;
 
         let position_info = if let Some(pos) = args.start_position {
@@ -95,7 +102,7 @@ impl TrackManager {
         tracing::info!(
             "Starting track '{}' (file: {}, duration: {:.2}s, volume: {}, fade: {}s, loops: {}{}) in guild {}",
             args.name,
-            args.filename,
+            resolved_filename,
             duration.map(|d| d.as_secs_f64()).unwrap_or(-1.0),
             args.volume,
             args.fade_time,
@@ -106,7 +113,7 @@ impl TrackManager {
 
         // Create audio source through DSP pipeline
         let processor_arc = self.audio_processor.clone();
-        let mut source = SymphoniaSource::from_file(&args.filename, 48000)?;
+        let mut source = SymphoniaSource::from_file(&resolved_filename, 48000)?;
 
         // Seek to start position if specified
         if let Some(pos) = args.start_position {
@@ -185,7 +192,6 @@ impl TrackManager {
         let track = TrackInfo {
             name: args.name.clone(),
             filename: args.filename.clone(),
-            original_filename: args.original_filename.clone(),
             volume: args.volume,
             fade_task: None,
             fade_cancel: None,
@@ -446,11 +452,16 @@ impl TrackManager {
     pub async fn get_all_tracks(&self) -> Vec<TrackSnapshot> {
         let mut snapshots = Vec::new();
         for info in self.tracks.values() {
-            let duration = self
-                .bot_state
-                .duration_cache
-                .get_duration(&info.filename)
-                .await;
+            let duration = match crate::bucket::resolve_track_path(
+                &info.filename,
+                &self.bot_state.content_path,
+                &self.bot_state.file_cache,
+            )
+            .await
+            {
+                Ok(resolved) => self.bot_state.duration_cache.get_duration(&resolved).await,
+                Err(_) => None,
+            };
             snapshots.push(TrackSnapshot {
                 name: info.name.clone(),
                 filename: info.filename.clone(),
@@ -487,7 +498,7 @@ impl TrackManager {
                 .filter(|info| info.persist)
                 .map(|info| crate::persistence::TrackState {
                     name: info.name.clone(),
-                    filename: info.original_filename.clone(),
+                    filename: info.filename.clone(),
                     volume: info.volume,
                     loops: info.loops,
                     start_time: Some(info.start_time),
