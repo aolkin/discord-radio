@@ -171,12 +171,10 @@ pub async fn dj_task(
                 if elapsed < total_duration {
                     let mut manager = manager_arc.lock().await;
 
-                    // Try to determine the original volume from the DJ's track pool by filename
                     let volume = find_track_by_filename(&state_machine, &filename)
                         .and_then(|entry| entry.volume)
                         .unwrap_or(1.0);
 
-                    // Try to restart the track at the appropriate position
                     if let Err(e) = manager
                         .start_track(StartTrackArgs {
                             name: track_name.clone(),

@@ -119,8 +119,7 @@ pub async fn change_track_state(
                 return Err(StatusCode::BAD_REQUEST);
             };
 
-            // Resolve here purely to validate the filename before touching any
-            // existing track; `start_track` resolves it again to actually play it.
+            // Validate now so a bad filename errors before we touch an existing track.
             bot_state
                 .file_resolver
                 .resolve(&filename)

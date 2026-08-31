@@ -39,8 +39,7 @@ pub struct TrackInfo {
 #[derive(Clone, Debug)]
 pub struct StartTrackArgs {
     pub name: String,
-    /// The filename or `s3://` key as originally requested; `TrackManager`
-    /// resolves it to a local path before touching the filesystem.
+    /// The filename or `s3://` key as originally requested, resolved to a local path before use.
     pub filename: String,
     pub volume: f32,
     pub fade_time: f32,
