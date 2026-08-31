@@ -30,8 +30,6 @@ pub enum CacheError {
 #[async_trait]
 pub(crate) trait ObjectDownloader: Send + Sync {
     async fn download(&self, key: &str) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>>;
-
-    async fn list_keys(&self, prefix: &str) -> Result<Vec<String>, Box<dyn Error + Send + Sync>>;
 }
 
 #[async_trait]
@@ -45,14 +43,6 @@ impl ObjectDownloader for s3::Bucket {
         }
 
         Ok(response.bytes().to_vec())
-    }
-
-    async fn list_keys(&self, prefix: &str) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
-        let pages = self.list(prefix.to_string(), None).await?;
-        Ok(pages
-            .into_iter()
-            .flat_map(|page| page.contents.into_iter().map(|object| object.key))
-            .collect())
     }
 }
 
@@ -168,18 +158,6 @@ impl FileCache {
         tokio::fs::rename(&temp_dest, dest)
             .await
             .map_err(|e| CacheError::Local(Arc::new(e)))
-    }
-
-    /// Empty when no bucket is configured or the listing request fails.
-    pub async fn list_remote(&self, prefix: &str) -> Vec<String> {
-        let Some(downloader) = &self.downloader else {
-            return Vec::new();
-        };
-
-        downloader.list_keys(prefix).await.unwrap_or_else(|e| {
-            tracing::warn!("Failed to list remote objects under {prefix:?}: {e}");
-            Vec::new()
-        })
     }
 
     /// Forgets `key`, so the next `ensure_cached` re-downloads it.
@@ -313,7 +291,6 @@ mod tests {
     struct StubDownloader {
         calls: Arc<AtomicUsize>,
         payload: Vec<u8>,
-        remote_keys: Vec<String>,
     }
 
     impl StubDownloader {
@@ -321,15 +298,6 @@ mod tests {
             Arc::new(Self {
                 calls: Arc::clone(calls),
                 payload: b"hello world".to_vec(),
-                remote_keys: Vec::new(),
-            })
-        }
-
-        fn with_remote_keys(keys: &[&str]) -> Arc<Self> {
-            Arc::new(Self {
-                calls: Arc::new(AtomicUsize::new(0)),
-                payload: b"hello world".to_vec(),
-                remote_keys: keys.iter().map(|k| k.to_string()).collect(),
             })
         }
     }
@@ -340,18 +308,6 @@ mod tests {
             self.calls.fetch_add(1, Ordering::SeqCst);
             Ok(self.payload.clone())
         }
-
-        async fn list_keys(
-            &self,
-            prefix: &str,
-        ) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
-            Ok(self
-                .remote_keys
-                .iter()
-                .filter(|key| key.starts_with(prefix))
-                .cloned()
-                .collect())
-        }
     }
 
     struct FailingDownloader;
@@ -360,13 +316,6 @@ mod tests {
     impl ObjectDownloader for FailingDownloader {
         async fn download(&self, key: &str) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
             Err(format!("no such object: {key}").into())
-        }
-
-        async fn list_keys(
-            &self,
-            _prefix: &str,
-        ) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
-            Err("listing failed".into())
         }
     }
 
@@ -548,37 +497,5 @@ mod tests {
         assert!(cache.cached_path("tracks/a.ogg").exists());
         assert!(cache.cached_path("tracks/b.ogg").exists());
         assert!(cache.cached_path("tracks/c.ogg").exists());
-    }
-
-    #[tokio::test]
-    async fn list_remote_is_empty_without_a_bucket() {
-        let dir = tempfile::tempdir().unwrap();
-        let cache = FileCache::new(dir.path().to_path_buf(), None, None)
-            .await
-            .unwrap();
-
-        assert!(cache.list_remote("tracks/").await.is_empty());
-    }
-
-    #[tokio::test]
-    async fn list_remote_filters_by_prefix() {
-        let dir = tempfile::tempdir().unwrap();
-        let downloader =
-            StubDownloader::with_remote_keys(&["tracks/a.ogg", "tracks/b.ogg", "other/c.ogg"]);
-        let cache = FileCache::with_downloader(dir.path().to_path_buf(), downloader).await;
-
-        let mut keys = cache.list_remote("tracks/").await;
-        keys.sort();
-
-        assert_eq!(keys, ["tracks/a.ogg", "tracks/b.ogg"]);
-    }
-
-    #[tokio::test]
-    async fn list_remote_is_empty_when_listing_fails() {
-        let dir = tempfile::tempdir().unwrap();
-        let cache =
-            FileCache::with_downloader(dir.path().to_path_buf(), Arc::new(FailingDownloader)).await;
-
-        assert!(cache.list_remote("tracks/").await.is_empty());
     }
 }

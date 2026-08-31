@@ -77,7 +77,6 @@ pub struct BotState {
     pub shutdown_tx: tokio::sync::broadcast::Sender<String>,
     pub logs_base_path: std::path::PathBuf,
     pub metrics: MetricsHandle,
-    pub file_cache: Arc<FileCache>,
     pub file_resolver: FileResolver,
 }
 
@@ -127,7 +126,6 @@ impl BotState {
             shutdown_tx,
             logs_base_path,
             metrics,
-            file_cache,
             file_resolver,
         }
     }
