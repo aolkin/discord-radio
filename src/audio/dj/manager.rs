@@ -66,7 +66,6 @@ pub async fn dj_task(
     let mut state_machine = DJStateMachine::new(
         config.clone(),
         guild_id,
-        bot_state.content_path.clone(),
         announcement_channel,
         http.clone(),
         restored_state.clone(),

@@ -109,12 +109,12 @@ impl BotState {
         Self {
             voice_connections: voice_connections.clone(),
             track_managers: RwLock::new(HashMap::new()),
+            duration_cache: DurationCache::new(content_path.clone(), file_cache.clone()),
             content_path,
             dj_config_overrides,
             state_store: state_store.clone(),
             hex_playback_states: RwLock::new(HashMap::new()),
             hex_playback_tasks: RwLock::new(HashMap::new()),
-            duration_cache: DurationCache::new(),
             audio_processors: RwLock::new(HashMap::new()),
             profile_manager,
             dj_managers: RwLock::new(HashMap::new()),

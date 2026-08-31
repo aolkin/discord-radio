@@ -1,21 +1,37 @@
+use crate::bucket::{FileCache, resolve_track_path};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 
+/// Caches audio durations, keyed by the raw track identifier (a content-relative
+/// path or an `s3://` key) rather than a resolved filesystem path. Keying on the
+/// raw identifier lets a cache hit return without resolving anything.
 #[derive(Clone)]
 pub struct DurationCache {
     cache: Arc<RwLock<HashMap<String, Option<Duration>>>>,
+    content_path: String,
+    file_cache: Arc<FileCache>,
 }
 
 impl DurationCache {
-    pub fn new() -> Self {
+    pub fn new(content_path: String, file_cache: Arc<FileCache>) -> Self {
         Self {
             cache: Arc::new(RwLock::new(HashMap::new())),
+            content_path,
+            file_cache,
         }
     }
 
+    /// Returns the duration for `filename`, a raw track identifier (a
+    /// content-relative path or an `s3://` key). On a cache miss, resolves it
+    /// to a local path before computing.
+    ///
+    /// A resolution failure is not cached, since it can be transient (e.g. a
+    /// dropped R2 fetch), unlike a resolved file with no readable duration,
+    /// which is cached as `None` the same way `compute_audio_duration`'s other
+    /// failure cases are.
     pub async fn get_duration(&self, filename: &str) -> Option<Duration> {
         {
             let cache = self.cache.read().await;
@@ -26,7 +42,16 @@ impl DurationCache {
         }
 
         tracing::debug!("Computing duration for {}", filename);
-        let duration = compute_audio_duration(filename);
+        let resolved =
+            match resolve_track_path(filename, &self.content_path, &self.file_cache).await {
+                Ok(resolved) => resolved,
+                Err(e) => {
+                    tracing::warn!("Failed to resolve {} for duration lookup: {}", filename, e);
+                    return None;
+                }
+            };
+
+        let duration = compute_audio_duration(&resolved);
 
         {
             let mut cache = self.cache.write().await;
@@ -72,4 +97,43 @@ fn compute_audio_duration(filename: &str) -> Option<Duration> {
     }
 
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn resolution_failure_is_not_cached_but_a_computed_none_is() {
+        let content_dir = tempfile::tempdir().unwrap();
+        let cache_dir = tempfile::tempdir().unwrap();
+        let file_cache = Arc::new(
+            FileCache::new(cache_dir.path().to_path_buf(), None, None)
+                .await
+                .unwrap(),
+        );
+        let duration_cache =
+            DurationCache::new(content_dir.path().to_string_lossy().to_string(), file_cache);
+
+        // Local path: resolves fine, but the file isn't valid audio, so
+        // duration computation fails. That `None` is a real answer and gets
+        // cached.
+        std::fs::write(content_dir.path().join("track.bin"), b"not audio").unwrap();
+        assert_eq!(duration_cache.get_duration("track.bin").await, None);
+        assert!(duration_cache.cache.read().await.contains_key("track.bin"));
+
+        // s3:// key against an unconfigured file cache: resolution itself
+        // fails, so nothing is cached and a later retry can still succeed.
+        assert_eq!(
+            duration_cache.get_duration("s3://tracks/song.ogg").await,
+            None
+        );
+        assert!(
+            !duration_cache
+                .cache
+                .read()
+                .await
+                .contains_key("s3://tracks/song.ogg")
+        );
+    }
 }

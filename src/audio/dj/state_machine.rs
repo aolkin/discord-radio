@@ -1,7 +1,6 @@
 use crate::audio::dj::config::DJConfig;
 use crate::audio::dj::scheduler::{DJStateType, WeightedScheduler};
 use crate::audio::tracks::{StartTrackArgs, TrackManager};
-use crate::bucket::resolve_track_path;
 use crate::state::Data;
 use rand::Rng;
 use serenity::all::Http;
@@ -75,7 +74,6 @@ pub struct DJStateMachine {
     current_state: DJState,
     scheduler: WeightedScheduler,
     guild_id: GuildId,
-    content_path: String,
     announcement_channel: Option<ChannelId>,
     http: Arc<Http>,
     hex_message_announcements: Vec<String>,
@@ -85,7 +83,6 @@ impl DJStateMachine {
     pub fn new(
         config: DJConfig,
         guild_id: GuildId,
-        content_path: String,
         announcement_channel: Option<ChannelId>,
         http: Arc<Http>,
         restored_state: Option<crate::persistence::DJStateMachineState>,
@@ -115,7 +112,6 @@ impl DJStateMachine {
             current_state,
             scheduler: WeightedScheduler::new(config),
             guild_id,
-            content_path,
             announcement_channel,
             http,
             hex_message_announcements,
@@ -368,19 +364,11 @@ impl DJStateMachine {
             .get_track(idx)
             .ok_or("Track index out of bounds")?;
 
-        // Resolved here (in addition to inside `start_track`) because the
-        // subsection start position below needs the track's actual duration.
-        let resolved_filename = resolve_track_path(
-            &track_entry.filename,
-            &self.content_path,
-            &bot_state.file_cache,
-        )
-        .await?;
         let track_name = format!("dj_track_{}", idx);
 
         let duration = bot_state
             .duration_cache
-            .get_duration(&resolved_filename)
+            .get_duration(&track_entry.filename)
             .await;
         let (start_position, play_duration) = if track_entry.allow_subsection.unwrap_or(false) {
             if let Some(total_duration) = duration {

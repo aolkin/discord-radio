@@ -90,7 +90,7 @@ impl TrackManager {
         let duration = self
             .bot_state
             .duration_cache
-            .get_duration(&resolved_filename)
+            .get_duration(&args.filename)
             .await;
 
         let position_info = if let Some(pos) = args.start_position {
@@ -452,16 +452,11 @@ impl TrackManager {
     pub async fn get_all_tracks(&self) -> Vec<TrackSnapshot> {
         let mut snapshots = Vec::new();
         for info in self.tracks.values() {
-            let duration = match crate::bucket::resolve_track_path(
-                &info.filename,
-                &self.bot_state.content_path,
-                &self.bot_state.file_cache,
-            )
-            .await
-            {
-                Ok(resolved) => self.bot_state.duration_cache.get_duration(&resolved).await,
-                Err(_) => None,
-            };
+            let duration = self
+                .bot_state
+                .duration_cache
+                .get_duration(&info.filename)
+                .await;
             snapshots.push(TrackSnapshot {
                 name: info.name.clone(),
                 filename: info.filename.clone(),
