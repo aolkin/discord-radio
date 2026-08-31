@@ -5,9 +5,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 
-/// Caches audio durations, keyed by the raw track identifier (a content-relative
-/// path or an `s3://` key) rather than a resolved filesystem path. Keying on the
-/// raw identifier lets a cache hit return without resolving anything.
 #[derive(Clone)]
 pub struct DurationCache {
     cache: Arc<RwLock<HashMap<String, Option<Duration>>>>,
@@ -22,14 +19,9 @@ impl DurationCache {
         }
     }
 
-    /// Returns the duration for `filename`, a raw track identifier (a
-    /// content-relative path or an `s3://` key). On a cache miss, resolves it
-    /// to a local path before computing.
-    ///
-    /// A resolution failure is not cached, since it can be transient (e.g. a
-    /// dropped R2 fetch), unlike a resolved file with no readable duration,
-    /// which is cached as `None` the same way `compute_audio_duration`'s other
-    /// failure cases are.
+    /// A resolution failure isn't cached, unlike a resolved file with no
+    /// readable duration — the failure may be transient (a dropped fetch),
+    /// the missing duration isn't.
     pub async fn get_duration(&self, filename: &str) -> Option<Duration> {
         {
             let cache = self.cache.read().await;
@@ -114,15 +106,10 @@ mod tests {
             FileResolver::new(content_dir.path().to_string_lossy().to_string(), file_cache);
         let duration_cache = DurationCache::new(file_resolver);
 
-        // Local path: resolves fine, but the file isn't valid audio, so
-        // duration computation fails. That `None` is a real answer and gets
-        // cached.
         std::fs::write(content_dir.path().join("track.bin"), b"not audio").unwrap();
         assert_eq!(duration_cache.get_duration("track.bin").await, None);
         assert!(duration_cache.cache.read().await.contains_key("track.bin"));
 
-        // s3:// key against an unconfigured file cache: resolution itself
-        // fails, so nothing is cached and a later retry can still succeed.
         assert_eq!(
             duration_cache.get_duration("s3://tracks/song.ogg").await,
             None
