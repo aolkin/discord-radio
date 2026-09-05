@@ -43,15 +43,29 @@ fn find_track_by_filename<'a>(
     result
 }
 
-pub async fn dj_task(
-    guild_id: GuildId,
-    config: DJConfig,
-    bot_state: Data,
-    mut command_rx: mpsc::Receiver<DJCommand>,
-    mut announcement_channel: Option<ChannelId>,
-    http: Arc<Http>,
-    restored_state: Option<crate::persistence::DJStateMachineState>,
-) {
+pub struct DJTaskArgs {
+    pub guild_id: GuildId,
+    pub config: DJConfig,
+    pub bot_state: Data,
+    pub command_rx: mpsc::Receiver<DJCommand>,
+    pub announcement_channel: Option<ChannelId>,
+    pub http: Arc<Http>,
+    pub restored_state: Option<crate::persistence::DJStateMachineState>,
+    pub playlist_name: Option<String>,
+}
+
+pub async fn dj_task(args: DJTaskArgs) {
+    let DJTaskArgs {
+        guild_id,
+        config,
+        bot_state,
+        mut command_rx,
+        mut announcement_channel,
+        http,
+        restored_state,
+        playlist_name,
+    } = args;
+
     let config_name = config.name.clone();
 
     tracing::info!(
@@ -392,6 +406,7 @@ pub async fn dj_task(
             running: true,
             announcement_channel_id: announcement_channel.map(|id| id.get()),
             state_machine: Some(state_machine.current_state().into()),
+            playlist_name: playlist_name.clone(),
         };
         if let Err(e) = bot_state
             .state_store
@@ -520,6 +535,7 @@ impl DJManager {
         http: Arc<Http>,
         announcement_channel: Option<ChannelId>,
         restored_state: Option<crate::persistence::DJStateMachineState>,
+        playlist_name: Option<String>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if self.task_handle.is_some() {
             return Err("DJ is already running".into());
@@ -545,16 +561,18 @@ impl DJManager {
         let guild_id = self.guild_id;
         let bot_state_clone = bot_state.clone();
         let http_clone = http.clone();
+        let playlist_name_clone = playlist_name.clone();
         let handle = tokio::spawn(async move {
-            dj_task(
+            dj_task(DJTaskArgs {
                 guild_id,
                 config,
-                bot_state_clone,
-                rx,
+                bot_state: bot_state_clone,
+                command_rx: rx,
                 announcement_channel,
-                http_clone,
+                http: http_clone,
                 restored_state,
-            )
+                playlist_name: playlist_name_clone,
+            })
             .await;
         });
 
@@ -570,6 +588,7 @@ impl DJManager {
                 started_at: std::time::SystemTime::now(),
                 duration_secs: 1.0,
             }),
+            playlist_name,
         };
         if let Err(e) = bot_state
             .state_store

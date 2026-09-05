@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct DJConfig {
@@ -14,6 +15,10 @@ pub struct DJConfig {
     pub recent_history_size: usize,
     pub duplicate_penalty_multiplier: f32,
     pub channel_status: Option<String>,
+    /// Playlist name to R2 key, for track pools stored outside the config file.
+    #[serde(default)]
+    pub playlists: HashMap<String, String>,
+    pub default_playlist: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -125,5 +130,162 @@ impl DJConfig {
         }
 
         self
+    }
+
+    /// Replaces `track_pool` with the contents of an external playlist file,
+    /// falling back to the inline `track_pool` if no playlist is selected,
+    /// the name isn't in `playlists`, or fetching/parsing it fails.
+    pub async fn resolve_track_pool(
+        &mut self,
+        playlist_name: Option<&str>,
+        file_cache: &crate::bucket::FileCache,
+    ) {
+        let Some(name) = playlist_name.or(self.default_playlist.as_deref()) else {
+            return;
+        };
+
+        let Some(key) = self.playlists.get(name).cloned() else {
+            tracing::warn!(
+                "DJ config '{}' has no playlist named '{}', using inline track pool",
+                self.name,
+                name
+            );
+            return;
+        };
+
+        let tracks = match file_cache.ensure_cached(&key).await {
+            Ok(path) => std::fs::read_to_string(&path)
+                .map_err(|e| e.to_string())
+                .and_then(|content| {
+                    serde_json::from_str::<Vec<TrackEntry>>(&content).map_err(|e| e.to_string())
+                }),
+            Err(e) => Err(e.to_string()),
+        };
+
+        match tracks {
+            Ok(tracks) => self.track_pool = tracks,
+            Err(e) => tracing::warn!(
+                "Failed to load playlist '{}' ({key}) for DJ config '{}': {e}, using inline track pool",
+                name,
+                self.name
+            ),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::bucket::FileCache;
+    use crate::bucket::cache::ObjectDownloader;
+    use async_trait::async_trait;
+    use std::error::Error;
+    use std::sync::Arc;
+
+    fn track_entry(filename: &str) -> TrackEntry {
+        TrackEntry {
+            filename: filename.to_string(),
+            weight: 1,
+            max_duration_seconds: None,
+            allow_subsection: None,
+            signal_profile: None,
+            volume: None,
+            channel_status: None,
+        }
+    }
+
+    fn base_config() -> DJConfig {
+        DJConfig {
+            name: "test".to_string(),
+            track_pool: vec![track_entry("inline.mp3")],
+            hex_messages: vec![],
+            hex_message_announcements: None,
+            hex_message_defaults: HexMessageDefaults::default(),
+            noise_periods: vec![],
+            signal_profiles: vec![],
+            state_weights: StateWeights {
+                track: 1,
+                hex_message: 1,
+                noise: 1,
+            },
+            recent_history_size: 1,
+            duplicate_penalty_multiplier: 1.0,
+            channel_status: None,
+            playlists: HashMap::new(),
+            default_playlist: None,
+        }
+    }
+
+    struct PlaylistDownloader(Vec<u8>);
+
+    #[async_trait]
+    impl ObjectDownloader for PlaylistDownloader {
+        async fn download(&self, _key: &str) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
+            Ok(self.0.clone())
+        }
+    }
+
+    async fn cache_serving(tracks: &[TrackEntry]) -> FileCache {
+        let dir = tempfile::tempdir().unwrap();
+        FileCache::with_downloader(
+            dir.path().to_path_buf(),
+            Arc::new(PlaylistDownloader(serde_json::to_vec(tracks).unwrap())),
+        )
+        .await
+    }
+
+    async fn cache_with_no_downloader() -> FileCache {
+        let dir = tempfile::tempdir().unwrap();
+        FileCache::new(dir.path().to_path_buf(), None, None)
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn resolve_track_pool_uses_an_explicit_playlist_when_found() {
+        let cache = cache_serving(&[track_entry("remote.mp3")]).await;
+        let mut config = base_config();
+        config
+            .playlists
+            .insert("party".to_string(), "playlists/party.json".to_string());
+
+        config.resolve_track_pool(Some("party"), &cache).await;
+
+        assert_eq!(config.track_pool.len(), 1);
+        assert_eq!(config.track_pool[0].filename, "remote.mp3");
+    }
+
+    #[tokio::test]
+    async fn resolve_track_pool_falls_back_when_the_name_is_not_in_the_map() {
+        let cache = cache_with_no_downloader().await;
+        let mut config = base_config();
+
+        config.resolve_track_pool(Some("missing"), &cache).await;
+
+        assert_eq!(config.track_pool[0].filename, "inline.mp3");
+    }
+
+    #[tokio::test]
+    async fn resolve_track_pool_falls_back_with_no_name_and_no_default() {
+        let cache = cache_with_no_downloader().await;
+        let mut config = base_config();
+
+        config.resolve_track_pool(None, &cache).await;
+
+        assert_eq!(config.track_pool[0].filename, "inline.mp3");
+    }
+
+    #[tokio::test]
+    async fn resolve_track_pool_uses_the_default_playlist_when_present() {
+        let cache = cache_serving(&[track_entry("remote.mp3")]).await;
+        let mut config = base_config();
+        config.default_playlist = Some("party".to_string());
+        config
+            .playlists
+            .insert("party".to_string(), "playlists/party.json".to_string());
+
+        config.resolve_track_pool(None, &cache).await;
+
+        assert_eq!(config.track_pool[0].filename, "remote.mp3");
     }
 }
