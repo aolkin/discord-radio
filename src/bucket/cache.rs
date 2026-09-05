@@ -1,5 +1,5 @@
-// Nothing outside this module and its tests calls into FileCache yet; the
-// resolver that will (OLK-114) lands in a later PR.
+// `pre_cache` and `invalidate` have no callers outside this module and its
+// tests yet.
 #![allow(dead_code)]
 
 use async_trait::async_trait;
@@ -19,14 +19,23 @@ const TEMP_SUFFIX: &str = ".tmp";
 pub enum CacheError {
     #[error("object storage is not configured")]
     NotConfigured,
+    #[error("object not found")]
+    NotFound,
     #[error("remote download failed: {0}")]
     Remote(Arc<dyn Error + Send + Sync>),
     #[error("local cache i/o failed: {0}")]
     Local(Arc<std::io::Error>),
 }
 
-/// Downloads a single object's bytes from remote storage. Exists so tests can
-/// substitute a stub for a real bucket without real credentials.
+/// Marks a [`ObjectDownloader::download`] failure as specifically meaning the
+/// key doesn't exist in object storage, distinct from a network or auth
+/// failure.
+#[derive(Debug, thiserror::Error)]
+#[error("object not found")]
+struct ObjectNotFound;
+
+/// Exists so tests can substitute a stub for a real bucket without real
+/// credentials.
 #[async_trait]
 pub(crate) trait ObjectDownloader: Send + Sync {
     async fn download(&self, key: &str) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>>;
@@ -38,6 +47,9 @@ impl ObjectDownloader for s3::Bucket {
         let response = self.get_object(key).await?;
 
         let status = response.status_code();
+        if status == 404 {
+            return Err(Box::new(ObjectNotFound));
+        }
         if !(200..300).contains(&status) {
             return Err(format!("unexpected status {status} fetching {key}").into());
         }
@@ -129,10 +141,13 @@ impl FileCache {
     /// there.
     async fn fill(&self, key: &str, dest: &Path) -> Result<(), CacheError> {
         let downloader = self.downloader.as_ref().ok_or(CacheError::NotConfigured)?;
-        let bytes = downloader
-            .download(key)
-            .await
-            .map_err(|e| CacheError::Remote(e.into()))?;
+        let bytes = downloader.download(key).await.map_err(|e| {
+            if e.is::<ObjectNotFound>() {
+                CacheError::NotFound
+            } else {
+                CacheError::Remote(e.into())
+            }
+        })?;
 
         if let Some(parent) = dest.parent() {
             tokio::fs::create_dir_all(parent)
@@ -319,6 +334,15 @@ mod tests {
         }
     }
 
+    struct NotFoundDownloader;
+
+    #[async_trait]
+    impl ObjectDownloader for NotFoundDownloader {
+        async fn download(&self, _key: &str) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
+            Err(Box::new(ObjectNotFound))
+        }
+    }
+
     fn write_cached_file(path: &Path, contents: &[u8]) {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, contents).unwrap();
@@ -471,6 +495,18 @@ mod tests {
         let err = cache.ensure_cached("tracks/missing.ogg").await.unwrap_err();
 
         assert!(matches!(err, CacheError::Remote(_)));
+    }
+
+    #[tokio::test]
+    async fn ensure_cached_distinguishes_a_missing_object_from_other_failures() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache =
+            FileCache::with_downloader(dir.path().to_path_buf(), Arc::new(NotFoundDownloader))
+                .await;
+
+        let err = cache.ensure_cached("tracks/missing.ogg").await.unwrap_err();
+
+        assert!(matches!(err, CacheError::NotFound));
     }
 
     #[tokio::test]

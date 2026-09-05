@@ -23,7 +23,6 @@ pub fn message_to_hex_sequence(message: &str) -> Vec<char> {
 pub async fn hex_playback_task(
     guild_id: GuildId,
     manager_arc: Arc<Mutex<TrackManager>>,
-    hex_audio_dir: String,
     playback_state: Arc<RwLock<HexPlaybackState>>,
     bot_state: Data,
 ) {
@@ -50,17 +49,19 @@ pub async fn hex_playback_task(
         }
 
         let hex_char = hex_chars[position];
-        let audio_path = format!("{}/hex_{}.wav", hex_audio_dir, hex_char);
-
-        if !Path::new(&audio_path).exists() {
-            tracing::warn!("Audio file not found: {}", audio_path);
-            let next_position = if position + 1 >= hex_chars.len() {
-                0
-            } else {
-                position + 1
-            };
-            playback_state.write().await.current_position = next_position;
-            continue;
+        let relative_filename = format!("audio/hex/hex_{}.wav", hex_char);
+        match bot_state.file_resolver.resolve(&relative_filename).await {
+            Ok(path) if Path::new(&path).exists() => {}
+            _ => {
+                tracing::warn!("Audio file not found: {}", relative_filename);
+                let next_position = if position + 1 >= hex_chars.len() {
+                    0
+                } else {
+                    position + 1
+                };
+                playback_state.write().await.current_position = next_position;
+                continue;
+            }
         }
 
         let notify = Arc::new(tokio::sync::Notify::new());
@@ -82,7 +83,7 @@ pub async fn hex_playback_task(
                 .start_track_with_callback(
                     StartTrackArgs {
                         name: HEX_PLAYBACK_TRACK_NAME.to_string(),
-                        filename: audio_path,
+                        filename: relative_filename,
                         volume,
                         fade_time: 0.0,
                         loops: false,

@@ -342,8 +342,11 @@ pub async fn change_track_state(
                 return Ok(());
             };
 
-            // Prepend content directory to filename
-            let full_path = format!("{}/{}", ctx.data().content_path, filename);
+            if let Err(e) = ctx.data().file_resolver.resolve(&filename).await {
+                ctx.say(format!("Failed to resolve audio file: {}", e))
+                    .await?;
+                return Ok(());
+            }
 
             let volume = volume.unwrap_or(1.0);
             let loops = loops.unwrap_or(true);
@@ -363,7 +366,7 @@ pub async fn change_track_state(
             if let Err(e) = manager
                 .start_track(crate::audio::tracks::StartTrackArgs {
                     name: name.clone(),
-                    filename: full_path,
+                    filename,
                     volume,
                     fade_time,
                     loops,
@@ -590,7 +593,6 @@ async fn ensure_hex_playback_task(
 
     let guild_id_copy = guild_id;
     let manager_copy = manager_arc.clone();
-    let hex_audio_dir = ctx.data().hex_audio_dir();
     let playback_state_copy = playback_state.clone();
     let bot_state = ctx.data().clone();
 
@@ -598,7 +600,6 @@ async fn ensure_hex_playback_task(
         crate::audio::manager::hex_playback_task(
             guild_id_copy,
             manager_copy,
-            hex_audio_dir,
             playback_state_copy,
             bot_state,
         )

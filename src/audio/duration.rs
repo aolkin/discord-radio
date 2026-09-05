@@ -1,3 +1,4 @@
+use crate::bucket::FileResolver;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
@@ -7,12 +8,14 @@ use tokio::sync::RwLock;
 #[derive(Clone)]
 pub struct DurationCache {
     cache: Arc<RwLock<HashMap<String, Option<Duration>>>>,
+    file_resolver: FileResolver,
 }
 
 impl DurationCache {
-    pub fn new() -> Self {
+    pub fn new(file_resolver: FileResolver) -> Self {
         Self {
             cache: Arc::new(RwLock::new(HashMap::new())),
+            file_resolver,
         }
     }
 
@@ -26,7 +29,16 @@ impl DurationCache {
         }
 
         tracing::debug!("Computing duration for {}", filename);
-        let duration = compute_audio_duration(filename);
+        let resolved = self
+            .file_resolver
+            .resolve(filename)
+            .await
+            .inspect_err(|e| {
+                tracing::warn!("Failed to resolve {} for duration lookup: {}", filename, e)
+            })
+            .ok();
+
+        let duration = resolved.and_then(|resolved| compute_audio_duration(&resolved));
 
         {
             let mut cache = self.cache.write().await;

@@ -1,8 +1,8 @@
 pub mod cache;
 pub mod resolve;
 
-pub use cache::FileCache;
-pub use resolve::resolve_track_path;
+pub use cache::{CacheError, FileCache};
+pub use resolve::FileResolver;
 
 use s3::bucket::Bucket;
 use s3::creds::Credentials;

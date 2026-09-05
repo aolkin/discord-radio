@@ -2,7 +2,6 @@ use crate::audio::dj::config::DJConfig;
 use crate::audio::dj::profile_machine::ProfileStateMachine;
 use crate::audio::dj::state_machine::{DJState, DJStateMachine};
 use crate::audio::tracks::StartTrackArgs;
-use crate::bucket::resolve_track_path;
 use crate::state::Data;
 use serenity::all::Http;
 use serenity::model::id::{ChannelId, GuildId};
@@ -67,7 +66,6 @@ pub async fn dj_task(
     let mut state_machine = DJStateMachine::new(
         config.clone(),
         guild_id,
-        bot_state.content_path.clone(),
         announcement_channel,
         http.clone(),
         restored_state.clone(),
@@ -171,60 +169,40 @@ pub async fn dj_task(
 
                 // Only attempt to restart the track if it hasn't finished yet
                 if elapsed < total_duration {
-                    match resolve_track_path(
-                        &filename,
-                        &bot_state.content_path,
-                        &bot_state.file_cache,
-                    )
-                    .await
+                    let mut manager = manager_arc.lock().await;
+
+                    let volume = find_track_by_filename(&state_machine, &filename)
+                        .and_then(|entry| entry.volume)
+                        .unwrap_or(1.0);
+
+                    if let Err(e) = manager
+                        .start_track(StartTrackArgs {
+                            name: track_name.clone(),
+                            filename: filename.clone(),
+                            volume,
+                            fade_time: 1.0,
+                            loops: false,
+                            start_position: Some(elapsed),
+                            persist: false,
+                        })
+                        .await
                     {
-                        Ok(full_path) => {
-                            let mut manager = manager_arc.lock().await;
-
-                            // Try to determine the original volume from the DJ's track pool by filename
-                            let volume = find_track_by_filename(&state_machine, &filename)
-                                .and_then(|entry| entry.volume)
-                                .unwrap_or(1.0);
-
-                            // Try to restart the track at the appropriate position
-                            if let Err(e) = manager
-                                .start_track(StartTrackArgs {
-                                    name: track_name.clone(),
-                                    filename: full_path,
-                                    volume,
-                                    fade_time: 1.0,
-                                    loops: false,
-                                    start_position: Some(elapsed),
-                                    persist: false,
-                                })
-                                .await
-                            {
-                                tracing::warn!(
-                                    "Failed to restore DJ track '{}' in guild {}: {}",
-                                    track_name,
-                                    guild_id,
-                                    e
-                                );
-                            } else {
-                                tracing::info!(
-                                    "Successfully restored DJ track '{}' at position {:.1}s in guild {}",
-                                    track_name,
-                                    elapsed.as_secs_f32(),
-                                    guild_id
-                                );
-                            }
-
-                            drop(manager);
-                        }
-                        Err(e) => {
-                            tracing::warn!(
-                                "Failed to resolve path for DJ track '{}' in guild {}: {}",
-                                track_name,
-                                guild_id,
-                                e
-                            );
-                        }
+                        tracing::warn!(
+                            "Failed to restore DJ track '{}' in guild {}: {}",
+                            track_name,
+                            guild_id,
+                            e
+                        );
+                    } else {
+                        tracing::info!(
+                            "Successfully restored DJ track '{}' at position {:.1}s in guild {}",
+                            track_name,
+                            elapsed.as_secs_f32(),
+                            guild_id
+                        );
                     }
+
+                    drop(manager);
                 } else {
                     tracing::info!(
                         "DJ track '{}' has already finished (elapsed: {:.1}s, duration: {:.1}s), will advance to next state",

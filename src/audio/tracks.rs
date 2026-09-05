@@ -23,6 +23,8 @@ pub struct TrackSnapshot {
 
 pub struct TrackInfo {
     pub name: String,
+    /// The raw filename or `s3://` key, not a resolved path — persisting the
+    /// resolved form would break restoration after an R2 cache eviction.
     pub filename: String,
     pub volume: f32,
     pub fade_task: Option<JoinHandle<()>>,
@@ -72,7 +74,9 @@ impl TrackManager {
         args: StartTrackArgs,
         callback: Option<crate::audio::custom_mixer::TrackEndCallback>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.validate_and_prepare_track(&args.name, &args.filename)
+        let resolved_filename = self.bot_state.file_resolver.resolve(&args.filename).await?;
+
+        self.validate_and_prepare_track(&args.name, &resolved_filename)
             .await?;
         let duration = self
             .bot_state
@@ -89,7 +93,7 @@ impl TrackManager {
         tracing::info!(
             "Starting track '{}' (file: {}, duration: {:.2}s, volume: {}, fade: {}s, loops: {}{}) in guild {}",
             args.name,
-            args.filename,
+            resolved_filename,
             duration.map(|d| d.as_secs_f64()).unwrap_or(-1.0),
             args.volume,
             args.fade_time,
@@ -100,7 +104,7 @@ impl TrackManager {
 
         // Create audio source through DSP pipeline
         let processor_arc = self.audio_processor.clone();
-        let mut source = SymphoniaSource::from_file(&args.filename, 48000)?;
+        let mut source = SymphoniaSource::from_file(&resolved_filename, 48000)?;
 
         // Seek to start position if specified
         if let Some(pos) = args.start_position {
