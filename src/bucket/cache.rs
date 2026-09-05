@@ -30,16 +30,9 @@ pub enum CacheError {
 /// Marks a [`ObjectDownloader::download`] failure as specifically meaning the
 /// key doesn't exist in object storage, so [`FileCache::fill`] can tell it
 /// apart from a network or auth failure.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
+#[error("object not found")]
 struct ObjectNotFound;
-
-impl std::fmt::Display for ObjectNotFound {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "object not found")
-    }
-}
-
-impl Error for ObjectNotFound {}
 
 /// Exists so tests can substitute a stub for a real bucket without real
 /// credentials.

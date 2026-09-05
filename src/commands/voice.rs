@@ -344,7 +344,6 @@ pub async fn change_track_state(
 
             // Validate now so a bad filename errors before we touch an existing track.
             if let Err(e) = ctx.data().file_resolver.resolve(&filename).await {
-                tracing::warn!("Failed to resolve audio file '{}': {}", filename, e);
                 ctx.say(format!("Failed to resolve audio file: {}", e))
                     .await?;
                 return Ok(());
