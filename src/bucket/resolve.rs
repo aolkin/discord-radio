@@ -1,4 +1,4 @@
-use crate::bucket::FileCache;
+use crate::bucket::{CacheError, FileCache};
 use std::sync::Arc;
 
 /// Resolves a playlist entry's `filename` to a local filesystem path.
@@ -20,10 +20,7 @@ impl FileResolver {
         }
     }
 
-    pub async fn resolve(
-        &self,
-        filename: &str,
-    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn resolve(&self, filename: &str) -> Result<String, CacheError> {
         if let Some(key) = filename.strip_prefix("s3://") {
             Ok(self
                 .file_cache

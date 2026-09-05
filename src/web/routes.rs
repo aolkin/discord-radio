@@ -1,3 +1,4 @@
+use crate::bucket::CacheError;
 use crate::state::Data;
 use crate::web::state_snapshot::BotSnapshot;
 use axum::Json as AxumJson;
@@ -124,7 +125,10 @@ pub async fn change_track_state(
                 .file_resolver
                 .resolve(&filename)
                 .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                .map_err(|e| match e {
+                    CacheError::NotFound => StatusCode::NOT_FOUND,
+                    _ => StatusCode::INTERNAL_SERVER_ERROR,
+                })?;
             let volume = request.volume.unwrap_or(1.0);
             let loops = request.loops.unwrap_or(true);
 
