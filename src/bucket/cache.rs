@@ -28,8 +28,7 @@ pub enum CacheError {
 }
 
 /// Marks a [`ObjectDownloader::download`] failure as specifically meaning the
-/// key doesn't exist in object storage, so callers of [`FileCache`] can
-/// distinguish it (e.g. for HTTP status mapping) from a network or auth
+/// key doesn't exist in object storage, distinct from a network or auth
 /// failure.
 #[derive(Debug, thiserror::Error)]
 #[error("object not found")]
