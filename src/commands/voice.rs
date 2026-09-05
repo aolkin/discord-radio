@@ -342,7 +342,6 @@ pub async fn change_track_state(
                 return Ok(());
             };
 
-            // Validate now so a bad filename errors before we touch an existing track.
             if let Err(e) = ctx.data().file_resolver.resolve(&filename).await {
                 ctx.say(format!("Failed to resolve audio file: {}", e))
                     .await?;

@@ -120,7 +120,6 @@ pub async fn change_track_state(
                 return Err(StatusCode::BAD_REQUEST);
             };
 
-            // Validate now so a bad filename errors before we touch an existing track.
             bot_state
                 .file_resolver
                 .resolve(&filename)
