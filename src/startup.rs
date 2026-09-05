@@ -275,7 +275,7 @@ async fn restore_dj_managers(
             crate::audio::tracks::get_or_create_track_manager(&bot_state, guild_id).await;
 
         let config_path = format!("dj_configs/{}.json", dj_state.config_name);
-        let dj_config = match crate::audio::dj::config::DJConfig::load_from_file(&config_path) {
+        let mut dj_config = match crate::audio::dj::config::DJConfig::load_from_file(&config_path) {
             Ok(cfg) => {
                 // Apply overrides if any are enabled
                 let overrides_arc = bot_state.dj_config_overrides.get_arc();
@@ -293,6 +293,9 @@ async fn restore_dj_managers(
                 continue;
             }
         };
+        dj_config
+            .resolve_track_pool(dj_state.playlist_name.as_deref(), &bot_state.file_cache)
+            .await;
 
         tracing::info!(
             "Restoring DJ for guild {} with config '{}'",
@@ -333,6 +336,7 @@ async fn restore_dj_managers(
                 http.clone(),
                 announcement_channel,
                 dj_state.state_machine,
+                dj_state.playlist_name,
             )
             .await
         {

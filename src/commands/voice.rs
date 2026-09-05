@@ -795,19 +795,23 @@ pub async fn manage_dj(
     match action_lower.as_str() {
         "start" => {
             let config_path = format!("dj_configs/{}.json", config);
-            let dj_config = match crate::audio::dj::config::DJConfig::load_from_file(&config_path) {
-                Ok(cfg) => {
-                    // Apply overrides if any are enabled
-                    let overrides_arc = ctx.data().dj_config_overrides.get_arc();
-                    let overrides = overrides_arc.read().await;
-                    cfg.with_overrides(&overrides)
-                }
-                Err(e) => {
-                    ctx.say(format!("Failed to load DJ config '{}': {}", config, e))
-                        .await?;
-                    return Ok(());
-                }
-            };
+            let mut dj_config =
+                match crate::audio::dj::config::DJConfig::load_from_file(&config_path) {
+                    Ok(cfg) => {
+                        // Apply overrides if any are enabled
+                        let overrides_arc = ctx.data().dj_config_overrides.get_arc();
+                        let overrides = overrides_arc.read().await;
+                        cfg.with_overrides(&overrides)
+                    }
+                    Err(e) => {
+                        ctx.say(format!("Failed to load DJ config '{}': {}", config, e))
+                            .await?;
+                        return Ok(());
+                    }
+                };
+            dj_config
+                .resolve_track_pool(None, &ctx.data().file_cache)
+                .await;
 
             // Create track manager for this guild (no longer requires voice connection)
             let _track_manager = get_or_create_track_manager(ctx, guild_id).await;
@@ -838,6 +842,7 @@ pub async fn manage_dj(
                     ctx.data().clone(),
                     ctx.serenity_context().http.clone(),
                     announcement_channel,
+                    None,
                     None,
                 )
                 .await

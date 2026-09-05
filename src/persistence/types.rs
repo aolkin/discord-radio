@@ -50,6 +50,8 @@ pub struct DJState {
     pub announcement_channel_id: Option<u64>,
     #[serde(default)]
     pub state_machine: Option<DJStateMachineState>,
+    #[serde(default)]
+    pub playlist_name: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
