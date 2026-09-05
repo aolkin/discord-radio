@@ -78,6 +78,7 @@ pub struct BotState {
     pub logs_base_path: std::path::PathBuf,
     pub metrics: MetricsHandle,
     pub file_resolver: FileResolver,
+    pub file_cache: Arc<FileCache>,
 }
 
 impl BotState {
@@ -127,6 +128,7 @@ impl BotState {
             logs_base_path,
             metrics,
             file_resolver,
+            file_cache,
         }
     }
 
