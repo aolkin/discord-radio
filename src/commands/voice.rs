@@ -264,7 +264,7 @@ fn has_audio_extension(path: &std::path::Path) -> bool {
     path.extension().is_some_and(|ext| {
         matches!(
             ext.to_string_lossy().to_lowercase().as_str(),
-            "mp3" | "ogg" | "wav" | "flac" | "m4a"
+            "mp3" | "ogg" | "wav" | "flac"
         )
     })
 }
@@ -312,7 +312,7 @@ async fn autocomplete_audio_file(ctx: Context<'_>, partial: &'_ str) -> Vec<Stri
     // follows it; otherwise every key is searched, matching how local files
     // are searched from the content root.
     let search_prefix = partial.strip_prefix("s3://").unwrap_or(partial);
-    for key in ctx.data().file_cache.list_remote(search_prefix).await {
+    for key in ctx.data().file_resolver.list_remote(search_prefix).await {
         if has_audio_extension(std::path::Path::new(&key)) {
             results.push(format!("s3://{}", key));
         }
