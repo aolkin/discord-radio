@@ -33,8 +33,7 @@ impl FileResolver {
         }
     }
 
-    /// Lists remote object keys under `prefix`. Empty when no bucket is
-    /// configured or the listing request fails.
+    /// Empty when no bucket is configured or the listing request fails.
     pub async fn list_remote(&self, prefix: &str) -> Vec<String> {
         self.file_cache.list_remote(prefix).await
     }
