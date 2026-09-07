@@ -15,7 +15,7 @@ pub struct DJConfig {
     pub recent_history_size: usize,
     pub duplicate_penalty_multiplier: f32,
     pub channel_status: Option<String>,
-    /// Playlist name to R2 key, for track pools stored outside the config file.
+    /// Playlist name to object-storage key, for track pools stored outside the config file.
     #[serde(default)]
     pub playlists: HashMap<String, String>,
     pub default_playlist: Option<String>,
