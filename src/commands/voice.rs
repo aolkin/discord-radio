@@ -308,11 +308,11 @@ async fn autocomplete_audio_file(ctx: Context<'_>, partial: &'_ str) -> Vec<Stri
         }
     }
 
-    // A typed "s3://" prefix narrows the R2 search to what follows it;
-    // otherwise every R2 key is searched, matching how local files are
-    // searched from the content root.
-    let r2_prefix = partial.strip_prefix("s3://").unwrap_or(partial);
-    for key in ctx.data().file_cache.list_remote(r2_prefix).await {
+    // A typed "s3://" prefix narrows the object storage search to what
+    // follows it; otherwise every key is searched, matching how local files
+    // are searched from the content root.
+    let search_prefix = partial.strip_prefix("s3://").unwrap_or(partial);
+    for key in ctx.data().file_cache.list_remote(search_prefix).await {
         if has_audio_extension(std::path::Path::new(&key)) {
             results.push(format!("s3://{}", key));
         }
