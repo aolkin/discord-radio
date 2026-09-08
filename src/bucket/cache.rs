@@ -16,7 +16,7 @@ const MAX_TRACKED_KEYS: u64 = 10_000;
 /// A dropdown only shows so many results anyway, so a cap this small still
 /// covers autocomplete while bounding how much of the bucket a single
 /// listing call can walk.
-const MAX_LISTED_KEYS: usize = 500;
+const MAX_LISTED_KEYS: usize = 50;
 
 /// Long enough that repeated autocomplete calls for the same prefix don't
 /// re-hit object storage on every keystroke, short enough that a newly
