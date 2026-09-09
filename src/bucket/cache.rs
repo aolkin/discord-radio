@@ -13,6 +13,18 @@ use tokio::sync::Semaphore;
 /// record of what is on disk.
 const MAX_TRACKED_KEYS: u64 = 10_000;
 
+/// A dropdown only shows so many results anyway, so a cap this small still
+/// covers autocomplete while bounding how much of the bucket a single
+/// listing call can walk.
+const MAX_LISTED_KEYS: usize = 50;
+
+/// Long enough that repeated autocomplete calls for the same prefix don't
+/// re-hit object storage on every keystroke, short enough that a newly
+/// uploaded file shows up again soon after.
+const REMOTE_LISTING_TTL: Duration = Duration::from_secs(30);
+
+const MAX_TRACKED_LISTINGS: u64 = 1_000;
+
 const TEMP_SUFFIX: &str = ".tmp";
 
 #[derive(Clone, Debug, thiserror::Error)]
@@ -39,6 +51,8 @@ struct ObjectNotFound;
 #[async_trait]
 pub(crate) trait ObjectDownloader: Send + Sync {
     async fn download(&self, key: &str) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>>;
+
+    async fn list_keys(&self, prefix: &str) -> Result<Vec<String>, Box<dyn Error + Send + Sync>>;
 }
 
 #[async_trait]
@@ -56,6 +70,42 @@ impl ObjectDownloader for s3::Bucket {
 
         Ok(response.bytes().to_vec())
     }
+
+    // TODO: this returns a flat list of every object key under `prefix`,
+    // which is hard to use once a prefix holds more than a handful of
+    // objects. A real implementation should list one directory level at a
+    // time instead, the way S3's `delimiter` parameter (passed to
+    // `list_page`) groups keys under a separator into "common prefixes"
+    // (folders) distinct from the objects directly in that folder.
+    async fn list_keys(&self, prefix: &str) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
+        let mut keys = Vec::new();
+        let mut continuation_token = None;
+
+        loop {
+            let (page, _) = self
+                .list_page(
+                    prefix.to_string(),
+                    None,
+                    continuation_token,
+                    None,
+                    Some(MAX_LISTED_KEYS - keys.len()),
+                )
+                .await?;
+
+            keys.extend(page.contents.into_iter().map(|object| object.key));
+            if keys.len() >= MAX_LISTED_KEYS {
+                keys.truncate(MAX_LISTED_KEYS);
+                break;
+            }
+
+            continuation_token = page.next_continuation_token;
+            if continuation_token.is_none() {
+                break;
+            }
+        }
+
+        Ok(keys)
+    }
 }
 
 /// Caches objects on local disk, mirroring the object storage key structure
@@ -65,6 +115,8 @@ pub struct FileCache {
     downloader: Option<Arc<dyn ObjectDownloader>>,
     /// Seeded at construction from the files already in `cache_dir`.
     present: moka::future::Cache<String, ()>,
+    /// `list_remote` results, keyed by prefix.
+    remote_listings: moka::future::Cache<String, Vec<String>>,
 }
 
 impl FileCache {
@@ -105,6 +157,10 @@ impl FileCache {
             cache_dir,
             downloader,
             present: moka::future::Cache::new(MAX_TRACKED_KEYS),
+            remote_listings: moka::future::Cache::builder()
+                .max_capacity(MAX_TRACKED_LISTINGS)
+                .time_to_live(REMOTE_LISTING_TTL)
+                .build(),
         };
 
         let mut keys = Vec::new();
@@ -184,6 +240,22 @@ impl FileCache {
     /// into place while its entry claims the key is cached.
     pub async fn invalidate(&self, key: &str) {
         self.present.invalidate(key).await;
+    }
+
+    /// Empty when no bucket is configured or the listing request fails.
+    /// Cached per prefix for [`REMOTE_LISTING_TTL`].
+    pub async fn list_remote(&self, prefix: &str) -> Vec<String> {
+        let Some(downloader) = &self.downloader else {
+            return Vec::new();
+        };
+
+        self.remote_listings
+            .try_get_with(prefix.to_string(), downloader.list_keys(prefix))
+            .await
+            .unwrap_or_else(|e| {
+                tracing::warn!("Failed to list remote objects under {prefix:?}: {e}");
+                Vec::new()
+            })
     }
 }
 
@@ -305,14 +377,31 @@ mod tests {
 
     struct StubDownloader {
         calls: Arc<AtomicUsize>,
+        list_calls: Arc<AtomicUsize>,
         payload: Vec<u8>,
+        remote_keys: Vec<String>,
     }
 
     impl StubDownloader {
         fn new(calls: &Arc<AtomicUsize>) -> Arc<Self> {
             Arc::new(Self {
                 calls: Arc::clone(calls),
+                list_calls: Arc::new(AtomicUsize::new(0)),
                 payload: b"hello world".to_vec(),
+                remote_keys: Vec::new(),
+            })
+        }
+
+        fn with_remote_keys(keys: &[&str]) -> Arc<Self> {
+            Self::with_remote_keys_and_counter(keys, &Arc::new(AtomicUsize::new(0)))
+        }
+
+        fn with_remote_keys_and_counter(keys: &[&str], list_calls: &Arc<AtomicUsize>) -> Arc<Self> {
+            Arc::new(Self {
+                calls: Arc::new(AtomicUsize::new(0)),
+                list_calls: Arc::clone(list_calls),
+                payload: b"hello world".to_vec(),
+                remote_keys: keys.iter().map(|k| k.to_string()).collect(),
             })
         }
     }
@@ -323,6 +412,19 @@ mod tests {
             self.calls.fetch_add(1, Ordering::SeqCst);
             Ok(self.payload.clone())
         }
+
+        async fn list_keys(
+            &self,
+            prefix: &str,
+        ) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
+            self.list_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(self
+                .remote_keys
+                .iter()
+                .filter(|key| key.starts_with(prefix))
+                .cloned()
+                .collect())
+        }
     }
 
     struct FailingDownloader;
@@ -332,6 +434,13 @@ mod tests {
         async fn download(&self, key: &str) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
             Err(format!("no such object: {key}").into())
         }
+
+        async fn list_keys(
+            &self,
+            _prefix: &str,
+        ) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
+            Err("listing failed".into())
+        }
     }
 
     struct NotFoundDownloader;
@@ -340,6 +449,13 @@ mod tests {
     impl ObjectDownloader for NotFoundDownloader {
         async fn download(&self, _key: &str) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
             Err(Box::new(ObjectNotFound))
+        }
+
+        async fn list_keys(
+            &self,
+            _prefix: &str,
+        ) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
+            Ok(Vec::new())
         }
     }
 
@@ -533,5 +649,53 @@ mod tests {
         assert!(cache.cached_path("tracks/a.ogg").exists());
         assert!(cache.cached_path("tracks/b.ogg").exists());
         assert!(cache.cached_path("tracks/c.ogg").exists());
+    }
+
+    #[tokio::test]
+    async fn list_remote_is_empty_without_a_bucket() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = FileCache::new(dir.path().to_path_buf(), None, None)
+            .await
+            .unwrap();
+
+        assert!(cache.list_remote("tracks/").await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn list_remote_filters_by_prefix() {
+        let dir = tempfile::tempdir().unwrap();
+        let downloader =
+            StubDownloader::with_remote_keys(&["tracks/a.ogg", "tracks/b.ogg", "other/c.ogg"]);
+        let cache = FileCache::with_downloader(dir.path().to_path_buf(), downloader).await;
+
+        let mut keys = cache.list_remote("tracks/").await;
+        keys.sort();
+
+        assert_eq!(keys, ["tracks/a.ogg", "tracks/b.ogg"]);
+    }
+
+    #[tokio::test]
+    async fn list_remote_reuses_a_cached_result_for_the_same_prefix() {
+        let dir = tempfile::tempdir().unwrap();
+        let list_calls = Arc::new(AtomicUsize::new(0));
+        let downloader = StubDownloader::with_remote_keys_and_counter(
+            &["tracks/a.ogg", "tracks/b.ogg"],
+            &list_calls,
+        );
+        let cache = FileCache::with_downloader(dir.path().to_path_buf(), downloader).await;
+
+        cache.list_remote("tracks/").await;
+        cache.list_remote("tracks/").await;
+
+        assert_eq!(list_calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn list_remote_is_empty_when_listing_fails() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache =
+            FileCache::with_downloader(dir.path().to_path_buf(), Arc::new(FailingDownloader)).await;
+
+        assert!(cache.list_remote("tracks/").await.is_empty());
     }
 }
