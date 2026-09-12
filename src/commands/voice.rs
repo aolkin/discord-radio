@@ -777,6 +777,39 @@ pub fn obfuscate_message(message: &str) -> String {
         .collect()
 }
 
+async fn autocomplete_playlist(_ctx: Context<'_>, partial: &'_ str) -> Vec<String> {
+    #[derive(serde::Deserialize, Default)]
+    struct PlaylistNames {
+        #[serde(default)]
+        playlists: std::collections::HashMap<String, String>,
+    }
+
+    let mut names = std::collections::HashSet::new();
+
+    if let Ok(entries) = std::fs::read_dir("dj_configs") {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+
+            if let Ok(content) = std::fs::read_to_string(&path)
+                && let Ok(parsed) = serde_json::from_str::<PlaylistNames>(&content)
+            {
+                names.extend(parsed.playlists.into_keys());
+            }
+        }
+    }
+
+    let mut results: Vec<String> = names
+        .into_iter()
+        .filter(|name| name.starts_with(partial))
+        .collect();
+    results.sort();
+    results.truncate(25);
+    results
+}
+
 /// Manage the radio DJ for automated playback
 #[poise::command(
     slash_command,
@@ -790,6 +823,9 @@ pub async fn manage_dj(
     #[description = "Text channel for announcements (optional)"] announcement_channel: Option<
         ChannelId,
     >,
+    #[description = "Playlist name (optional, uses default from config)"]
+    #[autocomplete = "autocomplete_playlist"]
+    playlist: Option<String>,
 ) -> Result<(), Error> {
     let guild_id = ctx
         .guild_id()
@@ -825,8 +861,14 @@ pub async fn manage_dj(
                         return Ok(());
                     }
                 };
+            let selected_playlist = playlist
+                .as_deref()
+                .or(dj_config.default_playlist.as_deref())
+                .filter(|name| dj_config.playlists.contains_key(*name))
+                .map(str::to_string);
+
             dj_config
-                .resolve_track_pool(None, &ctx.data().file_cache)
+                .resolve_track_pool(playlist.as_deref(), &ctx.data().file_cache)
                 .await;
 
             // Create track manager for this guild (no longer requires voice connection)
@@ -867,13 +909,21 @@ pub async fn manage_dj(
                 return Ok(());
             }
 
+            let playlist_note = match selected_playlist {
+                Some(name) => format!(" using playlist '{}'", name),
+                None => " using inline track pool".to_string(),
+            };
+
             let msg = if let Some(ch_id) = announcement_channel {
                 format!(
-                    "DJ started with configuration '{}' (announcements in <#{}>)",
-                    config, ch_id
+                    "DJ started with configuration '{}'{} (announcements in <#{}>)",
+                    config, playlist_note, ch_id
                 )
             } else {
-                format!("DJ started with configuration '{}'", config)
+                format!(
+                    "DJ started with configuration '{}'{}",
+                    config, playlist_note
+                )
             };
 
             ctx.say(msg).await?;
