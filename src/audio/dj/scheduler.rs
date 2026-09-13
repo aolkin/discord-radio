@@ -1,6 +1,7 @@
 use crate::audio::dj::config::{DJConfig, HexMessageEntry, NoisePeriodEntry, TrackEntry};
 use crate::audio::dj::weighted_choice::WeightedSelector;
 use std::collections::VecDeque;
+use std::sync::LazyLock;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DJStateType {
@@ -151,12 +152,11 @@ impl WeightedScheduler {
         self.config.hex_messages.get(index)
     }
 
-    pub fn get_noise_period(&self, index: usize) -> NoisePeriodEntry {
+    pub fn get_noise_period(&self, index: usize) -> &NoisePeriodEntry {
         self.config
             .noise_periods
             .get(index)
-            .cloned()
-            .unwrap_or_else(default_noise_period)
+            .unwrap_or(&DEFAULT_NOISE_PERIOD)
     }
 
     pub fn config(&self) -> &DJConfig {
@@ -170,14 +170,12 @@ enum StateCategory {
     Noise,
 }
 
-fn default_noise_period() -> NoisePeriodEntry {
-    NoisePeriodEntry {
-        noise_profile: "default".to_string(),
-        min_duration_seconds: 15.0,
-        max_duration_seconds: 45.0,
-        weight: 1,
-    }
-}
+static DEFAULT_NOISE_PERIOD: LazyLock<NoisePeriodEntry> = LazyLock::new(|| NoisePeriodEntry {
+    noise_profile: "default".to_string(),
+    min_duration_seconds: 15.0,
+    max_duration_seconds: 45.0,
+    weight: 1,
+});
 
 #[cfg(test)]
 mod tests {
