@@ -280,9 +280,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn dj_settings_round_trip() {
+    async fn dj_settings_survive_dj_state_removal() {
         let (store, _dir) = store();
-        let guild = GuildId::new(1);
+        let guild = GuildId::new(7);
 
         assert!(
             store
@@ -292,22 +292,6 @@ mod tests {
                 .tracks
                 .is_none()
         );
-
-        let settings = DjSettings {
-            tracks: Some("s3://playlists/main.json".to_string()),
-            hex_messages: None,
-        };
-        store.save_dj_settings(guild, &settings).await.unwrap();
-
-        let loaded = store.load_dj_settings(guild).await.unwrap();
-        assert_eq!(loaded.tracks.as_deref(), Some("s3://playlists/main.json"));
-        assert!(loaded.hex_messages.is_none());
-    }
-
-    #[tokio::test]
-    async fn removing_dj_state_leaves_settings_intact() {
-        let (store, _dir) = store();
-        let guild = GuildId::new(7);
 
         let settings = DjSettings {
             tracks: Some("s3://playlists/main.json".to_string()),
@@ -322,7 +306,6 @@ mod tests {
             state_machine: Some(DJStateMachineState::Stopped),
         };
         store.save_dj_state(guild, &dj_state).await.unwrap();
-
         store.remove_dj_state(guild).await.unwrap();
 
         let loaded = store.load_dj_settings(guild).await.unwrap();
