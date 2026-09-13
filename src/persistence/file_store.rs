@@ -1,6 +1,6 @@
 use super::{
-    DJState, MessagePlaybackState, MultiTrackPlaybackState, ProfileState, RegisteredChannel,
-    Result, StateStore,
+    DJState, DjSettings, MessagePlaybackState, MultiTrackPlaybackState, ProfileState,
+    RegisteredChannel, Result, StateStore,
 };
 use async_trait::async_trait;
 use serenity::model::id::{ChannelId, GuildId};
@@ -110,6 +110,10 @@ impl FileStore {
         PersistedMap::new(self.base_path.clone(), "dj_states.json")
     }
 
+    fn dj_settings(&self) -> PersistedMap<GuildId, DjSettings> {
+        PersistedMap::new(self.base_path.clone(), "dj_settings.json")
+    }
+
     fn registered_channels_path(&self) -> PathBuf {
         self.base_path.join("registered_channels.json")
     }
@@ -193,6 +197,19 @@ impl StateStore for FileStore {
         self.dj_states().remove(&guild_id).await
     }
 
+    async fn save_dj_settings(&self, guild_id: GuildId, settings: &DjSettings) -> Result<()> {
+        self.dj_settings().insert(guild_id, settings.clone()).await
+    }
+
+    async fn load_dj_settings(&self, guild_id: GuildId) -> Result<DjSettings> {
+        Ok(self
+            .dj_settings()
+            .load_all()
+            .await?
+            .remove(&guild_id)
+            .unwrap_or_default())
+    }
+
     async fn save_registered_channel(&self, channel: &RegisteredChannel) -> Result<()> {
         let mut channels = self.load_registered_channels().await?;
 
@@ -249,5 +266,70 @@ impl StateStore for FileStore {
         let state: Option<super::ActivityState> = serde_json::from_str(&content)?;
 
         Ok(state)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::persistence::types::DJStateMachineState;
+
+    fn store() -> (FileStore, tempfile::TempDir) {
+        let dir = tempfile::tempdir().unwrap();
+        (FileStore::new(dir.path().to_path_buf()), dir)
+    }
+
+    #[tokio::test]
+    async fn dj_settings_round_trip() {
+        let (store, _dir) = store();
+        let guild = GuildId::new(1);
+
+        assert!(
+            store
+                .load_dj_settings(guild)
+                .await
+                .unwrap()
+                .tracks
+                .is_none()
+        );
+
+        let settings = DjSettings {
+            tracks: Some("s3://playlists/main.json".to_string()),
+            hex_messages: None,
+        };
+        store.save_dj_settings(guild, &settings).await.unwrap();
+
+        let loaded = store.load_dj_settings(guild).await.unwrap();
+        assert_eq!(loaded.tracks.as_deref(), Some("s3://playlists/main.json"));
+        assert!(loaded.hex_messages.is_none());
+    }
+
+    #[tokio::test]
+    async fn removing_dj_state_leaves_settings_intact() {
+        let (store, _dir) = store();
+        let guild = GuildId::new(7);
+
+        let settings = DjSettings {
+            tracks: Some("s3://playlists/main.json".to_string()),
+            hex_messages: Some("s3://playlists/messages.json".to_string()),
+        };
+        store.save_dj_settings(guild, &settings).await.unwrap();
+
+        let dj_state = DJState {
+            config_name: "default".to_string(),
+            running: true,
+            announcement_channel_id: None,
+            state_machine: Some(DJStateMachineState::Stopped),
+        };
+        store.save_dj_state(guild, &dj_state).await.unwrap();
+
+        store.remove_dj_state(guild).await.unwrap();
+
+        let loaded = store.load_dj_settings(guild).await.unwrap();
+        assert_eq!(loaded.tracks.as_deref(), Some("s3://playlists/main.json"));
+        assert_eq!(
+            loaded.hex_messages.as_deref(),
+            Some("s3://playlists/messages.json")
+        );
     }
 }

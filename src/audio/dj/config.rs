@@ -3,7 +3,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct DJConfig {
     pub name: String,
+    #[serde(default)]
     pub track_pool: Vec<TrackEntry>,
+    #[serde(default)]
     pub hex_messages: Vec<HexMessageEntry>,
     pub hex_message_announcements: Option<Vec<String>>,
     #[serde(default)]
@@ -125,5 +127,44 @@ impl DJConfig {
         }
 
         self
+    }
+
+    pub async fn apply_dj_settings(
+        &mut self,
+        settings: &crate::persistence::DjSettings,
+        resolver: &crate::bucket::FileResolver,
+    ) {
+        self.track_pool = load_pool(settings.tracks.as_deref(), resolver).await;
+        self.hex_messages = load_pool(settings.hex_messages.as_deref(), resolver).await;
+    }
+}
+
+async fn load_pool<T: serde::de::DeserializeOwned>(
+    slot: Option<&str>,
+    resolver: &crate::bucket::FileResolver,
+) -> Vec<T> {
+    let Some(uri) = slot else {
+        return Vec::new();
+    };
+    let path = match resolver.resolve(uri).await {
+        Ok(path) => path,
+        Err(e) => {
+            tracing::warn!("Failed to resolve DJ pool slot '{uri}': {e}");
+            return Vec::new();
+        }
+    };
+    let contents = match tokio::fs::read_to_string(&path).await {
+        Ok(contents) => contents,
+        Err(e) => {
+            tracing::warn!("Failed to read DJ pool from '{uri}': {e}");
+            return Vec::new();
+        }
+    };
+    match serde_json::from_str(&contents) {
+        Ok(pool) => pool,
+        Err(e) => {
+            tracing::warn!("Failed to parse DJ pool from '{uri}': {e}");
+            Vec::new()
+        }
     }
 }

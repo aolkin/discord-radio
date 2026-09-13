@@ -44,16 +44,15 @@ impl WeightedScheduler {
         self.config = config;
     }
 
-    pub fn next_state(&mut self) -> DJStateType {
-        let state_type = self.choose_state_type();
-        let state = match state_type {
+    pub fn next_state(&mut self) -> Option<DJStateType> {
+        let state = match self.choose_state_type()? {
             StateCategory::Track => self.choose_track(),
             StateCategory::HexMessage => self.choose_hex_message(),
             StateCategory::Noise => self.choose_noise(),
         };
 
         self.add_to_history(state.clone());
-        state
+        Some(state)
     }
 
     pub fn next_state_of_type(
@@ -70,25 +69,50 @@ impl WeightedScheduler {
         state
     }
 
-    fn choose_state_type(&self) -> StateCategory {
+    fn choose_state_type(&self) -> Option<StateCategory> {
         use rand::Rng;
         let weights = &self.config.state_weights;
-        let total: u32 = weights.track + weights.hex_message + weights.noise;
+        let categories = [
+            (
+                StateCategory::Track,
+                weights.track,
+                self.config.track_pool.is_empty(),
+            ),
+            (
+                StateCategory::HexMessage,
+                weights.hex_message,
+                self.config.hex_messages.is_empty(),
+            ),
+            (
+                StateCategory::Noise,
+                weights.noise,
+                self.config.noise_periods.is_empty(),
+            ),
+        ];
+
+        let total: u32 = categories
+            .iter()
+            .filter(|(_, _, empty)| !empty)
+            .map(|(_, weight, _)| weight)
+            .sum();
+        if total == 0 {
+            return None;
+        }
 
         let mut rng = rand::rng();
         let roll: u32 = rng.random_range(0..total);
 
         let mut cumulative = 0;
-        if roll < (cumulative + weights.track) {
-            return StateCategory::Track;
+        for (category, weight, empty) in categories {
+            if empty {
+                continue;
+            }
+            cumulative += weight;
+            if roll < cumulative {
+                return Some(category);
+            }
         }
-        cumulative += weights.track;
-
-        if roll < (cumulative + weights.hex_message) {
-            return StateCategory::HexMessage;
-        }
-
-        StateCategory::Noise
+        None
     }
 
     fn choose_track(&mut self) -> DJStateType {
@@ -141,4 +165,61 @@ enum StateCategory {
     Track,
     HexMessage,
     Noise,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::audio::dj::config::StateWeights;
+
+    fn config(track_pool: Vec<TrackEntry>) -> DJConfig {
+        DJConfig {
+            name: "test".to_string(),
+            track_pool,
+            hex_messages: Vec::new(),
+            hex_message_announcements: None,
+            hex_message_defaults: Default::default(),
+            noise_periods: Vec::new(),
+            signal_profiles: Vec::new(),
+            state_weights: StateWeights {
+                track: 1,
+                hex_message: 1,
+                noise: 1,
+            },
+            recent_history_size: 4,
+            duplicate_penalty_multiplier: 0.5,
+            channel_status: None,
+        }
+    }
+
+    fn track() -> TrackEntry {
+        TrackEntry {
+            filename: "audio/song.ogg".to_string(),
+            weight: 1,
+            max_duration_seconds: None,
+            allow_subsection: None,
+            signal_profile: None,
+            volume: None,
+            channel_status: None,
+        }
+    }
+
+    #[test]
+    fn all_pools_empty_yields_nothing() {
+        let mut scheduler = WeightedScheduler::new(config(Vec::new()));
+        for _ in 0..100 {
+            assert_eq!(scheduler.next_state(), None);
+        }
+    }
+
+    #[test]
+    fn empty_categories_are_skipped() {
+        let mut scheduler = WeightedScheduler::new(config(vec![track()]));
+        for _ in 0..100 {
+            assert!(matches!(
+                scheduler.next_state(),
+                Some(DJStateType::Track(_))
+            ));
+        }
+    }
 }
