@@ -1,3 +1,4 @@
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -133,7 +134,7 @@ impl DJConfig {
         &mut self,
         settings: &crate::persistence::DjSettings,
         resolver: &crate::bucket::FileResolver,
-    ) -> Result<(), String> {
+    ) -> anyhow::Result<()> {
         self.track_pool = match &settings.tracks {
             Some(uri) => load_pool(uri, resolver).await?,
             None => Vec::new(),
@@ -149,14 +150,13 @@ impl DJConfig {
 async fn load_pool<T: serde::de::DeserializeOwned>(
     uri: &str,
     resolver: &crate::bucket::FileResolver,
-) -> Result<Vec<T>, String> {
+) -> anyhow::Result<Vec<T>> {
     let path = resolver
         .resolve(uri)
         .await
-        .map_err(|e| format!("could not resolve DJ component '{uri}': {e}"))?;
+        .with_context(|| format!("resolving DJ component '{uri}'"))?;
     let contents = tokio::fs::read_to_string(&path)
         .await
-        .map_err(|e| format!("could not read DJ component '{uri}': {e}"))?;
-    serde_json::from_str(&contents)
-        .map_err(|e| format!("could not parse DJ component '{uri}': {e}"))
+        .with_context(|| format!("reading DJ component '{uri}'"))?;
+    serde_json::from_str(&contents).with_context(|| format!("parsing DJ component '{uri}'"))
 }

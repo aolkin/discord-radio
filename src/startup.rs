@@ -303,7 +303,7 @@ async fn restore_dj_managers(
             .apply_dj_settings(&settings, &bot_state.file_resolver)
             .await
         {
-            tracing::warn!("Skipping DJ restore for guild {guild_id}: {e}");
+            tracing::warn!("Skipping DJ restore for guild {guild_id}: {e:#}");
             continue;
         }
 

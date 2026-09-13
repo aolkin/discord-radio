@@ -836,7 +836,7 @@ pub async fn manage_dj(
                 .apply_dj_settings(&settings, &ctx.data().file_resolver)
                 .await
             {
-                ctx.say(format!("Failed to load DJ components: {e}"))
+                ctx.say(format!("Failed to load DJ components: {e:#}"))
                     .await?;
                 return Ok(());
             }
