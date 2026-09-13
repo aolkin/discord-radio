@@ -77,7 +77,6 @@ pub struct DJStateMachine {
     announcement_channel: Option<ChannelId>,
     http: Arc<Http>,
     hex_message_announcements: Vec<String>,
-    empty_pools_logged: bool,
 }
 
 impl DJStateMachine {
@@ -116,7 +115,6 @@ impl DJStateMachine {
             announcement_channel,
             http,
             hex_message_announcements,
-            empty_pools_logged: false,
         }
     }
 
@@ -132,7 +130,6 @@ impl DJStateMachine {
         self.hex_message_announcements =
             config.hex_message_announcements.clone().unwrap_or_default();
         self.scheduler.update_config(config);
-        self.empty_pools_logged = false;
     }
 
     pub fn set_announcement_channel(&mut self, channel: Option<ChannelId>) {
@@ -159,18 +156,13 @@ impl DJStateMachine {
         state_type_filter: Option<crate::audio::dj::manager::DJStateTypeFilter>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let next_state_type = if let Some(filter) = state_type_filter {
-            Some(self.scheduler.next_state_of_type(filter))
+            self.scheduler.next_state_of_type(filter)
         } else {
             self.scheduler.next_state()
         };
 
-        match next_state_type {
-            Some(state_type) => {
-                self.transition_to_state(state_type, track_manager, bot_state)
-                    .await
-            }
-            None => Ok(()),
-        }
+        self.transition_to_state(next_state_type, track_manager, bot_state)
+            .await
     }
 
     pub async fn force_hex_message(
@@ -206,28 +198,9 @@ impl DJStateMachine {
             return Ok(());
         }
 
-        match self.scheduler.next_state() {
-            Some(next_state_type) => {
-                self.empty_pools_logged = false;
-                self.transition_to_state(next_state_type, track_manager, bot_state)
-                    .await
-            }
-            None => {
-                if !self.empty_pools_logged {
-                    tracing::warn!(
-                        "DJ has no playable content for guild {}, staying idle",
-                        self.guild_id
-                    );
-                    self.empty_pools_logged = true;
-                }
-                self.cleanup_current_state(track_manager, bot_state).await?;
-                self.current_state = DJState::Idle {
-                    started_at: std::time::Instant::now(),
-                    duration: Duration::from_secs(30),
-                };
-                Ok(())
-            }
-        }
+        let next_state_type = self.scheduler.next_state();
+        self.transition_to_state(next_state_type, track_manager, bot_state)
+            .await
     }
 
     async fn transition_to_state(
@@ -692,10 +665,7 @@ impl DJStateMachine {
         idx: usize,
         bot_state: &Data,
     ) -> Result<DJState, Box<dyn std::error::Error + Send + Sync>> {
-        let noise_entry = self
-            .scheduler
-            .get_noise_period(idx)
-            .ok_or("Noise period index out of bounds")?;
+        let noise_entry = self.scheduler.get_noise_period(idx);
 
         let duration_secs = {
             let mut rng = rand::rng();

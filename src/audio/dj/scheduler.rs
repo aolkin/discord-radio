@@ -44,15 +44,14 @@ impl WeightedScheduler {
         self.config = config;
     }
 
-    pub fn next_state(&mut self) -> Option<DJStateType> {
-        let state = match self.choose_state_type()? {
+    pub fn next_state(&mut self) -> DJStateType {
+        let state = match self.choose_state_type() {
             StateCategory::Track => self.choose_track(),
             StateCategory::HexMessage => self.choose_hex_message(),
             StateCategory::Noise => self.choose_noise(),
         };
-
         self.add_to_history(state.clone());
-        Some(state)
+        state
     }
 
     pub fn next_state_of_type(
@@ -69,7 +68,7 @@ impl WeightedScheduler {
         state
     }
 
-    fn choose_state_type(&self) -> Option<StateCategory> {
+    fn choose_state_type(&self) -> StateCategory {
         use rand::Rng;
         let weights = &self.config.state_weights;
         let categories = [
@@ -96,7 +95,7 @@ impl WeightedScheduler {
             .map(|(_, weight, _)| weight)
             .sum();
         if total == 0 {
-            return None;
+            return StateCategory::Noise;
         }
 
         let mut rng = rand::rng();
@@ -109,10 +108,10 @@ impl WeightedScheduler {
             }
             cumulative += weight;
             if roll < cumulative {
-                return Some(category);
+                return category;
             }
         }
-        None
+        StateCategory::Noise
     }
 
     fn choose_track(&mut self) -> DJStateType {
@@ -152,8 +151,12 @@ impl WeightedScheduler {
         self.config.hex_messages.get(index)
     }
 
-    pub fn get_noise_period(&self, index: usize) -> Option<&NoisePeriodEntry> {
-        self.config.noise_periods.get(index)
+    pub fn get_noise_period(&self, index: usize) -> NoisePeriodEntry {
+        self.config
+            .noise_periods
+            .get(index)
+            .cloned()
+            .unwrap_or_else(default_noise_period)
     }
 
     pub fn config(&self) -> &DJConfig {
@@ -165,6 +168,15 @@ enum StateCategory {
     Track,
     HexMessage,
     Noise,
+}
+
+fn default_noise_period() -> NoisePeriodEntry {
+    NoisePeriodEntry {
+        noise_profile: "default".to_string(),
+        min_duration_seconds: 15.0,
+        max_duration_seconds: 45.0,
+        weight: 1,
+    }
 }
 
 #[cfg(test)]
@@ -205,10 +217,10 @@ mod tests {
     }
 
     #[test]
-    fn all_pools_empty_yields_nothing() {
+    fn all_pools_empty_falls_back_to_noise() {
         let mut scheduler = WeightedScheduler::new(config(Vec::new()));
         for _ in 0..100 {
-            assert_eq!(scheduler.next_state(), None);
+            assert!(matches!(scheduler.next_state(), DJStateType::Noise(_)));
         }
     }
 
@@ -216,10 +228,7 @@ mod tests {
     fn empty_categories_are_skipped() {
         let mut scheduler = WeightedScheduler::new(config(vec![track()]));
         for _ in 0..100 {
-            assert!(matches!(
-                scheduler.next_state(),
-                Some(DJStateType::Track(_))
-            ));
+            assert!(matches!(scheduler.next_state(), DJStateType::Track(_)));
         }
     }
 }
