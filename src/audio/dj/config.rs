@@ -134,19 +134,22 @@ impl DJConfig {
         settings: &crate::persistence::DjSettings,
         resolver: &crate::bucket::FileResolver,
     ) -> Result<(), String> {
-        self.track_pool = load_pool(settings.tracks.as_deref(), resolver).await?;
-        self.hex_messages = load_pool(settings.hex_messages.as_deref(), resolver).await?;
+        self.track_pool = match &settings.tracks {
+            Some(uri) => load_pool(uri, resolver).await?,
+            None => Vec::new(),
+        };
+        self.hex_messages = match &settings.hex_messages {
+            Some(uri) => load_pool(uri, resolver).await?,
+            None => Vec::new(),
+        };
         Ok(())
     }
 }
 
 async fn load_pool<T: serde::de::DeserializeOwned>(
-    slot: Option<&str>,
+    uri: &str,
     resolver: &crate::bucket::FileResolver,
 ) -> Result<Vec<T>, String> {
-    let Some(uri) = slot else {
-        return Ok(Vec::new());
-    };
     let path = resolver
         .resolve(uri)
         .await
