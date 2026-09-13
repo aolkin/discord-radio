@@ -832,9 +832,14 @@ pub async fn manage_dj(
                 .load_dj_settings(guild_id)
                 .await
                 .unwrap_or_default();
-            dj_config
+            if let Err(e) = dj_config
                 .apply_dj_settings(&settings, &ctx.data().file_resolver)
-                .await;
+                .await
+            {
+                ctx.say(format!("Failed to load DJ components: {e}"))
+                    .await?;
+                return Ok(());
+            }
 
             // Create track manager for this guild (no longer requires voice connection)
             let _track_manager = get_or_create_track_manager(ctx, guild_id).await;

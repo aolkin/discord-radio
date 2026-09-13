@@ -133,38 +133,27 @@ impl DJConfig {
         &mut self,
         settings: &crate::persistence::DjSettings,
         resolver: &crate::bucket::FileResolver,
-    ) {
-        self.track_pool = load_pool(settings.tracks.as_deref(), resolver).await;
-        self.hex_messages = load_pool(settings.hex_messages.as_deref(), resolver).await;
+    ) -> Result<(), String> {
+        self.track_pool = load_pool(settings.tracks.as_deref(), resolver).await?;
+        self.hex_messages = load_pool(settings.hex_messages.as_deref(), resolver).await?;
+        Ok(())
     }
 }
 
 async fn load_pool<T: serde::de::DeserializeOwned>(
     slot: Option<&str>,
     resolver: &crate::bucket::FileResolver,
-) -> Vec<T> {
+) -> Result<Vec<T>, String> {
     let Some(uri) = slot else {
-        return Vec::new();
+        return Ok(Vec::new());
     };
-    let path = match resolver.resolve(uri).await {
-        Ok(path) => path,
-        Err(e) => {
-            tracing::warn!("Failed to resolve DJ pool slot '{uri}': {e}");
-            return Vec::new();
-        }
-    };
-    let contents = match tokio::fs::read_to_string(&path).await {
-        Ok(contents) => contents,
-        Err(e) => {
-            tracing::warn!("Failed to read DJ pool from '{uri}': {e}");
-            return Vec::new();
-        }
-    };
-    match serde_json::from_str(&contents) {
-        Ok(pool) => pool,
-        Err(e) => {
-            tracing::warn!("Failed to parse DJ pool from '{uri}': {e}");
-            Vec::new()
-        }
-    }
+    let path = resolver
+        .resolve(uri)
+        .await
+        .map_err(|e| format!("could not resolve DJ component '{uri}': {e}"))?;
+    let contents = tokio::fs::read_to_string(&path)
+        .await
+        .map_err(|e| format!("could not read DJ component '{uri}': {e}"))?;
+    serde_json::from_str(&contents)
+        .map_err(|e| format!("could not parse DJ component '{uri}': {e}"))
 }

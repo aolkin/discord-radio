@@ -299,9 +299,13 @@ async fn restore_dj_managers(
             .load_dj_settings(guild_id)
             .await
             .unwrap_or_default();
-        dj_config
+        if let Err(e) = dj_config
             .apply_dj_settings(&settings, &bot_state.file_resolver)
-            .await;
+            .await
+        {
+            tracing::warn!("Skipping DJ restore for guild {guild_id}: {e}");
+            continue;
+        }
 
         tracing::info!(
             "Restoring DJ for guild {} with config '{}'",
