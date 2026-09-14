@@ -42,6 +42,14 @@ pub struct ProfileState {
     pub bypass: bool,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct DjSettings {
+    #[serde(default)]
+    pub tracks: Option<String>,
+    #[serde(default)]
+    pub hex_messages: Option<String>,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DJState {
     pub config_name: String,

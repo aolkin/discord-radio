@@ -1,6 +1,7 @@
 use crate::audio::dj::config::{DJConfig, HexMessageEntry, NoisePeriodEntry, TrackEntry};
 use crate::audio::dj::weighted_choice::WeightedSelector;
 use std::collections::VecDeque;
+use std::sync::LazyLock;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DJStateType {
@@ -45,13 +46,11 @@ impl WeightedScheduler {
     }
 
     pub fn next_state(&mut self) -> DJStateType {
-        let state_type = self.choose_state_type();
-        let state = match state_type {
+        let state = match self.choose_state_type() {
             StateCategory::Track => self.choose_track(),
             StateCategory::HexMessage => self.choose_hex_message(),
             StateCategory::Noise => self.choose_noise(),
         };
-
         self.add_to_history(state.clone());
         state
     }
@@ -73,21 +72,46 @@ impl WeightedScheduler {
     fn choose_state_type(&self) -> StateCategory {
         use rand::Rng;
         let weights = &self.config.state_weights;
-        let total: u32 = weights.track + weights.hex_message + weights.noise;
+        let categories = [
+            (
+                StateCategory::Track,
+                weights.track,
+                self.config.track_pool.is_empty(),
+            ),
+            (
+                StateCategory::HexMessage,
+                weights.hex_message,
+                self.config.hex_messages.is_empty(),
+            ),
+            (
+                StateCategory::Noise,
+                weights.noise,
+                self.config.noise_periods.is_empty(),
+            ),
+        ];
+
+        let total: u32 = categories
+            .iter()
+            .filter(|(_, _, empty)| !empty)
+            .map(|(_, weight, _)| weight)
+            .sum();
+        if total == 0 {
+            return StateCategory::Noise;
+        }
 
         let mut rng = rand::rng();
         let roll: u32 = rng.random_range(0..total);
 
         let mut cumulative = 0;
-        if roll < (cumulative + weights.track) {
-            return StateCategory::Track;
+        for (category, weight, empty) in categories {
+            if empty {
+                continue;
+            }
+            cumulative += weight;
+            if roll < cumulative {
+                return category;
+            }
         }
-        cumulative += weights.track;
-
-        if roll < (cumulative + weights.hex_message) {
-            return StateCategory::HexMessage;
-        }
-
         StateCategory::Noise
     }
 
@@ -128,8 +152,11 @@ impl WeightedScheduler {
         self.config.hex_messages.get(index)
     }
 
-    pub fn get_noise_period(&self, index: usize) -> Option<&NoisePeriodEntry> {
-        self.config.noise_periods.get(index)
+    pub fn get_noise_period(&self, index: usize) -> &NoisePeriodEntry {
+        self.config
+            .noise_periods
+            .get(index)
+            .unwrap_or(&DEFAULT_NOISE_PERIOD)
     }
 
     pub fn config(&self) -> &DJConfig {
@@ -141,4 +168,65 @@ enum StateCategory {
     Track,
     HexMessage,
     Noise,
+}
+
+static DEFAULT_NOISE_PERIOD: LazyLock<NoisePeriodEntry> = LazyLock::new(|| NoisePeriodEntry {
+    noise_profile: "default".to_string(),
+    min_duration_seconds: 2.0,
+    max_duration_seconds: 2.0,
+    weight: 1,
+});
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::audio::dj::config::StateWeights;
+
+    fn config(track_pool: Vec<TrackEntry>) -> DJConfig {
+        DJConfig {
+            name: "test".to_string(),
+            track_pool,
+            hex_messages: Vec::new(),
+            hex_message_announcements: None,
+            hex_message_defaults: Default::default(),
+            noise_periods: Vec::new(),
+            signal_profiles: Vec::new(),
+            state_weights: StateWeights {
+                track: 1,
+                hex_message: 1,
+                noise: 1,
+            },
+            recent_history_size: 4,
+            duplicate_penalty_multiplier: 0.5,
+            channel_status: None,
+        }
+    }
+
+    fn track() -> TrackEntry {
+        TrackEntry {
+            filename: "audio/song.ogg".to_string(),
+            weight: 1,
+            max_duration_seconds: None,
+            allow_subsection: None,
+            signal_profile: None,
+            volume: None,
+            channel_status: None,
+        }
+    }
+
+    #[test]
+    fn all_pools_empty_falls_back_to_noise() {
+        let mut scheduler = WeightedScheduler::new(config(Vec::new()));
+        for _ in 0..100 {
+            assert!(matches!(scheduler.next_state(), DJStateType::Noise(_)));
+        }
+    }
+
+    #[test]
+    fn empty_categories_are_skipped() {
+        let mut scheduler = WeightedScheduler::new(config(vec![track()]));
+        for _ in 0..100 {
+            assert!(matches!(scheduler.next_state(), DJStateType::Track(_)));
+        }
+    }
 }

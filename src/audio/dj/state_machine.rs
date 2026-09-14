@@ -665,12 +665,12 @@ impl DJStateMachine {
         idx: usize,
         bot_state: &Data,
     ) -> Result<DJState, Box<dyn std::error::Error + Send + Sync>> {
-        let noise_entry = self
-            .scheduler
-            .get_noise_period(idx)
-            .ok_or("Noise period index out of bounds")?;
+        let noise_entry = self.scheduler.get_noise_period(idx);
 
-        let duration_secs = {
+        let duration_secs = if noise_entry.min_duration_seconds >= noise_entry.max_duration_seconds
+        {
+            noise_entry.min_duration_seconds
+        } else {
             let mut rng = rand::rng();
             rng.random_range(noise_entry.min_duration_seconds..noise_entry.max_duration_seconds)
         };
