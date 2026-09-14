@@ -120,8 +120,11 @@ impl TryFrom<&DJStateMachineState> for DJState {
 }
 
 // DJ Config Overrides
-use crate::persistence::types::DJConfigOverrides;
+use crate::persistence::types::{DJConfigOverrides, DjSettings};
 use crate::persistence::utils::save_json_to_file;
+use serenity::model::id::GuildId;
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -261,5 +264,74 @@ impl DJConfigOverridesStore {
             overrides.state_weights.value = Some(weights);
         }
         self.save().await
+    }
+}
+
+pub struct DjSettingsStore {
+    settings: Arc<RwLock<HashMap<GuildId, DjSettings>>>,
+    path: PathBuf,
+}
+
+impl DjSettingsStore {
+    pub fn new(path: PathBuf) -> Self {
+        let settings = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|contents| serde_json::from_str(&contents).ok())
+            .unwrap_or_default();
+        Self {
+            settings: Arc::new(RwLock::new(settings)),
+            path,
+        }
+    }
+
+    pub async fn get(&self, guild_id: GuildId) -> DjSettings {
+        self.settings
+            .read()
+            .await
+            .get(&guild_id)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    pub async fn update<F: FnOnce(&mut DjSettings)>(
+        &self,
+        guild_id: GuildId,
+        f: F,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let mut settings = self.settings.write().await;
+        f(settings.entry(guild_id).or_default());
+        save_json_to_file(&*settings, &self.path).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn update_preserves_other_fields_and_persists() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("dj_settings.json");
+        let guild_id = GuildId::new(42);
+
+        let store = DjSettingsStore::new(path.clone());
+        store
+            .update(guild_id, |s| s.tracks = Some("tracks.json".to_string()))
+            .await
+            .unwrap();
+        store
+            .update(guild_id, |s| {
+                s.hex_messages = Some("messages.json".to_string())
+            })
+            .await
+            .unwrap();
+
+        let settings = store.get(guild_id).await;
+        assert_eq!(settings.tracks.as_deref(), Some("tracks.json"));
+        assert_eq!(settings.hex_messages.as_deref(), Some("messages.json"));
+
+        let reloaded = DjSettingsStore::new(path).get(guild_id).await;
+        assert_eq!(reloaded.tracks.as_deref(), Some("tracks.json"));
+        assert_eq!(reloaded.hex_messages.as_deref(), Some("messages.json"));
     }
 }

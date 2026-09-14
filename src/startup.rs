@@ -294,11 +294,7 @@ async fn restore_dj_managers(
             }
         };
 
-        let settings = bot_state
-            .state_store
-            .load_dj_settings(guild_id)
-            .await
-            .unwrap_or_default();
+        let settings = bot_state.dj_settings.get(guild_id).await;
         if let Err(e) = dj_config
             .apply_dj_settings(&settings, &bot_state.file_resolver)
             .await

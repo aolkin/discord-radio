@@ -256,6 +256,10 @@ async fn main() -> Result<(), Error> {
         persistence::DJConfigOverridesStore::new(dj_config_overrides, dj_config_overrides_path);
     tracing::info!("Loaded DJ config overrides");
 
+    let dj_settings_store =
+        persistence::DjSettingsStore::new(state_store_path.join("dj_settings.json"));
+    tracing::info!("Loaded DJ settings");
+
     let (shutdown_tx, _shutdown_rx) = tokio::sync::broadcast::channel(16);
 
     // Initialize metrics if configured
@@ -318,6 +322,7 @@ async fn main() -> Result<(), Error> {
     let data = Arc::new(BotState::new(
         content_path,
         dj_config_overrides_store,
+        dj_settings_store,
         state_store,
         shutdown_tx,
         metrics_handle.clone(),
@@ -343,6 +348,8 @@ async fn main() -> Result<(), Error> {
                 commands::voice::manage_dj(),
                 commands::voice::get_dj_state(),
                 commands::voice::advance_dj_state(),
+                commands::voice::dj_tracks(),
+                commands::voice::dj_messages(),
                 commands::messaging::register_channel(),
                 commands::messaging::speak(),
                 commands::messaging::set_status(),
