@@ -827,8 +827,7 @@ pub async fn manage_dj(
                 .apply_dj_settings(&settings, &ctx.data().file_resolver)
                 .await
             {
-                ctx.say(format!("Failed to load DJ components: {e:#}"))
-                    .await?;
+                ctx.say(format!("Failed to load DJ content: {e:#}")).await?;
                 return Ok(());
             }
 
@@ -1163,23 +1162,21 @@ pub async fn advance_dj_state(
     Ok(())
 }
 
-async fn autocomplete_dj_component(ctx: Context<'_>, partial: &'_ str) -> Vec<String> {
-    let search_prefix = partial.strip_prefix("s3://").unwrap_or(partial);
+async fn autocomplete_content_file(ctx: Context<'_>, partial: &'_ str) -> Vec<String> {
     let mut results: Vec<String> = ctx
         .data()
         .file_resolver
-        .list_remote(search_prefix)
+        .list_content(partial)
         .await
         .into_iter()
-        .filter(|key| key.ends_with(".json"))
-        .map(|key| format!("s3://{key}"))
+        .filter(|uri| uri.ends_with(".json"))
         .collect();
     results.sort();
     results.truncate(25);
     results
 }
 
-async fn validate_component_uri(
+async fn validate_content_uri(
     resolver: &crate::bucket::FileResolver,
     uri: &str,
 ) -> Result<(), String> {
@@ -1194,7 +1191,7 @@ async fn validate_component_uri(
     }
 }
 
-async fn set_dj_component(
+async fn set_dj_content(
     ctx: Context<'_>,
     uri: Option<String>,
     label: &str,
@@ -1210,20 +1207,18 @@ async fn set_dj_component(
     let uri = uri.filter(|u| !u.trim().is_empty());
 
     if let Some(uri) = &uri
-        && let Err(e) = validate_component_uri(&ctx.data().file_resolver, uri).await
+        && let Err(e) = validate_content_uri(&ctx.data().file_resolver, uri).await
     {
         ctx.say(e).await?;
         return Ok(());
     }
 
-    let mut settings = ctx.data().state_store.load_dj_settings(guild_id).await?;
-    set(&mut settings, uri);
     ctx.data()
-        .state_store
-        .save_dj_settings(guild_id, &settings)
+        .dj_settings
+        .update(guild_id, |s| set(s, uri))
         .await?;
 
-    let saved = ctx.data().state_store.load_dj_settings(guild_id).await?;
+    let saved = ctx.data().dj_settings.get(guild_id).await;
     let message = match get(&saved) {
         Some(value) => {
             format!("DJ {label} set to `{value}`. This takes effect the next time the DJ starts.")
@@ -1243,11 +1238,11 @@ async fn set_dj_component(
 )]
 pub async fn dj_tracks(
     ctx: Context<'_>,
-    #[description = "Object storage URI of the track pool JSON file (omit to clear)"]
-    #[autocomplete = "autocomplete_dj_component"]
+    #[description = "Path or s3:// URI of the track pool file (omit to clear)"]
+    #[autocomplete = "autocomplete_content_file"]
     uri: Option<String>,
 ) -> Result<(), Error> {
-    set_dj_component(
+    set_dj_content(
         ctx,
         uri,
         "track pool",
@@ -1265,11 +1260,11 @@ pub async fn dj_tracks(
 )]
 pub async fn dj_messages(
     ctx: Context<'_>,
-    #[description = "Object storage URI of the hex-message pool JSON file (omit to clear)"]
-    #[autocomplete = "autocomplete_dj_component"]
+    #[description = "Path or s3:// URI of the message pool file (omit to clear)"]
+    #[autocomplete = "autocomplete_content_file"]
     uri: Option<String>,
 ) -> Result<(), Error> {
-    set_dj_component(
+    set_dj_content(
         ctx,
         uri,
         "hex-message pool",
@@ -1294,14 +1289,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn validate_component_uri_checks_the_file_exists() {
+    async fn validate_content_uri_checks_the_file_exists() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("pool.json"), "[]").unwrap();
         let resolver = resolver(dir.path()).await;
 
-        assert!(validate_component_uri(&resolver, "pool.json").await.is_ok());
+        assert!(validate_content_uri(&resolver, "pool.json").await.is_ok());
         assert!(
-            validate_component_uri(&resolver, "missing.json")
+            validate_content_uri(&resolver, "missing.json")
                 .await
                 .is_err()
         );

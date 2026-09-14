@@ -238,6 +238,7 @@ async fn main() -> Result<(), Error> {
 
     let dj_settings_store =
         persistence::DjSettingsStore::new(state_store_path.join("dj_settings.json"));
+    tracing::info!("Loaded DJ settings");
     let state_store = Arc::new(persistence::FileStore::new(state_store_path));
 
     let (shutdown_tx, _shutdown_rx) = tokio::sync::broadcast::channel(16);
