@@ -172,8 +172,8 @@ enum StateCategory {
 
 static DEFAULT_NOISE_PERIOD: LazyLock<NoisePeriodEntry> = LazyLock::new(|| NoisePeriodEntry {
     noise_profile: "default".to_string(),
-    min_duration_seconds: 15.0,
-    max_duration_seconds: 45.0,
+    min_duration_seconds: 2.0,
+    max_duration_seconds: 2.0,
     weight: 1,
 });
 
