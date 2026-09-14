@@ -13,6 +13,8 @@ pub struct FileResolver {
 }
 
 impl FileResolver {
+    const CONTENT_PREFIX: &str = "config/";
+
     pub fn new(content_path: String, file_cache: Arc<FileCache>) -> Self {
         Self {
             content_path,
@@ -36,6 +38,19 @@ impl FileResolver {
     /// Empty when no bucket is configured or the listing request fails.
     pub async fn list_remote(&self, prefix: &str) -> Vec<String> {
         self.file_cache.list_remote(prefix).await
+    }
+
+    /// Lists content files (as s3:// URIs) whose key matches `partial` under the content prefix.
+    pub async fn list_content(&self, partial: &str) -> Vec<String> {
+        let partial = partial.strip_prefix("s3://").unwrap_or(partial);
+        let partial = partial
+            .strip_prefix(Self::CONTENT_PREFIX)
+            .unwrap_or(partial);
+        self.list_remote(&format!("{}{partial}", Self::CONTENT_PREFIX))
+            .await
+            .into_iter()
+            .map(|key| format!("s3://{key}"))
+            .collect()
     }
 }
 
