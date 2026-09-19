@@ -810,15 +810,17 @@ pub async fn manage_dj(
 
     match action_lower.as_str() {
         "start" => {
+            let settings = ctx
+                .data()
+                .state_store
+                .load_dj_settings(guild_id)
+                .await
+                .unwrap_or_default();
+
             let config_path = format!("dj_configs/{}.json", config);
             let mut dj_config =
                 match crate::audio::dj::config::DJConfig::load_from_file(&config_path) {
-                    Ok(cfg) => {
-                        // Apply overrides if any are enabled
-                        let overrides_arc = ctx.data().dj_config_overrides.get_arc();
-                        let overrides = overrides_arc.read().await;
-                        cfg.with_overrides(&overrides)
-                    }
+                    Ok(cfg) => cfg.with_overrides(&settings),
                     Err(e) => {
                         ctx.say(format!("Failed to load DJ config '{}': {}", config, e))
                             .await?;
@@ -826,12 +828,6 @@ pub async fn manage_dj(
                     }
                 };
 
-            let settings = ctx
-                .data()
-                .state_store
-                .load_dj_settings(guild_id)
-                .await
-                .unwrap_or_default();
             if let Err(e) = dj_config
                 .apply_dj_settings(&settings, &ctx.data().file_resolver)
                 .await

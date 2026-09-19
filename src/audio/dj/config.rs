@@ -109,20 +109,22 @@ impl DJConfig {
     }
 
     /// Apply overrides to this config, replacing specified categories entirely when enabled
-    pub fn with_overrides(mut self, overrides: &crate::persistence::DJConfigOverrides) -> Self {
-        if overrides.hex_messages.enabled && !overrides.hex_messages.items.is_empty() {
-            self.hex_messages = overrides.hex_messages.items.clone();
+    pub fn with_overrides(mut self, settings: &crate::persistence::DjSettings) -> Self {
+        if settings.hex_message_overrides.enabled
+            && !settings.hex_message_overrides.items.is_empty()
+        {
+            self.hex_messages = settings.hex_message_overrides.items.clone();
         }
 
-        if overrides.hex_message_announcements.enabled
-            && !overrides.hex_message_announcements.items.is_empty()
+        if settings.hex_message_announcement_overrides.enabled
+            && !settings.hex_message_announcement_overrides.items.is_empty()
         {
             self.hex_message_announcements =
-                Some(overrides.hex_message_announcements.items.clone());
+                Some(settings.hex_message_announcement_overrides.items.clone());
         }
 
-        if overrides.state_weights.enabled
-            && let Some(ref weights) = overrides.state_weights.value
+        if settings.state_weight_overrides.enabled
+            && let Some(ref weights) = settings.state_weight_overrides.value
         {
             self.state_weights = weights.clone();
         }
@@ -159,4 +161,84 @@ async fn load_pool<T: serde::de::DeserializeOwned>(
         .await
         .with_context(|| format!("reading DJ component '{uri}'"))?;
     serde_json::from_str(&contents).with_context(|| format!("parsing DJ component '{uri}'"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::persistence::DjSettings;
+
+    fn base_config() -> DJConfig {
+        DJConfig {
+            name: "base".to_string(),
+            track_pool: Vec::new(),
+            hex_messages: vec![hex_message("base message")],
+            hex_message_announcements: Some(vec!["base announcement".to_string()]),
+            hex_message_defaults: HexMessageDefaults::default(),
+            noise_periods: Vec::new(),
+            signal_profiles: Vec::new(),
+            state_weights: StateWeights {
+                track: 1,
+                hex_message: 1,
+                noise: 1,
+            },
+            recent_history_size: 0,
+            duplicate_penalty_multiplier: 1.0,
+            channel_status: None,
+        }
+    }
+
+    fn hex_message(text: &str) -> HexMessageEntry {
+        HexMessageEntry {
+            text: text.to_string(),
+            weight: 1,
+            signal_profile: None,
+            loop_min: None,
+            loop_max: None,
+            announcement: None,
+        }
+    }
+
+    #[test]
+    fn enabled_overrides_replace_config_values() {
+        let mut settings = DjSettings::default();
+        settings.hex_message_overrides.enabled = true;
+        settings.hex_message_overrides.items = vec![hex_message("override message")];
+        settings.hex_message_announcement_overrides.enabled = true;
+        settings.hex_message_announcement_overrides.items =
+            vec!["override announcement".to_string()];
+        settings.state_weight_overrides.enabled = true;
+        settings.state_weight_overrides.value = Some(StateWeights {
+            track: 7,
+            hex_message: 8,
+            noise: 9,
+        });
+
+        let config = base_config().with_overrides(&settings);
+
+        assert_eq!(config.hex_messages[0].text, "override message");
+        assert_eq!(
+            config.hex_message_announcements,
+            Some(vec!["override announcement".to_string()])
+        );
+        assert_eq!(config.state_weights.track, 7);
+    }
+
+    #[test]
+    fn disabled_or_empty_overrides_leave_config_alone() {
+        let mut settings = DjSettings::default();
+        settings.hex_message_overrides.items = vec![hex_message("override message")];
+        settings.hex_message_announcement_overrides.items =
+            vec!["override announcement".to_string()];
+        settings.state_weight_overrides.enabled = true;
+
+        let config = base_config().with_overrides(&settings);
+
+        assert_eq!(config.hex_messages[0].text, "base message");
+        assert_eq!(
+            config.hex_message_announcements,
+            Some(vec!["base announcement".to_string()])
+        );
+        assert_eq!(config.state_weights.track, 1);
+    }
 }

@@ -344,14 +344,14 @@ pub async fn dj_task(
                     let config_path = format!("dj_configs/{}.json", config_name);
                     match DJConfig::load_from_file(&config_path) {
                         Ok(base_config) => {
-                            // Apply current overrides
-                            let overrides_arc = bot_state.dj_config_overrides.get_arc();
-                            let overrides = overrides_arc.read().await;
-                            let updated_config = base_config.with_overrides(&overrides);
-                            drop(overrides);
+                            let settings = bot_state
+                                .state_store
+                                .load_dj_settings(guild_id)
+                                .await
+                                .unwrap_or_default();
 
                             // Update the state machine with new config
-                            state_machine.update_config(updated_config);
+                            state_machine.update_config(base_config.with_overrides(&settings));
                             tracing::info!(
                                 "DJ config reloaded successfully for guild {}",
                                 guild_id

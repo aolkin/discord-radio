@@ -274,14 +274,15 @@ async fn restore_dj_managers(
         let _manager_arc =
             crate::audio::tracks::get_or_create_track_manager(&bot_state, guild_id).await;
 
+        let settings = bot_state
+            .state_store
+            .load_dj_settings(guild_id)
+            .await
+            .unwrap_or_default();
+
         let config_path = format!("dj_configs/{}.json", dj_state.config_name);
         let mut dj_config = match crate::audio::dj::config::DJConfig::load_from_file(&config_path) {
-            Ok(cfg) => {
-                // Apply overrides if any are enabled
-                let overrides_arc = bot_state.dj_config_overrides.get_arc();
-                let overrides = overrides_arc.read().await;
-                cfg.with_overrides(&overrides)
-            }
+            Ok(cfg) => cfg.with_overrides(&settings),
             Err(e) => {
                 tracing::error!(
                     "Failed to load DJ config '{}' for guild {}: {}",
@@ -294,11 +295,6 @@ async fn restore_dj_managers(
             }
         };
 
-        let settings = bot_state
-            .state_store
-            .load_dj_settings(guild_id)
-            .await
-            .unwrap_or_default();
         if let Err(e) = dj_config
             .apply_dj_settings(&settings, &bot_state.file_resolver)
             .await
