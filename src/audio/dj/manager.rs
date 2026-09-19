@@ -344,11 +344,7 @@ pub async fn dj_task(
                     let config_path = format!("dj_configs/{}.json", config_name);
                     match DJConfig::load_from_file(&config_path) {
                         Ok(base_config) => {
-                            let settings = bot_state
-                                .state_store
-                                .load_dj_settings(guild_id)
-                                .await
-                                .unwrap_or_default();
+                            let settings = bot_state.dj_settings.get(guild_id).await;
 
                             // Update the state machine with new config
                             state_machine.update_config(base_config.with_overrides(&settings));

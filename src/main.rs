@@ -236,6 +236,8 @@ async fn main() -> Result<(), Error> {
     );
     tracing::info!("Using state store path: {:?}", state_store_path);
 
+    let dj_settings_store =
+        persistence::DjSettingsStore::new(state_store_path.join("dj_settings.json"));
     let state_store = Arc::new(persistence::FileStore::new(state_store_path));
 
     let (shutdown_tx, _shutdown_rx) = tokio::sync::broadcast::channel(16);
@@ -300,6 +302,7 @@ async fn main() -> Result<(), Error> {
     let data = Arc::new(BotState::new(
         content_path,
         state_store,
+        dj_settings_store,
         shutdown_tx,
         metrics_handle.clone(),
         file_cache,

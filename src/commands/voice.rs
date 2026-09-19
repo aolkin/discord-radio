@@ -810,12 +810,7 @@ pub async fn manage_dj(
 
     match action_lower.as_str() {
         "start" => {
-            let settings = ctx
-                .data()
-                .state_store
-                .load_dj_settings(guild_id)
-                .await
-                .unwrap_or_default();
+            let settings = ctx.data().dj_settings.get(guild_id).await;
 
             let config_path = format!("dj_configs/{}.json", config);
             let mut dj_config =

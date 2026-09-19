@@ -274,11 +274,7 @@ async fn restore_dj_managers(
         let _manager_arc =
             crate::audio::tracks::get_or_create_track_manager(&bot_state, guild_id).await;
 
-        let settings = bot_state
-            .state_store
-            .load_dj_settings(guild_id)
-            .await
-            .unwrap_or_default();
+        let settings = bot_state.dj_settings.get(guild_id).await;
 
         let config_path = format!("dj_configs/{}.json", dj_state.config_name);
         let mut dj_config = match crate::audio::dj::config::DJConfig::load_from_file(&config_path) {

@@ -405,14 +405,7 @@ pub async fn get_dj_config_overrides(
 ) -> Result<AxumJson<DJConfigOverridesResponse>, StatusCode> {
     let guild_id = parse_guild_id(&guild_id)?;
 
-    let settings = bot_state
-        .state_store
-        .load_dj_settings(guild_id)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to load DJ settings for guild {}: {}", guild_id, e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let settings = bot_state.dj_settings.get(guild_id).await;
 
     let hex_messages_items = serde_json::to_value(&settings.hex_message_overrides.items)
         .unwrap_or(serde_json::Value::Null);
@@ -471,13 +464,15 @@ pub async fn set_hex_message_override(
         announcement: request.announcement,
     };
 
-    crate::persistence::update_dj_settings(bot_state.state_store.as_ref(), guild_id, |settings| {
-        settings
-            .hex_message_overrides
-            .set(request.index, hex_message)
-    })
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    bot_state
+        .dj_settings
+        .update(guild_id, |settings| {
+            settings
+                .hex_message_overrides
+                .set(request.index, hex_message)
+        })
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     trigger_dj_config_reload(&bot_state, guild_id).await;
 
@@ -490,11 +485,13 @@ pub async fn delete_hex_message_override(
 ) -> Result<StatusCode, StatusCode> {
     let guild_id = parse_guild_id(&guild_id)?;
 
-    crate::persistence::update_dj_settings(bot_state.state_store.as_ref(), guild_id, |settings| {
-        settings.hex_message_overrides.remove(index)
-    })
-    .await
-    .map_err(|_| StatusCode::NOT_FOUND)?;
+    bot_state
+        .dj_settings
+        .update(guild_id, |settings| {
+            settings.hex_message_overrides.remove(index)
+        })
+        .await
+        .map_err(|_| StatusCode::NOT_FOUND)?;
 
     trigger_dj_config_reload(&bot_state, guild_id).await;
 
@@ -518,13 +515,15 @@ pub async fn set_announcement_override(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    crate::persistence::update_dj_settings(bot_state.state_store.as_ref(), guild_id, |settings| {
-        settings
-            .hex_message_announcement_overrides
-            .set(request.index, request.text)
-    })
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    bot_state
+        .dj_settings
+        .update(guild_id, |settings| {
+            settings
+                .hex_message_announcement_overrides
+                .set(request.index, request.text)
+        })
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     trigger_dj_config_reload(&bot_state, guild_id).await;
 
@@ -537,11 +536,13 @@ pub async fn delete_announcement_override(
 ) -> Result<StatusCode, StatusCode> {
     let guild_id = parse_guild_id(&guild_id)?;
 
-    crate::persistence::update_dj_settings(bot_state.state_store.as_ref(), guild_id, |settings| {
-        settings.hex_message_announcement_overrides.remove(index)
-    })
-    .await
-    .map_err(|_| StatusCode::NOT_FOUND)?;
+    bot_state
+        .dj_settings
+        .update(guild_id, |settings| {
+            settings.hex_message_announcement_overrides.remove(index)
+        })
+        .await
+        .map_err(|_| StatusCode::NOT_FOUND)?;
 
     trigger_dj_config_reload(&bot_state, guild_id).await;
 
@@ -561,18 +562,22 @@ pub async fn toggle_override_category(
 ) -> Result<StatusCode, StatusCode> {
     let guild_id = parse_guild_id(&guild_id)?;
 
-    crate::persistence::update_dj_settings(bot_state.state_store.as_ref(), guild_id, |settings| {
-        let enabled = match request.category.as_str() {
-            "hex_messages" => &mut settings.hex_message_overrides.enabled,
-            "hex_message_announcements" => &mut settings.hex_message_announcement_overrides.enabled,
-            "state_weights" => &mut settings.state_weight_overrides.enabled,
-            _ => return Err("Unknown category".into()),
-        };
-        *enabled = request.enabled;
-        Ok(())
-    })
-    .await
-    .map_err(|_| StatusCode::BAD_REQUEST)?;
+    bot_state
+        .dj_settings
+        .update(guild_id, |settings| {
+            let enabled = match request.category.as_str() {
+                "hex_messages" => &mut settings.hex_message_overrides.enabled,
+                "hex_message_announcements" => {
+                    &mut settings.hex_message_announcement_overrides.enabled
+                }
+                "state_weights" => &mut settings.state_weight_overrides.enabled,
+                _ => return Err("Unknown category".into()),
+            };
+            *enabled = request.enabled;
+            Ok(())
+        })
+        .await
+        .map_err(|_| StatusCode::BAD_REQUEST)?;
 
     trigger_dj_config_reload(&bot_state, guild_id).await;
 
@@ -601,12 +606,14 @@ pub async fn set_state_weights_override(
         noise: request.noise,
     };
 
-    crate::persistence::update_dj_settings(bot_state.state_store.as_ref(), guild_id, |settings| {
-        settings.state_weight_overrides.value = Some(weights);
-        Ok(())
-    })
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    bot_state
+        .dj_settings
+        .update(guild_id, |settings| {
+            settings.state_weight_overrides.value = Some(weights);
+            Ok(())
+        })
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     trigger_dj_config_reload(&bot_state, guild_id).await;
 

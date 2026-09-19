@@ -119,28 +119,56 @@ impl TryFrom<&DJStateMachineState> for DJState {
     }
 }
 
-use crate::persistence::{DjSettings, StateStore};
+use super::utils::save_json_to_file;
+use crate::persistence::DjSettings;
 use serenity::model::id::GuildId;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
-/// Read one guild's DJ settings, apply `f`, and persist the result.
-pub async fn update_dj_settings<F>(
-    store: &dyn StateStore,
-    guild_id: GuildId,
-    f: F,
-) -> super::Result<()>
-where
-    F: FnOnce(&mut DjSettings) -> super::Result<()>,
-{
-    let mut settings = store.load_dj_settings(guild_id).await?;
-    f(&mut settings)?;
-    store.save_dj_settings(guild_id, &settings).await
+pub struct DjSettingsStore {
+    settings: Arc<RwLock<HashMap<GuildId, DjSettings>>>,
+    path: PathBuf,
+}
+
+impl DjSettingsStore {
+    pub fn new(path: PathBuf) -> Self {
+        let settings = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|contents| serde_json::from_str(&contents).ok())
+            .unwrap_or_default();
+        Self {
+            settings: Arc::new(RwLock::new(settings)),
+            path,
+        }
+    }
+
+    pub async fn get(&self, guild_id: GuildId) -> DjSettings {
+        self.settings
+            .read()
+            .await
+            .get(&guild_id)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    pub async fn update<F>(&self, guild_id: GuildId, f: F) -> super::Result<()>
+    where
+        F: FnOnce(&mut DjSettings) -> super::Result<()>,
+    {
+        let mut map = self.settings.write().await;
+        let mut entry = map.get(&guild_id).cloned().unwrap_or_default();
+        f(&mut entry)?;
+        map.insert(guild_id, entry);
+        save_json_to_file(&*map, &self.path).await
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::audio::dj::config::HexMessageEntry;
-    use crate::persistence::FileStore;
 
     fn hex_message(text: &str) -> HexMessageEntry {
         HexMessageEntry {
@@ -156,23 +184,26 @@ mod tests {
     #[tokio::test]
     async fn overrides_persist_alongside_content_slots() {
         let dir = tempfile::tempdir().unwrap();
-        let store = FileStore::new(dir.path().to_path_buf());
+        let path = dir.path().join("dj_settings.json");
+        let store = DjSettingsStore::new(path.clone());
         let guild_id = GuildId::new(1);
 
-        update_dj_settings(&store, guild_id, |settings| {
-            settings.tracks = Some("tracks.json".to_string());
-            Ok(())
-        })
-        .await
-        .unwrap();
+        store
+            .update(guild_id, |settings| {
+                settings.tracks = Some("tracks.json".to_string());
+                Ok(())
+            })
+            .await
+            .unwrap();
 
-        update_dj_settings(&store, guild_id, |settings| {
-            settings.hex_message_overrides.set(None, hex_message("one"))
-        })
-        .await
-        .unwrap();
+        store
+            .update(guild_id, |settings| {
+                settings.hex_message_overrides.set(None, hex_message("one"))
+            })
+            .await
+            .unwrap();
 
-        let settings = store.load_dj_settings(guild_id).await.unwrap();
+        let settings = DjSettingsStore::new(path).get(guild_id).await;
         assert_eq!(settings.tracks.as_deref(), Some("tracks.json"));
         assert_eq!(settings.hex_message_overrides.items[0].text, "one");
     }
@@ -180,25 +211,19 @@ mod tests {
     #[tokio::test]
     async fn a_rejected_mutation_is_not_persisted() {
         let dir = tempfile::tempdir().unwrap();
-        let store = FileStore::new(dir.path().to_path_buf());
+        let store = DjSettingsStore::new(dir.path().join("dj_settings.json"));
         let guild_id = GuildId::new(1);
 
-        let result = update_dj_settings(&store, guild_id, |settings| {
-            settings.hex_message_overrides.enabled = true;
-            settings
-                .hex_message_overrides
-                .set(Some(3), hex_message("one"))
-        })
-        .await;
+        let result = store
+            .update(guild_id, |settings| {
+                settings.hex_message_overrides.enabled = true;
+                settings
+                    .hex_message_overrides
+                    .set(Some(3), hex_message("one"))
+            })
+            .await;
 
         assert!(result.is_err());
-        assert!(
-            !store
-                .load_dj_settings(guild_id)
-                .await
-                .unwrap()
-                .hex_message_overrides
-                .enabled
-        );
+        assert!(!store.get(guild_id).await.hex_message_overrides.enabled);
     }
 }
