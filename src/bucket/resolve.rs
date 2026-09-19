@@ -13,8 +13,6 @@ pub struct FileResolver {
 }
 
 impl FileResolver {
-    const CONTENT_PREFIX: &str = "config/";
-
     pub fn new(content_path: String, file_cache: Arc<FileCache>) -> Self {
         Self {
             content_path,
@@ -40,13 +38,11 @@ impl FileResolver {
         self.file_cache.list_remote(prefix).await
     }
 
-    /// Lists content files (as s3:// URIs) whose key matches `partial` under the content prefix.
-    pub async fn list_content(&self, partial: &str) -> Vec<String> {
+    /// Lists files (as s3:// URIs) whose key matches `partial` under `prefix`.
+    pub async fn list_content(&self, prefix: &str, partial: &str) -> Vec<String> {
         let partial = partial.strip_prefix("s3://").unwrap_or(partial);
-        let partial = partial
-            .strip_prefix(Self::CONTENT_PREFIX)
-            .unwrap_or(partial);
-        self.list_remote(&format!("{}{partial}", Self::CONTENT_PREFIX))
+        let partial = partial.strip_prefix(prefix).unwrap_or(partial);
+        self.list_remote(&format!("{prefix}{partial}"))
             .await
             .into_iter()
             .map(|key| format!("s3://{key}"))

@@ -1166,7 +1166,7 @@ async fn autocomplete_content_file(ctx: Context<'_>, partial: &'_ str) -> Vec<St
     let mut results: Vec<String> = ctx
         .data()
         .file_resolver
-        .list_content(partial)
+        .list_content("config/", partial)
         .await
         .into_iter()
         .filter(|uri| uri.ends_with(".json"))
