@@ -1196,7 +1196,6 @@ async fn set_dj_content(
     uri: Option<String>,
     label: &str,
     set: impl FnOnce(&mut crate::persistence::DjSettings, Option<String>),
-    get: impl FnOnce(&crate::persistence::DjSettings) -> Option<String>,
 ) -> Result<(), Error> {
     ctx.defer_ephemeral().await?;
 
@@ -1213,6 +1212,13 @@ async fn set_dj_content(
         return Ok(());
     }
 
+    let message = match &uri {
+        Some(value) => {
+            format!("DJ {label} set to `{value}`. This takes effect the next time the DJ starts.")
+        }
+        None => format!("DJ {label} cleared. This takes effect the next time the DJ starts."),
+    };
+
     ctx.data()
         .dj_settings
         .update(guild_id, |s| {
@@ -1221,13 +1227,6 @@ async fn set_dj_content(
         })
         .await?;
 
-    let saved = ctx.data().dj_settings.get(guild_id).await;
-    let message = match get(&saved) {
-        Some(value) => {
-            format!("DJ {label} set to `{value}`. This takes effect the next time the DJ starts.")
-        }
-        None => format!("DJ {label} cleared. This takes effect the next time the DJ starts."),
-    };
     ctx.say(message).await?;
 
     Ok(())
@@ -1245,13 +1244,9 @@ pub async fn dj_tracks(
     #[autocomplete = "autocomplete_content_file"]
     uri: Option<String>,
 ) -> Result<(), Error> {
-    set_dj_content(
-        ctx,
-        uri,
-        "track pool",
-        |settings, value| settings.tracks = value,
-        |settings| settings.tracks.clone(),
-    )
+    set_dj_content(ctx, uri, "track pool", |settings, value| {
+        settings.tracks = value
+    })
     .await
 }
 
