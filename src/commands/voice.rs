@@ -1215,7 +1215,10 @@ async fn set_dj_content(
 
     ctx.data()
         .dj_settings
-        .update(guild_id, |s| set(s, uri))
+        .update(guild_id, |s| {
+            set(s, uri);
+            Ok(())
+        })
         .await?;
 
     let saved = ctx.data().dj_settings.get(guild_id).await;
@@ -1248,28 +1251,6 @@ pub async fn dj_tracks(
         "track pool",
         |settings, value| settings.tracks = value,
         |settings| settings.tracks.clone(),
-    )
-    .await
-}
-
-/// Set or clear the guild's DJ hex-message pool
-#[poise::command(
-    slash_command,
-    guild_only,
-    default_member_permissions = "ADMINISTRATOR"
-)]
-pub async fn dj_messages(
-    ctx: Context<'_>,
-    #[description = "Path or s3:// URI of the message pool file (omit to clear)"]
-    #[autocomplete = "autocomplete_content_file"]
-    uri: Option<String>,
-) -> Result<(), Error> {
-    set_dj_content(
-        ctx,
-        uri,
-        "hex-message pool",
-        |settings, value| settings.hex_messages = value,
-        |settings| settings.hex_messages.clone(),
     )
     .await
 }
