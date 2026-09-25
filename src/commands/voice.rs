@@ -824,12 +824,21 @@ pub async fn manage_dj(
                     }
                 };
 
-            if let Err(e) = dj_config
+            match dj_config
                 .apply_dj_settings(&settings, &ctx.data().file_resolver)
                 .await
             {
-                ctx.say(format!("Failed to load DJ content: {e:#}")).await?;
-                return Ok(());
+                Ok(guild_profiles) => {
+                    ctx.data()
+                        .guild_signal_profiles
+                        .write()
+                        .await
+                        .insert(guild_id, guild_profiles);
+                }
+                Err(e) => {
+                    ctx.say(format!("Failed to load DJ content: {e:#}")).await?;
+                    return Ok(());
+                }
             }
 
             // Create track manager for this guild (no longer requires voice connection)

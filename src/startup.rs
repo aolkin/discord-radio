@@ -291,12 +291,21 @@ async fn restore_dj_managers(
             }
         };
 
-        if let Err(e) = dj_config
+        match dj_config
             .apply_dj_settings(&settings, &bot_state.file_resolver)
             .await
         {
-            tracing::warn!("Skipping DJ restore for guild {guild_id}: {e:#}");
-            continue;
+            Ok(guild_profiles) => {
+                bot_state
+                    .guild_signal_profiles
+                    .write()
+                    .await
+                    .insert(guild_id, guild_profiles);
+            }
+            Err(e) => {
+                tracing::warn!("Skipping DJ restore for guild {guild_id}: {e:#}");
+                continue;
+            }
         }
 
         tracing::info!(

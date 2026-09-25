@@ -245,12 +245,21 @@ pub async fn dj_task(
         reason: &str,
     ) {
         if let Some(profile_name) = profile_name {
+            let new_profile = {
+                let guild_profiles = bot_state.guild_signal_profiles.read().await;
+                guild_profiles
+                    .get(&guild_id)
+                    .and_then(|profiles| profiles.get(profile_name))
+                    .or_else(|| bot_state.profile_manager.get_profile(profile_name))
+                    .cloned()
+            };
+
             let processors = bot_state.audio_processors.read().await;
             if let Some(processor_arc) = processors.get(&guild_id)
-                && let Some(new_profile) = bot_state.profile_manager.get_profile(profile_name)
+                && let Some(new_profile) = new_profile
             {
                 let mut processor = processor_arc.write().await;
-                processor.start_profile_transition(new_profile.clone(), fade_secs * 1000.0);
+                processor.start_profile_transition(new_profile, fade_secs * 1000.0);
 
                 tracing::info!(
                     "DJ transitioning to profile '{}' over {:.1}s {} in guild {}",
@@ -346,14 +355,35 @@ pub async fn dj_task(
                         Ok(base_config) => {
                             let settings = bot_state.dj_settings.get(guild_id).await;
                             let mut config = base_config.with_overrides(&settings);
-                            if let Err(e) = config
+                            match config
                                 .apply_dj_settings(&settings, &bot_state.file_resolver)
                                 .await
                             {
-                                tracing::warn!(
-                                    "Failed to reload DJ content for guild {guild_id}: {e:#}"
-                                );
+                                Ok(guild_profiles) => {
+                                    bot_state
+                                        .guild_signal_profiles
+                                        .write()
+                                        .await
+                                        .insert(guild_id, guild_profiles);
+                                }
+                                Err(e) => {
+                                    tracing::warn!(
+                                        "Failed to reload DJ content for guild {guild_id}: {e:#}"
+                                    );
+                                }
                             }
+                            profile_machine = if config.signal_profiles.is_empty() {
+                                None
+                            } else {
+                                let mut machine = ProfileStateMachine::new(
+                                    config.signal_profiles.clone(),
+                                    current_forced_profile.as_deref(),
+                                );
+                                if let Some(profile_name) = &current_forced_profile {
+                                    machine.force_profile(profile_name.clone());
+                                }
+                                Some(machine)
+                            };
                             state_machine.update_config(config);
                             tracing::info!(
                                 "DJ config reloaded successfully for guild {}",

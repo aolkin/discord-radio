@@ -1,5 +1,7 @@
+use crate::audio::profiles::SignalProfile;
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct DJConfig {
@@ -127,6 +129,9 @@ pub struct HexComponent {
 pub struct ConfigComponent {
     #[serde(default)]
     pub noise_periods: Vec<NoisePeriodEntry>,
+    /// Profile name to the URI of a `SignalProfile` JSON file.
+    #[serde(default)]
+    pub signal_profile_uris: HashMap<String, String>,
     #[serde(default)]
     pub state_weights: StateWeights,
     #[serde(default)]
@@ -180,11 +185,13 @@ impl DJConfig {
         self
     }
 
+    /// Returns the signal profiles defined by the config slot, keyed by the name
+    /// a `SignalProfileEntry` refers to them by.
     pub async fn apply_dj_settings(
         &mut self,
         settings: &crate::persistence::DjSettings,
         resolver: &crate::bucket::FileResolver,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<HashMap<String, SignalProfile>> {
         self.track_pool = match &settings.tracks {
             Some(uri) => load_component::<Vec<TrackEntry>>(uri, resolver).await?,
             None => Vec::new(),
@@ -207,7 +214,15 @@ impl DJConfig {
         self.recent_history_size = orchestration.playback.recent_history_size;
         self.duplicate_penalty_multiplier = orchestration.playback.duplicate_penalty_multiplier;
 
-        Ok(())
+        let mut signal_profiles = HashMap::with_capacity(orchestration.signal_profile_uris.len());
+        for (name, uri) in &orchestration.signal_profile_uris {
+            signal_profiles.insert(
+                name.clone(),
+                load_component::<SignalProfile>(uri, resolver).await?,
+            );
+        }
+
+        Ok(signal_profiles)
     }
 }
 
@@ -287,13 +302,24 @@ mod tests {
         std::fs::write(
             dir.path().join("config.json"),
             r#"{"state_weights":{"track":3,"hex_message":0,"noise":0},
+                "signal_profile_uris":{"slot_profile":"profile.json"},
                 "playback":{"recent_history_size":2,"duplicate_penalty_multiplier":0.25}}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("profile.json"),
+            r#"{"name":"from the slot","bandpass_low":100.0,"bandpass_high":4000.0,
+                "white_noise_level":0.1,"pink_noise_level":0.0,"brown_noise_level":0.0,
+                "tremolo_depth":0.0,"tremolo_rate":0.0,"tremolo_jitter":0.0,
+                "clip_pregain":1.0,"clip_threshold":1.0,"bitcrush_bits":null,
+                "dropout_probability":0.0,"dropout_duration_ms":[0.0,0.0],
+                "frequency_warble_hz":null}"#,
         )
         .unwrap();
         let resolver = resolver(dir.path()).await;
 
         let mut config = local_file_config();
-        config
+        let signal_profiles = config
             .apply_dj_settings(
                 &DjSettings {
                     hex_messages: Some("hex.json".to_string()),
@@ -304,6 +330,11 @@ mod tests {
             )
             .await
             .unwrap();
+
+        assert_eq!(
+            signal_profiles.get("slot_profile").map(|p| p.name.as_str()),
+            Some("from the slot")
+        );
 
         assert_eq!(config.hex_messages.len(), 1);
         assert_eq!(config.hex_messages[0].text, "slot");
@@ -318,11 +349,12 @@ mod tests {
         assert_eq!(config.duplicate_penalty_multiplier, 0.25);
 
         let mut config = local_file_config();
-        config
+        let signal_profiles = config
             .apply_dj_settings(&DjSettings::default(), &resolver)
             .await
             .unwrap();
 
+        assert!(signal_profiles.is_empty());
         assert!(config.hex_messages.is_empty());
         assert_eq!(config.hex_message_announcements, Some(Vec::new()));
         assert_eq!(config.hex_message_defaults.loop_max, default_loop_max());

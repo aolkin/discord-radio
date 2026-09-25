@@ -2,7 +2,7 @@ use crate::audio::dj::manager::DJManager;
 use crate::audio::dj::state_machine::DJState;
 use crate::audio::duration::DurationCache;
 use crate::audio::processing_thread::AudioProcessor;
-use crate::audio::profiles::ProfileManager;
+use crate::audio::profiles::{ProfileManager, SignalProfile};
 use crate::audio::tracks::TrackManager;
 use crate::bucket::{FileResolver, ObjectStore};
 use crate::logging::{JsonLogger, guild_logs_dir};
@@ -70,6 +70,7 @@ pub struct BotState {
     pub duration_cache: DurationCache,
     pub audio_processors: RwLock<HashMap<GuildId, Arc<RwLock<AudioProcessor>>>>,
     pub profile_manager: ProfileManager,
+    pub guild_signal_profiles: RwLock<HashMap<GuildId, HashMap<String, SignalProfile>>>,
     pub dj_managers: RwLock<HashMap<GuildId, Arc<Mutex<DJManager>>>>,
     pub dj_states: RwLock<HashMap<GuildId, Arc<RwLock<DJState>>>>,
     pub voice_status_manager: VoiceChannelStatusManager,
@@ -119,6 +120,7 @@ impl BotState {
             hex_playback_tasks: RwLock::new(HashMap::new()),
             audio_processors: RwLock::new(HashMap::new()),
             profile_manager,
+            guild_signal_profiles: RwLock::new(HashMap::new()),
             dj_managers: RwLock::new(HashMap::new()),
             dj_states: RwLock::new(HashMap::new()),
             voice_status_manager: VoiceChannelStatusManager::new(voice_connections),
