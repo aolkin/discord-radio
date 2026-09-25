@@ -1,3 +1,4 @@
+use crate::audio::dj::manager::trigger_reload;
 use crate::commands::utils;
 use crate::commands::utils::{Context, Error};
 use serenity::all::{ChannelId, ChannelType, GuildId};
@@ -1226,6 +1227,8 @@ async fn set_dj_content(
             Ok(())
         })
         .await?;
+
+    trigger_reload(ctx.data(), guild_id).await;
 
     ctx.say(message).await?;
 

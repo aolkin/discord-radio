@@ -1,3 +1,4 @@
+use crate::audio::dj::manager::trigger_reload;
 use crate::bucket::CacheError;
 use crate::state::Data;
 use crate::web::state_snapshot::BotSnapshot;
@@ -351,29 +352,6 @@ pub async fn remove_bot_activity(
 
 // DJ Config Override management endpoints
 
-async fn trigger_dj_config_reload(bot_state: &Data, guild_id: GuildId) {
-    let dj_managers = bot_state.dj_managers.read().await;
-    let Some(manager_arc) = dj_managers.get(&guild_id) else {
-        return;
-    };
-
-    let manager = manager_arc.lock().await;
-    if let Some(tx) = &manager.command_tx {
-        if let Err(e) = tx
-            .send(crate::audio::dj::manager::DJCommand::ReloadConfig)
-            .await
-        {
-            tracing::warn!(
-                "Failed to send reload command to DJ in guild {}: {}",
-                guild_id,
-                e
-            );
-        } else {
-            tracing::debug!("Sent config reload command to DJ in guild {}", guild_id);
-        }
-    }
-}
-
 #[derive(Debug, Serialize)]
 pub struct DJConfigOverridesResponse {
     pub hex_messages: DJConfigOverrideCategoryResponse,
@@ -474,7 +452,7 @@ pub async fn set_hex_message_override(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    trigger_dj_config_reload(&bot_state, guild_id).await;
+    trigger_reload(&bot_state, guild_id).await;
 
     Ok(StatusCode::OK)
 }
@@ -493,7 +471,7 @@ pub async fn delete_hex_message_override(
         .await
         .map_err(|_| StatusCode::NOT_FOUND)?;
 
-    trigger_dj_config_reload(&bot_state, guild_id).await;
+    trigger_reload(&bot_state, guild_id).await;
 
     Ok(StatusCode::OK)
 }
@@ -525,7 +503,7 @@ pub async fn set_announcement_override(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    trigger_dj_config_reload(&bot_state, guild_id).await;
+    trigger_reload(&bot_state, guild_id).await;
 
     Ok(StatusCode::OK)
 }
@@ -544,7 +522,7 @@ pub async fn delete_announcement_override(
         .await
         .map_err(|_| StatusCode::NOT_FOUND)?;
 
-    trigger_dj_config_reload(&bot_state, guild_id).await;
+    trigger_reload(&bot_state, guild_id).await;
 
     Ok(StatusCode::OK)
 }
@@ -579,7 +557,7 @@ pub async fn toggle_override_category(
         .await
         .map_err(|_| StatusCode::BAD_REQUEST)?;
 
-    trigger_dj_config_reload(&bot_state, guild_id).await;
+    trigger_reload(&bot_state, guild_id).await;
 
     Ok(StatusCode::OK)
 }
@@ -615,7 +593,7 @@ pub async fn set_state_weights_override(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    trigger_dj_config_reload(&bot_state, guild_id).await;
+    trigger_reload(&bot_state, guild_id).await;
 
     Ok(StatusCode::OK)
 }
