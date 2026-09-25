@@ -827,8 +827,7 @@ pub async fn manage_dj(
                 .apply_dj_settings(&settings, &ctx.data().file_resolver)
                 .await
             {
-                ctx.say(format!("Failed to load DJ components: {e:#}"))
-                    .await?;
+                ctx.say(format!("Failed to load DJ content: {e:#}")).await?;
                 return Ok(());
             }
 
@@ -1161,4 +1160,121 @@ pub async fn advance_dj_state(
     ctx.say(message).await?;
 
     Ok(())
+}
+
+async fn autocomplete_content_file(ctx: Context<'_>, partial: &'_ str) -> Vec<String> {
+    let mut results: Vec<String> = ctx
+        .data()
+        .file_resolver
+        .list_content("config/", partial)
+        .await
+        .into_iter()
+        .filter(|uri| uri.ends_with(".json"))
+        .collect();
+    results.sort();
+    results.truncate(25);
+    results
+}
+
+async fn validate_content_uri(
+    resolver: &crate::bucket::FileResolver,
+    uri: &str,
+) -> Result<(), String> {
+    let path = resolver
+        .resolve(uri)
+        .await
+        .map_err(|e| format!("Could not resolve `{uri}`: {e}"))?;
+    match tokio::fs::metadata(&path).await {
+        Ok(meta) if meta.is_file() => Ok(()),
+        Ok(_) => Err(format!("`{uri}` does not point to a file")),
+        Err(e) => Err(format!("`{uri}` is not a readable file: {e}")),
+    }
+}
+
+async fn set_dj_content(
+    ctx: Context<'_>,
+    uri: Option<String>,
+    label: &str,
+    set: impl FnOnce(&mut crate::persistence::DjSettings, Option<String>),
+) -> Result<(), Error> {
+    ctx.defer_ephemeral().await?;
+
+    let guild_id = ctx
+        .guild_id()
+        .ok_or("This command can only be used in a server")?;
+
+    let uri = uri.filter(|u| !u.trim().is_empty());
+
+    if let Some(uri) = &uri
+        && let Err(e) = validate_content_uri(&ctx.data().file_resolver, uri).await
+    {
+        ctx.say(e).await?;
+        return Ok(());
+    }
+
+    let message = match &uri {
+        Some(value) => {
+            format!("DJ {label} set to `{value}`. This takes effect the next time the DJ starts.")
+        }
+        None => format!("DJ {label} cleared. This takes effect the next time the DJ starts."),
+    };
+
+    ctx.data()
+        .dj_settings
+        .update(guild_id, |s| {
+            set(s, uri);
+            Ok(())
+        })
+        .await?;
+
+    ctx.say(message).await?;
+
+    Ok(())
+}
+
+/// Set or clear the guild's DJ track pool
+#[poise::command(
+    slash_command,
+    guild_only,
+    default_member_permissions = "ADMINISTRATOR"
+)]
+pub async fn dj_tracks(
+    ctx: Context<'_>,
+    #[description = "Path or s3:// URI of the track pool file (omit to clear)"]
+    #[autocomplete = "autocomplete_content_file"]
+    uri: Option<String>,
+) -> Result<(), Error> {
+    set_dj_content(ctx, uri, "track pool", |settings, value| {
+        settings.tracks = value
+    })
+    .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::bucket::FileCache;
+
+    async fn resolver(content_path: &std::path::Path) -> crate::bucket::FileResolver {
+        let file_cache = Arc::new(
+            FileCache::new(content_path.to_path_buf(), None, None)
+                .await
+                .unwrap(),
+        );
+        crate::bucket::FileResolver::new(content_path.to_string_lossy().to_string(), file_cache)
+    }
+
+    #[tokio::test]
+    async fn validate_content_uri_checks_the_file_exists() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("pool.json"), "[]").unwrap();
+        let resolver = resolver(dir.path()).await;
+
+        assert!(validate_content_uri(&resolver, "pool.json").await.is_ok());
+        assert!(
+            validate_content_uri(&resolver, "missing.json")
+                .await
+                .is_err()
+        );
+    }
 }

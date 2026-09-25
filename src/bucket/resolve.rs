@@ -37,6 +37,17 @@ impl FileResolver {
     pub async fn list_remote(&self, prefix: &str) -> Vec<String> {
         self.file_cache.list_remote(prefix).await
     }
+
+    /// Lists files (as s3:// URIs) whose key matches `partial` under `prefix`.
+    pub async fn list_content(&self, prefix: &str, partial: &str) -> Vec<String> {
+        let partial = partial.strip_prefix("s3://").unwrap_or(partial);
+        let partial = partial.strip_prefix(prefix).unwrap_or(partial);
+        self.list_remote(&format!("{prefix}{partial}"))
+            .await
+            .into_iter()
+            .map(|key| format!("s3://{key}"))
+            .collect()
+    }
 }
 
 #[cfg(test)]
