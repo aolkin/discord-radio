@@ -1,3 +1,4 @@
+use crate::audio::dj::manager::trigger_reload;
 use crate::bucket::CacheError;
 use crate::state::Data;
 use crate::web::state_snapshot::BotSnapshot;
@@ -451,7 +452,7 @@ pub async fn set_hex_message_override(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    crate::audio::dj::manager::trigger_reload(&bot_state, guild_id).await;
+    trigger_reload(&bot_state, guild_id).await;
 
     Ok(StatusCode::OK)
 }
@@ -470,7 +471,7 @@ pub async fn delete_hex_message_override(
         .await
         .map_err(|_| StatusCode::NOT_FOUND)?;
 
-    crate::audio::dj::manager::trigger_reload(&bot_state, guild_id).await;
+    trigger_reload(&bot_state, guild_id).await;
 
     Ok(StatusCode::OK)
 }
@@ -502,7 +503,7 @@ pub async fn set_announcement_override(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    crate::audio::dj::manager::trigger_reload(&bot_state, guild_id).await;
+    trigger_reload(&bot_state, guild_id).await;
 
     Ok(StatusCode::OK)
 }
@@ -521,7 +522,7 @@ pub async fn delete_announcement_override(
         .await
         .map_err(|_| StatusCode::NOT_FOUND)?;
 
-    crate::audio::dj::manager::trigger_reload(&bot_state, guild_id).await;
+    trigger_reload(&bot_state, guild_id).await;
 
     Ok(StatusCode::OK)
 }
@@ -556,7 +557,7 @@ pub async fn toggle_override_category(
         .await
         .map_err(|_| StatusCode::BAD_REQUEST)?;
 
-    crate::audio::dj::manager::trigger_reload(&bot_state, guild_id).await;
+    trigger_reload(&bot_state, guild_id).await;
 
     Ok(StatusCode::OK)
 }
@@ -592,7 +593,7 @@ pub async fn set_state_weights_override(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    crate::audio::dj::manager::trigger_reload(&bot_state, guild_id).await;
+    trigger_reload(&bot_state, guild_id).await;
 
     Ok(StatusCode::OK)
 }
