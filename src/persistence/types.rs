@@ -50,6 +50,8 @@ pub struct DjSettings {
     #[serde(default)]
     pub hex_messages: Option<String>,
     #[serde(default)]
+    pub config: Option<String>,
+    #[serde(default)]
     pub hex_message_overrides: DJConfigOverrideCategory<HexMessageEntry>,
     #[serde(default)]
     pub hex_message_announcement_overrides: DJConfigOverrideCategory<String>,
