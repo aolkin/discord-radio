@@ -71,31 +71,31 @@ pub async fn run_web_server(
             get(audio_stream::audio_stream),
         )
         .route(
-            "/api/dj-config/overrides",
+            "/api/guilds/{guild_id}/dj-config/overrides",
             get(routes::get_dj_config_overrides),
         )
         .route(
-            "/api/dj-config/overrides/hex-messages",
+            "/api/guilds/{guild_id}/dj-config/overrides/hex-messages",
             post(routes::set_hex_message_override),
         )
         .route(
-            "/api/dj-config/overrides/hex-messages/{index}",
+            "/api/guilds/{guild_id}/dj-config/overrides/hex-messages/{index}",
             axum::routing::delete(routes::delete_hex_message_override),
         )
         .route(
-            "/api/dj-config/overrides/announcements",
+            "/api/guilds/{guild_id}/dj-config/overrides/announcements",
             post(routes::set_announcement_override),
         )
         .route(
-            "/api/dj-config/overrides/announcements/{index}",
+            "/api/guilds/{guild_id}/dj-config/overrides/announcements/{index}",
             axum::routing::delete(routes::delete_announcement_override),
         )
         .route(
-            "/api/dj-config/overrides/toggle",
+            "/api/guilds/{guild_id}/dj-config/overrides/toggle",
             post(routes::toggle_override_category),
         )
         .route(
-            "/api/dj-config/overrides/state-weights",
+            "/api/guilds/{guild_id}/dj-config/overrides/state-weights",
             post(routes::set_state_weights_override),
         )
         .route(

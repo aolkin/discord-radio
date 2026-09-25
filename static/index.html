@@ -513,17 +513,6 @@
             </button>
         </div>
 
-        <!-- DJ Config Overrides Section -->
-        <div style="background: white; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-            <h2 style="color: #667eea; margin-bottom: 15px; font-size: 1.5rem;">DJ Config Overrides</h2>
-            <button @click="openDJConfigModal()" 
-                    style="background: #667eea; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 1rem; font-weight: 500; transition: background 0.2s;"
-                    @mouseover="$el.style.background='#5568d3'" 
-                    @mouseout="$el.style.background='#667eea'">
-                ⚙️ Manage Hex Messages & Announcements
-            </button>
-        </div>
-
         <div class="guilds-grid" x-show="guilds.length > 0">
             <template x-for="guild in guilds" :key="guild.guild_id">
                 <div class="guild-card">
@@ -645,6 +634,14 @@
                             </template>
                         </div>
                     </template>
+
+                    <!-- DJ Config Overrides -->
+                    <div class="section">
+                        <div class="section-title">DJ Config Overrides</div>
+                        <button class="btn btn-secondary" style="width: 100%;" @click="openDJConfigModal(guild.guild_id)">
+                            ⚙️ Manage Hex Messages &amp; Announcements
+                        </button>
+                    </div>
 
                     <!-- Activity Logs-->
                     <div class="section">
@@ -1814,16 +1811,21 @@
                 },
 
                 // DJ Config Override Functions
-                async openDJConfigModal() {
+                async openDJConfigModal(guildId) {
+                    this.currentGuildId = guildId;
                     this.showDJConfigModal = true;
+                    await this.loadDJConfigOverrides();
+                },
+
+                async loadDJConfigOverrides() {
                     this.djConfigLoading = true;
                     this.djConfigError = null;
                     this.djConfigMessage = { text: '', type: '' };
-                    
+
                     try {
                         // Load both overrides and default state weights in parallel
                         const [overridesResponse, defaultWeightsResponse] = await Promise.all([
-                            fetch('/api/dj-config/overrides'),
+                            fetch(`/api/guilds/${this.currentGuildId}/dj-config/overrides`),
                             fetch('/api/dj-config/default-state-weights')
                         ]);
                         
@@ -1852,6 +1854,7 @@
 
                 closeDJConfigModal() {
                     this.showDJConfigModal = false;
+                    this.currentGuildId = null;
                     this.djConfigError = null;
                     this.djConfigMessage = { text: '', type: '' };
                 },
@@ -1862,7 +1865,7 @@
                     
                     try {
                         const enabled = this.djConfigData[category].enabled;
-                        const response = await fetch('/api/dj-config/overrides/toggle', {
+                        const response = await fetch(`/api/guilds/${this.currentGuildId}/dj-config/overrides/toggle`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ category, enabled }),
@@ -1930,7 +1933,7 @@
                             announcement: this.hexMessageFormData.announcement || null
                         };
                         
-                        const response = await fetch('/api/dj-config/overrides/hex-messages', {
+                        const response = await fetch(`/api/guilds/${this.currentGuildId}/dj-config/overrides/hex-messages`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(payload),
@@ -1941,7 +1944,7 @@
                         }
                         
                         // Reload the config
-                        await this.openDJConfigModal();
+                        await this.loadDJConfigOverrides();
                         this.closeHexMessageForm();
                         
                         this.djConfigMessage = {
@@ -1969,7 +1972,7 @@
                     this.djConfigMessage = { text: '', type: '' };
                     
                     try {
-                        const response = await fetch(`/api/dj-config/overrides/hex-messages/${index}`, {
+                        const response = await fetch(`/api/guilds/${this.currentGuildId}/dj-config/overrides/hex-messages/${index}`, {
                             method: 'DELETE',
                         });
                         
@@ -1978,7 +1981,7 @@
                         }
                         
                         // Reload the config
-                        await this.openDJConfigModal();
+                        await this.loadDJConfigOverrides();
                         
                         this.djConfigMessage = {
                             text: 'Hex message deleted successfully!',
@@ -2027,7 +2030,7 @@
                             text: this.announcementFormData.text
                         };
                         
-                        const response = await fetch('/api/dj-config/overrides/announcements', {
+                        const response = await fetch(`/api/guilds/${this.currentGuildId}/dj-config/overrides/announcements`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(payload),
@@ -2038,7 +2041,7 @@
                         }
                         
                         // Reload the config
-                        await this.openDJConfigModal();
+                        await this.loadDJConfigOverrides();
                         this.closeAnnouncementForm();
                         
                         this.djConfigMessage = {
@@ -2066,7 +2069,7 @@
                     this.djConfigMessage = { text: '', type: '' };
                     
                     try {
-                        const response = await fetch(`/api/dj-config/overrides/announcements/${index}`, {
+                        const response = await fetch(`/api/guilds/${this.currentGuildId}/dj-config/overrides/announcements/${index}`, {
                             method: 'DELETE',
                         });
                         
@@ -2075,7 +2078,7 @@
                         }
                         
                         // Reload the config
-                        await this.openDJConfigModal();
+                        await this.loadDJConfigOverrides();
                         
                         this.djConfigMessage = {
                             text: 'Announcement deleted successfully!',
@@ -2098,7 +2101,7 @@
                     this.djConfigMessage = { text: '', type: '' };
                     
                     try {
-                        const response = await fetch('/api/dj-config/overrides/state-weights', {
+                        const response = await fetch(`/api/guilds/${this.currentGuildId}/dj-config/overrides/state-weights`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',

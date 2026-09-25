@@ -236,25 +236,9 @@ async fn main() -> Result<(), Error> {
     );
     tracing::info!("Using state store path: {:?}", state_store_path);
 
-    let state_store = Arc::new(persistence::FileStore::new(state_store_path.clone()));
-
-    // Load DJ config overrides
-    let dj_config_overrides_path = state_store_path.join("dj_config_overrides.json");
-    let dj_config_overrides =
-        match persistence::DJConfigOverrides::load_from_file(&dj_config_overrides_path) {
-            Ok(overrides) => overrides,
-            Err(_e) if !dj_config_overrides_path.exists() => {
-                tracing::info!("DJ config overrides file does not exist, using defaults");
-                persistence::DJConfigOverrides::default()
-            }
-            Err(e) => {
-                tracing::error!("Failed to load DJ config overrides: {}", e);
-                return Err(e);
-            }
-        };
-    let dj_config_overrides_store =
-        persistence::DJConfigOverridesStore::new(dj_config_overrides, dj_config_overrides_path);
-    tracing::info!("Loaded DJ config overrides");
+    let dj_settings_store =
+        persistence::DjSettingsStore::new(state_store_path.join("dj_settings.json"));
+    let state_store = Arc::new(persistence::FileStore::new(state_store_path));
 
     let (shutdown_tx, _shutdown_rx) = tokio::sync::broadcast::channel(16);
 
@@ -317,8 +301,8 @@ async fn main() -> Result<(), Error> {
 
     let data = Arc::new(BotState::new(
         content_path,
-        dj_config_overrides_store,
         state_store,
+        dj_settings_store,
         shutdown_tx,
         metrics_handle.clone(),
         file_cache,

@@ -1,6 +1,6 @@
 use super::{
-    DJState, DjSettings, MessagePlaybackState, MultiTrackPlaybackState, ProfileState,
-    RegisteredChannel, Result, StateStore,
+    DJState, MessagePlaybackState, MultiTrackPlaybackState, ProfileState, RegisteredChannel,
+    Result, StateStore,
 };
 use async_trait::async_trait;
 use serenity::model::id::{ChannelId, GuildId};
@@ -110,10 +110,6 @@ impl FileStore {
         PersistedMap::new(self.base_path.clone(), "dj_states.json")
     }
 
-    fn dj_settings(&self) -> PersistedMap<GuildId, DjSettings> {
-        PersistedMap::new(self.base_path.clone(), "dj_settings.json")
-    }
-
     fn registered_channels_path(&self) -> PathBuf {
         self.base_path.join("registered_channels.json")
     }
@@ -195,19 +191,6 @@ impl StateStore for FileStore {
 
     async fn remove_dj_state(&self, guild_id: GuildId) -> Result<()> {
         self.dj_states().remove(&guild_id).await
-    }
-
-    async fn save_dj_settings(&self, guild_id: GuildId, settings: &DjSettings) -> Result<()> {
-        self.dj_settings().insert(guild_id, settings.clone()).await
-    }
-
-    async fn load_dj_settings(&self, guild_id: GuildId) -> Result<DjSettings> {
-        Ok(self
-            .dj_settings()
-            .load_all()
-            .await?
-            .remove(&guild_id)
-            .unwrap_or_default())
     }
 
     async fn save_registered_channel(&self, channel: &RegisteredChannel) -> Result<()> {

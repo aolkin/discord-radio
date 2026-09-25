@@ -1,3 +1,4 @@
+use crate::audio::dj::config::{HexMessageEntry, StateWeights};
 use serde::{Deserialize, Serialize};
 use serenity::model::id::{ChannelId, GuildId};
 use std::time::SystemTime;
@@ -48,6 +49,12 @@ pub struct DjSettings {
     pub tracks: Option<String>,
     #[serde(default)]
     pub hex_messages: Option<String>,
+    #[serde(default)]
+    pub hex_message_overrides: DJConfigOverrideCategory<HexMessageEntry>,
+    #[serde(default)]
+    pub hex_message_announcement_overrides: DJConfigOverrideCategory<String>,
+    #[serde(default)]
+    pub state_weight_overrides: DJConfigOverrideSingle<StateWeights>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -96,20 +103,34 @@ pub enum DJStateMachineState {
     Stopped,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
-pub struct DJConfigOverrides {
-    #[serde(default)]
-    pub hex_messages: DJConfigOverrideCategory<crate::audio::dj::config::HexMessageEntry>,
-    #[serde(default)]
-    pub hex_message_announcements: DJConfigOverrideCategory<String>,
-    #[serde(default)]
-    pub state_weights: DJConfigOverrideSingle<crate::audio::dj::config::StateWeights>,
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DJConfigOverrideCategory<T> {
     pub enabled: bool,
     pub items: Vec<T>,
+}
+
+impl<T> DJConfigOverrideCategory<T> {
+    /// Replace the item at `index`, or append when `index` is `None`.
+    pub fn set(&mut self, index: Option<usize>, item: T) -> super::Result<()> {
+        match index {
+            Some(index) => {
+                let slot = self.items.get_mut(index).ok_or_else(
+                    || -> Box<dyn std::error::Error + Send + Sync> { "Index out of bounds".into() },
+                )?;
+                *slot = item;
+            }
+            None => self.items.push(item),
+        }
+        Ok(())
+    }
+
+    pub fn remove(&mut self, index: usize) -> super::Result<()> {
+        if index >= self.items.len() {
+            return Err("Index out of bounds".into());
+        }
+        self.items.remove(index);
+        Ok(())
+    }
 }
 
 impl<T> Default for DJConfigOverrideCategory<T> {

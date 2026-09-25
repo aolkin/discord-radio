@@ -119,147 +119,49 @@ impl TryFrom<&DJStateMachineState> for DJState {
     }
 }
 
-// DJ Config Overrides
-use crate::persistence::types::DJConfigOverrides;
-use crate::persistence::utils::save_json_to_file;
+use super::utils::save_json_to_file;
+use crate::persistence::DjSettings;
+use serenity::model::id::GuildId;
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-impl DJConfigOverrides {
-    pub fn load_from_file(
-        path: &std::path::Path,
-    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        if !path.exists() {
-            return Ok(Self::default());
-        }
-        let contents = std::fs::read_to_string(path)?;
-        let overrides: DJConfigOverrides = serde_json::from_str(&contents)?;
-        Ok(overrides)
-    }
+pub struct DjSettingsStore {
+    settings: Arc<RwLock<HashMap<GuildId, DjSettings>>>,
+    path: PathBuf,
 }
 
-/// A wrapper around DJConfigOverrides that auto-saves on mutations
-pub struct DJConfigOverridesStore {
-    overrides: Arc<RwLock<DJConfigOverrides>>,
-    path: std::path::PathBuf,
-}
-
-impl DJConfigOverridesStore {
-    pub fn new(overrides: DJConfigOverrides, path: std::path::PathBuf) -> Self {
+impl DjSettingsStore {
+    pub fn new(path: PathBuf) -> Self {
+        let settings = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|contents| serde_json::from_str(&contents).ok())
+            .unwrap_or_default();
         Self {
-            overrides: Arc::new(RwLock::new(overrides)),
+            settings: Arc::new(RwLock::new(settings)),
             path,
         }
     }
 
-    pub fn get_arc(&self) -> Arc<RwLock<DJConfigOverrides>> {
-        self.overrides.clone()
+    pub async fn get(&self, guild_id: GuildId) -> DjSettings {
+        self.settings
+            .read()
+            .await
+            .get(&guild_id)
+            .cloned()
+            .unwrap_or_default()
     }
 
-    async fn save(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let overrides = self.overrides.read().await;
-        save_json_to_file(&*overrides, &self.path).await
-    }
-
-    pub async fn set_hex_message(
-        &self,
-        index: Option<usize>,
-        entry: crate::audio::dj::config::HexMessageEntry,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        {
-            let mut overrides = self.overrides.write().await;
-            if let Some(idx) = index {
-                if idx < overrides.hex_messages.items.len() {
-                    overrides.hex_messages.items[idx] = entry;
-                } else {
-                    return Err("Index out of bounds".into());
-                }
-            } else {
-                overrides.hex_messages.items.push(entry);
-            }
-        }
-        self.save().await
-    }
-
-    pub async fn delete_hex_message(
-        &self,
-        index: usize,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        {
-            let mut overrides = self.overrides.write().await;
-            if index >= overrides.hex_messages.items.len() {
-                return Err("Index out of bounds".into());
-            }
-            overrides.hex_messages.items.remove(index);
-        }
-        self.save().await
-    }
-
-    pub async fn set_announcement(
-        &self,
-        index: Option<usize>,
-        text: String,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        {
-            let mut overrides = self.overrides.write().await;
-            if let Some(idx) = index {
-                if idx < overrides.hex_message_announcements.items.len() {
-                    overrides.hex_message_announcements.items[idx] = text;
-                } else {
-                    return Err("Index out of bounds".into());
-                }
-            } else {
-                overrides.hex_message_announcements.items.push(text);
-            }
-        }
-        self.save().await
-    }
-
-    pub async fn delete_announcement(
-        &self,
-        index: usize,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        {
-            let mut overrides = self.overrides.write().await;
-            if index >= overrides.hex_message_announcements.items.len() {
-                return Err("Index out of bounds".into());
-            }
-            overrides.hex_message_announcements.items.remove(index);
-        }
-        self.save().await
-    }
-
-    pub async fn toggle_category(
-        &self,
-        category: &str,
-        enabled: bool,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        {
-            let mut overrides = self.overrides.write().await;
-            match category {
-                "hex_messages" => {
-                    overrides.hex_messages.enabled = enabled;
-                }
-                "hex_message_announcements" => {
-                    overrides.hex_message_announcements.enabled = enabled;
-                }
-                "state_weights" => {
-                    overrides.state_weights.enabled = enabled;
-                }
-                _ => return Err("Unknown category".into()),
-            }
-        }
-        self.save().await
-    }
-
-    pub async fn set_state_weights(
-        &self,
-        weights: crate::audio::dj::config::StateWeights,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        {
-            let mut overrides = self.overrides.write().await;
-            overrides.state_weights.value = Some(weights);
-        }
-        self.save().await
+    pub async fn update<F>(&self, guild_id: GuildId, f: F) -> super::Result<()>
+    where
+        F: FnOnce(&mut DjSettings) -> super::Result<()>,
+    {
+        let mut map = self.settings.write().await;
+        // Mutate a clone so a failed `f` leaves the map (and file) untouched.
+        let mut entry = map.get(&guild_id).cloned().unwrap_or_default();
+        f(&mut entry)?;
+        map.insert(guild_id, entry);
+        save_json_to_file(&*map, &self.path).await
     }
 }

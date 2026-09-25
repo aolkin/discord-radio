@@ -7,7 +7,7 @@ use crate::audio::tracks::TrackManager;
 use crate::bucket::{FileCache, FileResolver};
 use crate::logging::{JsonLogger, guild_logs_dir};
 use crate::metrics::MetricsHandle;
-use crate::persistence::{DJConfigOverridesStore, StateStore};
+use crate::persistence::{DjSettingsStore, StateStore};
 use crate::voice_status::{ActivityManager, VoiceChannelStatusManager};
 use serde::Serialize;
 use serenity::model::id::GuildId;
@@ -61,10 +61,10 @@ impl HexPlaybackState {
 
 pub struct BotState {
     pub voice_connections: Arc<RwLock<HashMap<GuildId, Arc<Mutex<Call>>>>>,
-    pub dj_config_overrides: DJConfigOverridesStore,
     pub track_managers: RwLock<HashMap<GuildId, Arc<Mutex<TrackManager>>>>,
     pub content_path: String,
     pub state_store: Arc<dyn StateStore>,
+    pub dj_settings: DjSettingsStore,
     pub hex_playback_states: RwLock<HashMap<GuildId, Arc<RwLock<HexPlaybackState>>>>,
     pub hex_playback_tasks: RwLock<HashMap<GuildId, JoinHandle<()>>>,
     pub duration_cache: DurationCache,
@@ -83,8 +83,8 @@ pub struct BotState {
 impl BotState {
     pub fn new(
         content_path: String,
-        dj_config_overrides: DJConfigOverridesStore,
         state_store: Arc<dyn StateStore>,
+        dj_settings: DjSettingsStore,
         shutdown_tx: tokio::sync::broadcast::Sender<String>,
         metrics: MetricsHandle,
         file_cache: Arc<FileCache>,
@@ -113,8 +113,8 @@ impl BotState {
             track_managers: RwLock::new(HashMap::new()),
             duration_cache: DurationCache::new(file_resolver.clone()),
             content_path,
-            dj_config_overrides,
             state_store: state_store.clone(),
+            dj_settings,
             hex_playback_states: RwLock::new(HashMap::new()),
             hex_playback_tasks: RwLock::new(HashMap::new()),
             audio_processors: RwLock::new(HashMap::new()),

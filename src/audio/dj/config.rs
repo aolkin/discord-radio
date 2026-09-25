@@ -109,20 +109,22 @@ impl DJConfig {
     }
 
     /// Apply overrides to this config, replacing specified categories entirely when enabled
-    pub fn with_overrides(mut self, overrides: &crate::persistence::DJConfigOverrides) -> Self {
-        if overrides.hex_messages.enabled && !overrides.hex_messages.items.is_empty() {
-            self.hex_messages = overrides.hex_messages.items.clone();
+    pub fn with_overrides(mut self, settings: &crate::persistence::DjSettings) -> Self {
+        if settings.hex_message_overrides.enabled
+            && !settings.hex_message_overrides.items.is_empty()
+        {
+            self.hex_messages = settings.hex_message_overrides.items.clone();
         }
 
-        if overrides.hex_message_announcements.enabled
-            && !overrides.hex_message_announcements.items.is_empty()
+        if settings.hex_message_announcement_overrides.enabled
+            && !settings.hex_message_announcement_overrides.items.is_empty()
         {
             self.hex_message_announcements =
-                Some(overrides.hex_message_announcements.items.clone());
+                Some(settings.hex_message_announcement_overrides.items.clone());
         }
 
-        if overrides.state_weights.enabled
-            && let Some(ref weights) = overrides.state_weights.value
+        if settings.state_weight_overrides.enabled
+            && let Some(ref weights) = settings.state_weight_overrides.value
         {
             self.state_weights = weights.clone();
         }
