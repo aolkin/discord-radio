@@ -1227,6 +1227,8 @@ async fn set_dj_content(
         })
         .await?;
 
+    crate::audio::dj::manager::trigger_reload(ctx.data(), guild_id).await;
+
     ctx.say(message).await?;
 
     Ok(())

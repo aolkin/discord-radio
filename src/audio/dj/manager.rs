@@ -345,9 +345,16 @@ pub async fn dj_task(
                     match DJConfig::load_from_file(&config_path) {
                         Ok(base_config) => {
                             let settings = bot_state.dj_settings.get(guild_id).await;
-
-                            // Update the state machine with new config
-                            state_machine.update_config(base_config.with_overrides(&settings));
+                            let mut config = base_config.with_overrides(&settings);
+                            if let Err(e) = config
+                                .apply_dj_settings(&settings, &bot_state.file_resolver)
+                                .await
+                            {
+                                tracing::warn!(
+                                    "Failed to reload DJ content for guild {guild_id}: {e:#}"
+                                );
+                            }
+                            state_machine.update_config(config);
                             tracing::info!(
                                 "DJ config reloaded successfully for guild {}",
                                 guild_id
@@ -685,4 +692,24 @@ pub async fn force_hex_message(
 
     let mgr = manager.lock().await;
     mgr.force_hex_message(message).await
+}
+
+pub async fn trigger_reload(bot_state: &Data, guild_id: GuildId) {
+    let dj_managers = bot_state.dj_managers.read().await;
+    let Some(manager_arc) = dj_managers.get(&guild_id) else {
+        return;
+    };
+    let manager_arc = manager_arc.clone();
+    drop(dj_managers);
+
+    let manager = manager_arc.lock().await;
+    if let Some(tx) = &manager.command_tx
+        && let Err(e) = tx.send(DJCommand::ReloadConfig).await
+    {
+        tracing::warn!(
+            "Failed to send reload command to DJ in guild {}: {}",
+            guild_id,
+            e
+        );
+    }
 }
