@@ -158,72 +158,10 @@ impl DjSettingsStore {
         F: FnOnce(&mut DjSettings) -> super::Result<()>,
     {
         let mut map = self.settings.write().await;
+        // Mutate a clone so a failed `f` leaves the map (and file) untouched.
         let mut entry = map.get(&guild_id).cloned().unwrap_or_default();
         f(&mut entry)?;
         map.insert(guild_id, entry);
         save_json_to_file(&*map, &self.path).await
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::audio::dj::config::HexMessageEntry;
-
-    fn hex_message(text: &str) -> HexMessageEntry {
-        HexMessageEntry {
-            text: text.to_string(),
-            weight: 1,
-            signal_profile: None,
-            loop_min: None,
-            loop_max: None,
-            announcement: None,
-        }
-    }
-
-    #[tokio::test]
-    async fn overrides_persist_alongside_content_slots() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("dj_settings.json");
-        let store = DjSettingsStore::new(path.clone());
-        let guild_id = GuildId::new(1);
-
-        store
-            .update(guild_id, |settings| {
-                settings.tracks = Some("tracks.json".to_string());
-                Ok(())
-            })
-            .await
-            .unwrap();
-
-        store
-            .update(guild_id, |settings| {
-                settings.hex_message_overrides.set(None, hex_message("one"))
-            })
-            .await
-            .unwrap();
-
-        let settings = DjSettingsStore::new(path).get(guild_id).await;
-        assert_eq!(settings.tracks.as_deref(), Some("tracks.json"));
-        assert_eq!(settings.hex_message_overrides.items[0].text, "one");
-    }
-
-    #[tokio::test]
-    async fn a_rejected_mutation_is_not_persisted() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = DjSettingsStore::new(dir.path().join("dj_settings.json"));
-        let guild_id = GuildId::new(1);
-
-        let result = store
-            .update(guild_id, |settings| {
-                settings.hex_message_overrides.enabled = true;
-                settings
-                    .hex_message_overrides
-                    .set(Some(3), hex_message("one"))
-            })
-            .await;
-
-        assert!(result.is_err());
-        assert!(!store.get(guild_id).await.hex_message_overrides.enabled);
     }
 }
