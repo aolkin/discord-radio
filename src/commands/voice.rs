@@ -1253,6 +1253,24 @@ pub async fn dj_tracks(
     .await
 }
 
+/// Set or clear the guild's DJ config
+#[poise::command(
+    slash_command,
+    guild_only,
+    default_member_permissions = "ADMINISTRATOR"
+)]
+pub async fn dj_config(
+    ctx: Context<'_>,
+    #[description = "Path or s3:// URI of the config file (omit to clear)"]
+    #[autocomplete = "autocomplete_content_file"]
+    uri: Option<String>,
+) -> Result<(), Error> {
+    set_dj_content(ctx, uri, "config", |settings, value| {
+        settings.config = value
+    })
+    .await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
