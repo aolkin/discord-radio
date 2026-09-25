@@ -1,3 +1,4 @@
+use crate::audio::dj::config::{HexMessageEntry, StateWeights};
 use serde::{Deserialize, Serialize};
 use serenity::model::id::{ChannelId, GuildId};
 use std::time::SystemTime;
@@ -49,11 +50,11 @@ pub struct DjSettings {
     #[serde(default)]
     pub hex_messages: Option<String>,
     #[serde(default)]
-    pub hex_message_overrides: DJConfigOverrideCategory<crate::audio::dj::config::HexMessageEntry>,
+    pub hex_message_overrides: DJConfigOverrideCategory<HexMessageEntry>,
     #[serde(default)]
     pub hex_message_announcement_overrides: DJConfigOverrideCategory<String>,
     #[serde(default)]
-    pub state_weight_overrides: DJConfigOverrideSingle<crate::audio::dj::config::StateWeights>,
+    pub state_weight_overrides: DJConfigOverrideSingle<StateWeights>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
