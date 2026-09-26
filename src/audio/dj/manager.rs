@@ -241,18 +241,16 @@ pub async fn dj_task(
         guild_id: GuildId,
         profile_name: Option<&str>,
         fade_secs: f32,
+        config: &DJConfig,
         bot_state: &Data,
         reason: &str,
     ) {
         if let Some(profile_name) = profile_name {
-            let new_profile = {
-                let guild_profiles = bot_state.guild_signal_profiles.read().await;
-                guild_profiles
-                    .get(&guild_id)
-                    .and_then(|profiles| profiles.get(profile_name))
-                    .or_else(|| bot_state.profile_manager.get_profile(profile_name))
-                    .cloned()
-            };
+            let new_profile = config
+                .resolved_signal_profiles
+                .get(profile_name)
+                .or_else(|| bot_state.profile_manager.get_profile(profile_name))
+                .cloned();
 
             let processors = bot_state.audio_processors.read().await;
             if let Some(processor_arc) = processors.get(&guild_id)
@@ -355,22 +353,13 @@ pub async fn dj_task(
                         Ok(base_config) => {
                             let settings = bot_state.dj_settings.get(guild_id).await;
                             let mut config = base_config.with_overrides(&settings);
-                            match config
+                            if let Err(e) = config
                                 .apply_dj_settings(&settings, &bot_state.file_resolver)
                                 .await
                             {
-                                Ok(guild_profiles) => {
-                                    bot_state
-                                        .guild_signal_profiles
-                                        .write()
-                                        .await
-                                        .insert(guild_id, guild_profiles);
-                                }
-                                Err(e) => {
-                                    tracing::warn!(
-                                        "Failed to reload DJ content for guild {guild_id}: {e:#}"
-                                    );
-                                }
+                                tracing::warn!(
+                                    "Failed to reload DJ content for guild {guild_id}: {e:#}"
+                                );
                             }
                             profile_machine = if config.signal_profiles.is_empty() {
                                 None
@@ -473,6 +462,7 @@ pub async fn dj_task(
                     guild_id,
                     Some(&profile_name),
                     fade_secs,
+                    state_machine.scheduler().config(),
                     &bot_state,
                     reason,
                 )

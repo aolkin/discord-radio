@@ -199,6 +199,7 @@ mod tests {
             recent_history_size: 4,
             duplicate_penalty_multiplier: 0.5,
             channel_status: None,
+            resolved_signal_profiles: Default::default(),
         }
     }
 

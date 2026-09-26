@@ -14,11 +14,18 @@ pub struct DJConfig {
     #[serde(default)]
     pub hex_message_defaults: HexMessageDefaults,
     pub noise_periods: Vec<NoisePeriodEntry>,
+    /// The profile rotation schedule: names, weights, and timing. Not the
+    /// resolved profile data itself — see `resolved_signal_profiles`.
     pub signal_profiles: Vec<SignalProfileEntry>,
     pub state_weights: StateWeights,
     pub recent_history_size: usize,
     pub duplicate_penalty_multiplier: f32,
     pub channel_status: Option<String>,
+    /// Signal profiles resolved from `ConfigComponent::signal_profile_uris`,
+    /// keyed by the name `signal_profiles` entries refer to. Not serialized;
+    /// populated by `apply_dj_settings`.
+    #[serde(skip)]
+    pub resolved_signal_profiles: HashMap<String, SignalProfile>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -185,13 +192,14 @@ impl DJConfig {
         self
     }
 
-    /// Returns the signal profiles defined by the config slot, keyed by the name
-    /// a `SignalProfileEntry` refers to them by.
+    /// Resolves the signal profiles defined by the config slot into
+    /// `resolved_signal_profiles`, keyed by the name a `SignalProfileEntry`
+    /// refers to them by.
     pub async fn apply_dj_settings(
         &mut self,
         settings: &crate::persistence::DjSettings,
         resolver: &crate::bucket::FileResolver,
-    ) -> anyhow::Result<HashMap<String, SignalProfile>> {
+    ) -> anyhow::Result<()> {
         self.track_pool = match &settings.tracks {
             Some(uri) => load_component::<Vec<TrackEntry>>(uri, resolver).await?,
             None => Vec::new(),
@@ -221,8 +229,9 @@ impl DJConfig {
                 load_component::<SignalProfile>(uri, resolver).await?,
             );
         }
+        self.resolved_signal_profiles = signal_profiles;
 
-        Ok(signal_profiles)
+        Ok(())
     }
 }
 
@@ -277,6 +286,7 @@ mod tests {
             recent_history_size: 12,
             duplicate_penalty_multiplier: 0.5,
             channel_status: None,
+            resolved_signal_profiles: HashMap::new(),
         }
     }
 
@@ -319,7 +329,7 @@ mod tests {
         let resolver = resolver(dir.path()).await;
 
         let mut config = local_file_config();
-        let signal_profiles = config
+        config
             .apply_dj_settings(
                 &DjSettings {
                     hex_messages: Some("hex.json".to_string()),
@@ -332,7 +342,10 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            signal_profiles.get("slot_profile").map(|p| p.name.as_str()),
+            config
+                .resolved_signal_profiles
+                .get("slot_profile")
+                .map(|p| p.name.as_str()),
             Some("from the slot")
         );
 
@@ -349,12 +362,12 @@ mod tests {
         assert_eq!(config.duplicate_penalty_multiplier, 0.25);
 
         let mut config = local_file_config();
-        let signal_profiles = config
+        config
             .apply_dj_settings(&DjSettings::default(), &resolver)
             .await
             .unwrap();
 
-        assert!(signal_profiles.is_empty());
+        assert!(config.resolved_signal_profiles.is_empty());
         assert!(config.hex_messages.is_empty());
         assert_eq!(config.hex_message_announcements, Some(Vec::new()));
         assert_eq!(config.hex_message_defaults.loop_max, default_loop_max());
