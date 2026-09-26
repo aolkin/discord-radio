@@ -231,6 +231,19 @@ impl FileCache {
             .map_err(|e| CacheError::Local(Arc::new(e)))
     }
 
+    /// Downloads `key` and returns its bytes directly, without writing them
+    /// to local disk.
+    pub async fn fetch_bytes(&self, key: &str) -> Result<Vec<u8>, CacheError> {
+        let downloader = self.downloader.as_ref().ok_or(CacheError::NotConfigured)?;
+        downloader.download(key).await.map_err(|e| {
+            if e.is::<ObjectNotFound>() {
+                CacheError::NotFound
+            } else {
+                CacheError::Remote(e.into())
+            }
+        })
+    }
+
     /// Forgets `key`, so the next `ensure_cached` re-downloads it.
     ///
     /// The file stays on disk. `fill` overwrites unconditionally and nothing
@@ -554,6 +567,20 @@ mod tests {
             cache.ensure_cached("tracks/stale.ogg").await.unwrap_err(),
             CacheError::NotConfigured
         ));
+    }
+
+    #[tokio::test]
+    async fn fetch_bytes_downloads_without_writing_to_disk() {
+        let dir = tempfile::tempdir().unwrap();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let cache =
+            FileCache::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls)).await;
+
+        let bytes = cache.fetch_bytes("tracks/song.ogg").await.unwrap();
+
+        assert_eq!(bytes, b"hello world");
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert!(!cache.cached_path("tracks/song.ogg").exists());
     }
 
     #[tokio::test]
