@@ -1274,11 +1274,11 @@ pub async fn dj_config(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bucket::FileCache;
+    use crate::bucket::ObjectStore;
 
     async fn resolver(content_path: &std::path::Path) -> crate::bucket::FileResolver {
         let file_cache = Arc::new(
-            FileCache::new(content_path.to_path_buf(), None, None)
+            ObjectStore::new(content_path.to_path_buf(), None, None)
                 .await
                 .unwrap(),
         );

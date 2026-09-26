@@ -295,7 +295,7 @@ async fn main() -> Result<(), Error> {
     tracing::info!("Using file cache ttl: {:?}", file_cache_ttl);
 
     let file_cache = Arc::new(
-        bucket::FileCache::new(file_cache_dir.clone(), bucket, file_cache_ttl)
+        bucket::ObjectStore::new(file_cache_dir.clone(), bucket, file_cache_ttl)
             .await
             .map_err(|e| format!("Failed to create file cache at {file_cache_dir:?}: {e}"))?,
     );

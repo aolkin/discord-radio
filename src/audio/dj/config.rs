@@ -225,7 +225,7 @@ async fn load_component<T: serde::de::DeserializeOwned>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bucket::{FileCache, FileResolver};
+    use crate::bucket::{FileResolver, ObjectStore};
     use crate::persistence::DjSettings;
     use std::sync::Arc;
 
@@ -267,7 +267,7 @@ mod tests {
 
     async fn resolver(content_path: &std::path::Path) -> FileResolver {
         let file_cache = Arc::new(
-            FileCache::new(content_path.to_path_buf(), None, None)
+            ObjectStore::new(content_path.to_path_buf(), None, None)
                 .await
                 .unwrap(),
         );

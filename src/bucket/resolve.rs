@@ -1,4 +1,4 @@
-use crate::bucket::{CacheError, FileCache};
+use crate::bucket::{CacheError, ObjectStore};
 use std::sync::Arc;
 
 /// Resolves a playlist entry's `filename` to a local filesystem path.
@@ -9,11 +9,11 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct FileResolver {
     content_path: String,
-    file_cache: Arc<FileCache>,
+    file_cache: Arc<ObjectStore>,
 }
 
 impl FileResolver {
-    pub fn new(content_path: String, file_cache: Arc<FileCache>) -> Self {
+    pub fn new(content_path: String, file_cache: Arc<ObjectStore>) -> Self {
         Self {
             content_path,
             file_cache,
@@ -68,7 +68,7 @@ mod tests {
     async fn dispatches_on_the_s3_prefix() {
         let dir = tempfile::tempdir().unwrap();
         let file_cache = Arc::new(
-            FileCache::new(dir.path().to_path_buf(), None, None)
+            ObjectStore::new(dir.path().to_path_buf(), None, None)
                 .await
                 .unwrap(),
         );

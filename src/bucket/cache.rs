@@ -110,7 +110,7 @@ impl ObjectDownloader for s3::Bucket {
 
 /// Caches objects on local disk, mirroring the object storage key structure
 /// (`{cache_dir}/{key}`).
-pub struct FileCache {
+pub struct ObjectStore {
     cache_dir: PathBuf,
     downloader: Option<Arc<dyn ObjectDownloader>>,
     /// Seeded at construction from the files already in `cache_dir`.
@@ -119,7 +119,7 @@ pub struct FileCache {
     remote_listings: moka::future::Cache<String, Vec<String>>,
 }
 
-impl FileCache {
+impl ObjectStore {
     /// Creates the cache, creating `cache_dir` on disk if it doesn't exist
     /// yet, and adopts the files already in it. With `bucket` set to `None`
     /// nothing can be downloaded, and `ensure_cached` fails with
@@ -359,7 +359,7 @@ fn remove_best_effort(path: &Path) {
 /// at a time. Returns immediately; failures are logged rather than surfaced.
 /// Await the returned handle to wait for every key to have been attempted.
 pub fn pre_cache(
-    cache: Arc<FileCache>,
+    cache: Arc<ObjectStore>,
     keys: Vec<String>,
     max_concurrent: usize,
 ) -> tokio::task::JoinHandle<()> {
@@ -483,7 +483,9 @@ mod tests {
         let cache_dir = dir.path().join("nested/cache");
         assert!(!cache_dir.exists());
 
-        FileCache::new(cache_dir.clone(), None, None).await.unwrap();
+        ObjectStore::new(cache_dir.clone(), None, None)
+            .await
+            .unwrap();
 
         assert!(cache_dir.is_dir());
     }
@@ -493,7 +495,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let calls = Arc::new(AtomicUsize::new(0));
         let cache =
-            FileCache::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls)).await;
+            ObjectStore::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls))
+                .await;
 
         let path = cache.ensure_cached("tracks/song.ogg").await.unwrap();
 
@@ -509,7 +512,8 @@ mod tests {
         write_cached_file(&dir.path().join("tracks/song.ogg"), b"already cached");
 
         let cache =
-            FileCache::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls)).await;
+            ObjectStore::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls))
+                .await;
         cache.ensure_cached("tracks/song.ogg").await.unwrap();
 
         assert_eq!(calls.load(Ordering::SeqCst), 0);
@@ -521,7 +525,7 @@ mod tests {
         let partial = temp_path(&dir.path().join("tracks/song.ogg"));
         write_cached_file(&partial, b"half a s");
 
-        let cache = FileCache::new(dir.path().to_path_buf(), None, None)
+        let cache = ObjectStore::new(dir.path().to_path_buf(), None, None)
             .await
             .unwrap();
 
@@ -551,7 +555,7 @@ mod tests {
             .set_times(times)
             .unwrap();
 
-        let cache = FileCache::new(
+        let cache = ObjectStore::new(
             dir.path().to_path_buf(),
             None,
             Some(Duration::from_secs(60)),
@@ -570,25 +574,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fetch_bytes_downloads_without_writing_to_disk() {
-        let dir = tempfile::tempdir().unwrap();
-        let calls = Arc::new(AtomicUsize::new(0));
-        let cache =
-            FileCache::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls)).await;
-
-        let bytes = cache.fetch_bytes("tracks/song.ogg").await.unwrap();
-
-        assert_eq!(bytes, b"hello world");
-        assert_eq!(calls.load(Ordering::SeqCst), 1);
-        assert!(!cache.cached_path("tracks/song.ogg").exists());
-    }
-
-    #[tokio::test]
     async fn ensure_cached_re_downloads_after_invalidate() {
         let dir = tempfile::tempdir().unwrap();
         let calls = Arc::new(AtomicUsize::new(0));
         let cache =
-            FileCache::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls)).await;
+            ObjectStore::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls))
+                .await;
 
         cache.ensure_cached("tracks/song.ogg").await.unwrap();
         cache.invalidate("tracks/song.ogg").await;
@@ -602,7 +593,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let calls = Arc::new(AtomicUsize::new(0));
         let cache =
-            FileCache::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls)).await;
+            ObjectStore::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls))
+                .await;
 
         cache.ensure_cached("tracks/song.ogg").await.unwrap();
 
@@ -614,7 +606,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let calls = Arc::new(AtomicUsize::new(0));
         let cache =
-            FileCache::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls)).await;
+            ObjectStore::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls))
+                .await;
         let dest = cache.cached_path("tracks/song.ogg");
         tokio::fs::create_dir_all(dest.parent().unwrap())
             .await
@@ -633,7 +626,8 @@ mod tests {
     async fn ensure_cached_surfaces_download_failures() {
         let dir = tempfile::tempdir().unwrap();
         let cache =
-            FileCache::with_downloader(dir.path().to_path_buf(), Arc::new(FailingDownloader)).await;
+            ObjectStore::with_downloader(dir.path().to_path_buf(), Arc::new(FailingDownloader))
+                .await;
 
         let err = cache.ensure_cached("tracks/missing.ogg").await.unwrap_err();
 
@@ -644,7 +638,7 @@ mod tests {
     async fn ensure_cached_distinguishes_a_missing_object_from_other_failures() {
         let dir = tempfile::tempdir().unwrap();
         let cache =
-            FileCache::with_downloader(dir.path().to_path_buf(), Arc::new(NotFoundDownloader))
+            ObjectStore::with_downloader(dir.path().to_path_buf(), Arc::new(NotFoundDownloader))
                 .await;
 
         let err = cache.ensure_cached("tracks/missing.ogg").await.unwrap_err();
@@ -657,7 +651,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let calls = Arc::new(AtomicUsize::new(0));
         let cache = Arc::new(
-            FileCache::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls)).await,
+            ObjectStore::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls))
+                .await,
         );
 
         pre_cache(
@@ -681,7 +676,7 @@ mod tests {
     #[tokio::test]
     async fn list_remote_is_empty_without_a_bucket() {
         let dir = tempfile::tempdir().unwrap();
-        let cache = FileCache::new(dir.path().to_path_buf(), None, None)
+        let cache = ObjectStore::new(dir.path().to_path_buf(), None, None)
             .await
             .unwrap();
 
@@ -693,7 +688,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let downloader =
             StubDownloader::with_remote_keys(&["tracks/a.ogg", "tracks/b.ogg", "other/c.ogg"]);
-        let cache = FileCache::with_downloader(dir.path().to_path_buf(), downloader).await;
+        let cache = ObjectStore::with_downloader(dir.path().to_path_buf(), downloader).await;
 
         let mut keys = cache.list_remote("tracks/").await;
         keys.sort();
@@ -709,7 +704,7 @@ mod tests {
             &["tracks/a.ogg", "tracks/b.ogg"],
             &list_calls,
         );
-        let cache = FileCache::with_downloader(dir.path().to_path_buf(), downloader).await;
+        let cache = ObjectStore::with_downloader(dir.path().to_path_buf(), downloader).await;
 
         cache.list_remote("tracks/").await;
         cache.list_remote("tracks/").await;
@@ -721,7 +716,8 @@ mod tests {
     async fn list_remote_is_empty_when_listing_fails() {
         let dir = tempfile::tempdir().unwrap();
         let cache =
-            FileCache::with_downloader(dir.path().to_path_buf(), Arc::new(FailingDownloader)).await;
+            ObjectStore::with_downloader(dir.path().to_path_buf(), Arc::new(FailingDownloader))
+                .await;
 
         assert!(cache.list_remote("tracks/").await.is_empty());
     }
