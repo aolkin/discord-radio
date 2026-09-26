@@ -28,7 +28,7 @@ const MAX_TRACKED_LISTINGS: u64 = 1_000;
 const TEMP_SUFFIX: &str = ".tmp";
 
 #[derive(Clone, Debug, thiserror::Error)]
-pub enum CacheError {
+pub enum ObjectStoreError {
     #[error("object storage is not configured")]
     NotConfigured,
     #[error("object not found")]
@@ -110,7 +110,7 @@ impl ObjectDownloader for s3::Bucket {
 
 /// Caches objects on local disk, mirroring the object storage key structure
 /// (`{cache_dir}/{key}`).
-pub struct FileCache {
+pub struct ObjectStore {
     cache_dir: PathBuf,
     downloader: Option<Arc<dyn ObjectDownloader>>,
     /// Seeded at construction from the files already in `cache_dir`.
@@ -119,11 +119,11 @@ pub struct FileCache {
     remote_listings: moka::future::Cache<String, Vec<String>>,
 }
 
-impl FileCache {
+impl ObjectStore {
     /// Creates the cache, creating `cache_dir` on disk if it doesn't exist
     /// yet, and adopts the files already in it. With `bucket` set to `None`
     /// nothing can be downloaded, and `ensure_cached` fails with
-    /// [`CacheError::NotConfigured`] for any key that wasn't adopted.
+    /// [`ObjectStoreError::NotConfigured`] for any key that wasn't adopted.
     ///
     /// A file whose last access is older than `entry_ttl` is deleted rather
     /// than adopted; `None` keeps every file forever.
@@ -131,7 +131,7 @@ impl FileCache {
         cache_dir: PathBuf,
         bucket: Option<Arc<s3::Bucket>>,
         entry_ttl: Option<Duration>,
-    ) -> Result<Self, CacheError> {
+    ) -> Result<Self, ObjectStoreError> {
         let downloader = bucket.map(|bucket| bucket as Arc<dyn ObjectDownloader>);
         Self::build(cache_dir, downloader, entry_ttl).await
     }
@@ -150,8 +150,8 @@ impl FileCache {
         cache_dir: PathBuf,
         downloader: Option<Arc<dyn ObjectDownloader>>,
         entry_ttl: Option<Duration>,
-    ) -> Result<Self, CacheError> {
-        std::fs::create_dir_all(&cache_dir).map_err(|e| CacheError::Local(Arc::new(e)))?;
+    ) -> Result<Self, ObjectStoreError> {
+        std::fs::create_dir_all(&cache_dir).map_err(|e| ObjectStoreError::Local(Arc::new(e)))?;
 
         let cache = Self {
             cache_dir,
@@ -165,7 +165,7 @@ impl FileCache {
 
         let mut keys = Vec::new();
         collect_cached_keys(&cache.cache_dir, &cache.cache_dir, entry_ttl, &mut keys)
-            .map_err(|e| CacheError::Local(Arc::new(e)))?;
+            .map_err(|e| ObjectStoreError::Local(Arc::new(e)))?;
         for key in keys {
             cache.present.insert(key, ()).await;
         }
@@ -182,7 +182,7 @@ impl FileCache {
     /// Returns the local path for `key`, downloading the object first if it
     /// isn't already cached. Concurrent calls for the same key share a single
     /// download.
-    pub async fn ensure_cached(&self, key: &str) -> Result<PathBuf, CacheError> {
+    pub async fn ensure_cached(&self, key: &str) -> Result<PathBuf, ObjectStoreError> {
         let dest = self.cached_path(key);
 
         self.present
@@ -195,20 +195,23 @@ impl FileCache {
 
     /// Downloads `key` and writes it to `dest`, replacing anything already
     /// there.
-    async fn fill(&self, key: &str, dest: &Path) -> Result<(), CacheError> {
-        let downloader = self.downloader.as_ref().ok_or(CacheError::NotConfigured)?;
+    async fn fill(&self, key: &str, dest: &Path) -> Result<(), ObjectStoreError> {
+        let downloader = self
+            .downloader
+            .as_ref()
+            .ok_or(ObjectStoreError::NotConfigured)?;
         let bytes = downloader.download(key).await.map_err(|e| {
             if e.is::<ObjectNotFound>() {
-                CacheError::NotFound
+                ObjectStoreError::NotFound
             } else {
-                CacheError::Remote(e.into())
+                ObjectStoreError::Remote(e.into())
             }
         })?;
 
         if let Some(parent) = dest.parent() {
             tokio::fs::create_dir_all(parent)
                 .await
-                .map_err(|e| CacheError::Local(Arc::new(e)))?;
+                .map_err(|e| ObjectStoreError::Local(Arc::new(e)))?;
         }
 
         // Write to a temporary path in the same directory as `dest` and
@@ -223,12 +226,28 @@ impl FileCache {
             {
                 tracing::warn!("Failed to clean up temp file {temp_dest:?}: {cleanup_err}");
             }
-            return Err(CacheError::Local(Arc::new(e)));
+            return Err(ObjectStoreError::Local(Arc::new(e)));
         }
 
         tokio::fs::rename(&temp_dest, dest)
             .await
-            .map_err(|e| CacheError::Local(Arc::new(e)))
+            .map_err(|e| ObjectStoreError::Local(Arc::new(e)))
+    }
+
+    /// Downloads `key` and returns its bytes directly, without writing them
+    /// to local disk.
+    pub async fn fetch_bytes(&self, key: &str) -> Result<Vec<u8>, ObjectStoreError> {
+        let downloader = self
+            .downloader
+            .as_ref()
+            .ok_or(ObjectStoreError::NotConfigured)?;
+        downloader.download(key).await.map_err(|e| {
+            if e.is::<ObjectNotFound>() {
+                ObjectStoreError::NotFound
+            } else {
+                ObjectStoreError::Remote(e.into())
+            }
+        })
     }
 
     /// Forgets `key`, so the next `ensure_cached` re-downloads it.
@@ -346,7 +365,7 @@ fn remove_best_effort(path: &Path) {
 /// at a time. Returns immediately; failures are logged rather than surfaced.
 /// Await the returned handle to wait for every key to have been attempted.
 pub fn pre_cache(
-    cache: Arc<FileCache>,
+    cache: Arc<ObjectStore>,
     keys: Vec<String>,
     max_concurrent: usize,
 ) -> tokio::task::JoinHandle<()> {
@@ -470,7 +489,9 @@ mod tests {
         let cache_dir = dir.path().join("nested/cache");
         assert!(!cache_dir.exists());
 
-        FileCache::new(cache_dir.clone(), None, None).await.unwrap();
+        ObjectStore::new(cache_dir.clone(), None, None)
+            .await
+            .unwrap();
 
         assert!(cache_dir.is_dir());
     }
@@ -480,7 +501,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let calls = Arc::new(AtomicUsize::new(0));
         let cache =
-            FileCache::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls)).await;
+            ObjectStore::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls))
+                .await;
 
         let path = cache.ensure_cached("tracks/song.ogg").await.unwrap();
 
@@ -496,7 +518,8 @@ mod tests {
         write_cached_file(&dir.path().join("tracks/song.ogg"), b"already cached");
 
         let cache =
-            FileCache::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls)).await;
+            ObjectStore::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls))
+                .await;
         cache.ensure_cached("tracks/song.ogg").await.unwrap();
 
         assert_eq!(calls.load(Ordering::SeqCst), 0);
@@ -508,7 +531,7 @@ mod tests {
         let partial = temp_path(&dir.path().join("tracks/song.ogg"));
         write_cached_file(&partial, b"half a s");
 
-        let cache = FileCache::new(dir.path().to_path_buf(), None, None)
+        let cache = ObjectStore::new(dir.path().to_path_buf(), None, None)
             .await
             .unwrap();
 
@@ -518,7 +541,7 @@ mod tests {
                 .ensure_cached("tracks/song.ogg.tmp")
                 .await
                 .unwrap_err(),
-            CacheError::NotConfigured
+            ObjectStoreError::NotConfigured
         ));
     }
 
@@ -538,7 +561,7 @@ mod tests {
             .set_times(times)
             .unwrap();
 
-        let cache = FileCache::new(
+        let cache = ObjectStore::new(
             dir.path().to_path_buf(),
             None,
             Some(Duration::from_secs(60)),
@@ -552,7 +575,7 @@ mod tests {
         cache.ensure_cached("tracks/fresh.ogg").await.unwrap();
         assert!(matches!(
             cache.ensure_cached("tracks/stale.ogg").await.unwrap_err(),
-            CacheError::NotConfigured
+            ObjectStoreError::NotConfigured
         ));
     }
 
@@ -561,7 +584,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let calls = Arc::new(AtomicUsize::new(0));
         let cache =
-            FileCache::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls)).await;
+            ObjectStore::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls))
+                .await;
 
         cache.ensure_cached("tracks/song.ogg").await.unwrap();
         cache.invalidate("tracks/song.ogg").await;
@@ -575,7 +599,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let calls = Arc::new(AtomicUsize::new(0));
         let cache =
-            FileCache::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls)).await;
+            ObjectStore::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls))
+                .await;
 
         cache.ensure_cached("tracks/song.ogg").await.unwrap();
 
@@ -587,7 +612,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let calls = Arc::new(AtomicUsize::new(0));
         let cache =
-            FileCache::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls)).await;
+            ObjectStore::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls))
+                .await;
         let dest = cache.cached_path("tracks/song.ogg");
         tokio::fs::create_dir_all(dest.parent().unwrap())
             .await
@@ -598,7 +624,7 @@ mod tests {
 
         let err = cache.ensure_cached("tracks/song.ogg").await.unwrap_err();
 
-        assert!(matches!(err, CacheError::Local(_)));
+        assert!(matches!(err, ObjectStoreError::Local(_)));
         assert!(!dest.exists());
     }
 
@@ -606,23 +632,24 @@ mod tests {
     async fn ensure_cached_surfaces_download_failures() {
         let dir = tempfile::tempdir().unwrap();
         let cache =
-            FileCache::with_downloader(dir.path().to_path_buf(), Arc::new(FailingDownloader)).await;
+            ObjectStore::with_downloader(dir.path().to_path_buf(), Arc::new(FailingDownloader))
+                .await;
 
         let err = cache.ensure_cached("tracks/missing.ogg").await.unwrap_err();
 
-        assert!(matches!(err, CacheError::Remote(_)));
+        assert!(matches!(err, ObjectStoreError::Remote(_)));
     }
 
     #[tokio::test]
     async fn ensure_cached_distinguishes_a_missing_object_from_other_failures() {
         let dir = tempfile::tempdir().unwrap();
         let cache =
-            FileCache::with_downloader(dir.path().to_path_buf(), Arc::new(NotFoundDownloader))
+            ObjectStore::with_downloader(dir.path().to_path_buf(), Arc::new(NotFoundDownloader))
                 .await;
 
         let err = cache.ensure_cached("tracks/missing.ogg").await.unwrap_err();
 
-        assert!(matches!(err, CacheError::NotFound));
+        assert!(matches!(err, ObjectStoreError::NotFound));
     }
 
     #[tokio::test]
@@ -630,7 +657,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let calls = Arc::new(AtomicUsize::new(0));
         let cache = Arc::new(
-            FileCache::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls)).await,
+            ObjectStore::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls))
+                .await,
         );
 
         pre_cache(
@@ -654,7 +682,7 @@ mod tests {
     #[tokio::test]
     async fn list_remote_is_empty_without_a_bucket() {
         let dir = tempfile::tempdir().unwrap();
-        let cache = FileCache::new(dir.path().to_path_buf(), None, None)
+        let cache = ObjectStore::new(dir.path().to_path_buf(), None, None)
             .await
             .unwrap();
 
@@ -666,7 +694,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let downloader =
             StubDownloader::with_remote_keys(&["tracks/a.ogg", "tracks/b.ogg", "other/c.ogg"]);
-        let cache = FileCache::with_downloader(dir.path().to_path_buf(), downloader).await;
+        let cache = ObjectStore::with_downloader(dir.path().to_path_buf(), downloader).await;
 
         let mut keys = cache.list_remote("tracks/").await;
         keys.sort();
@@ -682,7 +710,7 @@ mod tests {
             &["tracks/a.ogg", "tracks/b.ogg"],
             &list_calls,
         );
-        let cache = FileCache::with_downloader(dir.path().to_path_buf(), downloader).await;
+        let cache = ObjectStore::with_downloader(dir.path().to_path_buf(), downloader).await;
 
         cache.list_remote("tracks/").await;
         cache.list_remote("tracks/").await;
@@ -694,7 +722,8 @@ mod tests {
     async fn list_remote_is_empty_when_listing_fails() {
         let dir = tempfile::tempdir().unwrap();
         let cache =
-            FileCache::with_downloader(dir.path().to_path_buf(), Arc::new(FailingDownloader)).await;
+            ObjectStore::with_downloader(dir.path().to_path_buf(), Arc::new(FailingDownloader))
+                .await;
 
         assert!(cache.list_remote("tracks/").await.is_empty());
     }

@@ -1,4 +1,4 @@
-use crate::bucket::{CacheError, FileCache};
+use crate::bucket::{ObjectStore, ObjectStoreError};
 use std::sync::Arc;
 
 /// Resolves a playlist entry's `filename` to a local filesystem path.
@@ -9,18 +9,18 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct FileResolver {
     content_path: String,
-    file_cache: Arc<FileCache>,
+    file_cache: Arc<ObjectStore>,
 }
 
 impl FileResolver {
-    pub fn new(content_path: String, file_cache: Arc<FileCache>) -> Self {
+    pub fn new(content_path: String, file_cache: Arc<ObjectStore>) -> Self {
         Self {
             content_path,
             file_cache,
         }
     }
 
-    pub async fn resolve(&self, filename: &str) -> Result<String, CacheError> {
+    pub async fn resolve(&self, filename: &str) -> Result<String, ObjectStoreError> {
         if let Some(key) = filename.strip_prefix("s3://") {
             Ok(self
                 .file_cache
@@ -30,6 +30,16 @@ impl FileResolver {
                 .to_string())
         } else {
             Ok(format!("{}/{filename}", self.content_path))
+        }
+    }
+
+    pub async fn resolve_contents(&self, filename: &str) -> Result<Vec<u8>, ObjectStoreError> {
+        if let Some(key) = filename.strip_prefix("s3://") {
+            self.file_cache.fetch_bytes(key).await
+        } else {
+            tokio::fs::read(format!("{}/{filename}", self.content_path))
+                .await
+                .map_err(|e| ObjectStoreError::Local(Arc::new(e)))
         }
     }
 
@@ -58,15 +68,27 @@ mod tests {
     async fn dispatches_on_the_s3_prefix() {
         let dir = tempfile::tempdir().unwrap();
         let file_cache = Arc::new(
-            FileCache::new(dir.path().to_path_buf(), None, None)
+            ObjectStore::new(dir.path().to_path_buf(), None, None)
                 .await
                 .unwrap(),
         );
-        let resolver = FileResolver::new("content".to_string(), file_cache);
+        let resolver = FileResolver::new(dir.path().to_string_lossy().to_string(), file_cache);
 
         assert!(resolver.resolve("s3://tracks/song.ogg").await.is_err());
+        assert!(
+            resolver
+                .resolve_contents("s3://tracks/song.ogg")
+                .await
+                .is_err()
+        );
+
+        std::fs::create_dir_all(dir.path().join("audio")).unwrap();
+        std::fs::write(dir.path().join("audio/song.ogg"), b"hello world").unwrap();
 
         let resolved = resolver.resolve("audio/song.ogg").await.unwrap();
-        assert_eq!(resolved, "content/audio/song.ogg");
+        assert_eq!(resolved, format!("{}/audio/song.ogg", dir.path().display()));
+
+        let contents = resolver.resolve_contents("audio/song.ogg").await.unwrap();
+        assert_eq!(contents, b"hello world");
     }
 }

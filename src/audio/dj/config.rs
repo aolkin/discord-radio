@@ -215,20 +215,17 @@ async fn load_component<T: serde::de::DeserializeOwned>(
     uri: &str,
     resolver: &crate::bucket::FileResolver,
 ) -> anyhow::Result<T> {
-    let path = resolver
-        .resolve(uri)
+    let bytes = resolver
+        .resolve_contents(uri)
         .await
         .with_context(|| format!("resolving DJ component '{uri}'"))?;
-    let contents = tokio::fs::read_to_string(&path)
-        .await
-        .with_context(|| format!("reading DJ component '{uri}'"))?;
-    serde_json::from_str(&contents).with_context(|| format!("parsing DJ component '{uri}'"))
+    serde_json::from_slice(&bytes).with_context(|| format!("parsing DJ component '{uri}'"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bucket::{FileCache, FileResolver};
+    use crate::bucket::{FileResolver, ObjectStore};
     use crate::persistence::DjSettings;
     use std::sync::Arc;
 
@@ -270,7 +267,7 @@ mod tests {
 
     async fn resolver(content_path: &std::path::Path) -> FileResolver {
         let file_cache = Arc::new(
-            FileCache::new(content_path.to_path_buf(), None, None)
+            ObjectStore::new(content_path.to_path_buf(), None, None)
                 .await
                 .unwrap(),
         );

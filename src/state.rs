@@ -4,7 +4,7 @@ use crate::audio::duration::DurationCache;
 use crate::audio::processing_thread::AudioProcessor;
 use crate::audio::profiles::ProfileManager;
 use crate::audio::tracks::TrackManager;
-use crate::bucket::{FileCache, FileResolver};
+use crate::bucket::{FileResolver, ObjectStore};
 use crate::logging::{JsonLogger, guild_logs_dir};
 use crate::metrics::MetricsHandle;
 use crate::persistence::{DjSettingsStore, StateStore};
@@ -87,7 +87,7 @@ impl BotState {
         dj_settings: DjSettingsStore,
         shutdown_tx: tokio::sync::broadcast::Sender<String>,
         metrics: MetricsHandle,
-        file_cache: Arc<FileCache>,
+        file_cache: Arc<ObjectStore>,
     ) -> Self {
         let profiles_dir = "audio_profiles";
         let mut profile_manager = ProfileManager::new(profiles_dir);
