@@ -1,5 +1,7 @@
+use crate::audio::profiles::SignalProfile;
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct DJConfig {
@@ -12,11 +14,18 @@ pub struct DJConfig {
     #[serde(default)]
     pub hex_message_defaults: HexMessageDefaults,
     pub noise_periods: Vec<NoisePeriodEntry>,
+    /// The profile rotation schedule: names, weights, and timing. Not the
+    /// resolved profile data itself — see `resolved_signal_profiles`.
     pub signal_profiles: Vec<SignalProfileEntry>,
     pub state_weights: StateWeights,
     pub recent_history_size: usize,
     pub duplicate_penalty_multiplier: f32,
     pub channel_status: Option<String>,
+    /// Signal profiles resolved from `ConfigComponent::signal_profile_uris`,
+    /// keyed by the name `signal_profiles` entries refer to. Not serialized;
+    /// populated by `apply_dj_settings`.
+    #[serde(skip)]
+    pub resolved_signal_profiles: HashMap<String, SignalProfile>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -127,6 +136,9 @@ pub struct HexComponent {
 pub struct ConfigComponent {
     #[serde(default)]
     pub noise_periods: Vec<NoisePeriodEntry>,
+    /// Profile name to the URI of a `SignalProfile` JSON file.
+    #[serde(default)]
+    pub signal_profile_uris: HashMap<String, String>,
     #[serde(default)]
     pub state_weights: StateWeights,
     #[serde(default)]
@@ -180,6 +192,9 @@ impl DJConfig {
         self
     }
 
+    /// Resolves the signal profiles defined by the config slot into
+    /// `resolved_signal_profiles`, keyed by the name a `SignalProfileEntry`
+    /// refers to them by.
     pub async fn apply_dj_settings(
         &mut self,
         settings: &crate::persistence::DjSettings,
@@ -206,6 +221,15 @@ impl DJConfig {
         self.state_weights = orchestration.state_weights;
         self.recent_history_size = orchestration.playback.recent_history_size;
         self.duplicate_penalty_multiplier = orchestration.playback.duplicate_penalty_multiplier;
+
+        let mut signal_profiles = HashMap::with_capacity(orchestration.signal_profile_uris.len());
+        for (name, uri) in &orchestration.signal_profile_uris {
+            signal_profiles.insert(
+                name.clone(),
+                load_component::<SignalProfile>(uri, resolver).await?,
+            );
+        }
+        self.resolved_signal_profiles = signal_profiles;
 
         Ok(())
     }
@@ -262,6 +286,7 @@ mod tests {
             recent_history_size: 12,
             duplicate_penalty_multiplier: 0.5,
             channel_status: None,
+            resolved_signal_profiles: HashMap::new(),
         }
     }
 
@@ -287,7 +312,18 @@ mod tests {
         std::fs::write(
             dir.path().join("config.json"),
             r#"{"state_weights":{"track":3,"hex_message":0,"noise":0},
+                "signal_profile_uris":{"slot_profile":"profile.json"},
                 "playback":{"recent_history_size":2,"duplicate_penalty_multiplier":0.25}}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("profile.json"),
+            r#"{"name":"from the slot","bandpass_low":100.0,"bandpass_high":4000.0,
+                "white_noise_level":0.1,"pink_noise_level":0.0,"brown_noise_level":0.0,
+                "tremolo_depth":0.0,"tremolo_rate":0.0,"tremolo_jitter":0.0,
+                "clip_pregain":1.0,"clip_threshold":1.0,"bitcrush_bits":null,
+                "dropout_probability":0.0,"dropout_duration_ms":[0.0,0.0],
+                "frequency_warble_hz":null}"#,
         )
         .unwrap();
         let resolver = resolver(dir.path()).await;
@@ -304,6 +340,14 @@ mod tests {
             )
             .await
             .unwrap();
+
+        assert_eq!(
+            config
+                .resolved_signal_profiles
+                .get("slot_profile")
+                .map(|p| p.name.as_str()),
+            Some("from the slot")
+        );
 
         assert_eq!(config.hex_messages.len(), 1);
         assert_eq!(config.hex_messages[0].text, "slot");
@@ -323,6 +367,7 @@ mod tests {
             .await
             .unwrap();
 
+        assert!(config.resolved_signal_profiles.is_empty());
         assert!(config.hex_messages.is_empty());
         assert_eq!(config.hex_message_announcements, Some(Vec::new()));
         assert_eq!(config.hex_message_defaults.loop_max, default_loop_max());
