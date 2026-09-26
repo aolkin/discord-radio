@@ -1,7 +1,7 @@
 pub mod cache;
 pub mod resolve;
 
-pub use cache::{CacheError, ObjectStore};
+pub use cache::{ObjectStore, ObjectStoreError};
 pub use resolve::FileResolver;
 
 use s3::bucket::Bucket;

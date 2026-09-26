@@ -1,5 +1,5 @@
 use crate::audio::dj::manager::trigger_reload;
-use crate::bucket::CacheError;
+use crate::bucket::ObjectStoreError;
 use crate::state::Data;
 use crate::web::state_snapshot::BotSnapshot;
 use axum::Json as AxumJson;
@@ -126,7 +126,7 @@ pub async fn change_track_state(
                 .resolve(&filename)
                 .await
                 .map_err(|e| match e {
-                    CacheError::NotFound => StatusCode::NOT_FOUND,
+                    ObjectStoreError::NotFound => StatusCode::NOT_FOUND,
                     _ => StatusCode::INTERNAL_SERVER_ERROR,
                 })?;
             let volume = request.volume.unwrap_or(1.0);

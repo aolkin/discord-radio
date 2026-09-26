@@ -28,7 +28,7 @@ const MAX_TRACKED_LISTINGS: u64 = 1_000;
 const TEMP_SUFFIX: &str = ".tmp";
 
 #[derive(Clone, Debug, thiserror::Error)]
-pub enum CacheError {
+pub enum ObjectStoreError {
     #[error("object storage is not configured")]
     NotConfigured,
     #[error("object not found")]
@@ -123,7 +123,7 @@ impl ObjectStore {
     /// Creates the cache, creating `cache_dir` on disk if it doesn't exist
     /// yet, and adopts the files already in it. With `bucket` set to `None`
     /// nothing can be downloaded, and `ensure_cached` fails with
-    /// [`CacheError::NotConfigured`] for any key that wasn't adopted.
+    /// [`ObjectStoreError::NotConfigured`] for any key that wasn't adopted.
     ///
     /// A file whose last access is older than `entry_ttl` is deleted rather
     /// than adopted; `None` keeps every file forever.
@@ -131,7 +131,7 @@ impl ObjectStore {
         cache_dir: PathBuf,
         bucket: Option<Arc<s3::Bucket>>,
         entry_ttl: Option<Duration>,
-    ) -> Result<Self, CacheError> {
+    ) -> Result<Self, ObjectStoreError> {
         let downloader = bucket.map(|bucket| bucket as Arc<dyn ObjectDownloader>);
         Self::build(cache_dir, downloader, entry_ttl).await
     }
@@ -150,8 +150,8 @@ impl ObjectStore {
         cache_dir: PathBuf,
         downloader: Option<Arc<dyn ObjectDownloader>>,
         entry_ttl: Option<Duration>,
-    ) -> Result<Self, CacheError> {
-        std::fs::create_dir_all(&cache_dir).map_err(|e| CacheError::Local(Arc::new(e)))?;
+    ) -> Result<Self, ObjectStoreError> {
+        std::fs::create_dir_all(&cache_dir).map_err(|e| ObjectStoreError::Local(Arc::new(e)))?;
 
         let cache = Self {
             cache_dir,
@@ -165,7 +165,7 @@ impl ObjectStore {
 
         let mut keys = Vec::new();
         collect_cached_keys(&cache.cache_dir, &cache.cache_dir, entry_ttl, &mut keys)
-            .map_err(|e| CacheError::Local(Arc::new(e)))?;
+            .map_err(|e| ObjectStoreError::Local(Arc::new(e)))?;
         for key in keys {
             cache.present.insert(key, ()).await;
         }
@@ -182,7 +182,7 @@ impl ObjectStore {
     /// Returns the local path for `key`, downloading the object first if it
     /// isn't already cached. Concurrent calls for the same key share a single
     /// download.
-    pub async fn ensure_cached(&self, key: &str) -> Result<PathBuf, CacheError> {
+    pub async fn ensure_cached(&self, key: &str) -> Result<PathBuf, ObjectStoreError> {
         let dest = self.cached_path(key);
 
         self.present
@@ -195,20 +195,23 @@ impl ObjectStore {
 
     /// Downloads `key` and writes it to `dest`, replacing anything already
     /// there.
-    async fn fill(&self, key: &str, dest: &Path) -> Result<(), CacheError> {
-        let downloader = self.downloader.as_ref().ok_or(CacheError::NotConfigured)?;
+    async fn fill(&self, key: &str, dest: &Path) -> Result<(), ObjectStoreError> {
+        let downloader = self
+            .downloader
+            .as_ref()
+            .ok_or(ObjectStoreError::NotConfigured)?;
         let bytes = downloader.download(key).await.map_err(|e| {
             if e.is::<ObjectNotFound>() {
-                CacheError::NotFound
+                ObjectStoreError::NotFound
             } else {
-                CacheError::Remote(e.into())
+                ObjectStoreError::Remote(e.into())
             }
         })?;
 
         if let Some(parent) = dest.parent() {
             tokio::fs::create_dir_all(parent)
                 .await
-                .map_err(|e| CacheError::Local(Arc::new(e)))?;
+                .map_err(|e| ObjectStoreError::Local(Arc::new(e)))?;
         }
 
         // Write to a temporary path in the same directory as `dest` and
@@ -223,23 +226,26 @@ impl ObjectStore {
             {
                 tracing::warn!("Failed to clean up temp file {temp_dest:?}: {cleanup_err}");
             }
-            return Err(CacheError::Local(Arc::new(e)));
+            return Err(ObjectStoreError::Local(Arc::new(e)));
         }
 
         tokio::fs::rename(&temp_dest, dest)
             .await
-            .map_err(|e| CacheError::Local(Arc::new(e)))
+            .map_err(|e| ObjectStoreError::Local(Arc::new(e)))
     }
 
     /// Downloads `key` and returns its bytes directly, without writing them
     /// to local disk.
-    pub async fn fetch_bytes(&self, key: &str) -> Result<Vec<u8>, CacheError> {
-        let downloader = self.downloader.as_ref().ok_or(CacheError::NotConfigured)?;
+    pub async fn fetch_bytes(&self, key: &str) -> Result<Vec<u8>, ObjectStoreError> {
+        let downloader = self
+            .downloader
+            .as_ref()
+            .ok_or(ObjectStoreError::NotConfigured)?;
         downloader.download(key).await.map_err(|e| {
             if e.is::<ObjectNotFound>() {
-                CacheError::NotFound
+                ObjectStoreError::NotFound
             } else {
-                CacheError::Remote(e.into())
+                ObjectStoreError::Remote(e.into())
             }
         })
     }
@@ -535,7 +541,7 @@ mod tests {
                 .ensure_cached("tracks/song.ogg.tmp")
                 .await
                 .unwrap_err(),
-            CacheError::NotConfigured
+            ObjectStoreError::NotConfigured
         ));
     }
 
@@ -569,7 +575,7 @@ mod tests {
         cache.ensure_cached("tracks/fresh.ogg").await.unwrap();
         assert!(matches!(
             cache.ensure_cached("tracks/stale.ogg").await.unwrap_err(),
-            CacheError::NotConfigured
+            ObjectStoreError::NotConfigured
         ));
     }
 
@@ -618,7 +624,7 @@ mod tests {
 
         let err = cache.ensure_cached("tracks/song.ogg").await.unwrap_err();
 
-        assert!(matches!(err, CacheError::Local(_)));
+        assert!(matches!(err, ObjectStoreError::Local(_)));
         assert!(!dest.exists());
     }
 
@@ -631,7 +637,7 @@ mod tests {
 
         let err = cache.ensure_cached("tracks/missing.ogg").await.unwrap_err();
 
-        assert!(matches!(err, CacheError::Remote(_)));
+        assert!(matches!(err, ObjectStoreError::Remote(_)));
     }
 
     #[tokio::test]
@@ -643,7 +649,7 @@ mod tests {
 
         let err = cache.ensure_cached("tracks/missing.ogg").await.unwrap_err();
 
-        assert!(matches!(err, CacheError::NotFound));
+        assert!(matches!(err, ObjectStoreError::NotFound));
     }
 
     #[tokio::test]

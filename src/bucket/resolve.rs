@@ -1,4 +1,4 @@
-use crate::bucket::{CacheError, ObjectStore};
+use crate::bucket::{ObjectStore, ObjectStoreError};
 use std::sync::Arc;
 
 /// Resolves a playlist entry's `filename` to a local filesystem path.
@@ -20,7 +20,7 @@ impl FileResolver {
         }
     }
 
-    pub async fn resolve(&self, filename: &str) -> Result<String, CacheError> {
+    pub async fn resolve(&self, filename: &str) -> Result<String, ObjectStoreError> {
         if let Some(key) = filename.strip_prefix("s3://") {
             Ok(self
                 .file_cache
@@ -33,13 +33,13 @@ impl FileResolver {
         }
     }
 
-    pub async fn resolve_contents(&self, filename: &str) -> Result<Vec<u8>, CacheError> {
+    pub async fn resolve_contents(&self, filename: &str) -> Result<Vec<u8>, ObjectStoreError> {
         if let Some(key) = filename.strip_prefix("s3://") {
             self.file_cache.fetch_bytes(key).await
         } else {
             tokio::fs::read(format!("{}/{filename}", self.content_path))
                 .await
-                .map_err(|e| CacheError::Local(Arc::new(e)))
+                .map_err(|e| ObjectStoreError::Local(Arc::new(e)))
         }
     }
 
