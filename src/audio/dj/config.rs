@@ -1,4 +1,4 @@
-use crate::audio::dj::pool::Weighted;
+use crate::audio::dj::weighted_choice::Weighted;
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
@@ -111,6 +111,12 @@ pub struct SignalProfileEntry {
     pub fade_duration_seconds: f32,
     pub min_time_seconds: f32,
     pub max_time_seconds: f32,
+}
+
+impl Weighted for SignalProfileEntry {
+    fn weight(&self) -> u32 {
+        self.weight
+    }
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]

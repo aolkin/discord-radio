@@ -1,5 +1,5 @@
 use crate::audio::dj::config::{DJConfig, HexMessageEntry, NoisePeriodEntry, TrackEntry};
-use crate::audio::dj::pool::Pool;
+use crate::audio::dj::weighted_choice::WeightedSelector;
 use std::collections::VecDeque;
 use std::sync::{Arc, LazyLock};
 
@@ -13,24 +13,24 @@ pub enum DJStateType {
 pub struct WeightedScheduler {
     config: DJConfig,
     recent_history: VecDeque<DJStateType>,
-    track_pool: Pool<TrackEntry>,
-    hex_message_pool: Pool<HexMessageEntry>,
-    noise_pool: Pool<NoisePeriodEntry>,
+    track_selector: WeightedSelector<TrackEntry>,
+    hex_message_selector: WeightedSelector<HexMessageEntry>,
+    noise_selector: WeightedSelector<NoisePeriodEntry>,
 }
 
 impl WeightedScheduler {
     pub fn new(config: DJConfig) -> Self {
-        let track_pool = Pool::new(
+        let track_selector = WeightedSelector::new(
             config.recent_history_size,
             config.duplicate_penalty_multiplier,
             Arc::from(config.track_pool.clone()),
         );
-        let hex_message_pool = Pool::new(
+        let hex_message_selector = WeightedSelector::new(
             config.recent_history_size,
             config.duplicate_penalty_multiplier,
             Arc::from(config.hex_messages.clone()),
         );
-        let noise_pool = Pool::new(
+        let noise_selector = WeightedSelector::new(
             config.recent_history_size,
             config.duplicate_penalty_multiplier,
             Arc::from(config.noise_periods.clone()),
@@ -38,18 +38,18 @@ impl WeightedScheduler {
         Self {
             recent_history: VecDeque::with_capacity(config.recent_history_size),
             config,
-            track_pool,
-            hex_message_pool,
-            noise_pool,
+            track_selector,
+            hex_message_selector,
+            noise_selector,
         }
     }
 
     pub fn update_config(&mut self, config: DJConfig) {
-        self.track_pool
+        self.track_selector
             .set_items(Arc::from(config.track_pool.clone()));
-        self.hex_message_pool
+        self.hex_message_selector
             .set_items(Arc::from(config.hex_messages.clone()));
-        self.noise_pool
+        self.noise_selector
             .set_items(Arc::from(config.noise_periods.clone()));
         self.config = config;
     }
@@ -125,17 +125,17 @@ impl WeightedScheduler {
     }
 
     fn choose_track(&mut self) -> DJStateType {
-        let index = self.track_pool.next();
+        let index = self.track_selector.next();
         DJStateType::Track(index)
     }
 
     fn choose_hex_message(&mut self) -> DJStateType {
-        let index = self.hex_message_pool.next();
+        let index = self.hex_message_selector.next();
         DJStateType::HexMessage(index)
     }
 
     fn choose_noise(&mut self) -> DJStateType {
-        let index = self.noise_pool.next();
+        let index = self.noise_selector.next();
         DJStateType::Noise(index)
     }
 

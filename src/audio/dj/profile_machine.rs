@@ -2,6 +2,7 @@ use crate::audio::dj::config::SignalProfileEntry;
 use crate::audio::dj::weighted_choice::WeightedSelector;
 use rand::Rng;
 use std::ops::Add;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 #[derive(Clone, Debug)]
@@ -28,8 +29,7 @@ impl ProfileState {
 
 pub struct ProfileStateMachine {
     current_state: ProfileState,
-    profiles: Vec<SignalProfileEntry>,
-    selector: WeightedSelector,
+    selector: WeightedSelector<SignalProfileEntry>,
 }
 
 impl ProfileStateMachine {
@@ -49,16 +49,14 @@ impl ProfileStateMachine {
         let duration_secs =
             rng.random_range(profile_entry.min_time_seconds..profile_entry.max_time_seconds);
 
-        let mut selector = WeightedSelector::new(5, 0.3);
-        // Add initial profile to history
-        selector.choose(&[initial_index], |&idx| idx as u32);
+        let mut selector = WeightedSelector::new(5, 0.3, Arc::from(profiles));
+        selector.seed_history(initial_index);
 
         Self {
             current_state: ProfileState::Active {
                 started_at: Instant::now(),
                 duration: Duration::from_secs_f32(duration_secs),
             },
-            profiles,
             selector,
         }
     }
@@ -85,7 +83,7 @@ impl ProfileStateMachine {
     }
 
     fn activate_profile(&mut self, to_index: usize) -> Option<(String, f32)> {
-        let profile_entry = &self.profiles[to_index];
+        let profile_entry = &self.selector.items()[to_index];
 
         let mut rng = rand::rng();
         let duration_secs =
@@ -104,6 +102,6 @@ impl ProfileStateMachine {
     }
 
     fn choose_next_profile(&mut self) -> usize {
-        self.selector.choose(&self.profiles, |p| p.weight)
+        self.selector.next()
     }
 }

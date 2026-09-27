@@ -1,31 +1,49 @@
 use rand::Rng;
 use std::collections::VecDeque;
+use std::sync::Arc;
 
-/// A weighted random selector with history-based penalty to avoid repetition
-pub struct WeightedSelector {
+/// A weight an item contributes to weighted random selection.
+pub trait Weighted {
+    fn weight(&self) -> u32;
+}
+
+/// A weighted random selector that owns its items: picks an index weighted
+/// by `Weighted::weight`, with recent-history avoidance and a duplicate
+/// penalty.
+pub struct WeightedSelector<T> {
+    items: Arc<[T]>,
     recent_history: VecDeque<usize>,
     history_size: usize,
     penalty_multiplier: f32,
 }
 
-impl WeightedSelector {
-    pub fn new(history_size: usize, penalty_multiplier: f32) -> Self {
+impl<T: Weighted> WeightedSelector<T> {
+    pub fn new(history_size: usize, penalty_multiplier: f32, items: Arc<[T]>) -> Self {
         Self {
+            items,
             recent_history: VecDeque::with_capacity(history_size),
             history_size,
             penalty_multiplier,
         }
     }
 
-    pub fn choose<T, F>(&mut self, items: &[T], weight_fn: F) -> usize
-    where
-        F: Fn(&T) -> u32,
-    {
-        let effective_weights: Vec<f32> = items
+    /// Swaps the owned item list (e.g. on a config reload) without resetting
+    /// the selector, so recent-history state carries over across the swap.
+    pub fn set_items(&mut self, items: Arc<[T]>) {
+        self.items = items;
+    }
+
+    pub fn items(&self) -> &[T] {
+        &self.items
+    }
+
+    pub fn next(&mut self) -> usize {
+        let effective_weights: Vec<f32> = self
+            .items
             .iter()
             .enumerate()
             .map(|(idx, item)| {
-                let base_weight = weight_fn(item) as f32;
+                let base_weight = item.weight() as f32;
                 let penalty = self.get_penalty_for_index(idx);
                 base_weight * penalty
             })
@@ -48,9 +66,15 @@ impl WeightedSelector {
             }
         }
 
-        let idx = items.len().saturating_sub(1);
+        let idx = self.items.len().saturating_sub(1);
         self.add_to_history(idx);
         idx
+    }
+
+    /// Records `index` into recent-history without selecting, so a
+    /// subsequent `next()` treats it as already having just been picked.
+    pub fn seed_history(&mut self, index: usize) {
+        self.add_to_history(index);
     }
 
     fn get_penalty_for_index(&self, idx: usize) -> f32 {
@@ -68,5 +92,67 @@ impl WeightedSelector {
             self.recent_history.pop_front();
         }
         self.recent_history.push_back(idx);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct Item(u32);
+
+    impl Weighted for Item {
+        fn weight(&self) -> u32 {
+            self.0
+        }
+    }
+
+    fn items(weights: &[u32]) -> Arc<[Item]> {
+        Arc::from(weights.iter().map(|&w| Item(w)).collect::<Vec<_>>())
+    }
+
+    #[test]
+    fn zero_total_weight_falls_back_to_first_index() {
+        let mut selector = WeightedSelector::new(0, 0.0, items(&[0, 0]));
+        assert_eq!(selector.next(), 0);
+    }
+
+    #[test]
+    fn single_nonzero_weight_is_always_chosen() {
+        let mut selector = WeightedSelector::new(0, 0.0, items(&[0, 5, 0]));
+        for _ in 0..50 {
+            assert_eq!(selector.next(), 1);
+        }
+    }
+
+    #[test]
+    fn seed_history_records_index_without_selecting() {
+        let mut selector = WeightedSelector::new(2, 1.0, items(&[1, 1]));
+        selector.seed_history(0);
+        assert_eq!(selector.recent_history, VecDeque::from([0]));
+    }
+
+    #[test]
+    fn set_items_preserves_history() {
+        let mut selector = WeightedSelector::new(2, 1.0, items(&[1, 1]));
+        selector.seed_history(0);
+        selector.seed_history(1);
+        selector.set_items(items(&[1, 1, 1]));
+        assert_eq!(selector.recent_history, VecDeque::from([0, 1]));
+    }
+
+    #[test]
+    fn zero_history_size_is_a_no_op() {
+        let mut selector = WeightedSelector::new(0, 1.0, items(&[1]));
+        selector.seed_history(0);
+        assert_eq!(selector.get_penalty_for_index(0), 1.0);
+    }
+
+    #[test]
+    fn zero_penalty_multiplier_is_a_no_op() {
+        let mut selector = WeightedSelector::new(2, 0.0, items(&[1, 1]));
+        selector.seed_history(0);
+        selector.seed_history(0);
+        assert_eq!(selector.get_penalty_for_index(0), 1.0);
     }
 }
