@@ -1,7 +1,7 @@
 use crate::audio::dj::config::{DJConfig, HexMessageEntry, NoisePeriodEntry, TrackEntry};
 use crate::audio::dj::weighted_choice::WeightedSelector;
 use std::collections::VecDeque;
-use std::sync::{Arc, LazyLock};
+use std::sync::LazyLock;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DJStateType {
@@ -13,9 +13,9 @@ pub enum DJStateType {
 pub struct WeightedScheduler {
     config: DJConfig,
     recent_history: VecDeque<DJStateType>,
-    track_selector: WeightedSelector<TrackEntry>,
-    hex_message_selector: WeightedSelector<HexMessageEntry>,
-    noise_selector: WeightedSelector<NoisePeriodEntry>,
+    track_selector: WeightedSelector,
+    hex_message_selector: WeightedSelector,
+    noise_selector: WeightedSelector,
 }
 
 impl WeightedScheduler {
@@ -23,17 +23,14 @@ impl WeightedScheduler {
         let track_selector = WeightedSelector::new(
             config.recent_history_size,
             config.duplicate_penalty_multiplier,
-            Arc::from(config.track_pool.clone()),
         );
         let hex_message_selector = WeightedSelector::new(
             config.recent_history_size,
             config.duplicate_penalty_multiplier,
-            Arc::from(config.hex_messages.clone()),
         );
         let noise_selector = WeightedSelector::new(
             config.recent_history_size,
             config.duplicate_penalty_multiplier,
-            Arc::from(config.noise_periods.clone()),
         );
         Self {
             recent_history: VecDeque::with_capacity(config.recent_history_size),
@@ -45,12 +42,6 @@ impl WeightedScheduler {
     }
 
     pub fn update_config(&mut self, config: DJConfig) {
-        self.track_selector
-            .set_items(Arc::from(config.track_pool.clone()));
-        self.hex_message_selector
-            .set_items(Arc::from(config.hex_messages.clone()));
-        self.noise_selector
-            .set_items(Arc::from(config.noise_periods.clone()));
         self.config = config;
     }
 
@@ -125,17 +116,17 @@ impl WeightedScheduler {
     }
 
     fn choose_track(&mut self) -> DJStateType {
-        let index = self.track_selector.next();
+        let index = self.track_selector.choose(&self.config.track_pool);
         DJStateType::Track(index)
     }
 
     fn choose_hex_message(&mut self) -> DJStateType {
-        let index = self.hex_message_selector.next();
+        let index = self.hex_message_selector.choose(&self.config.hex_messages);
         DJStateType::HexMessage(index)
     }
 
     fn choose_noise(&mut self) -> DJStateType {
-        let index = self.noise_selector.next();
+        let index = self.noise_selector.choose(&self.config.noise_periods);
         DJStateType::Noise(index)
     }
 

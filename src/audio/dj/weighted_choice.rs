@@ -1,45 +1,29 @@
 use rand::Rng;
 use std::collections::VecDeque;
-use std::sync::Arc;
 
 /// A weight an item contributes to weighted random selection.
 pub trait Weighted {
     fn weight(&self) -> f32;
 }
 
-/// A weighted random selector that owns its items: picks an index weighted
-/// by `Weighted::weight`, with recent-history avoidance and a duplicate
-/// penalty.
-pub struct WeightedSelector<T> {
-    items: Arc<[T]>,
+/// A weighted random selector with history-based penalty to avoid repetition
+pub struct WeightedSelector {
     recent_history: VecDeque<usize>,
     history_size: usize,
     penalty_multiplier: f32,
 }
 
-impl<T: Weighted> WeightedSelector<T> {
-    pub fn new(history_size: usize, penalty_multiplier: f32, items: Arc<[T]>) -> Self {
+impl WeightedSelector {
+    pub fn new(history_size: usize, penalty_multiplier: f32) -> Self {
         Self {
-            items,
             recent_history: VecDeque::with_capacity(history_size),
             history_size,
             penalty_multiplier,
         }
     }
 
-    /// Swaps the owned item list (e.g. on a config reload) without resetting
-    /// the selector, so recent-history state carries over across the swap.
-    pub fn set_items(&mut self, items: Arc<[T]>) {
-        self.items = items;
-    }
-
-    pub fn items(&self) -> &[T] {
-        &self.items
-    }
-
-    pub fn next(&mut self) -> usize {
-        let effective_weights: Vec<f32> = self
-            .items
+    pub fn choose<T: Weighted>(&mut self, items: &[T]) -> usize {
+        let effective_weights: Vec<f32> = items
             .iter()
             .enumerate()
             .map(|(idx, item)| {
@@ -66,7 +50,7 @@ impl<T: Weighted> WeightedSelector<T> {
             }
         }
 
-        let idx = self.items.len().saturating_sub(1);
+        let idx = items.len().saturating_sub(1);
         self.add_to_history(idx);
         idx
     }
@@ -82,7 +66,7 @@ impl<T: Weighted> WeightedSelector<T> {
     }
 
     /// Records `index` into recent-history without selecting, so a
-    /// subsequent `next()` treats it as already having just been picked.
+    /// subsequent `choose` treats it as already having just been picked.
     pub fn add_to_history(&mut self, idx: usize) {
         if self.recent_history.len() >= self.history_size {
             self.recent_history.pop_front();
