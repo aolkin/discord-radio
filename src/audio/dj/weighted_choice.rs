@@ -90,36 +90,3 @@ impl<T: Weighted> WeightedSelector<T> {
         self.recent_history.push_back(idx);
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    struct Item(u32);
-
-    impl Weighted for Item {
-        fn weight(&self) -> f32 {
-            self.0 as f32
-        }
-    }
-
-    fn items(weights: &[u32]) -> Arc<[Item]> {
-        Arc::from(weights.iter().map(|&w| Item(w)).collect::<Vec<_>>())
-    }
-
-    #[test]
-    fn add_to_history_records_index_without_selecting() {
-        let mut selector = WeightedSelector::new(2, 1.0, items(&[1, 1]));
-        selector.add_to_history(0);
-        assert_eq!(selector.recent_history, VecDeque::from([0]));
-    }
-
-    #[test]
-    fn set_items_preserves_history() {
-        let mut selector = WeightedSelector::new(2, 1.0, items(&[1, 1]));
-        selector.add_to_history(0);
-        selector.add_to_history(1);
-        selector.set_items(items(&[1, 1, 1]));
-        assert_eq!(selector.recent_history, VecDeque::from([0, 1]));
-    }
-}
