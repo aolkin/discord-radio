@@ -2,7 +2,9 @@ use super::{
     DJState, MessagePlaybackState, MultiTrackPlaybackState, ProfileState, RegisteredChannel,
     Result, StateStore,
 };
+use crate::persistence::types::DJStateSnapshot;
 use async_trait::async_trait;
+use serde::Serialize;
 use serenity::model::id::{ChannelId, GuildId};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -18,7 +20,7 @@ struct PersistedMap<K, V> {
 impl<K, V> PersistedMap<K, V>
 where
     K: Eq + std::hash::Hash + serde::Serialize + serde::de::DeserializeOwned,
-    V: serde::Serialize + serde::de::DeserializeOwned,
+    V: serde::de::DeserializeOwned,
 {
     fn new(base_path: PathBuf, filename: impl Into<String>) -> Self {
         Self {
@@ -33,7 +35,7 @@ where
         Ok(())
     }
 
-    async fn write(&self, data: &HashMap<K, V>) -> Result<()> {
+    async fn write(&self, data: &HashMap<K, serde_json::Value>) -> Result<()> {
         self.ensure_directory_exists().await?;
 
         let file_path = self.base_path.join(&self.filename);
@@ -51,7 +53,7 @@ where
         Ok(())
     }
 
-    async fn read(&self) -> Result<HashMap<K, V>> {
+    async fn read(&self) -> Result<HashMap<K, serde_json::Value>> {
         let file_path = self.base_path.join(&self.filename);
 
         if !file_path.exists() {
@@ -64,7 +66,8 @@ where
         Ok(data)
     }
 
-    async fn insert(&self, key: K, value: V) -> Result<()> {
+    async fn insert<T: Serialize>(&self, key: K, value: T) -> Result<()> {
+        let value = serde_json::to_value(&value)?;
         let mut map = self.read().await?;
         map.insert(key, value);
         self.write(&map).await
@@ -77,7 +80,12 @@ where
     }
 
     async fn load_all(&self) -> Result<HashMap<K, V>> {
-        self.read().await
+        self.read().await.map(|values| {
+            values
+                .into_iter()
+                .filter_map(|(k, v)| V::deserialize(&v).ok().map(|v| (k, v)))
+                .collect()
+        })
     }
 }
 
@@ -126,7 +134,7 @@ impl StateStore for FileStore {
     }
 
     async fn save_voice_channel(&self, guild_id: GuildId, channel_id: ChannelId) -> Result<()> {
-        self.voice_channels().insert(guild_id, channel_id).await
+        self.voice_channels().insert(guild_id, &channel_id).await
     }
 
     async fn load_voice_channels(&self) -> Result<HashMap<GuildId, ChannelId>> {
@@ -142,9 +150,7 @@ impl StateStore for FileStore {
         guild_id: GuildId,
         state: &MessagePlaybackState,
     ) -> Result<()> {
-        self.message_playbacks()
-            .insert(guild_id, state.clone())
-            .await
+        self.message_playbacks().insert(guild_id, state).await
     }
 
     async fn load_message_playbacks(&self) -> Result<HashMap<GuildId, MessagePlaybackState>> {
@@ -160,9 +166,7 @@ impl StateStore for FileStore {
         guild_id: GuildId,
         state: &MultiTrackPlaybackState,
     ) -> Result<()> {
-        self.multitrack_playbacks()
-            .insert(guild_id, state.clone())
-            .await
+        self.multitrack_playbacks().insert(guild_id, state).await
     }
 
     async fn load_multitrack_playbacks(&self) -> Result<HashMap<GuildId, MultiTrackPlaybackState>> {
@@ -174,14 +178,14 @@ impl StateStore for FileStore {
     }
 
     async fn save_profile_state(&self, guild_id: GuildId, state: &ProfileState) -> Result<()> {
-        self.profile_states().insert(guild_id, state.clone()).await
+        self.profile_states().insert(guild_id, state).await
     }
 
     async fn load_profile_states(&self) -> Result<HashMap<GuildId, ProfileState>> {
         self.profile_states().load_all().await
     }
 
-    async fn save_dj_state(&self, guild_id: GuildId, state: DJState) -> Result<()> {
+    async fn save_dj_state(&self, guild_id: GuildId, state: &DJStateSnapshot) -> Result<()> {
         self.dj_states().insert(guild_id, state).await
     }
 
