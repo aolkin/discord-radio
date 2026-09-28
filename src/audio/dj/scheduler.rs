@@ -116,24 +116,17 @@ impl WeightedScheduler {
     }
 
     fn choose_track(&mut self) -> DJStateType {
-        let track_pool = &self.config.track_pool;
-        let index = self.track_selector.choose(track_pool, |entry| entry.weight);
+        let index = self.track_selector.choose(&self.config.track_pool);
         DJStateType::Track(index)
     }
 
     fn choose_hex_message(&mut self) -> DJStateType {
-        let hex_messages = &self.config.hex_messages;
-        let index = self
-            .hex_message_selector
-            .choose(hex_messages, |entry| entry.weight);
+        let index = self.hex_message_selector.choose(&self.config.hex_messages);
         DJStateType::HexMessage(index)
     }
 
     fn choose_noise(&mut self) -> DJStateType {
-        let noise_periods = &self.config.noise_periods;
-        let index = self
-            .noise_selector
-            .choose(noise_periods, |entry| entry.weight);
+        let index = self.noise_selector.choose(&self.config.noise_periods);
         DJStateType::Noise(index)
     }
 

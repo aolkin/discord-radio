@@ -1,6 +1,11 @@
 use rand::Rng;
 use std::collections::VecDeque;
 
+/// A weight an item contributes to weighted random selection.
+pub trait Weighted {
+    fn weight(&self) -> f32;
+}
+
 /// A weighted random selector with history-based penalty to avoid repetition
 pub struct WeightedSelector {
     recent_history: VecDeque<usize>,
@@ -17,15 +22,12 @@ impl WeightedSelector {
         }
     }
 
-    pub fn choose<T, F>(&mut self, items: &[T], weight_fn: F) -> usize
-    where
-        F: Fn(&T) -> u32,
-    {
+    pub fn choose<T: Weighted>(&mut self, items: &[T]) -> usize {
         let effective_weights: Vec<f32> = items
             .iter()
             .enumerate()
             .map(|(idx, item)| {
-                let base_weight = weight_fn(item) as f32;
+                let base_weight = item.weight();
                 let penalty = self.get_penalty_for_index(idx);
                 base_weight * penalty
             })
@@ -63,7 +65,9 @@ impl WeightedSelector {
         1.0
     }
 
-    fn add_to_history(&mut self, idx: usize) {
+    /// Records `index` into recent-history without selecting, so a
+    /// subsequent `choose` treats it as already having just been picked.
+    pub fn add_to_history(&mut self, idx: usize) {
         if self.recent_history.len() >= self.history_size {
             self.recent_history.pop_front();
         }

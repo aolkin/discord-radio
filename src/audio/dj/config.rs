@@ -1,3 +1,4 @@
+use crate::audio::dj::weighted_choice::Weighted;
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
@@ -39,6 +40,12 @@ pub struct TrackEntry {
     pub channel_status: Option<String>,
 }
 
+impl Weighted for TrackEntry {
+    fn weight(&self) -> f32 {
+        self.weight as f32
+    }
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct HexMessageDefaults {
     #[serde(default = "default_loop_min")]
@@ -77,12 +84,24 @@ pub struct HexMessageEntry {
     pub announcement: Option<String>,
 }
 
+impl Weighted for HexMessageEntry {
+    fn weight(&self) -> f32 {
+        self.weight as f32
+    }
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct NoisePeriodEntry {
     pub noise_profile: String,
     pub min_duration_seconds: f32,
     pub max_duration_seconds: f32,
     pub weight: u32,
+}
+
+impl Weighted for NoisePeriodEntry {
+    fn weight(&self) -> f32 {
+        self.weight as f32
+    }
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -92,6 +111,12 @@ pub struct SignalProfileEntry {
     pub fade_duration_seconds: f32,
     pub min_time_seconds: f32,
     pub max_time_seconds: f32,
+}
+
+impl Weighted for SignalProfileEntry {
+    fn weight(&self) -> f32 {
+        self.weight as f32
+    }
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
