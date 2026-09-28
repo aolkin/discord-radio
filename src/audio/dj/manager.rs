@@ -69,16 +69,10 @@ pub async fn dj_task(
                 "Failed to restore DJ state for guild {}, starting from idle",
                 guild_id
             );
-            DJState::Idle {
-                started_at: std::time::Instant::now(),
-                duration: Duration::from_secs(1),
-            }
+            DJState::idle()
         })
     } else {
-        DJState::Idle {
-            started_at: std::time::Instant::now(),
-            duration: Duration::from_secs(1),
-        }
+        DJState::idle()
     };
 
     let dj_state = bot_state

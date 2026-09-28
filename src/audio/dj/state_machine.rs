@@ -40,6 +40,13 @@ pub enum DJState {
 }
 
 impl DJState {
+    pub fn idle() -> Self {
+        DJState::Idle {
+            started_at: std::time::Instant::now(),
+            duration: Duration::from_secs(1),
+        }
+    }
+
     pub fn is_complete(&self) -> bool {
         match self {
             DJState::PlayingTrack {
