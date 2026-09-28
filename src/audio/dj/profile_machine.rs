@@ -63,8 +63,7 @@ impl ProfileStateMachine {
 
     pub fn advance(&mut self) -> Option<(String, f32)> {
         if self.current_state.should_transition() {
-            let next_index = self.selector.next();
-            return self.activate_profile(next_index);
+            return self.next_profile();
         }
         None
     }
@@ -76,14 +75,14 @@ impl ProfileStateMachine {
     pub fn release_forced_profile(&mut self) -> Option<(String, f32)> {
         if let ProfileState::ForcedProfile = &self.current_state {
             // Always transition to next random profile
-            let next_index = self.selector.next();
-            return self.activate_profile(next_index);
+            return self.next_profile();
         }
         None
     }
 
-    fn activate_profile(&mut self, to_index: usize) -> Option<(String, f32)> {
-        let profile_entry = &self.selector.items()[to_index];
+    fn next_profile(&mut self) -> Option<(String, f32)> {
+        let next_index = self.selector.next();
+        let profile_entry = &self.selector.items()[next_index];
 
         let mut rng = rand::rng();
         let duration_secs =
