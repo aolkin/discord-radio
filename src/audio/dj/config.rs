@@ -41,8 +41,8 @@ pub struct TrackEntry {
 }
 
 impl Weighted for TrackEntry {
-    fn weight(&self) -> u32 {
-        self.weight
+    fn weight(&self) -> f32 {
+        self.weight as f32
     }
 }
 
@@ -85,8 +85,8 @@ pub struct HexMessageEntry {
 }
 
 impl Weighted for HexMessageEntry {
-    fn weight(&self) -> u32 {
-        self.weight
+    fn weight(&self) -> f32 {
+        self.weight as f32
     }
 }
 
@@ -99,8 +99,8 @@ pub struct NoisePeriodEntry {
 }
 
 impl Weighted for NoisePeriodEntry {
-    fn weight(&self) -> u32 {
-        self.weight
+    fn weight(&self) -> f32 {
+        self.weight as f32
     }
 }
 
@@ -114,8 +114,8 @@ pub struct SignalProfileEntry {
 }
 
 impl Weighted for SignalProfileEntry {
-    fn weight(&self) -> u32 {
-        self.weight
+    fn weight(&self) -> f32 {
+        self.weight as f32
     }
 }
 

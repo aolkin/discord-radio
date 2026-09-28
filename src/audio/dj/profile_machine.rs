@@ -50,7 +50,7 @@ impl ProfileStateMachine {
             rng.random_range(profile_entry.min_time_seconds..profile_entry.max_time_seconds);
 
         let mut selector = WeightedSelector::new(5, 0.3, Arc::from(profiles));
-        selector.seed_history(initial_index);
+        selector.add_to_history(initial_index);
 
         Self {
             current_state: ProfileState::Active {
@@ -63,7 +63,7 @@ impl ProfileStateMachine {
 
     pub fn advance(&mut self) -> Option<(String, f32)> {
         if self.current_state.should_transition() {
-            let next_index = self.choose_next_profile();
+            let next_index = self.selector.next();
             return self.activate_profile(next_index);
         }
         None
@@ -76,7 +76,7 @@ impl ProfileStateMachine {
     pub fn release_forced_profile(&mut self) -> Option<(String, f32)> {
         if let ProfileState::ForcedProfile = &self.current_state {
             // Always transition to next random profile
-            let next_index = self.choose_next_profile();
+            let next_index = self.selector.next();
             return self.activate_profile(next_index);
         }
         None
@@ -99,9 +99,5 @@ impl ProfileStateMachine {
         };
 
         Some((profile_name, fade_duration_secs))
-    }
-
-    fn choose_next_profile(&mut self) -> usize {
-        self.selector.next()
     }
 }
