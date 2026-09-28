@@ -181,8 +181,8 @@ impl StateStore for FileStore {
         self.profile_states().load_all().await
     }
 
-    async fn save_dj_state(&self, guild_id: GuildId, state: &DJState) -> Result<()> {
-        self.dj_states().insert(guild_id, state.clone()).await
+    async fn save_dj_state(&self, guild_id: GuildId, state: DJState) -> Result<()> {
+        self.dj_states().insert(guild_id, state).await
     }
 
     async fn load_dj_states(&self) -> Result<HashMap<GuildId, DJState>> {
