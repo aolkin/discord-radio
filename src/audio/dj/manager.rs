@@ -63,8 +63,8 @@ pub async fn dj_task(
     // Clone signal_profiles before moving config
     let signal_profiles = config.signal_profiles.clone();
 
-    let initial_state = if let Some(ref state) = restored_state {
-        state.try_into().unwrap_or_else(|_| {
+    let initial_state = if let Some(state) = restored_state {
+        (&state).try_into().unwrap_or_else(|_| {
             tracing::warn!(
                 "Failed to restore DJ state for guild {}, starting from idle",
                 guild_id
@@ -91,21 +91,43 @@ pub async fn dj_task(
         dj_state,
     );
 
+    // Derive what restoration needs to apply from the state machine's initial runtime
+    // state (which is `Idle` when there was nothing to restore).
+    let (forced_profile, track_restart) = {
+        let current = state_machine.current_state().await;
+        match &*current {
+            DJState::PlayingTrack {
+                track_name,
+                filename,
+                started_at,
+                duration,
+                forced_profile,
+                status_message,
+            } => (
+                forced_profile.clone(),
+                Some((
+                    track_name.clone(),
+                    filename.clone(),
+                    started_at.elapsed(),
+                    *duration,
+                    status_message.clone(),
+                )),
+            ),
+            DJState::PlayingHexMessage { forced_profile, .. } => (forced_profile.clone(), None),
+            DJState::PlayingNoise { noise_profile, .. } => {
+                tracing::info!(
+                    "DJ was in playing noise state with profile '{}', will continue from current state",
+                    noise_profile
+                );
+                (Some(noise_profile.clone()), None)
+            }
+            _ => (None, None),
+        }
+    };
+
     // Initialize profile state machine
     let mut profile_machine = if !signal_profiles.is_empty() {
-        // Check if the restored DJ state has a forced profile
-        let forced_profile_name = restored_state.as_ref().and_then(|state| match state {
-            crate::persistence::DJStateMachineState::PlayingTrack { forced_profile, .. } => {
-                forced_profile.as_ref()
-            }
-            crate::persistence::DJStateMachineState::PlayingHexMessage {
-                forced_profile, ..
-            } => forced_profile.as_ref(),
-            crate::persistence::DJStateMachineState::PlayingNoise { noise_profile, .. } => {
-                Some(noise_profile)
-            }
-            _ => None,
-        });
+        let forced_profile_name = forced_profile.as_deref();
 
         // If no forced profile, try to restore the last active profile from ProfileState
         let initial_profile_name = if let Some(profile_name) = forced_profile_name {
@@ -124,7 +146,7 @@ pub async fn dj_task(
 
         // If the DJ state had a forced profile, set the machine to ForcedProfile state
         if let Some(profile_name) = forced_profile_name {
-            machine.force_profile(profile_name.clone());
+            machine.force_profile(profile_name.to_string());
             tracing::info!(
                 "Restored forced profile '{}' for DJ in guild {}",
                 profile_name,
@@ -137,122 +159,86 @@ pub async fn dj_task(
         None
     };
 
-    // If we restored a PlayingTrack state, the DJ should restart the track itself
-    // since DJ tracks are now played in non-persisted mode
-    if let Some(state) = restored_state {
-        match state {
-            crate::persistence::DJStateMachineState::PlayingTrack {
-                track_name,
-                filename,
-                started_at,
-                duration_secs,
-                status_message,
-                ..
-            } => {
-                tracing::debug!(
-                    "Attempting to restore DJ track '{}' (file: {}) in guild {}",
+    if let Some((track_name, filename, elapsed, total_duration, status_message)) = track_restart {
+        tracing::debug!(
+            "Attempting to restore DJ track '{}' (file: {}) in guild {}",
+            track_name,
+            filename,
+            guild_id
+        );
+
+        // Wait for track manager to be available
+        let manager_arc = loop {
+            let track_managers = bot_state.track_managers.read().await;
+            if let Some(arc) = track_managers.get(&guild_id) {
+                let arc_clone = arc.clone();
+                drop(track_managers);
+                break arc_clone;
+            }
+            drop(track_managers);
+            tracing::debug!(
+                "Waiting for track manager for guild {} during DJ restoration",
+                guild_id
+            );
+            sleep(Duration::from_millis(100)).await;
+        };
+
+        // Only attempt to restart the track if it hasn't finished yet
+        if elapsed < total_duration {
+            let mut manager = manager_arc.lock().await;
+
+            let volume = find_track_by_filename(&state_machine, &filename)
+                .and_then(|entry| entry.volume)
+                .unwrap_or(1.0);
+
+            if let Err(e) = manager
+                .start_track(StartTrackArgs {
+                    name: track_name.clone(),
+                    filename: filename.clone(),
+                    volume,
+                    fade_time: 1.0,
+                    loops: false,
+                    start_position: Some(elapsed),
+                    persist: false,
+                })
+                .await
+            {
+                tracing::warn!(
+                    "Failed to restore DJ track '{}' in guild {}: {}",
                     track_name,
-                    filename,
+                    guild_id,
+                    e
+                );
+            } else {
+                tracing::info!(
+                    "Successfully restored DJ track '{}' at position {:.1}s in guild {}",
+                    track_name,
+                    elapsed.as_secs_f32(),
                     guild_id
                 );
-
-                // Wait for track manager to be available
-                let manager_arc = loop {
-                    let track_managers = bot_state.track_managers.read().await;
-                    if let Some(arc) = track_managers.get(&guild_id) {
-                        let arc_clone = arc.clone();
-                        drop(track_managers);
-                        break arc_clone;
-                    }
-                    drop(track_managers);
-                    tracing::debug!(
-                        "Waiting for track manager for guild {} during DJ restoration",
-                        guild_id
-                    );
-                    sleep(Duration::from_millis(100)).await;
-                };
-
-                // Calculate how much time has elapsed since the track started
-                let elapsed = match started_at.elapsed() {
-                    Ok(elapsed) => elapsed,
-                    Err(e) => {
-                        tracing::warn!(
-                            "Failed to calculate elapsed time for DJ track '{}': {}",
-                            track_name,
-                            e
-                        );
-                        Duration::from_secs(0)
-                    }
-                };
-
-                let total_duration = Duration::from_secs_f32(duration_secs);
-
-                // Only attempt to restart the track if it hasn't finished yet
-                if elapsed < total_duration {
-                    let mut manager = manager_arc.lock().await;
-
-                    let volume = find_track_by_filename(&state_machine, &filename)
-                        .and_then(|entry| entry.volume)
-                        .unwrap_or(1.0);
-
-                    if let Err(e) = manager
-                        .start_track(StartTrackArgs {
-                            name: track_name.clone(),
-                            filename: filename.clone(),
-                            volume,
-                            fade_time: 1.0,
-                            loops: false,
-                            start_position: Some(elapsed),
-                            persist: false,
-                        })
-                        .await
-                    {
-                        tracing::warn!(
-                            "Failed to restore DJ track '{}' in guild {}: {}",
-                            track_name,
-                            guild_id,
-                            e
-                        );
-                    } else {
-                        tracing::info!(
-                            "Successfully restored DJ track '{}' at position {:.1}s in guild {}",
-                            track_name,
-                            elapsed.as_secs_f32(),
-                            guild_id
-                        );
-                    }
-
-                    drop(manager);
-                } else {
-                    tracing::info!(
-                        "DJ track '{}' has already finished (elapsed: {:.1}s, duration: {:.1}s), will advance to next state",
-                        track_name,
-                        elapsed.as_secs_f32(),
-                        duration_secs
-                    );
-                }
-
-                // Restore the voice channel status for the restored track if it had one
-                if let Some(ref status_msg) = status_message {
-                    bot_state
-                        .voice_status_manager
-                        .push_status(guild_id, status_msg.clone(), &http)
-                        .await;
-                    tracing::info!(
-                        "Restored track status '{}' for DJ track in guild {}",
-                        status_msg,
-                        guild_id
-                    );
-                }
             }
-            crate::persistence::DJStateMachineState::PlayingNoise { noise_profile, .. } => {
-                tracing::info!(
-                    "DJ was in playing noise state with profile '{}', will continue from current state",
-                    noise_profile
-                );
-                // PlayingNoise doesn't need track restoration, it just forces a profile
-            }
-            _ => {}
+
+            drop(manager);
+        } else {
+            tracing::info!(
+                "DJ track '{}' has already finished (elapsed: {:.1}s, duration: {:.1}s), will advance to next state",
+                track_name,
+                elapsed.as_secs_f32(),
+                total_duration.as_secs_f32()
+            );
+        }
+
+        // Restore the voice channel status for the restored track if it had one
+        if let Some(ref status_msg) = status_message {
+            bot_state
+                .voice_status_manager
+                .push_status(guild_id, status_msg.clone(), &http)
+                .await;
+            tracing::info!(
+                "Restored track status '{}' for DJ track in guild {}",
+                status_msg,
+                guild_id
+            );
         }
     }
 
@@ -398,7 +384,7 @@ pub async fn dj_task(
         };
         if let Err(e) = bot_state
             .state_store
-            .save_dj_state(guild_id, &persist_state)
+            .save_dj_state(guild_id, persist_state)
             .await
         {
             tracing::warn!("Failed to persist DJ state for guild {}: {}", guild_id, e);
@@ -584,7 +570,7 @@ impl DJManager {
         };
         if let Err(e) = bot_state
             .state_store
-            .save_dj_state(guild_id, &dj_state)
+            .save_dj_state(guild_id, dj_state)
             .await
         {
             tracing::warn!("Failed to save DJ state for guild {}: {}", guild_id, e);

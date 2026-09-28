@@ -59,7 +59,7 @@ pub struct DjSettings {
     pub state_weight_overrides: DJConfigOverrideSingle<StateWeights>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct DJState {
     pub config_name: String,
     pub running: bool,
@@ -69,7 +69,7 @@ pub struct DJState {
     pub state_machine: Option<DJStateMachineState>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum DJStateMachineState {
     PlayingTrack {
         track_name: String,
