@@ -63,15 +63,39 @@ pub async fn dj_task(
     // Clone signal_profiles before moving config
     let signal_profiles = config.signal_profiles.clone();
 
+    let initial_state = if let Some(ref state) = restored_state {
+        state.try_into().unwrap_or_else(|_| {
+            tracing::warn!(
+                "Failed to restore DJ state for guild {}, starting from idle",
+                guild_id
+            );
+            DJState::Idle {
+                started_at: std::time::Instant::now(),
+                duration: Duration::from_secs(1),
+            }
+        })
+    } else {
+        DJState::Idle {
+            started_at: std::time::Instant::now(),
+            duration: Duration::from_secs(1),
+        }
+    };
+
+    let dj_state = bot_state
+        .dj_states
+        .write()
+        .await
+        .entry(guild_id)
+        .or_insert_with(|| Arc::new(tokio::sync::RwLock::new(initial_state)))
+        .clone();
+
     let mut state_machine = DJStateMachine::new(
         config.clone(),
         guild_id,
         announcement_channel,
         http.clone(),
-        restored_state.clone(),
-        &bot_state,
-    )
-    .await;
+        dj_state,
+    );
 
     // Initialize profile state machine
     let mut profile_machine = if !signal_profiles.is_empty() {
@@ -376,7 +400,7 @@ pub async fn dj_task(
             config_name: config_name.clone(),
             running: true,
             announcement_channel_id: announcement_channel.map(|id| id.get()),
-            state_machine: Some((&*state_machine.current_state().await).into()),
+            state_machine: Some(state_machine.persisted_state().await),
         };
         if let Err(e) = bot_state
             .state_store
