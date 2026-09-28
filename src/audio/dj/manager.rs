@@ -69,7 +69,9 @@ pub async fn dj_task(
         announcement_channel,
         http.clone(),
         restored_state.clone(),
-    );
+        &bot_state,
+    )
+    .await;
 
     // Initialize profile state machine
     let mut profile_machine = if !signal_profiles.is_empty() {
@@ -276,20 +278,6 @@ pub async fn dj_task(
         }
     }
 
-    // Create shared state for this DJ
-    let state_arc = {
-        let mut dj_states = bot_state.dj_states.write().await;
-
-        dj_states
-            .entry(guild_id)
-            .or_insert_with(|| {
-                std::sync::Arc::new(tokio::sync::RwLock::new(
-                    state_machine.current_state().clone(),
-                ))
-            })
-            .clone()
-    };
-
     let mut current_forced_profile: Option<String> = None;
 
     loop {
@@ -373,7 +361,7 @@ pub async fn dj_task(
         }
 
         // Check for stop state
-        if matches!(state_machine.current_state(), DJState::Stopped) {
+        if matches!(*state_machine.current_state().await, DJState::Stopped) {
             drop(manager);
             tracing::info!("DJ task stopped for guild {}", guild_id);
             break;
@@ -383,18 +371,12 @@ pub async fn dj_task(
             tracing::error!("DJ state machine error in guild {}: {}", guild_id, e);
         }
 
-        // Update shared state
-        {
-            let mut state = state_arc.write().await;
-            *state = state_machine.current_state().clone();
-        }
-
         // Persist DJ state periodically (including state machine state)
         let persist_state = crate::persistence::DJState {
             config_name: config_name.clone(),
             running: true,
             announcement_channel_id: announcement_channel.map(|id| id.get()),
-            state_machine: Some(state_machine.current_state().into()),
+            state_machine: Some((&*state_machine.current_state().await).into()),
         };
         if let Err(e) = bot_state
             .state_store
@@ -404,21 +386,29 @@ pub async fn dj_task(
             tracing::warn!("Failed to persist DJ state for guild {}: {}", guild_id, e);
         }
 
-        let current_state = state_machine.current_state();
+        // Snapshot the derived bits of the current state needed below, without holding
+        // the read guard across the profile-transition awaits.
+        let (new_forced_profile, noise_duration, is_hex_message) = {
+            let current_state = state_machine.current_state().await;
+            (
+                current_state.forced_profile().map(|s| s.to_string()),
+                match &*current_state {
+                    DJState::PlayingNoise { duration, .. } => Some(*duration),
+                    _ => None,
+                },
+                matches!(&*current_state, DJState::PlayingHexMessage { .. }),
+            )
+        };
 
         // Handle profile forcing and transitions
         if let Some(ref mut pm) = profile_machine {
-            let new_forced_profile = current_state.forced_profile().map(|s| s.to_string());
-
             // Determine which profile to transition to, if any
             let profile_transition = if new_forced_profile != current_forced_profile {
                 if let Some(ref profile_name) = new_forced_profile {
-                    let fade_secs = if let DJState::PlayingNoise { duration, .. } = current_state {
-                        // Fade over half the duration of the noise state
-                        duration.as_secs_f32() / 2.0
-                    } else {
-                        1.0
-                    };
+                    // Fade over half the duration of the noise state
+                    let fade_secs = noise_duration
+                        .map(|duration| duration.as_secs_f32() / 2.0)
+                        .unwrap_or(1.0);
                     // Force the new profile
                     pm.force_profile(profile_name.clone());
                     Some((profile_name.clone(), fade_secs, "(forced)"))
@@ -455,7 +445,7 @@ pub async fn dj_task(
             }
         }
 
-        if let DJState::PlayingHexMessage { .. } = current_state {
+        if is_hex_message {
             let hex_playback_states = bot_state.hex_playback_states.read().await;
             let should_advance = if let Some(state_arc) = hex_playback_states.get(&guild_id) {
                 let state = state_arc.read().await;

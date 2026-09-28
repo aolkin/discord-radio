@@ -7,9 +7,10 @@ use serenity::all::Http;
 use serenity::model::id::{ChannelId, GuildId};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::{RwLock, RwLockReadGuard};
 use tracing::info;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum DJState {
     PlayingTrack {
         track_name: String,
@@ -71,7 +72,7 @@ impl DJState {
 }
 
 pub struct DJStateMachine {
-    current_state: DJState,
+    state: Arc<RwLock<DJState>>,
     scheduler: WeightedScheduler,
     guild_id: GuildId,
     announcement_channel: Option<ChannelId>,
@@ -80,14 +81,17 @@ pub struct DJStateMachine {
 }
 
 impl DJStateMachine {
-    pub fn new(
+    /// Constructs the state machine around the guild's shared state cell in
+    /// `bot_state.dj_states`, creating it if this is the first DJ task for the guild.
+    pub async fn new(
         config: DJConfig,
         guild_id: GuildId,
         announcement_channel: Option<ChannelId>,
         http: Arc<Http>,
         restored_state: Option<crate::persistence::DJStateMachineState>,
+        bot_state: &Data,
     ) -> Self {
-        let current_state = if let Some(state) = restored_state {
+        let initial_state = if let Some(state) = restored_state {
             (&state).try_into().unwrap_or_else(|_| {
                 tracing::warn!(
                     "Failed to restore DJ state for guild {}, starting from idle",
@@ -105,11 +109,19 @@ impl DJStateMachine {
             }
         };
 
+        let state = bot_state
+            .dj_states
+            .write()
+            .await
+            .entry(guild_id)
+            .or_insert_with(|| Arc::new(RwLock::new(initial_state)))
+            .clone();
+
         let hex_message_announcements =
             config.hex_message_announcements.clone().unwrap_or_default();
 
         Self {
-            current_state,
+            state,
             scheduler: WeightedScheduler::new(config),
             guild_id,
             announcement_channel,
@@ -118,8 +130,8 @@ impl DJStateMachine {
         }
     }
 
-    pub fn current_state(&self) -> &DJState {
-        &self.current_state
+    pub async fn current_state(&self) -> RwLockReadGuard<'_, DJState> {
+        self.state.read().await
     }
 
     pub fn scheduler(&self) -> &WeightedScheduler {
@@ -141,7 +153,7 @@ impl DJStateMachine {
         if let Err(e) = self.cleanup_current_state(track_manager, bot_state).await {
             tracing::error!("Error cleaning up DJ state during stop: {}", e);
         }
-        self.current_state = DJState::Stopped;
+        *self.state.write().await = DJState::Stopped;
 
         // Log the stop event
         if let Err(e) = self.log_state_transition(bot_state).await {
@@ -177,9 +189,10 @@ impl DJStateMachine {
             "DJ force transitioning to hex message with custom text: {}",
             message
         );
-        self.current_state = self
+        let next_state = self
             .start_custom_hex_message_state(message, bot_state)
             .await?;
+        *self.state.write().await = next_state;
 
         // Log the forced hex message
         if let Err(e) = self.log_state_transition(bot_state).await {
@@ -194,7 +207,7 @@ impl DJStateMachine {
         track_manager: &mut TrackManager,
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        if !self.current_state.is_complete() {
+        if !self.state.read().await.is_complete() {
             return Ok(());
         }
 
@@ -210,17 +223,18 @@ impl DJStateMachine {
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Record the previous state before transitioning
-        let from_state = self.get_state_name(&self.current_state);
+        let from_state = self.get_state_name(&*self.state.read().await);
 
         self.cleanup_current_state(track_manager, bot_state).await?;
 
         info!("DJ transitioning to state: {:?}", next_state_type);
-        self.current_state = self
+        let next_state = self
             .create_next_state(next_state_type, track_manager, bot_state)
             .await?;
 
         // Record state transition metric
-        let to_state = self.get_state_name(&self.current_state);
+        let to_state = self.get_state_name(&next_state);
+        *self.state.write().await = next_state;
         if let Some(metrics) = bot_state.metrics.read().await.as_ref() {
             metrics.record_dj_state_transition(self.guild_id.get(), &from_state, &to_state);
         }
@@ -238,7 +252,11 @@ impl DJStateMachine {
         track_manager: &mut TrackManager,
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        match &self.current_state {
+        // Clone the Arc (not the DJState) so the read guard below doesn't borrow `self`,
+        // since the match arms need `self.http`/`self.guild_id` across awaits.
+        let state = self.state.clone();
+        let current = state.read().await;
+        match &*current {
             DJState::PlayingTrack {
                 track_name,
                 status_message,
@@ -701,53 +719,56 @@ impl DJStateMachine {
         &self,
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let (event_type, details) = match &self.current_state {
-            DJState::PlayingTrack {
-                track_name,
-                filename,
-                duration,
-                forced_profile,
-                ..
-            } => (
-                "track_started",
-                serde_json::json!({
-                    "track_name": track_name,
-                    "filename": filename,
-                    "duration_secs": duration.as_secs_f32(),
-                    "forced_profile": forced_profile,
-                }),
-            ),
-            DJState::PlayingHexMessage {
-                message,
-                target_loops,
-                forced_profile,
-                ..
-            } => (
-                "hex_message_started",
-                serde_json::json!({
-                    "message": message,
-                    "target_loops": target_loops,
-                    "forced_profile": forced_profile,
-                }),
-            ),
-            DJState::PlayingNoise {
-                noise_profile,
-                duration,
-                ..
-            } => (
-                "noise_started",
-                serde_json::json!({
-                    "noise_profile": noise_profile,
-                    "duration_secs": duration.as_secs_f32(),
-                }),
-            ),
-            DJState::Idle { duration, .. } => (
-                "idle_started",
-                serde_json::json!({
-                    "duration_secs": duration.as_secs_f32(),
-                }),
-            ),
-            DJState::Stopped => ("stopped", serde_json::json!({})),
+        let (event_type, details) = {
+            let state = self.state.read().await;
+            match &*state {
+                DJState::PlayingTrack {
+                    track_name,
+                    filename,
+                    duration,
+                    forced_profile,
+                    ..
+                } => (
+                    "track_started",
+                    serde_json::json!({
+                        "track_name": track_name,
+                        "filename": filename,
+                        "duration_secs": duration.as_secs_f32(),
+                        "forced_profile": forced_profile,
+                    }),
+                ),
+                DJState::PlayingHexMessage {
+                    message,
+                    target_loops,
+                    forced_profile,
+                    ..
+                } => (
+                    "hex_message_started",
+                    serde_json::json!({
+                        "message": message,
+                        "target_loops": target_loops,
+                        "forced_profile": forced_profile,
+                    }),
+                ),
+                DJState::PlayingNoise {
+                    noise_profile,
+                    duration,
+                    ..
+                } => (
+                    "noise_started",
+                    serde_json::json!({
+                        "noise_profile": noise_profile,
+                        "duration_secs": duration.as_secs_f32(),
+                    }),
+                ),
+                DJState::Idle { duration, .. } => (
+                    "idle_started",
+                    serde_json::json!({
+                        "duration_secs": duration.as_secs_f32(),
+                    }),
+                ),
+                DJState::Stopped => ("stopped", serde_json::json!({})),
+            }
         };
 
         bot_state
