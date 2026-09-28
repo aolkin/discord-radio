@@ -28,10 +28,6 @@ fn default_loops() -> bool {
     true
 }
 
-fn default_target_loops() -> usize {
-    1
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct MultiTrackPlaybackState {
     pub tracks: Vec<TrackState>,
@@ -59,50 +55,22 @@ pub struct DjSettings {
     pub state_weight_overrides: DJConfigOverrideSingle<StateWeights>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Deserialize, Debug)]
 pub struct DJState {
     pub config_name: String,
     pub running: bool,
     #[serde(default)]
     pub announcement_channel_id: Option<u64>,
     #[serde(default)]
-    pub state_machine: Option<DJStateMachineState>,
+    pub state_machine: Option<crate::audio::dj::state_machine::DJState>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub enum DJStateMachineState {
-    PlayingTrack {
-        track_name: String,
-        filename: String,
-        started_at: SystemTime,
-        duration_secs: f32,
-        #[serde(default)]
-        forced_profile: Option<String>,
-        #[serde(default)]
-        status_message: Option<String>,
-    },
-    PlayingHexMessage {
-        message: String,
-        started_at: SystemTime,
-        #[serde(default = "default_target_loops")]
-        target_loops: usize,
-        #[serde(default)]
-        forced_profile: Option<String>,
-    },
-    PlayingNoise {
-        noise_profile: String,
-        started_at: SystemTime,
-        duration_secs: f32,
-    },
-    TransitioningProfile {
-        started_at: SystemTime,
-        duration_secs: f32,
-    },
-    Idle {
-        started_at: SystemTime,
-        duration_secs: f32,
-    },
-    Stopped,
+#[derive(Serialize, Debug)]
+pub struct DJStateSnapshot<'a> {
+    pub config_name: &'a str,
+    pub running: bool,
+    pub announcement_channel_id: Option<u64>,
+    pub state_machine: &'a crate::audio::dj::state_machine::DJState,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

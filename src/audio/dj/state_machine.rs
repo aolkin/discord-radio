@@ -3,18 +3,45 @@ use crate::audio::dj::scheduler::{DJStateType, WeightedScheduler};
 use crate::audio::tracks::{StartTrackArgs, TrackManager};
 use crate::state::Data;
 use rand::Rng;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serenity::all::Http;
 use serenity::model::id::{ChannelId, GuildId};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use tokio::sync::{RwLock, RwLockReadGuard};
 use tracing::info;
 
-#[derive(Debug)]
+fn ser_instant<S>(instant: &std::time::Instant, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let elapsed = instant.elapsed();
+    let time = SystemTime::now()
+        .checked_sub(elapsed)
+        .unwrap_or_else(SystemTime::now);
+    time.serialize(serializer)
+}
+
+fn deser_instant<'de, D>(deserializer: D) -> Result<std::time::Instant, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let time = SystemTime::deserialize(deserializer)?;
+    // A backwards clock jump (future `time`) or a state persisted longer ago than the machine's
+    // uptime (elapsed exceeds the monotonic clock) would otherwise fail the whole deserialize;
+    // clamp both to "just started" instead.
+    let elapsed = time.elapsed().unwrap_or_default();
+    Ok(std::time::Instant::now()
+        .checked_sub(elapsed)
+        .unwrap_or_else(std::time::Instant::now))
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub enum DJState {
     PlayingTrack {
         track_name: String,
         filename: String,
+        #[serde(serialize_with = "ser_instant", deserialize_with = "deser_instant")]
         started_at: std::time::Instant,
         duration: Duration,
         forced_profile: Option<String>,
@@ -22,6 +49,7 @@ pub enum DJState {
     },
     PlayingHexMessage {
         message: String,
+        #[serde(serialize_with = "ser_instant", deserialize_with = "deser_instant")]
         started_at: std::time::Instant,
         target_loops: usize,
         forced_profile: Option<String>,
@@ -29,10 +57,12 @@ pub enum DJState {
     },
     PlayingNoise {
         noise_profile: String,
+        #[serde(serialize_with = "ser_instant", deserialize_with = "deser_instant")]
         started_at: std::time::Instant,
         duration: Duration,
     },
     Idle {
+        #[serde(serialize_with = "ser_instant", deserialize_with = "deser_instant")]
         started_at: std::time::Instant,
         duration: Duration,
     },
@@ -111,10 +141,6 @@ impl DJStateMachine {
 
     pub async fn current_state(&self) -> RwLockReadGuard<'_, DJState> {
         self.state.read().await
-    }
-
-    pub async fn persisted_state(&self) -> crate::persistence::DJStateMachineState {
-        (&*self.state.read().await).into()
     }
 
     pub fn scheduler(&self) -> &WeightedScheduler {

@@ -6,10 +6,11 @@ mod utils;
 pub use dj::DjSettingsStore;
 pub use file_store::FileStore;
 pub use types::{
-    ActivityState, DJState, DJStateMachineState, DjSettings, MessagePlaybackState,
-    MultiTrackPlaybackState, ProfileState, RegisteredChannel, TrackState,
+    ActivityState, DJState, DjSettings, MessagePlaybackState, MultiTrackPlaybackState,
+    ProfileState, RegisteredChannel, TrackState,
 };
 
+pub(crate) use crate::persistence::types::DJStateSnapshot;
 use async_trait::async_trait;
 use serenity::model::id::{ChannelId, GuildId};
 use std::collections::HashMap;
@@ -45,7 +46,7 @@ pub trait StateStore: Send + Sync {
     async fn save_profile_state(&self, guild_id: GuildId, state: &ProfileState) -> Result<()>;
     async fn load_profile_states(&self) -> Result<HashMap<GuildId, ProfileState>>;
 
-    async fn save_dj_state(&self, guild_id: GuildId, state: DJState) -> Result<()>;
+    async fn save_dj_state(&self, guild_id: GuildId, state: &DJStateSnapshot) -> Result<()>;
     async fn load_dj_states(&self) -> Result<HashMap<GuildId, DJState>>;
     async fn remove_dj_state(&self, guild_id: GuildId) -> Result<()>;
 

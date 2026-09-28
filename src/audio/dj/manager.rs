@@ -50,7 +50,7 @@ pub async fn dj_task(
     mut command_rx: mpsc::Receiver<DJCommand>,
     mut announcement_channel: Option<ChannelId>,
     http: Arc<Http>,
-    restored_state: Option<crate::persistence::DJStateMachineState>,
+    restored_state: Option<DJState>,
 ) {
     let config_name = config.name.clone();
 
@@ -64,13 +64,7 @@ pub async fn dj_task(
     let signal_profiles = config.signal_profiles.clone();
 
     let initial_state = if let Some(state) = restored_state {
-        (&state).try_into().unwrap_or_else(|_| {
-            tracing::warn!(
-                "Failed to restore DJ state for guild {}, starting from idle",
-                guild_id
-            );
-            DJState::idle()
-        })
+        state
     } else {
         DJState::idle()
     };
@@ -376,19 +370,21 @@ pub async fn dj_task(
         }
 
         // Persist DJ state periodically (including state machine state)
-        let persist_state = crate::persistence::DJState {
-            config_name: config_name.clone(),
+        let current_state = state_machine.current_state().await;
+        let persist_state = crate::persistence::DJStateSnapshot {
+            config_name: &config_name,
             running: true,
             announcement_channel_id: announcement_channel.map(|id| id.get()),
-            state_machine: Some(state_machine.persisted_state().await),
+            state_machine: &current_state,
         };
         if let Err(e) = bot_state
             .state_store
-            .save_dj_state(guild_id, persist_state)
+            .save_dj_state(guild_id, &persist_state)
             .await
         {
             tracing::warn!("Failed to persist DJ state for guild {}: {}", guild_id, e);
         }
+        drop(current_state);
 
         // Snapshot the derived bits of the current state needed below, without holding
         // the read guard across the profile-transition awaits.
@@ -516,7 +512,7 @@ impl DJManager {
         bot_state: Data,
         http: Arc<Http>,
         announcement_channel: Option<ChannelId>,
-        restored_state: Option<crate::persistence::DJStateMachineState>,
+        restored_state: Option<DJState>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if self.task_handle.is_some() {
             return Err("DJ is already running".into());
@@ -559,18 +555,16 @@ impl DJManager {
         self.command_tx = Some(tx);
 
         // Save DJ state to persistence (initial state will be Idle)
-        let dj_state = crate::persistence::DJState {
-            config_name,
+        let idle = DJState::idle();
+        let dj_state = crate::persistence::DJStateSnapshot {
+            config_name: &config_name,
             running: true,
             announcement_channel_id: announcement_channel.map(|id| id.get()),
-            state_machine: Some(crate::persistence::DJStateMachineState::Idle {
-                started_at: std::time::SystemTime::now(),
-                duration_secs: 1.0,
-            }),
+            state_machine: &idle,
         };
         if let Err(e) = bot_state
             .state_store
-            .save_dj_state(guild_id, dj_state)
+            .save_dj_state(guild_id, &dj_state)
             .await
         {
             tracing::warn!("Failed to save DJ state for guild {}: {}", guild_id, e);
