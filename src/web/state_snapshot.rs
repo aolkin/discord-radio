@@ -1,3 +1,4 @@
+use crate::audio::dj::state_machine::format_dj_track_name;
 use crate::state::Data;
 use serde::{Deserialize, Serialize};
 use serenity::model::id::GuildId;
@@ -198,7 +199,7 @@ fn dj_state_to_info(state: &crate::audio::dj::state_machine::DJState) -> DJState
 
     match state {
         DJState::PlayingTrack {
-            track_name,
+            filename,
             duration,
             started_at,
             ..
@@ -206,7 +207,7 @@ fn dj_state_to_info(state: &crate::audio::dj::state_machine::DJState) -> DJState
             state_type: "PlayingTrack".to_string(),
             details: format!(
                 "{} ({:.1}s / {:.1}s)",
-                track_name,
+                format_dj_track_name(filename),
                 started_at.elapsed().as_secs_f32(),
                 duration.as_secs_f32()
             ),
@@ -243,6 +244,13 @@ fn dj_state_to_info(state: &crate::audio::dj::state_machine::DJState) -> DJState
                 duration.as_secs_f32()
             ),
         },
+        DJState::Segment(segment) => {
+            let (state_type, details) = segment.state_info_display();
+            DJStateInfo {
+                state_type,
+                details,
+            }
+        }
         DJState::Stopped => DJStateInfo {
             state_type: "Stopped".to_string(),
             details: "Stopped".to_string(),

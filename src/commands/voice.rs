@@ -1072,6 +1072,9 @@ pub async fn get_dj_state(ctx: Context<'_>) -> Result<(), Error> {
             let total = duration.as_secs();
             format!("Idle ({}/{}s)", elapsed, total)
         }
+        crate::audio::dj::state_machine::DJState::Segment(segment) => {
+            segment.current_state_display()
+        }
         crate::audio::dj::state_machine::DJState::Stopped => "Stopped".to_string(),
     };
 

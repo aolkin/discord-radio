@@ -1,14 +1,17 @@
 use crate::audio::dj::config::{DJConfig, HexMessageEntry, NoisePeriodEntry, TrackEntry};
 use crate::audio::dj::manager::DJStateType;
 use crate::audio::dj::scheduler::{DJStateEntry, WeightedScheduler};
+use crate::audio::dj::segments::Segment;
+use crate::audio::dj::segments::SegmentCtx;
+use crate::audio::dj::serde::{deser_instant, ser_instant};
 use crate::audio::tracks::{StartTrackArgs, TrackManager};
-use crate::state::Data;
+use crate::state::{BotState, Data};
 use rand::Rng;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 use serenity::all::Http;
 use serenity::model::id::{ChannelId, GuildId};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 use tokio::sync::{RwLock, RwLockReadGuard};
 use tracing::info;
 
@@ -16,35 +19,9 @@ pub fn format_dj_track_name(filename: &str) -> String {
     format!("dj_track_{}", filename)
 }
 
-fn ser_instant<S>(instant: &std::time::Instant, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    let elapsed = instant.elapsed();
-    let time = SystemTime::now()
-        .checked_sub(elapsed)
-        .unwrap_or_else(SystemTime::now);
-    time.serialize(serializer)
-}
-
-fn deser_instant<'de, D>(deserializer: D) -> Result<std::time::Instant, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let time = SystemTime::deserialize(deserializer)?;
-    // A backwards clock jump (future `time`) or a state persisted longer ago than the machine's
-    // uptime (elapsed exceeds the monotonic clock) would otherwise fail the whole deserialize;
-    // clamp both to "just started" instead.
-    let elapsed = time.elapsed().unwrap_or_default();
-    Ok(std::time::Instant::now()
-        .checked_sub(elapsed)
-        .unwrap_or_else(std::time::Instant::now))
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 pub enum DJState {
     PlayingTrack {
-        track_name: String,
         filename: String,
         volume: f32,
         #[serde(serialize_with = "ser_instant", deserialize_with = "deser_instant")]
@@ -72,6 +49,7 @@ pub enum DJState {
         started_at: std::time::Instant,
         duration: Duration,
     },
+    Segment(Box<dyn Segment>),
     Stopped,
 }
 
@@ -83,7 +61,7 @@ impl DJState {
         }
     }
 
-    pub fn is_complete(&self) -> bool {
+    pub async fn is_complete(&self, ctx: &SegmentCtx<'_>) -> bool {
         match self {
             DJState::PlayingTrack {
                 started_at,
@@ -100,18 +78,28 @@ impl DJState {
                 started_at,
                 duration,
             } => started_at.elapsed() >= *duration,
+            DJState::Segment(segment) => segment.is_complete(ctx).await,
             DJState::Stopped => true,
         }
     }
 
-    pub fn forced_profile(&self) -> Option<&str> {
+    pub fn forced_profile(&self) -> Option<String> {
         match self {
-            DJState::PlayingTrack { forced_profile, .. } => forced_profile.as_deref(),
-            DJState::PlayingHexMessage { forced_profile, .. } => forced_profile.as_deref(),
-            DJState::PlayingNoise { noise_profile, .. } => Some(noise_profile.as_str()),
+            DJState::PlayingTrack { forced_profile, .. } => {
+                forced_profile.as_ref().map(|s| s.to_owned())
+            }
+            DJState::PlayingHexMessage { forced_profile, .. } => {
+                forced_profile.as_ref().map(|s| s.to_owned())
+            }
+            DJState::PlayingNoise { noise_profile, .. } => Some(noise_profile.to_owned()),
+            DJState::Segment(segment) => segment.noise_profile(),
             _ => None,
         }
     }
+}
+
+pub fn format_dj_track_name(filename: &str) -> String {
+    format!("dj_track_{}", filename)
 }
 
 pub struct DJStateMachine {
@@ -121,6 +109,7 @@ pub struct DJStateMachine {
     announcement_channel: Option<ChannelId>,
     http: Arc<Http>,
     hex_message_announcements: Vec<String>,
+    bot_state: Arc<BotState>,
 }
 
 impl DJStateMachine {
@@ -131,6 +120,7 @@ impl DJStateMachine {
         announcement_channel: Option<ChannelId>,
         http: Arc<Http>,
         state: Arc<RwLock<DJState>>,
+        bot_state: Arc<BotState>,
     ) -> Self {
         let hex_message_announcements =
             config.hex_message_announcements.clone().unwrap_or_default();
@@ -142,6 +132,15 @@ impl DJStateMachine {
             announcement_channel,
             http,
             hex_message_announcements,
+            bot_state,
+        }
+    }
+
+    fn segment_ctx(&self) -> SegmentCtx<'_> {
+        SegmentCtx {
+            guild_id: &self.guild_id,
+            bot_state: &self.bot_state,
+            http: &self.http,
         }
     }
 
@@ -214,7 +213,8 @@ impl DJStateMachine {
         track_manager: &mut TrackManager,
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        if !self.state.read().await.is_complete() {
+        let ctx = self.segment_ctx();
+        if !self.state.read().await.is_complete(&ctx).await {
             return Ok(());
         }
 
@@ -265,11 +265,12 @@ impl DJStateMachine {
         let current = self.state.read().await;
         match &*current {
             DJState::PlayingTrack {
-                track_name,
+                filename,
                 status_message,
                 started_at,
                 ..
             } => {
+                let track_name = format_dj_track_name(filename);
                 // Record duration metric
                 let duration_secs = started_at.elapsed().as_secs_f64();
                 if let Some(metrics) = bot_state.metrics.read().await.as_ref() {
@@ -278,11 +279,11 @@ impl DJStateMachine {
                         "playing_track",
                         duration_secs,
                     );
-                    metrics.record_track_stopped(self.guild_id.get(), track_name);
+                    metrics.record_track_stopped(self.guild_id.get(), &track_name);
                 }
 
-                if track_manager.has_track(track_name) {
-                    track_manager.stop_track(track_name, 1.0, false).await?;
+                if track_manager.has_track(&track_name) {
+                    track_manager.stop_track(&track_name, 1.0, false).await?;
                 }
 
                 // Remove the track status from the stack if present
@@ -359,7 +360,10 @@ impl DJStateMachine {
                     metrics.record_dj_state_duration(self.guild_id.get(), "idle", duration_secs);
                 }
             }
-            _ => {}
+            DJState::Segment(segment) => {
+                segment.exit(&self.segment_ctx()).await?;
+            }
+            DJState::Stopped => {}
         }
 
         Ok(())
@@ -459,7 +463,6 @@ impl DJStateMachine {
         };
 
         Ok(DJState::PlayingTrack {
-            track_name,
             filename: track_entry.filename.clone(),
             volume,
             started_at: std::time::Instant::now(),
@@ -705,17 +708,16 @@ impl DJStateMachine {
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let state = self.state.read().await;
-        let (event_type, details) = match &*state {
+        let (event_type, details): (String, serde_json::Value) = match &*state {
             DJState::PlayingTrack {
-                track_name,
                 filename,
                 duration,
                 forced_profile,
                 ..
             } => (
-                "track_started",
+                "track_started".into(),
                 serde_json::json!({
-                    "track_name": track_name,
+                    "track_name": format_dj_track_name(filename),
                     "filename": filename,
                     "duration_secs": duration.as_secs_f32(),
                     "forced_profile": forced_profile,
@@ -727,7 +729,7 @@ impl DJStateMachine {
                 forced_profile,
                 ..
             } => (
-                "hex_message_started",
+                "hex_message_started".into(),
                 serde_json::json!({
                     "message": message,
                     "target_loops": target_loops,
@@ -739,19 +741,23 @@ impl DJStateMachine {
                 duration,
                 ..
             } => (
-                "noise_started",
+                "noise_started".into(),
                 serde_json::json!({
                     "noise_profile": noise_profile,
                     "duration_secs": duration.as_secs_f32(),
                 }),
             ),
             DJState::Idle { duration, .. } => (
-                "idle_started",
+                "idle_started".into(),
                 serde_json::json!({
                     "duration_secs": duration.as_secs_f32(),
                 }),
             ),
-            DJState::Stopped => ("stopped", serde_json::json!({})),
+            DJState::Segment(segment) => (
+                format! { "{segment}_started" },
+                segment.loggable_properties(),
+            ),
+            DJState::Stopped => ("stopped".into(), serde_json::json!({})),
         };
         // Drop the read guard before awaiting the log write below so it isn't held
         // across unrelated file I/O.
@@ -768,6 +774,7 @@ impl DJStateMachine {
             DJState::PlayingHexMessage { .. } => "playing_hex_message".to_string(),
             DJState::PlayingNoise { .. } => "playing_noise".to_string(),
             DJState::Idle { .. } => "idle".to_string(),
+            DJState::Segment(segment) => segment.to_string(),
             DJState::Stopped => "stopped".to_string(),
         }
     }
