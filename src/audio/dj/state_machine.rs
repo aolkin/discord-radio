@@ -42,6 +42,7 @@ pub enum DJState {
     PlayingTrack {
         track_name: String,
         filename: String,
+        volume: f32,
         #[serde(serialize_with = "ser_instant", deserialize_with = "deser_instant")]
         started_at: std::time::Instant,
         duration: Duration,
@@ -142,10 +143,6 @@ impl DJStateMachine {
 
     pub async fn current_state(&self) -> RwLockReadGuard<'_, DJState> {
         self.state.read().await
-    }
-
-    pub fn scheduler(&self) -> &WeightedScheduler {
-        &self.scheduler
     }
 
     pub fn update_config(&mut self, config: DJConfig) {
@@ -404,11 +401,13 @@ impl DJStateMachine {
             (None, max_dur)
         };
 
+        let volume = track_entry.volume.unwrap_or(1.0);
+
         track_manager
             .start_track(StartTrackArgs {
                 name: track_name.clone(),
                 filename: track_entry.filename.clone(),
-                volume: track_entry.volume.unwrap_or(1.0),
+                volume,
                 fade_time: 1.0,
                 loops: false,
                 start_position,
@@ -458,6 +457,7 @@ impl DJStateMachine {
         Ok(DJState::PlayingTrack {
             track_name,
             filename: track_entry.filename.clone(),
+            volume,
             started_at: std::time::Instant::now(),
             duration: play_duration,
             forced_profile: track_entry.signal_profile.clone(),

@@ -26,23 +26,6 @@ pub enum DJStateType {
     Noise,
 }
 
-/// Helper function to find a track entry by matching filename in the track pool
-fn find_track_by_filename<'a>(
-    state_machine: &'a DJStateMachine,
-    filename: &str,
-) -> Option<&'a crate::audio::dj::config::TrackEntry> {
-    // Search through the track pool for a matching filename
-    let track_pool = &state_machine.scheduler().config().track_pool;
-
-    let result = track_pool.iter().find(|entry| entry.filename == filename);
-
-    if result.is_none() {
-        tracing::warn!("Could not find filename '{}' in DJ config", filename);
-    }
-
-    result
-}
-
 pub async fn dj_task(
     guild_id: GuildId,
     config: DJConfig,
@@ -93,6 +76,7 @@ pub async fn dj_task(
             DJState::PlayingTrack {
                 track_name,
                 filename,
+                volume,
                 started_at,
                 duration,
                 forced_profile,
@@ -102,6 +86,7 @@ pub async fn dj_task(
                 Some((
                     track_name.clone(),
                     filename.clone(),
+                    *volume,
                     started_at.elapsed(),
                     *duration,
                     status_message.clone(),
@@ -153,7 +138,9 @@ pub async fn dj_task(
         None
     };
 
-    if let Some((track_name, filename, elapsed, total_duration, status_message)) = track_restart {
+    if let Some((track_name, filename, volume, elapsed, total_duration, status_message)) =
+        track_restart
+    {
         tracing::debug!(
             "Attempting to restore DJ track '{}' (file: {}) in guild {}",
             track_name,
@@ -180,10 +167,6 @@ pub async fn dj_task(
         // Only attempt to restart the track if it hasn't finished yet
         if elapsed < total_duration {
             let mut manager = manager_arc.lock().await;
-
-            let volume = find_track_by_filename(&state_machine, &filename)
-                .and_then(|entry| entry.volume)
-                .unwrap_or(1.0);
 
             if let Err(e) = manager
                 .start_track(StartTrackArgs {
