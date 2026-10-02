@@ -98,10 +98,6 @@ impl DJState {
     }
 }
 
-pub fn format_dj_track_name(filename: &str) -> String {
-    format!("dj_track_{}", filename)
-}
-
 pub struct DJStateMachine {
     state: Arc<RwLock<DJState>>,
     scheduler: WeightedScheduler,
