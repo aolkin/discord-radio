@@ -188,14 +188,14 @@ impl VoiceChannelStatusManager {
     }
 
     /// Push a status message for a guild and update the channel
-    pub async fn push_status(&self, guild_id: GuildId, message: String, http: &Http) {
+    pub async fn push_status(&self, guild_id: GuildId, message: &str, http: &Http) {
         let stack = self.get_or_create_stack(guild_id).await;
         let mut stack_guard = stack.write().await;
-        stack_guard.push(message.clone());
+        stack_guard.push(message.to_owned());
         drop(stack_guard);
 
         // Update the channel status if connected to a voice channel
-        match self.update_channel_status(guild_id, &message, http).await {
+        match self.update_channel_status(guild_id, message, http).await {
             Ok(true) => {
                 tracing::debug!(
                     "Pushed voice channel status '{}' for guild {}",

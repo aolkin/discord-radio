@@ -271,7 +271,7 @@ async fn restore_dj_managers(
         }
 
         // Create track manager for this guild (no longer requires voice connection)
-        let _manager_arc =
+        let manager_arc =
             crate::audio::tracks::get_or_create_track_manager(&bot_state, guild_id).await;
 
         let settings = bot_state.dj_settings.get(guild_id).await;
@@ -336,6 +336,7 @@ async fn restore_dj_managers(
                 dj_config,
                 bot_state.clone(),
                 http.clone(),
+                manager_arc,
                 announcement_channel,
                 dj_state.state_machine,
             )
