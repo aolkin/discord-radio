@@ -67,6 +67,7 @@ pub async fn dj_task(
             duration,
             forced_profile,
             status_message,
+            ..
         } => {
             resume_dj_track(
                 &guild_id,

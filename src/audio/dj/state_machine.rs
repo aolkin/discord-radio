@@ -12,6 +12,10 @@ use std::time::{Duration, SystemTime};
 use tokio::sync::{RwLock, RwLockReadGuard};
 use tracing::info;
 
+pub fn format_dj_track_name(filename: &str) -> String {
+    format!("dj_track_{}", filename)
+}
+
 fn ser_instant<S>(instant: &std::time::Instant, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
@@ -367,7 +371,7 @@ impl DJStateMachine {
         track_manager: &mut TrackManager,
         bot_state: &Data,
     ) -> Result<DJState, Box<dyn std::error::Error + Send + Sync>> {
-        let track_name = format!("dj_track_{}", track_entry.filename);
+        let track_name = format_dj_track_name(&track_entry.filename);
 
         let duration = bot_state
             .duration_cache
@@ -447,7 +451,7 @@ impl DJStateMachine {
             };
             bot_state
                 .voice_status_manager
-                .push_status(self.guild_id, status_with_emoji.clone(), &self.http)
+                .push_status(self.guild_id, &status_with_emoji, &self.http)
                 .await;
             Some(status_with_emoji)
         } else {
@@ -597,7 +601,7 @@ impl DJStateMachine {
         let obfuscated = crate::commands::voice::obfuscate_message(&message);
         bot_state
             .voice_status_manager
-            .push_status(self.guild_id, obfuscated.clone(), &self.http)
+            .push_status(self.guild_id, &obfuscated, &self.http)
             .await;
 
         {
