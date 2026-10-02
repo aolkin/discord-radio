@@ -750,7 +750,7 @@ impl DJStateMachine {
                 }),
             ),
             DJState::Segment(segment) => (
-                format! { "{segment}_started" },
+                format!("{segment}_started"),
                 segment.loggable_properties(),
             ),
             DJState::Stopped => ("stopped".into(), serde_json::json!({})),
