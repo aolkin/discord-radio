@@ -1,18 +1,18 @@
 use crate::audio::dj::config::{DJConfig, HexMessageEntry, NoisePeriodEntry, TrackEntry};
+use crate::audio::dj::manager::DJStateType;
 use crate::audio::dj::weighted_choice::WeightedSelector;
-use std::collections::VecDeque;
+use rand::Rng;
 use std::sync::LazyLock;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum DJStateType {
-    Track(usize),
-    HexMessage(usize),
-    Noise(usize),
+#[derive(Clone, strum::Display)]
+pub enum DJStateEntry {
+    Track(TrackEntry),
+    HexMessage(HexMessageEntry),
+    Noise(NoisePeriodEntry),
 }
 
 pub struct WeightedScheduler {
     config: DJConfig,
-    recent_history: VecDeque<DJStateType>,
     track_selector: WeightedSelector,
     hex_message_selector: WeightedSelector,
     noise_selector: WeightedSelector,
@@ -33,7 +33,6 @@ impl WeightedScheduler {
             config.duplicate_penalty_multiplier,
         );
         Self {
-            recent_history: VecDeque::with_capacity(config.recent_history_size),
             config,
             track_selector,
             hex_message_selector,
@@ -45,46 +44,39 @@ impl WeightedScheduler {
         self.config = config;
     }
 
-    pub fn next_state(&mut self) -> DJStateType {
-        let state = match self.choose_state_type() {
-            StateCategory::Track => self.choose_track(),
-            StateCategory::HexMessage => self.choose_hex_message(),
-            StateCategory::Noise => self.choose_noise(),
-        };
-        self.add_to_history(state.clone());
-        state
+    pub fn next_state(&mut self, filter: Option<DJStateType>) -> DJStateEntry {
+        match filter.unwrap_or_else(|| self.choose_state_type()) {
+            DJStateType::Track => {
+                let track = self.track_selector.choose(&self.config.track_pool);
+                track.map(|track| DJStateEntry::Track(track.to_owned()))
+            }
+            DJStateType::HexMessage => {
+                let message = self.hex_message_selector.choose(&self.config.hex_messages);
+                message.map(|message| DJStateEntry::HexMessage(message.to_owned()))
+            }
+            DJStateType::Noise => {
+                let noise = self.noise_selector.choose(&self.config.noise_periods);
+                noise.map(|noise| DJStateEntry::Noise(noise.to_owned()))
+            }
+        }
+        .unwrap_or_else(|| DJStateEntry::Noise(DEFAULT_NOISE_PERIOD.to_owned()))
     }
 
-    pub fn next_state_of_type(
-        &mut self,
-        filter: crate::audio::dj::manager::DJStateTypeFilter,
-    ) -> DJStateType {
-        let state = match filter {
-            crate::audio::dj::manager::DJStateTypeFilter::Track => self.choose_track(),
-            crate::audio::dj::manager::DJStateTypeFilter::HexMessage => self.choose_hex_message(),
-            crate::audio::dj::manager::DJStateTypeFilter::Noise => self.choose_noise(),
-        };
-
-        self.add_to_history(state.clone());
-        state
-    }
-
-    fn choose_state_type(&self) -> StateCategory {
-        use rand::Rng;
+    fn choose_state_type(&self) -> DJStateType {
         let weights = &self.config.state_weights;
         let categories = [
             (
-                StateCategory::Track,
+                DJStateType::Track,
                 weights.track,
                 self.config.track_pool.is_empty(),
             ),
             (
-                StateCategory::HexMessage,
+                DJStateType::HexMessage,
                 weights.hex_message,
                 self.config.hex_messages.is_empty(),
             ),
             (
-                StateCategory::Noise,
+                DJStateType::Noise,
                 weights.noise,
                 self.config.noise_periods.is_empty(),
             ),
@@ -96,7 +88,7 @@ impl WeightedScheduler {
             .map(|(_, weight, _)| weight)
             .sum();
         if total == 0 {
-            return StateCategory::Noise;
+            return DJStateType::Noise;
         }
 
         let mut rng = rand::rng();
@@ -112,55 +104,12 @@ impl WeightedScheduler {
                 return category;
             }
         }
-        StateCategory::Noise
-    }
-
-    fn choose_track(&mut self) -> DJStateType {
-        let index = self.track_selector.choose(&self.config.track_pool);
-        DJStateType::Track(index)
-    }
-
-    fn choose_hex_message(&mut self) -> DJStateType {
-        let index = self.hex_message_selector.choose(&self.config.hex_messages);
-        DJStateType::HexMessage(index)
-    }
-
-    fn choose_noise(&mut self) -> DJStateType {
-        let index = self.noise_selector.choose(&self.config.noise_periods);
-        DJStateType::Noise(index)
-    }
-
-    fn add_to_history(&mut self, state: DJStateType) {
-        if self.recent_history.len() >= self.config.recent_history_size {
-            self.recent_history.pop_front();
-        }
-        self.recent_history.push_back(state);
-    }
-
-    pub fn get_track(&self, index: usize) -> Option<&TrackEntry> {
-        self.config.track_pool.get(index)
-    }
-
-    pub fn get_hex_message(&self, index: usize) -> Option<&HexMessageEntry> {
-        self.config.hex_messages.get(index)
-    }
-
-    pub fn get_noise_period(&self, index: usize) -> &NoisePeriodEntry {
-        self.config
-            .noise_periods
-            .get(index)
-            .unwrap_or(&DEFAULT_NOISE_PERIOD)
+        DJStateType::Noise
     }
 
     pub fn config(&self) -> &DJConfig {
         &self.config
     }
-}
-
-enum StateCategory {
-    Track,
-    HexMessage,
-    Noise,
 }
 
 static DEFAULT_NOISE_PERIOD: LazyLock<NoisePeriodEntry> = LazyLock::new(|| NoisePeriodEntry {
@@ -209,17 +158,17 @@ mod tests {
 
     #[test]
     fn all_pools_empty_falls_back_to_noise() {
-        let mut scheduler = WeightedScheduler::new(config(Vec::new()));
+        let scheduler = WeightedScheduler::new(config(Vec::new()));
         for _ in 0..100 {
-            assert!(matches!(scheduler.next_state(), DJStateType::Noise(_)));
+            assert!(matches!(scheduler.choose_state_type(), DJStateType::Noise));
         }
     }
 
     #[test]
     fn empty_categories_are_skipped() {
-        let mut scheduler = WeightedScheduler::new(config(vec![track()]));
+        let scheduler = WeightedScheduler::new(config(vec![track()]));
         for _ in 0..100 {
-            assert!(matches!(scheduler.next_state(), DJStateType::Track(_)));
+            assert!(matches!(scheduler.choose_state_type(), DJStateType::Track,));
         }
     }
 }

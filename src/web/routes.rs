@@ -1,4 +1,4 @@
-use crate::audio::dj::manager::trigger_reload;
+use crate::audio::dj::manager::{DJStateType, trigger_reload};
 use crate::bucket::ObjectStoreError;
 use crate::state::Data;
 use crate::web::state_snapshot::BotSnapshot;
@@ -54,11 +54,9 @@ pub async fn advance_dj_state(
 
     let state_type_filter = if let Some(type_str) = request.state_type {
         match type_str.to_lowercase().as_str() {
-            "track" => Some(crate::audio::dj::manager::DJStateTypeFilter::Track),
-            "hex" | "hex_message" | "hexmessage" => {
-                Some(crate::audio::dj::manager::DJStateTypeFilter::HexMessage)
-            }
-            "noise" => Some(crate::audio::dj::manager::DJStateTypeFilter::Noise),
+            "track" => Some(DJStateType::Track),
+            "hex" | "hex_message" | "hexmessage" => Some(DJStateType::HexMessage),
+            "noise" => Some(DJStateType::Noise),
             _ => return Err(StatusCode::BAD_REQUEST),
         }
     } else {

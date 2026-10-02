@@ -12,7 +12,7 @@ use tokio::time::{Duration, sleep};
 const DJ_TICK_INTERVAL_MS: u64 = 100;
 
 pub enum DJCommand {
-    ForceAdvance(Option<DJStateTypeFilter>),
+    ForceAdvance(Option<DJStateType>),
     ForceHexMessage(String),
     ReloadConfig,
     Stop,
@@ -20,7 +20,7 @@ pub enum DJCommand {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub enum DJStateTypeFilter {
+pub enum DJStateType {
     Track,
     HexMessage,
     Noise,
@@ -627,7 +627,7 @@ impl DJManager {
 
     pub async fn force_advance(
         &self,
-        state_type_filter: Option<DJStateTypeFilter>,
+        state_type_filter: Option<DJStateType>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if let Some(tx) = &self.command_tx {
             tx.send(DJCommand::ForceAdvance(state_type_filter)).await?;
@@ -653,7 +653,7 @@ impl DJManager {
 pub async fn force_advance(
     bot_state: &Data,
     guild_id: GuildId,
-    state_type_filter: Option<DJStateTypeFilter>,
+    state_type_filter: Option<DJStateType>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let dj_managers = bot_state.dj_managers.read().await;
     let manager = dj_managers

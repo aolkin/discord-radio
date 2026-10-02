@@ -22,7 +22,7 @@ impl WeightedSelector {
         }
     }
 
-    pub fn choose<T: Weighted>(&mut self, items: &[T]) -> usize {
+    pub fn choose<'a, T: Weighted>(&mut self, items: &'a [T]) -> Option<&'a T> {
         let effective_weights: Vec<f32> = items
             .iter()
             .enumerate()
@@ -35,7 +35,7 @@ impl WeightedSelector {
 
         let total: f32 = effective_weights.iter().sum();
         if total == 0.0 {
-            return 0;
+            return items.first();
         }
 
         let mut rng = rand::rng();
@@ -46,13 +46,13 @@ impl WeightedSelector {
             cumulative += weight;
             if roll < cumulative {
                 self.add_to_history(idx);
-                return idx;
+                return items.get(idx);
             }
         }
 
         let idx = items.len().saturating_sub(1);
         self.add_to_history(idx);
-        idx
+        items.get(idx)
     }
 
     fn get_penalty_for_index(&self, idx: usize) -> f32 {

@@ -1,4 +1,4 @@
-use crate::audio::dj::manager::trigger_reload;
+use crate::audio::dj::manager::{DJStateType, trigger_reload};
 use crate::commands::utils;
 use crate::commands::utils::{Context, Error};
 use serenity::all::{ChannelId, ChannelType, GuildId};
@@ -1126,11 +1126,9 @@ pub async fn advance_dj_state(
     // Parse state type filter
     let state_type_filter = if let Some(type_str) = state_type {
         match type_str.to_lowercase().as_str() {
-            "track" => Some(crate::audio::dj::manager::DJStateTypeFilter::Track),
-            "hex" | "hex_message" | "hexmessage" => {
-                Some(crate::audio::dj::manager::DJStateTypeFilter::HexMessage)
-            }
-            "noise" => Some(crate::audio::dj::manager::DJStateTypeFilter::Noise),
+            "track" => Some(DJStateType::Track),
+            "hex" | "hex_message" | "hexmessage" => Some(DJStateType::HexMessage),
+            "noise" => Some(DJStateType::Noise),
             _ => {
                 ctx.say(format!(
                     "Invalid state type '{}'. Valid types: track, hex, noise",
