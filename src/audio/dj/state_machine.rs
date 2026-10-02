@@ -749,10 +749,9 @@ impl DJStateMachine {
                     "duration_secs": duration.as_secs_f32(),
                 }),
             ),
-            DJState::Segment(segment) => (
-                format!("{segment}_started"),
-                segment.loggable_properties(),
-            ),
+            DJState::Segment(segment) => {
+                (format!("{segment}_started"), segment.loggable_properties())
+            }
             DJState::Stopped => ("stopped".into(), serde_json::json!({})),
         };
         // Drop the read guard before awaiting the log write below so it isn't held
