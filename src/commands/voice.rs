@@ -833,7 +833,7 @@ pub async fn manage_dj(
             }
 
             // Create track manager for this guild (no longer requires voice connection)
-            let track_manager = get_or_create_track_manager(ctx, guild_id).await;
+            let _track_manager = get_or_create_track_manager(ctx, guild_id).await;
 
             let mut dj_managers = ctx.data().dj_managers.write().await;
             let manager = dj_managers
@@ -860,7 +860,6 @@ pub async fn manage_dj(
                     dj_config,
                     ctx.data().clone(),
                     ctx.serenity_context().http.clone(),
-                    track_manager,
                     announcement_channel,
                     None,
                 )

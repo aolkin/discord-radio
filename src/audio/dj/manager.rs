@@ -1,7 +1,7 @@
 use crate::audio::dj::config::DJConfig;
 use crate::audio::dj::profile_machine::ProfileStateMachine;
 use crate::audio::dj::state_machine::{DJState, DJStateMachine, format_dj_track_name};
-use crate::audio::tracks::{StartTrackArgs, TrackManager};
+use crate::audio::tracks::StartTrackArgs;
 use crate::state::Data;
 use serenity::all::Http;
 use serenity::model::id::{ChannelId, GuildId};
@@ -40,7 +40,6 @@ pub async fn dj_task(
     mut command_rx: mpsc::Receiver<DJCommand>,
     mut announcement_channel: Option<ChannelId>,
     http: Arc<Http>,
-    track_manager: Arc<tokio::sync::Mutex<TrackManager>>,
     restored_state: Option<DJState>,
 ) {
     let config_name = config.name.clone();
@@ -60,9 +59,6 @@ pub async fn dj_task(
         DJState::idle()
     };
 
-    // Restore from the owned state before installing it, rather than installing it and then
-    // borrowing it back out of the lock under a read guard. `Idle`/`Stopped` carry nothing to
-    // restore.
     let (forced_profile, status_message) = match &initial_state {
         DJState::PlayingTrack {
             filename,
@@ -74,7 +70,7 @@ pub async fn dj_task(
         } => {
             resume_dj_track(
                 &guild_id,
-                &track_manager,
+                &bot_state,
                 ResumeTrackArgs {
                     filename: filename.clone(),
                     volume: *volume,
@@ -94,8 +90,7 @@ pub async fn dj_task(
         DJState::Idle { .. } | DJState::Stopped => (None, None),
     };
 
-    // Starting a DJ makes this state authoritative, so replace any stale entry rather than
-    // keeping it.
+    // A start is authoritative, so overwrite any existing entry for this guild.
     let dj_state = Arc::new(tokio::sync::RwLock::new(initial_state));
     bot_state
         .dj_states
@@ -397,11 +392,7 @@ pub async fn dj_task(
     tracing::info!("DJ task terminated for guild {}", guild_id);
 }
 
-async fn resume_dj_track(
-    guild_id: &GuildId,
-    track_manager: &Arc<tokio::sync::Mutex<TrackManager>>,
-    resume_track_args: ResumeTrackArgs,
-) {
+async fn resume_dj_track(guild_id: &GuildId, bot_state: &Data, resume_track_args: ResumeTrackArgs) {
     let ResumeTrackArgs {
         filename,
         volume,
@@ -418,7 +409,14 @@ async fn resume_dj_track(
 
     // Only attempt to restart the track if it hasn't finished yet
     if elapsed < duration {
-        let mut manager = track_manager.lock().await;
+        let manager_arc = bot_state
+            .track_managers
+            .read()
+            .await
+            .get(guild_id)
+            .expect("TrackManager should be initialized before DJ starts")
+            .clone();
+        let mut manager = manager_arc.lock().await;
 
         if let Err(e) = manager
             .start_track(StartTrackArgs {
@@ -492,7 +490,6 @@ impl DJManager {
         config: DJConfig,
         bot_state: Data,
         http: Arc<Http>,
-        track_manager: Arc<tokio::sync::Mutex<TrackManager>>,
         announcement_channel: Option<ChannelId>,
         restored_state: Option<DJState>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -528,7 +525,6 @@ impl DJManager {
                 rx,
                 announcement_channel,
                 http_clone,
-                track_manager,
                 restored_state,
             )
             .await;
