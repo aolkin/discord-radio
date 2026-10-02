@@ -82,8 +82,7 @@ impl ProfileStateMachine {
     }
 
     fn next_profile(&mut self) -> Option<(String, f32)> {
-        let next_index = self.selector.choose(&self.profiles);
-        let profile_entry = &self.profiles[next_index];
+        let profile_entry = self.selector.choose(&self.profiles)?;
 
         let mut rng = rand::rng();
         let duration_secs =

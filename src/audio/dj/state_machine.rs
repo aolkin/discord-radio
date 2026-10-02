@@ -1,5 +1,6 @@
-use crate::audio::dj::config::DJConfig;
-use crate::audio::dj::scheduler::{DJStateType, WeightedScheduler};
+use crate::audio::dj::config::{DJConfig, HexMessageEntry, NoisePeriodEntry, TrackEntry};
+use crate::audio::dj::manager::DJStateType;
+use crate::audio::dj::scheduler::{DJStateEntry, WeightedScheduler};
 use crate::audio::tracks::{StartTrackArgs, TrackManager};
 use crate::state::Data;
 use rand::Rng;
@@ -174,14 +175,10 @@ impl DJStateMachine {
         &mut self,
         track_manager: &mut TrackManager,
         bot_state: &Data,
-        state_type_filter: Option<crate::audio::dj::manager::DJStateTypeFilter>,
+        state_type_filter: Option<DJStateType>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let next_state_type = if let Some(filter) = state_type_filter {
-            self.scheduler.next_state_of_type(filter)
-        } else {
-            self.scheduler.next_state()
-        };
-
+        let Self { scheduler, .. } = self;
+        let next_state_type = scheduler.next_state(state_type_filter);
         self.transition_to_state(next_state_type, track_manager, bot_state)
             .await
     }
@@ -220,14 +217,12 @@ impl DJStateMachine {
             return Ok(());
         }
 
-        let next_state_type = self.scheduler.next_state();
-        self.transition_to_state(next_state_type, track_manager, bot_state)
-            .await
+        self.force_advance(track_manager, bot_state, None).await
     }
 
     async fn transition_to_state(
-        &mut self,
-        next_state_type: DJStateType,
+        &self,
+        next_state_type: DJStateEntry,
         track_manager: &mut TrackManager,
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -236,10 +231,15 @@ impl DJStateMachine {
 
         self.cleanup_current_state(track_manager, bot_state).await?;
 
-        info!("DJ transitioning to state: {:?}", next_state_type);
-        let next_state = self
-            .create_next_state(next_state_type, track_manager, bot_state)
-            .await?;
+        info!("DJ transitioning to state: {next_state_type}");
+        let next_state = match next_state_type {
+            DJStateEntry::Track(entry) => {
+                self.start_track_state(entry, track_manager, bot_state)
+                    .await
+            }
+            DJStateEntry::HexMessage(entry) => self.start_hex_message_state(entry, bot_state).await,
+            DJStateEntry::Noise(entry) => self.start_noise_state(entry, bot_state).await,
+        }?;
 
         // Record state transition metric
         let to_state = self.get_state_name(&next_state);
@@ -257,7 +257,7 @@ impl DJStateMachine {
     }
 
     async fn cleanup_current_state(
-        &mut self,
+        &self,
         track_manager: &mut TrackManager,
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -364,31 +364,13 @@ impl DJStateMachine {
         Ok(())
     }
 
-    async fn create_next_state(
-        &mut self,
-        state_type: DJStateType,
-        track_manager: &mut TrackManager,
-        bot_state: &Data,
-    ) -> Result<DJState, Box<dyn std::error::Error + Send + Sync>> {
-        match state_type {
-            DJStateType::Track(idx) => self.start_track_state(idx, track_manager, bot_state).await,
-            DJStateType::HexMessage(idx) => self.start_hex_message_state(idx, bot_state).await,
-            DJStateType::Noise(idx) => self.start_noise_state(idx, bot_state).await,
-        }
-    }
-
     async fn start_track_state(
-        &mut self,
-        idx: usize,
+        &self,
+        track_entry: TrackEntry,
         track_manager: &mut TrackManager,
         bot_state: &Data,
     ) -> Result<DJState, Box<dyn std::error::Error + Send + Sync>> {
-        let track_entry = self
-            .scheduler
-            .get_track(idx)
-            .ok_or("Track index out of bounds")?;
-
-        let track_name = format!("dj_track_{}", idx);
+        let track_name = format!("dj_track_{}", track_entry.filename);
 
         let duration = bot_state
             .duration_cache
@@ -484,15 +466,10 @@ impl DJStateMachine {
     }
 
     async fn start_hex_message_state(
-        &mut self,
-        idx: usize,
+        &self,
+        hex_entry: HexMessageEntry,
         bot_state: &Data,
     ) -> Result<DJState, Box<dyn std::error::Error + Send + Sync>> {
-        let hex_entry = self
-            .scheduler
-            .get_hex_message(idx)
-            .ok_or("Hex message index out of bounds")?;
-
         let loop_min = hex_entry
             .loop_min
             .unwrap_or(self.scheduler.config().hex_message_defaults.loop_min);
@@ -565,7 +542,7 @@ impl DJStateMachine {
     }
 
     async fn play_hex_message(
-        &mut self,
+        &self,
         message: String,
         loop_min: u32,
         loop_max: u32,
@@ -685,12 +662,10 @@ impl DJStateMachine {
     }
 
     async fn start_noise_state(
-        &mut self,
-        idx: usize,
+        &self,
+        noise_entry: NoisePeriodEntry,
         bot_state: &Data,
     ) -> Result<DJState, Box<dyn std::error::Error + Send + Sync>> {
-        let noise_entry = self.scheduler.get_noise_period(idx);
-
         let duration_secs = if noise_entry.min_duration_seconds >= noise_entry.max_duration_seconds
         {
             noise_entry.min_duration_seconds
