@@ -91,7 +91,6 @@ pub async fn dj_task(
         DJState::Idle { .. } | DJState::Stopped => (None, None),
     };
 
-    // A start is authoritative, so overwrite any existing entry for this guild.
     let dj_state = Arc::new(tokio::sync::RwLock::new(initial_state));
     bot_state
         .dj_states
@@ -408,7 +407,6 @@ async fn resume_dj_track(guild_id: &GuildId, bot_state: &Data, resume_track_args
         guild_id
     );
 
-    // Only attempt to restart the track if it hasn't finished yet
     if elapsed < duration {
         let manager_arc = bot_state
             .track_managers
