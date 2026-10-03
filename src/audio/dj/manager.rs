@@ -1,6 +1,6 @@
 use crate::audio::dj::config::DJConfig;
 use crate::audio::dj::profile_machine::ProfileStateMachine;
-use crate::audio::dj::segments::SegmentCtx;
+use crate::audio::dj::segments::{SegmentCtx, SignalProfilePlayback};
 use crate::audio::dj::state_machine::{DJState, DJStateMachine, format_dj_track_name};
 use crate::audio::tracks::StartTrackArgs;
 use crate::state::Data;
@@ -205,7 +205,7 @@ pub async fn dj_task(
         }
     }
 
-    let mut current_forced_profile: Option<String> = None;
+    let mut current_forced_profile = SignalProfilePlayback::default();
 
     loop {
         sleep(Duration::from_millis(DJ_TICK_INTERVAL_MS)).await;
@@ -328,9 +328,8 @@ pub async fn dj_task(
         // Handle profile forcing and transitions
         if let Some(ref mut pm) = profile_machine {
             // Determine which profile to transition to, if any
-            let profile_transition = if new_forced_profile.name != current_forced_profile {
+            let profile_transition = if new_forced_profile.name != current_forced_profile.name {
                 if let Some(ref profile) = new_forced_profile.name {
-                    // Fade over half the duration of the noise state
                     // Force the new profile
                     pm.force_profile(profile.clone());
                     Some((
@@ -338,11 +337,15 @@ pub async fn dj_task(
                         new_forced_profile.fade_in().as_secs_f32(),
                         "(forced)",
                     ))
-                } else if current_forced_profile.is_some() {
+                } else if current_forced_profile.name.is_some() {
                     // Release the forced profile and transition to next
                     pm.release_forced_profile()
                         .map(|(profile_name, _fade_secs)| {
-                            (profile_name, 1.5, "after releasing forced profile")
+                            (
+                                profile_name,
+                                current_forced_profile.fade_out().as_secs_f32(),
+                                "after releasing forced profile",
+                            )
                         })
                 } else {
                     None
@@ -366,8 +369,8 @@ pub async fn dj_task(
             }
 
             // Update the forced profile tracking
-            if new_forced_profile.name != current_forced_profile {
-                current_forced_profile = new_forced_profile.name;
+            if new_forced_profile.name != current_forced_profile.name {
+                current_forced_profile = new_forced_profile;
             }
         }
 
