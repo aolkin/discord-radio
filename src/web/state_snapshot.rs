@@ -155,7 +155,7 @@ impl BotSnapshot {
                 let dj_states = bot_state.dj_states.read().await;
                 let is_forced = if let Some(state_arc) = dj_states.get(&guild_id) {
                     let state = state_arc.read().await;
-                    state.forced_profile().is_some()
+                    state.forced_profile().name.is_some()
                 } else {
                     false
                 };

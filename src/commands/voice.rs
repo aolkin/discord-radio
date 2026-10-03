@@ -986,7 +986,7 @@ pub async fn get_dj_state(ctx: Context<'_>) -> Result<(), Error> {
             && let Some(profile_state) = states.get(&guild_id)
             && !profile_state.bypass
         {
-            let forced_indicator = if state.forced_profile().is_some() {
+            let forced_indicator = if state.forced_profile().name.is_some() {
                 " (forced)"
             } else {
                 ""

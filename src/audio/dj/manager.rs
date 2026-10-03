@@ -98,7 +98,7 @@ pub async fn dj_task(
                 })
                 .await
                 .inspect_err(|e| tracing::warn!("Failed to restore segment: {e:?}"));
-            (segment.noise_profile(), segment.voice_channel_status())
+            (segment.signal_profile().name, segment.channel_status())
         }
         DJState::Idle { .. } | DJState::Stopped => (None, None),
     };
@@ -317,14 +317,10 @@ pub async fn dj_task(
 
         // Snapshot the derived bits of the current state needed below, without holding
         // the read guard across the profile-transition awaits.
-        let (new_forced_profile, noise_duration, is_hex_message) = {
+        let (new_forced_profile, is_hex_message) = {
             let current_state = state_machine.current_state().await;
             (
-                current_state.forced_profile().map(|s| s.to_string()),
-                match &*current_state {
-                    DJState::PlayingNoise { duration, .. } => Some(*duration),
-                    _ => None,
-                },
+                current_state.forced_profile(),
                 matches!(&*current_state, DJState::PlayingHexMessage { .. }),
             )
         };
@@ -332,15 +328,16 @@ pub async fn dj_task(
         // Handle profile forcing and transitions
         if let Some(ref mut pm) = profile_machine {
             // Determine which profile to transition to, if any
-            let profile_transition = if new_forced_profile != current_forced_profile {
-                if let Some(ref profile_name) = new_forced_profile {
+            let profile_transition = if new_forced_profile.name != current_forced_profile {
+                if let Some(ref profile) = new_forced_profile.name {
                     // Fade over half the duration of the noise state
-                    let fade_secs = noise_duration
-                        .map(|duration| duration.as_secs_f32() / 2.0)
-                        .unwrap_or(1.0);
                     // Force the new profile
-                    pm.force_profile(profile_name.clone());
-                    Some((profile_name.clone(), fade_secs, "(forced)"))
+                    pm.force_profile(profile.clone());
+                    Some((
+                        profile.clone(),
+                        new_forced_profile.fade_in().as_secs_f32(),
+                        "(forced)",
+                    ))
                 } else if current_forced_profile.is_some() {
                     // Release the forced profile and transition to next
                     pm.release_forced_profile()
@@ -369,8 +366,8 @@ pub async fn dj_task(
             }
 
             // Update the forced profile tracking
-            if new_forced_profile != current_forced_profile {
-                current_forced_profile = new_forced_profile;
+            if new_forced_profile.name != current_forced_profile {
+                current_forced_profile = new_forced_profile.name;
             }
         }
 

@@ -1,8 +1,8 @@
 use crate::audio::dj::config::{DJConfig, HexMessageEntry, NoisePeriodEntry, TrackEntry};
 use crate::audio::dj::manager::DJStateType;
 use crate::audio::dj::scheduler::{DJStateEntry, WeightedScheduler};
-use crate::audio::dj::segments::Segment;
 use crate::audio::dj::segments::SegmentCtx;
+use crate::audio::dj::segments::{Segment, SignalProfilePlayback};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
 use crate::audio::tracks::{StartTrackArgs, TrackManager};
 use crate::state::{BotState, Data};
@@ -83,17 +83,24 @@ impl DJState {
         }
     }
 
-    pub fn forced_profile(&self) -> Option<String> {
+    pub fn forced_profile(&self) -> SignalProfilePlayback {
         match self {
-            DJState::PlayingTrack { forced_profile, .. } => {
-                forced_profile.as_ref().map(|s| s.to_owned())
-            }
-            DJState::PlayingHexMessage { forced_profile, .. } => {
-                forced_profile.as_ref().map(|s| s.to_owned())
-            }
-            DJState::PlayingNoise { noise_profile, .. } => Some(noise_profile.to_owned()),
-            DJState::Segment(segment) => segment.noise_profile(),
-            _ => None,
+            DJState::PlayingTrack { forced_profile, .. }
+            | DJState::PlayingHexMessage { forced_profile, .. } => forced_profile
+                .as_ref()
+                .map(|profile| profile.into())
+                .unwrap_or_default(),
+            DJState::PlayingNoise {
+                noise_profile,
+                duration,
+                ..
+            } => SignalProfilePlayback {
+                name: Some(noise_profile.to_owned()),
+                fade_in_duration: Some(duration.div_f32(2.0)),
+                ..Default::default()
+            },
+            DJState::Segment(segment) => segment.signal_profile(),
+            _ => Default::default(),
         }
     }
 }
