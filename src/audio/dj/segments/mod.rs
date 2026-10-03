@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serenity::http::Http;
 use serenity::model::id::GuildId;
+use std::borrow::ToOwned;
 use std::fmt::{Debug, Display};
 use std::ops::Deref;
 use std::time::Duration;
@@ -14,12 +15,50 @@ pub struct SegmentCtx<'a> {
     pub http: &'a Http,
 }
 
-pub trait SegmentPlaybackConfig {
-    fn noise_profile(&self) -> Option<String> {
-        None
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SignalProfilePlayback {
+    pub name: Option<String>,
+    pub fade_in_duration: Option<Duration>,
+    pub fade_out_duration: Option<Duration>,
+}
+
+impl SignalProfilePlayback {
+    pub fn fade_in(&self) -> Duration {
+        self.fade_in_duration
+            .unwrap_or_else(|| Duration::from_secs(1))
     }
 
-    fn voice_channel_status(&self) -> Option<String> {
+    pub fn fade_out(&self) -> Duration {
+        self.fade_out_duration
+            .unwrap_or_else(|| Duration::from_secs_f32(1.5))
+    }
+}
+
+impl From<String> for SignalProfilePlayback {
+    fn from(name: String) -> Self {
+        Self {
+            name: Some(name),
+            ..Default::default()
+        }
+    }
+}
+
+impl<T> From<&T> for SignalProfilePlayback
+where
+    T: Clone + Into<String>,
+{
+    fn from(value: &T) -> Self {
+        let name: String = value.clone().into();
+        name.into()
+    }
+}
+
+pub trait SegmentPlaybackConfig {
+    fn signal_profile(&self) -> SignalProfilePlayback {
+        Default::default()
+    }
+
+    fn channel_status(&self) -> Option<String> {
         None
     }
 }
@@ -49,8 +88,8 @@ pub trait Segment: Send + Sync + Display + Debug + SegmentPlaybackConfig {
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct CommonSegmentPlaybackConfig {
-    pub noise_profile: Option<String>,
-    pub voice_channel_status: Option<String>,
+    pub signal_profile: Option<SignalProfilePlayback>,
+    pub channel_status: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -74,12 +113,12 @@ impl From<CommonSegmentPlaybackConfig> for BasicSegmentPlaybackConfig {
 }
 
 impl<T: Deref<Target = CommonSegmentPlaybackConfig>> SegmentPlaybackConfig for T {
-    fn noise_profile(&self) -> Option<String> {
-        self.deref().noise_profile.to_owned()
+    fn signal_profile(&self) -> SignalProfilePlayback {
+        self.deref().signal_profile.to_owned().unwrap_or_default()
     }
 
-    fn voice_channel_status(&self) -> Option<String> {
-        self.deref().voice_channel_status.to_owned()
+    fn channel_status(&self) -> Option<String> {
+        self.deref().channel_status.to_owned()
     }
 }
 
