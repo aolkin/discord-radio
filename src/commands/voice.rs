@@ -177,7 +177,7 @@ pub async fn play_message(
     let obfuscated = obfuscate_message(&message);
     ctx.data()
         .voice_status_manager
-        .push_status(guild_id, obfuscated.clone(), ctx.http())
+        .push_status(guild_id, &obfuscated, ctx.http())
         .await;
 
     {
