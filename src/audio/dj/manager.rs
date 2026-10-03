@@ -60,8 +60,6 @@ pub async fn dj_task(
         DJState::idle()
     };
 
-    // Restore on the owned state, before it's installed, so a segment's `restore` runs
-    // without a read guard held on the state.
     let (forced_profile, status_message) = match &initial_state {
         DJState::PlayingTrack {
             filename,
