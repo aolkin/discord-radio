@@ -171,7 +171,7 @@ impl BotState {
     pub async fn log_dj_activity(
         &self,
         guild_id: u64,
-        event_type: &str,
+        event_type: String,
         details: serde_json::Value,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         #[derive(Serialize)]
@@ -186,7 +186,7 @@ impl BotState {
 
         let entry = DJActivityEntry {
             timestamp: chrono::Utc::now().to_rfc3339(),
-            event_type: event_type.to_string(),
+            event_type,
             details,
         };
 

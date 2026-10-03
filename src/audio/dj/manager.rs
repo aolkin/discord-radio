@@ -1,5 +1,6 @@
 use crate::audio::dj::config::DJConfig;
 use crate::audio::dj::profile_machine::ProfileStateMachine;
+use crate::audio::dj::segments::SegmentCtx;
 use crate::audio::dj::state_machine::{DJState, DJStateMachine, format_dj_track_name};
 use crate::audio::tracks::StartTrackArgs;
 use crate::state::Data;
@@ -88,6 +89,17 @@ pub async fn dj_task(
             ..
         } => (forced_profile.clone(), status_message.clone()),
         DJState::PlayingNoise { noise_profile, .. } => (Some(noise_profile.clone()), None),
+        DJState::Segment(segment) => {
+            let _ = segment
+                .restore(&SegmentCtx {
+                    guild_id: &guild_id,
+                    bot_state: &bot_state,
+                    http: &http,
+                })
+                .await
+                .inspect_err(|e| tracing::warn!("Failed to restore segment: {e:?}"));
+            (segment.noise_profile(), segment.voice_channel_status())
+        }
         DJState::Idle { .. } | DJState::Stopped => (None, None),
     };
 
@@ -104,6 +116,7 @@ pub async fn dj_task(
         announcement_channel,
         http.clone(),
         dj_state,
+        bot_state.clone(),
     );
 
     // Initialize profile state machine
