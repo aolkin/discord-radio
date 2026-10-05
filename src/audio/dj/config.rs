@@ -156,6 +156,10 @@ pub struct ConfigComponent {
     pub state_weights: StateWeights,
     #[serde(default)]
     pub playback: PlaybackSettings,
+    #[serde(default)]
+    pub signal_profiles: Vec<SignalProfileEntry>,
+    #[serde(default)]
+    pub channel_status: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -231,6 +235,8 @@ impl DJConfig {
         self.state_weights = orchestration.state_weights;
         self.recent_history_size = orchestration.playback.recent_history_size;
         self.duplicate_penalty_multiplier = orchestration.playback.duplicate_penalty_multiplier;
+        self.signal_profiles = orchestration.signal_profiles;
+        self.channel_status = orchestration.channel_status;
 
         Ok(())
     }
@@ -278,7 +284,13 @@ mod tests {
                 max_duration_seconds: 2.0,
                 weight: 1,
             }],
-            signal_profiles: Vec::new(),
+            signal_profiles: vec![SignalProfileEntry {
+                profile_name: "local".to_string(),
+                weight: 1,
+                fade_duration_seconds: 1.0,
+                min_time_seconds: 1.0,
+                max_time_seconds: 2.0,
+            }],
             state_weights: StateWeights {
                 track: 7,
                 hex_message: 7,
@@ -286,7 +298,7 @@ mod tests {
             },
             recent_history_size: 12,
             duplicate_penalty_multiplier: 0.5,
-            channel_status: None,
+            channel_status: Some("from the local file".to_string()),
         }
     }
 
@@ -312,7 +324,10 @@ mod tests {
         std::fs::write(
             dir.path().join("config.json"),
             r#"{"state_weights":{"track":3,"hex_message":0,"noise":0},
-                "playback":{"recent_history_size":2,"duplicate_penalty_multiplier":0.25}}"#,
+                "playback":{"recent_history_size":2,"duplicate_penalty_multiplier":0.25},
+                "signal_profiles":[{"profile_name":"slot","weight":2,
+                "fade_duration_seconds":3.0,"min_time_seconds":4.0,"max_time_seconds":5.0}],
+                "channel_status":"from the slot"}"#,
         )
         .unwrap();
         let resolver = resolver(dir.path()).await;
@@ -341,6 +356,9 @@ mod tests {
         assert_eq!(config.state_weights.track, 3);
         assert_eq!(config.recent_history_size, 2);
         assert_eq!(config.duplicate_penalty_multiplier, 0.25);
+        assert_eq!(config.signal_profiles.len(), 1);
+        assert_eq!(config.signal_profiles[0].profile_name, "slot");
+        assert_eq!(config.channel_status, Some("from the slot".to_string()));
 
         let mut config = local_file_config();
         config
@@ -357,5 +375,7 @@ mod tests {
             config.recent_history_size,
             PlaybackSettings::default().recent_history_size
         );
+        assert!(config.signal_profiles.is_empty());
+        assert_eq!(config.channel_status, None);
     }
 }
