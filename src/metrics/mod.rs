@@ -21,10 +21,6 @@ pub struct BotMetrics {
     dj_state_transitions: Counter<u64>,
     dj_state_duration: Histogram<f64>,
 
-    // Track playback metrics
-    track_playback_started: Counter<u64>,
-    track_playback_stopped: Counter<u64>,
-
     // Hex message metrics
     hex_message_started: Counter<u64>,
     hex_message_completed: Counter<u64>,
@@ -55,18 +51,6 @@ impl BotMetrics {
             .f64_histogram("dj_state_duration")
             .with_description("Duration spent in each DJ state")
             .with_unit("s")
-            .build();
-
-        let track_playback_started = meter
-            .u64_counter("track_playback_started")
-            .with_description("Number of tracks started")
-            .with_unit("tracks")
-            .build();
-
-        let track_playback_stopped = meter
-            .u64_counter("track_playback_stopped")
-            .with_description("Number of tracks stopped")
-            .with_unit("tracks")
             .build();
 
         let hex_message_started = meter
@@ -121,8 +105,6 @@ impl BotMetrics {
             _meter: meter,
             dj_state_transitions,
             dj_state_duration,
-            track_playback_started,
-            track_playback_stopped,
             hex_message_started,
             hex_message_completed,
             hex_message_loops,
@@ -152,27 +134,6 @@ impl BotMetrics {
             &[
                 KeyValue::new("guild_id", guild_id.to_string()),
                 KeyValue::new("state", state.to_string()),
-            ],
-        );
-    }
-
-    // Track playback metrics
-    pub fn record_track_started(&self, guild_id: u64, track_name: &str) {
-        self.track_playback_started.add(
-            1,
-            &[
-                KeyValue::new("guild_id", guild_id.to_string()),
-                KeyValue::new("track_name", track_name.to_string()),
-            ],
-        );
-    }
-
-    pub fn record_track_stopped(&self, guild_id: u64, track_name: &str) {
-        self.track_playback_stopped.add(
-            1,
-            &[
-                KeyValue::new("guild_id", guild_id.to_string()),
-                KeyValue::new("track_name", track_name.to_string()),
             ],
         );
     }
