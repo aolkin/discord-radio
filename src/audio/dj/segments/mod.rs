@@ -132,14 +132,10 @@ pub struct TimedSegment {
 }
 
 impl TimedSegment {
-    pub fn new(
-        playback_config: CommonSegmentPlaybackConfig,
-        started_at: std::time::Instant,
-        duration: Duration,
-    ) -> Self {
+    pub fn new(playback_config: CommonSegmentPlaybackConfig, duration: Duration) -> Self {
         Self {
             playback_config,
-            started_at,
+            started_at: std::time::Instant::now(),
             duration,
         }
     }
@@ -157,9 +153,7 @@ impl Deref for TimedSegment {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct NoiseSegment {
-    timed: TimedSegment,
-}
+pub struct NoiseSegment(TimedSegment);
 
 impl NoiseSegment {
     pub fn new(noise_profile: String, duration: Duration) -> Self {
@@ -171,26 +165,18 @@ impl NoiseSegment {
             }),
             channel_status: None,
         };
-        Self {
-            timed: TimedSegment::new(playback_config, std::time::Instant::now(), duration),
-        }
+        Self(TimedSegment::new(playback_config, duration))
     }
 
     pub fn idle(duration: Duration) -> Self {
-        Self {
-            timed: TimedSegment::new(Default::default(), std::time::Instant::now(), duration),
-        }
-    }
-
-    fn profile_name(&self) -> Option<String> {
-        self.signal_profile().name
+        Self(TimedSegment::new(Default::default(), duration))
     }
 }
 
 impl Deref for NoiseSegment {
     type Target = CommonSegmentPlaybackConfig;
     fn deref(&self) -> &Self::Target {
-        &self.timed
+        &self.0
     }
 }
 
@@ -204,15 +190,15 @@ impl Display for NoiseSegment {
 #[typetag::serde]
 impl Segment for NoiseSegment {
     async fn is_complete(&self, _ctx: &SegmentCtx) -> bool {
-        self.timed.is_elapsed()
+        self.0.is_elapsed()
     }
 
     async fn exit(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
-        let duration_secs = self.timed.started_at.elapsed().as_secs_f64();
+        let duration_secs = self.0.started_at.elapsed().as_secs_f64();
         if let Some(metrics) = ctx.bot_state.metrics.read().await.as_ref() {
             metrics.record_noise_state_duration(
                 ctx.guild_id.get(),
-                self.profile_name().as_deref().unwrap_or_default(),
+                self.signal_profile().name.as_deref().unwrap_or_default(),
                 duration_secs,
             );
         }
@@ -221,15 +207,15 @@ impl Segment for NoiseSegment {
 
     fn loggable_properties(&self) -> serde_json::Value {
         serde_json::json!({
-            "noise_profile": self.profile_name(),
-            "duration_secs": self.timed.duration.as_secs_f32(),
+            "noise_profile": self.signal_profile().name,
+            "duration_secs": self.0.duration.as_secs_f32(),
         })
     }
 
     fn state_info_display(&self) -> (String, String) {
-        let elapsed = self.timed.started_at.elapsed().as_secs_f32();
-        let total = self.timed.duration.as_secs_f32();
-        let details = match self.profile_name() {
+        let elapsed = self.0.started_at.elapsed().as_secs_f32();
+        let total = self.0.duration.as_secs_f32();
+        let details = match self.signal_profile().name {
             Some(name) => format!("Profile: {name} ({elapsed:.1}s / {total:.1}s)"),
             None => format!("No profile ({elapsed:.1}s / {total:.1}s)"),
         };
@@ -237,9 +223,9 @@ impl Segment for NoiseSegment {
     }
 
     fn current_state_display(&self) -> String {
-        let elapsed = self.timed.started_at.elapsed().as_secs();
-        let total = self.timed.duration.as_secs();
-        match self.profile_name() {
+        let elapsed = self.0.started_at.elapsed().as_secs();
+        let total = self.0.duration.as_secs();
+        match self.signal_profile().name {
             Some(name) => format!("Playing noise with profile: **{name}** ({elapsed}/{total}s)"),
             None => format!("Playing noise with no profile ({elapsed}/{total}s)"),
         }
