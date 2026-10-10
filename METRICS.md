@@ -28,8 +28,9 @@ If these environment variables are not set, the bot will run normally without me
   - Labels: `guild_id`, `from_state`, `to_state`
   
 - **dj_state_duration** (histogram): Time spent in each DJ state (in seconds)
-  - Labels: `guild_id`, `state`
-  - States: `playing_track`, `playing_hex_message`, `playing_noise`, `idle`, `stopped`
+  - Labels: `guild_id`, `state`, and `noise_profile` (only when `state` is `playing_noise`)
+  - Recorded states: `playing_track`, `playing_hex_message`, `playing_noise`
+  - Idle time is recorded as `playing_noise` without a `noise_profile` label
 
 ### Hex Message Metrics
 
@@ -41,14 +42,6 @@ If these environment variables are not set, the bot will run normally without me
 
 - **hex_message_loops** (histogram): Number of loops for hex messages
   - Labels: `guild_id`
-
-### Noise State Metrics
-
-- **noise_state_changes** (counter): Number of noise state changes
-  - Labels: `guild_id`, `noise_profile`
-
-- **noise_state_duration** (histogram): Duration spent in noise states (in seconds)
-  - Labels: `guild_id`, `noise_profile`
 
 ### System Metrics
 

@@ -26,10 +26,6 @@ pub struct BotMetrics {
     hex_message_completed: Counter<u64>,
     hex_message_loops: Histogram<u64>,
 
-    // Noise state metrics
-    noise_state_changes: Counter<u64>,
-    noise_state_duration: Histogram<f64>,
-
     // Liveness metric
     heartbeat: Counter<u64>,
 
@@ -71,18 +67,6 @@ impl BotMetrics {
             .with_unit("loops")
             .build();
 
-        let noise_state_changes = meter
-            .u64_counter("noise_state_changes")
-            .with_description("Number of noise state changes")
-            .with_unit("changes")
-            .build();
-
-        let noise_state_duration = meter
-            .f64_histogram("noise_state_duration")
-            .with_description("Duration spent in noise states")
-            .with_unit("s")
-            .build();
-
         let heartbeat = meter
             .u64_counter("bot_heartbeat")
             .with_description("Bot liveness heartbeat")
@@ -108,8 +92,6 @@ impl BotMetrics {
             hex_message_started,
             hex_message_completed,
             hex_message_loops,
-            noise_state_changes,
-            noise_state_duration,
             heartbeat,
             active_guilds,
             active_voice_connections,
@@ -128,14 +110,21 @@ impl BotMetrics {
         );
     }
 
-    pub fn record_dj_state_duration(&self, guild_id: u64, state: &str, duration_secs: f64) {
-        self.dj_state_duration.record(
-            duration_secs,
-            &[
-                KeyValue::new("guild_id", guild_id.to_string()),
-                KeyValue::new("state", state.to_string()),
-            ],
-        );
+    pub fn record_dj_state_duration(
+        &self,
+        guild_id: u64,
+        state: &str,
+        noise_profile: Option<&str>,
+        duration_secs: f64,
+    ) {
+        let mut attributes = vec![
+            KeyValue::new("guild_id", guild_id.to_string()),
+            KeyValue::new("state", state.to_string()),
+        ];
+        if let Some(noise_profile) = noise_profile {
+            attributes.push(KeyValue::new("noise_profile", noise_profile.to_string()));
+        }
+        self.dj_state_duration.record(duration_secs, &attributes);
     }
 
     // Hex message metrics
@@ -149,32 +138,6 @@ impl BotMetrics {
             .add(1, &[KeyValue::new("guild_id", guild_id.to_string())]);
         self.hex_message_loops
             .record(loops, &[KeyValue::new("guild_id", guild_id.to_string())]);
-    }
-
-    // Noise state metrics
-    pub fn record_noise_state_change(&self, guild_id: u64, noise_profile: &str) {
-        self.noise_state_changes.add(
-            1,
-            &[
-                KeyValue::new("guild_id", guild_id.to_string()),
-                KeyValue::new("noise_profile", noise_profile.to_string()),
-            ],
-        );
-    }
-
-    pub fn record_noise_state_duration(
-        &self,
-        guild_id: u64,
-        noise_profile: &str,
-        duration_secs: f64,
-    ) {
-        self.noise_state_duration.record(
-            duration_secs,
-            &[
-                KeyValue::new("guild_id", guild_id.to_string()),
-                KeyValue::new("noise_profile", noise_profile.to_string()),
-            ],
-        );
     }
 
     // Liveness metric

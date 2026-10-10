@@ -191,9 +191,10 @@ impl Segment for NoiseSegment {
     async fn exit(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
         let duration_secs = self.0.started_at.elapsed().as_secs_f64();
         if let Some(metrics) = ctx.bot_state.metrics.read().await.as_ref() {
-            metrics.record_noise_state_duration(
+            metrics.record_dj_state_duration(
                 ctx.guild_id.get(),
-                self.signal_profile().name.as_deref().unwrap_or_default(),
+                self.state_name(),
+                self.signal_profile().name.as_deref(),
                 duration_secs,
             );
         }
