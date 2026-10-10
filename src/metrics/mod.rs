@@ -114,15 +114,15 @@ impl BotMetrics {
         &self,
         guild_id: u64,
         state: &str,
-        noise_profile: Option<&str>,
+        signal_profile: Option<&str>,
         duration_secs: f64,
     ) {
         let mut attributes = vec![
             KeyValue::new("guild_id", guild_id.to_string()),
             KeyValue::new("state", state.to_string()),
         ];
-        if let Some(noise_profile) = noise_profile {
-            attributes.push(KeyValue::new("noise_profile", noise_profile.to_string()));
+        if let Some(signal_profile) = signal_profile {
+            attributes.push(KeyValue::new("signal_profile", signal_profile.to_string()));
         }
         self.dj_state_duration.record(duration_secs, &attributes);
     }

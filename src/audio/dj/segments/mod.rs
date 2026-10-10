@@ -67,6 +67,7 @@ pub trait SegmentPlaybackConfig {
 #[typetag::serde(tag = "type")]
 pub trait Segment: Send + Sync + Debug + SegmentPlaybackConfig {
     async fn is_complete(&self, ctx: &SegmentCtx) -> bool;
+    fn elapsed(&self) -> Duration;
 
     async fn restore(&self, _ctx: &SegmentCtx) -> anyhow::Result<()> {
         Ok(())
@@ -188,17 +189,8 @@ impl Segment for NoiseSegment {
         self.0.is_elapsed()
     }
 
-    async fn exit(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
-        let duration_secs = self.0.started_at.elapsed().as_secs_f64();
-        if let Some(metrics) = ctx.bot_state.metrics.read().await.as_ref() {
-            metrics.record_dj_state_duration(
-                ctx.guild_id.get(),
-                self.state_name(),
-                self.signal_profile().name.as_deref(),
-                duration_secs,
-            );
-        }
-        Ok(())
+    fn elapsed(&self) -> Duration {
+        self.0.started_at.elapsed()
     }
 
     fn loggable_properties(&self) -> serde_json::Value {

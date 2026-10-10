@@ -245,6 +245,7 @@ impl DJStateMachine {
                 filename,
                 status_message,
                 started_at,
+                forced_profile,
                 ..
             } => {
                 let track_name = format_dj_track_name(filename);
@@ -254,7 +255,7 @@ impl DJStateMachine {
                     metrics.record_dj_state_duration(
                         self.guild_id.get(),
                         "playing_track",
-                        None,
+                        forced_profile.as_deref(),
                         duration_secs,
                     );
                 }
@@ -274,6 +275,7 @@ impl DJStateMachine {
             DJState::PlayingHexMessage {
                 status_message,
                 started_at,
+                forced_profile,
                 target_loops,
                 ..
             } => {
@@ -283,7 +285,7 @@ impl DJStateMachine {
                     metrics.record_dj_state_duration(
                         self.guild_id.get(),
                         "playing_hex_message",
-                        None,
+                        forced_profile.as_deref(),
                         duration_secs,
                     );
                     metrics.record_hex_message_completed(self.guild_id.get(), *target_loops as u64);
@@ -315,6 +317,14 @@ impl DJStateMachine {
                 }
             }
             DJState::Segment(segment) => {
+                if let Some(metrics) = bot_state.metrics.read().await.as_ref() {
+                    metrics.record_dj_state_duration(
+                        self.guild_id.get(),
+                        segment.state_name(),
+                        segment.signal_profile().name.as_deref(),
+                        segment.elapsed().as_secs_f64(),
+                    );
+                }
                 segment.exit(&self.segment_ctx()).await?;
             }
             DJState::Stopped => {}
