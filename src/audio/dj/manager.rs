@@ -88,7 +88,6 @@ pub async fn dj_task(
             status_message,
             ..
         } => (forced_profile.clone(), status_message.clone()),
-        DJState::PlayingNoise { noise_profile, .. } => (Some(noise_profile.clone()), None),
         DJState::Segment(segment) => {
             let _ = segment
                 .restore(&SegmentCtx {
@@ -100,7 +99,7 @@ pub async fn dj_task(
                 .inspect_err(|e| tracing::warn!("Failed to restore segment: {e:?}"));
             (segment.signal_profile().name, segment.channel_status())
         }
-        DJState::Idle { .. } | DJState::Stopped => (None, None),
+        DJState::Stopped => (None, None),
     };
 
     let dj_state = Arc::new(tokio::sync::RwLock::new(initial_state));
