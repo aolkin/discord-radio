@@ -695,7 +695,7 @@ impl DJStateMachine {
         match state {
             DJState::PlayingTrack { .. } => "playing_track".to_string(),
             DJState::PlayingHexMessage { .. } => "playing_hex_message".to_string(),
-            DJState::Segment(segment) => segment.to_string(),
+            DJState::Segment(segment) => segment.state_name().to_string(),
             DJState::Stopped => "stopped".to_string(),
         }
     }

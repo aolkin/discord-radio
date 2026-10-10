@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serenity::http::Http;
 use serenity::model::id::GuildId;
 use std::borrow::ToOwned;
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
 use std::ops::Deref;
 use std::time::Duration;
 
@@ -65,7 +65,7 @@ pub trait SegmentPlaybackConfig {
 
 #[async_trait]
 #[typetag::serde(tag = "type")]
-pub trait Segment: Send + Sync + Display + Debug + SegmentPlaybackConfig {
+pub trait Segment: Send + Sync + Debug + SegmentPlaybackConfig {
     async fn is_complete(&self, ctx: &SegmentCtx) -> bool;
 
     async fn restore(&self, _ctx: &SegmentCtx) -> anyhow::Result<()> {
@@ -82,6 +82,7 @@ pub trait Segment: Send + Sync + Display + Debug + SegmentPlaybackConfig {
         serde_json::json!({})
     }
 
+    fn state_name(&self) -> &'static str;
     fn state_info_display(&self) -> (String, String);
     fn current_state_display(&self) -> String;
 }
@@ -180,12 +181,6 @@ impl Deref for NoiseSegment {
     }
 }
 
-impl Display for NoiseSegment {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "playing_noise")
-    }
-}
-
 #[async_trait]
 #[typetag::serde]
 impl Segment for NoiseSegment {
@@ -210,6 +205,10 @@ impl Segment for NoiseSegment {
             "noise_profile": self.signal_profile().name,
             "duration_secs": self.0.duration.as_secs_f32(),
         })
+    }
+
+    fn state_name(&self) -> &'static str {
+        "playing_noise"
     }
 
     fn state_info_display(&self) -> (String, String) {
