@@ -4,7 +4,7 @@ use crate::audio::dj::segments::{
 };
 use crate::audio::dj::weighted_choice::WeightedSelector;
 use rand::Rng;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 pub struct ProfileStateMachine {
     /// `None` while a forced profile is active.
@@ -26,8 +26,7 @@ fn profile_segment(entry: &SignalProfileEntry, hold_starts_after: Duration) -> T
     };
     TimedSegment::new(
         playback_config,
-        Instant::now() + hold_starts_after,
-        Duration::from_secs_f32(duration_secs),
+        hold_starts_after + Duration::from_secs_f32(duration_secs),
     )
 }
 
