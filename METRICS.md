@@ -31,14 +31,6 @@ If these environment variables are not set, the bot will run normally without me
   - Labels: `guild_id`, `state`
   - States: `playing_track`, `playing_hex_message`, `playing_noise`, `idle`, `stopped`
 
-### Track Playback Metrics
-
-- **track_playback_started** (counter): Number of tracks started
-  - Labels: `guild_id`
-
-- **track_playback_stopped** (counter): Number of tracks stopped
-  - Labels: `guild_id`
-
 ### Hex Message Metrics
 
 - **hex_message_started** (counter): Number of hex messages started
@@ -90,11 +82,6 @@ rate(dj_state_transitions_total[5m])
 ### Average DJ State Duration
 ```promql
 rate(dj_state_duration_sum[5m]) / rate(dj_state_duration_count[5m])
-```
-
-### Track Playback Rate
-```promql
-rate(track_playback_started_total[5m])
 ```
 
 ### Bot Uptime (via heartbeats)
