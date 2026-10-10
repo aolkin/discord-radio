@@ -44,6 +44,10 @@ impl Weighted for TrackEntry {
     fn weight(&self) -> f32 {
         self.weight as f32
     }
+
+    fn key(&self) -> &str {
+        &self.filename
+    }
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -88,6 +92,10 @@ impl Weighted for HexMessageEntry {
     fn weight(&self) -> f32 {
         self.weight as f32
     }
+
+    fn key(&self) -> &str {
+        &self.text
+    }
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -101,6 +109,10 @@ pub struct NoisePeriodEntry {
 impl Weighted for NoisePeriodEntry {
     fn weight(&self) -> f32 {
         self.weight as f32
+    }
+
+    fn key(&self) -> &str {
+        &self.noise_profile
     }
 }
 
@@ -116,6 +128,10 @@ pub struct SignalProfileEntry {
 impl Weighted for SignalProfileEntry {
     fn weight(&self) -> f32 {
         self.weight as f32
+    }
+
+    fn key(&self) -> &str {
+        &self.profile_name
     }
 }
 

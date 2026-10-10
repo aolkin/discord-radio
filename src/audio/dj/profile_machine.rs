@@ -45,7 +45,7 @@ impl ProfileStateMachine {
         let current = Some(profile_segment(&profiles[initial_index], Duration::ZERO));
 
         let mut selector = WeightedSelector::new(5, 0.3);
-        selector.add_to_history(initial_index);
+        selector.add_to_history(&profiles[initial_index]);
 
         Self {
             current,

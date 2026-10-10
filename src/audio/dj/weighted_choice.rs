@@ -4,11 +4,14 @@ use std::collections::VecDeque;
 /// A weight an item contributes to weighted random selection.
 pub trait Weighted {
     fn weight(&self) -> f32;
+
+    /// Identifies the item in recent-history across list changes.
+    fn key(&self) -> &str;
 }
 
 /// A weighted random selector with history-based penalty to avoid repetition
 pub struct WeightedSelector {
-    recent_history: VecDeque<usize>,
+    recent_history: VecDeque<String>,
     history_size: usize,
     penalty_multiplier: f32,
 }
@@ -25,12 +28,7 @@ impl WeightedSelector {
     pub fn choose<'a, T: Weighted>(&mut self, items: &'a [T]) -> Option<&'a T> {
         let effective_weights: Vec<f32> = items
             .iter()
-            .enumerate()
-            .map(|(idx, item)| {
-                let base_weight = item.weight();
-                let penalty = self.get_penalty_for_index(idx);
-                base_weight * penalty
-            })
+            .map(|item| item.weight() * self.get_penalty_for_key(item.key()))
             .collect();
 
         let total: f32 = effective_weights.iter().sum();
@@ -42,22 +40,21 @@ impl WeightedSelector {
         let roll: f32 = rng.random::<f32>() * total;
 
         let mut cumulative = 0.0;
-        for (idx, weight) in effective_weights.iter().enumerate() {
-            cumulative += weight;
-            if roll < cumulative {
-                self.add_to_history(idx);
-                return items.get(idx);
-            }
-        }
-
-        let idx = items.len().saturating_sub(1);
-        self.add_to_history(idx);
-        items.get(idx)
+        let idx = effective_weights
+            .iter()
+            .position(|weight| {
+                cumulative += weight;
+                roll < cumulative
+            })
+            .unwrap_or(items.len() - 1);
+        let item = &items[idx];
+        self.add_to_history(item);
+        Some(item)
     }
 
-    fn get_penalty_for_index(&self, idx: usize) -> f32 {
-        for (history_idx, &item_idx) in self.recent_history.iter().enumerate() {
-            if item_idx == idx {
+    fn get_penalty_for_key(&self, key: &str) -> f32 {
+        for (history_idx, item_key) in self.recent_history.iter().enumerate() {
+            if item_key == key {
                 let recency_factor = 1.0 - (history_idx as f32 / self.recent_history.len() as f32);
                 return self.penalty_multiplier * recency_factor + (1.0 - self.penalty_multiplier);
             }
@@ -65,12 +62,12 @@ impl WeightedSelector {
         1.0
     }
 
-    /// Records `index` into recent-history without selecting, so a
+    /// Records `item` into recent-history without selecting, so a
     /// subsequent `choose` treats it as already having just been picked.
-    pub fn add_to_history(&mut self, idx: usize) {
+    pub fn add_to_history<T: Weighted>(&mut self, item: &T) {
         if self.recent_history.len() >= self.history_size {
             self.recent_history.pop_front();
         }
-        self.recent_history.push_back(idx);
+        self.recent_history.push_back(item.key().to_owned());
     }
 }
