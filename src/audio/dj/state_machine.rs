@@ -2,7 +2,7 @@ use crate::audio::dj::config::{DJConfig, HexMessageEntry, NoisePeriodEntry, Trac
 use crate::audio::dj::manager::DJStateType;
 use crate::audio::dj::scheduler::{DJStateEntry, WeightedScheduler};
 use crate::audio::dj::segments::SegmentCtx;
-use crate::audio::dj::segments::{Segment, SignalProfilePlayback, TimedSegment};
+use crate::audio::dj::segments::{NoiseSegment, Segment, SignalProfilePlayback};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
 use crate::audio::tracks::{StartTrackArgs, TrackManager};
 use crate::state::{BotState, Data};
@@ -42,9 +42,15 @@ pub enum DJState {
     Stopped,
 }
 
+impl<S: Segment + 'static> From<S> for DJState {
+    fn from(segment: S) -> Self {
+        DJState::Segment(Box::new(segment))
+    }
+}
+
 impl DJState {
     pub fn idle() -> Self {
-        DJState::Segment(Box::new(TimedSegment::idle(Duration::from_secs(1))))
+        NoiseSegment::idle(Duration::from_secs(1)).into()
     }
 
     pub async fn is_complete(&self, ctx: &SegmentCtx<'_>) -> bool {
@@ -637,10 +643,7 @@ impl DJStateMachine {
             metrics.record_noise_state_change(self.guild_id.get(), &noise_profile);
         }
 
-        Ok(DJState::Segment(Box::new(TimedSegment::noise(
-            noise_profile,
-            duration,
-        ))))
+        Ok(NoiseSegment::new(noise_profile, duration).into())
     }
 
     async fn log_state_transition(
