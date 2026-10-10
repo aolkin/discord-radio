@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serenity::http::Http;
 use serenity::model::id::GuildId;
 use std::borrow::ToOwned;
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
 use std::ops::Deref;
 use std::time::Duration;
 
@@ -65,7 +65,7 @@ pub trait SegmentPlaybackConfig {
 
 #[async_trait]
 #[typetag::serde(tag = "type")]
-pub trait Segment: Send + Sync + Display + Debug + SegmentPlaybackConfig {
+pub trait Segment: Send + Sync + Debug + SegmentPlaybackConfig {
     async fn is_complete(&self, ctx: &SegmentCtx) -> bool;
 
     async fn restore(&self, _ctx: &SegmentCtx) -> anyhow::Result<()> {
@@ -82,6 +82,7 @@ pub trait Segment: Send + Sync + Display + Debug + SegmentPlaybackConfig {
         serde_json::json!({})
     }
 
+    fn state_name(&self) -> &'static str;
     fn state_info_display(&self) -> (String, String);
     fn current_state_display(&self) -> String;
 }
@@ -92,6 +93,7 @@ pub struct CommonSegmentPlaybackConfig {
     pub channel_status: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct BasicSegmentPlaybackConfig {
     playback_config: CommonSegmentPlaybackConfig,
@@ -130,9 +132,101 @@ pub struct TimedSegment {
     duration: Duration,
 }
 
+impl TimedSegment {
+    pub fn new(playback_config: CommonSegmentPlaybackConfig, duration: Duration) -> Self {
+        Self {
+            playback_config,
+            started_at: std::time::Instant::now(),
+            duration,
+        }
+    }
+
+    pub fn is_elapsed(&self) -> bool {
+        self.started_at.elapsed() >= self.duration
+    }
+}
+
 impl Deref for TimedSegment {
     type Target = CommonSegmentPlaybackConfig;
     fn deref(&self) -> &Self::Target {
         &self.playback_config
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NoiseSegment(TimedSegment);
+
+impl NoiseSegment {
+    pub fn new(noise_profile: String, duration: Duration) -> Self {
+        let playback_config = CommonSegmentPlaybackConfig {
+            signal_profile: Some(SignalProfilePlayback {
+                name: Some(noise_profile),
+                fade_in_duration: Some(duration.div_f32(2.0)),
+                ..Default::default()
+            }),
+            channel_status: None,
+        };
+        Self(TimedSegment::new(playback_config, duration))
+    }
+
+    pub fn idle(duration: Duration) -> Self {
+        Self(TimedSegment::new(Default::default(), duration))
+    }
+}
+
+impl Deref for NoiseSegment {
+    type Target = CommonSegmentPlaybackConfig;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[async_trait]
+#[typetag::serde]
+impl Segment for NoiseSegment {
+    async fn is_complete(&self, _ctx: &SegmentCtx) -> bool {
+        self.0.is_elapsed()
+    }
+
+    async fn exit(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
+        let duration_secs = self.0.started_at.elapsed().as_secs_f64();
+        if let Some(metrics) = ctx.bot_state.metrics.read().await.as_ref() {
+            metrics.record_noise_state_duration(
+                ctx.guild_id.get(),
+                self.signal_profile().name.as_deref().unwrap_or_default(),
+                duration_secs,
+            );
+        }
+        Ok(())
+    }
+
+    fn loggable_properties(&self) -> serde_json::Value {
+        serde_json::json!({
+            "noise_profile": self.signal_profile().name,
+            "duration_secs": self.0.duration.as_secs_f32(),
+        })
+    }
+
+    fn state_name(&self) -> &'static str {
+        "playing_noise"
+    }
+
+    fn state_info_display(&self) -> (String, String) {
+        let elapsed = self.0.started_at.elapsed().as_secs_f32();
+        let total = self.0.duration.as_secs_f32();
+        let details = match self.signal_profile().name {
+            Some(name) => format!("Profile: {name} ({elapsed:.1}s / {total:.1}s)"),
+            None => format!("No profile ({elapsed:.1}s / {total:.1}s)"),
+        };
+        ("PlayingNoise".into(), details)
+    }
+
+    fn current_state_display(&self) -> String {
+        let elapsed = self.0.started_at.elapsed().as_secs();
+        let total = self.0.duration.as_secs();
+        match self.signal_profile().name {
+            Some(name) => format!("Playing noise with profile: **{name}** ({elapsed}/{total}s)"),
+            None => format!("Playing noise with no profile ({elapsed}/{total}s)"),
+        }
     }
 }

@@ -2,7 +2,7 @@ use crate::audio::dj::config::{DJConfig, HexMessageEntry, NoisePeriodEntry, Trac
 use crate::audio::dj::manager::DJStateType;
 use crate::audio::dj::scheduler::{DJStateEntry, WeightedScheduler};
 use crate::audio::dj::segments::SegmentCtx;
-use crate::audio::dj::segments::{Segment, SignalProfilePlayback};
+use crate::audio::dj::segments::{NoiseSegment, Segment, SignalProfilePlayback};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
 use crate::audio::tracks::{StartTrackArgs, TrackManager};
 use crate::state::{BotState, Data};
@@ -38,27 +38,19 @@ pub enum DJState {
         forced_profile: Option<String>,
         status_message: Option<String>, // The obfuscated message pushed to status stack
     },
-    PlayingNoise {
-        noise_profile: String,
-        #[serde(serialize_with = "ser_instant", deserialize_with = "deser_instant")]
-        started_at: std::time::Instant,
-        duration: Duration,
-    },
-    Idle {
-        #[serde(serialize_with = "ser_instant", deserialize_with = "deser_instant")]
-        started_at: std::time::Instant,
-        duration: Duration,
-    },
     Segment(Box<dyn Segment>),
     Stopped,
 }
 
+impl<S: Segment + 'static> From<S> for DJState {
+    fn from(segment: S) -> Self {
+        DJState::Segment(Box::new(segment))
+    }
+}
+
 impl DJState {
     pub fn idle() -> Self {
-        DJState::Idle {
-            started_at: std::time::Instant::now(),
-            duration: Duration::from_secs(1),
-        }
+        NoiseSegment::idle(Duration::from_secs(1)).into()
     }
 
     pub async fn is_complete(&self, ctx: &SegmentCtx<'_>) -> bool {
@@ -69,15 +61,6 @@ impl DJState {
                 ..
             } => started_at.elapsed() >= *duration,
             DJState::PlayingHexMessage { .. } => false,
-            DJState::PlayingNoise {
-                started_at,
-                duration,
-                ..
-            } => started_at.elapsed() >= *duration,
-            DJState::Idle {
-                started_at,
-                duration,
-            } => started_at.elapsed() >= *duration,
             DJState::Segment(segment) => segment.is_complete(ctx).await,
             DJState::Stopped => true,
         }
@@ -90,17 +73,8 @@ impl DJState {
                 .as_ref()
                 .map(|profile| profile.into())
                 .unwrap_or_default(),
-            DJState::PlayingNoise {
-                noise_profile,
-                duration,
-                ..
-            } => SignalProfilePlayback {
-                name: Some(noise_profile.to_owned()),
-                fade_in_duration: Some(duration.div_f32(2.0)),
-                ..Default::default()
-            },
             DJState::Segment(segment) => segment.signal_profile(),
-            _ => Default::default(),
+            DJState::Stopped => Default::default(),
         }
     }
 }
@@ -336,30 +310,6 @@ impl DJStateMachine {
                     .await
                 {
                     tracing::warn!("Failed to remove message playback state: {}", e);
-                }
-            }
-            DJState::PlayingNoise {
-                noise_profile,
-                started_at,
-                ..
-            } => {
-                // Record duration metric
-                let duration_secs = started_at.elapsed().as_secs_f64();
-                if let Some(metrics) = bot_state.metrics.read().await.as_ref() {
-                    metrics.record_noise_state_duration(
-                        self.guild_id.get(),
-                        noise_profile,
-                        duration_secs,
-                    );
-                }
-                // PlayingNoise doesn't play any tracks, it just forces a profile
-                // No cleanup needed
-            }
-            DJState::Idle { started_at, .. } => {
-                // Record duration metric
-                let duration_secs = started_at.elapsed().as_secs_f64();
-                if let Some(metrics) = bot_state.metrics.read().await.as_ref() {
-                    metrics.record_dj_state_duration(self.guild_id.get(), "idle", duration_secs);
                 }
             }
             DJState::Segment(segment) => {
@@ -693,11 +643,7 @@ impl DJStateMachine {
             metrics.record_noise_state_change(self.guild_id.get(), &noise_profile);
         }
 
-        Ok(DJState::PlayingNoise {
-            noise_profile,
-            started_at: std::time::Instant::now(),
-            duration,
-        })
+        Ok(NoiseSegment::new(noise_profile, duration).into())
     }
 
     async fn log_state_transition(
@@ -733,26 +679,7 @@ impl DJStateMachine {
                     "forced_profile": forced_profile,
                 }),
             ),
-            DJState::PlayingNoise {
-                noise_profile,
-                duration,
-                ..
-            } => (
-                "noise_started".into(),
-                serde_json::json!({
-                    "noise_profile": noise_profile,
-                    "duration_secs": duration.as_secs_f32(),
-                }),
-            ),
-            DJState::Idle { duration, .. } => (
-                "idle_started".into(),
-                serde_json::json!({
-                    "duration_secs": duration.as_secs_f32(),
-                }),
-            ),
-            DJState::Segment(segment) => {
-                (format!("{segment}_started"), segment.loggable_properties())
-            }
+            DJState::Segment(segment) => ("noise_started".into(), segment.loggable_properties()),
             DJState::Stopped => ("stopped".into(), serde_json::json!({})),
         };
         // Drop the read guard before awaiting the log write below so it isn't held
@@ -768,9 +695,7 @@ impl DJStateMachine {
         match state {
             DJState::PlayingTrack { .. } => "playing_track".to_string(),
             DJState::PlayingHexMessage { .. } => "playing_hex_message".to_string(),
-            DJState::PlayingNoise { .. } => "playing_noise".to_string(),
-            DJState::Idle { .. } => "idle".to_string(),
-            DJState::Segment(segment) => segment.to_string(),
+            DJState::Segment(segment) => segment.state_name().to_string(),
             DJState::Stopped => "stopped".to_string(),
         }
     }

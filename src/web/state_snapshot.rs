@@ -220,30 +220,6 @@ fn dj_state_to_info(state: &crate::audio::dj::state_machine::DJState) -> DJState
             state_type: "PlayingHexMessage".to_string(),
             details: format!("Message: {} (loops: {})", message, target_loops),
         },
-        DJState::PlayingNoise {
-            noise_profile,
-            duration,
-            started_at,
-        } => DJStateInfo {
-            state_type: "PlayingNoise".to_string(),
-            details: format!(
-                "Profile: {} ({:.1}s / {:.1}s)",
-                noise_profile,
-                started_at.elapsed().as_secs_f32(),
-                duration.as_secs_f32()
-            ),
-        },
-        DJState::Idle {
-            duration,
-            started_at,
-        } => DJStateInfo {
-            state_type: "Idle".to_string(),
-            details: format!(
-                "{:.1}s / {:.1}s",
-                started_at.elapsed().as_secs_f32(),
-                duration.as_secs_f32()
-            ),
-        },
         DJState::Segment(segment) => {
             let (state_type, details) = segment.state_info_display();
             DJStateInfo {
