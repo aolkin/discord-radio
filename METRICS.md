@@ -34,10 +34,10 @@ If these environment variables are not set, the bot will run normally without me
 ### Track Playback Metrics
 
 - **track_playback_started** (counter): Number of tracks started
-  - Labels: `guild_id`, `track_name`
+  - Labels: `guild_id`
 
 - **track_playback_stopped** (counter): Number of tracks stopped
-  - Labels: `guild_id`, `track_name`
+  - Labels: `guild_id`
 
 ### Hex Message Metrics
 

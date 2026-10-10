@@ -157,24 +157,14 @@ impl BotMetrics {
     }
 
     // Track playback metrics
-    pub fn record_track_started(&self, guild_id: u64, track_name: &str) {
-        self.track_playback_started.add(
-            1,
-            &[
-                KeyValue::new("guild_id", guild_id.to_string()),
-                KeyValue::new("track_name", track_name.to_string()),
-            ],
-        );
+    pub fn record_track_started(&self, guild_id: u64) {
+        self.track_playback_started
+            .add(1, &[KeyValue::new("guild_id", guild_id.to_string())]);
     }
 
-    pub fn record_track_stopped(&self, guild_id: u64, track_name: &str) {
-        self.track_playback_stopped.add(
-            1,
-            &[
-                KeyValue::new("guild_id", guild_id.to_string()),
-                KeyValue::new("track_name", track_name.to_string()),
-            ],
-        );
+    pub fn record_track_stopped(&self, guild_id: u64) {
+        self.track_playback_stopped
+            .add(1, &[KeyValue::new("guild_id", guild_id.to_string())]);
     }
 
     // Hex message metrics

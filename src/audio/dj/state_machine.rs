@@ -282,7 +282,7 @@ impl DJStateMachine {
                         "playing_track",
                         duration_secs,
                     );
-                    metrics.record_track_stopped(self.guild_id.get(), &track_name);
+                    metrics.record_track_stopped(self.guild_id.get());
                 }
 
                 if track_manager.has_track(&track_name) {
@@ -435,7 +435,7 @@ impl DJStateMachine {
 
         // Record track started metric
         if let Some(metrics) = bot_state.metrics.read().await.as_ref() {
-            metrics.record_track_started(self.guild_id.get(), &track_name);
+            metrics.record_track_started(self.guild_id.get());
         }
 
         // Push track channel status onto the voice channel status stack if configured
