@@ -63,6 +63,26 @@ pub trait SegmentPlaybackConfig {
     }
 }
 
+pub enum StateType {
+    PlayingNoise { profile: String },
+    Idle,
+}
+
+impl StateType {
+    pub fn name(&self) -> &'static str {
+        match self {
+            StateType::PlayingNoise { .. } => "PlayingNoise",
+            StateType::Idle => "Idle",
+        }
+    }
+}
+
+pub struct StateDisplay {
+    pub state_type: StateType,
+    pub elapsed: Duration,
+    pub total: Duration,
+}
+
 #[async_trait]
 #[typetag::serde(tag = "type")]
 pub trait Segment: Send + Sync + Debug + SegmentPlaybackConfig {
@@ -83,8 +103,7 @@ pub trait Segment: Send + Sync + Debug + SegmentPlaybackConfig {
     }
 
     fn state_name(&self) -> &'static str;
-    fn state_info_display(&self) -> (String, String);
-    fn current_state_display(&self) -> String;
+    fn state_display(&self) -> StateDisplay;
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -211,22 +230,15 @@ impl Segment for NoiseSegment {
         "playing_noise"
     }
 
-    fn state_info_display(&self) -> (String, String) {
-        let elapsed = self.0.started_at.elapsed().as_secs_f32();
-        let total = self.0.duration.as_secs_f32();
-        let details = match self.signal_profile().name {
-            Some(name) => format!("Profile: {name} ({elapsed:.1}s / {total:.1}s)"),
-            None => format!("No profile ({elapsed:.1}s / {total:.1}s)"),
+    fn state_display(&self) -> StateDisplay {
+        let state_type = match self.signal_profile().name {
+            Some(profile) => StateType::PlayingNoise { profile },
+            None => StateType::Idle,
         };
-        ("PlayingNoise".into(), details)
-    }
-
-    fn current_state_display(&self) -> String {
-        let elapsed = self.0.started_at.elapsed().as_secs();
-        let total = self.0.duration.as_secs();
-        match self.signal_profile().name {
-            Some(name) => format!("Playing noise with profile: **{name}** ({elapsed}/{total}s)"),
-            None => format!("Playing noise with no profile ({elapsed}/{total}s)"),
+        StateDisplay {
+            state_type,
+            elapsed: self.0.started_at.elapsed(),
+            total: self.0.duration,
         }
     }
 }
