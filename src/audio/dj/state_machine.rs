@@ -676,9 +676,7 @@ impl DJStateMachine {
                     "forced_profile": forced_profile,
                 }),
             ),
-            DJState::Segment(segment) => {
-                (segment.started_event_name(), segment.loggable_properties())
-            }
+            DJState::Segment(segment) => ("noise_started".into(), segment.loggable_properties()),
             DJState::Stopped => ("stopped".into(), serde_json::json!({})),
         };
         // Drop the read guard before awaiting the log write below so it isn't held

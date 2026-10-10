@@ -78,8 +78,6 @@ pub trait Segment: Send + Sync + Display + Debug + SegmentPlaybackConfig {
         Ok(())
     }
 
-    fn started_event_name(&self) -> String;
-
     fn loggable_properties(&self) -> serde_json::Value {
         serde_json::json!({})
     }
@@ -125,15 +123,8 @@ impl<T: Deref<Target = CommonSegmentPlaybackConfig>> SegmentPlaybackConfig for T
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub enum TimedSegmentKind {
-    Noise,
-    Idle,
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TimedSegment {
-    kind: TimedSegmentKind,
     playback_config: CommonSegmentPlaybackConfig,
     #[serde(serialize_with = "ser_instant", deserialize_with = "deser_instant")]
     started_at: std::time::Instant,
@@ -143,7 +134,6 @@ pub struct TimedSegment {
 impl TimedSegment {
     pub fn noise(noise_profile: String, duration: Duration) -> Self {
         Self {
-            kind: TimedSegmentKind::Noise,
             playback_config: CommonSegmentPlaybackConfig {
                 signal_profile: Some(SignalProfilePlayback {
                     name: Some(noise_profile),
@@ -159,7 +149,6 @@ impl TimedSegment {
 
     pub fn idle(duration: Duration) -> Self {
         Self {
-            kind: TimedSegmentKind::Idle,
             playback_config: Default::default(),
             started_at: std::time::Instant::now(),
             duration,
@@ -167,7 +156,9 @@ impl TimedSegment {
     }
 
     fn profile_name(&self) -> String {
-        self.signal_profile().name.unwrap_or_default()
+        self.signal_profile()
+            .name
+            .unwrap_or_else(|| "default".into())
     }
 }
 
@@ -180,10 +171,7 @@ impl Deref for TimedSegment {
 
 impl Display for TimedSegment {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.kind {
-            TimedSegmentKind::Noise => write!(f, "playing_noise"),
-            TimedSegmentKind::Idle => write!(f, "idle"),
-        }
+        write!(f, "playing_noise")
     }
 }
 
@@ -197,67 +185,44 @@ impl Segment for TimedSegment {
     async fn exit(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
         let duration_secs = self.started_at.elapsed().as_secs_f64();
         if let Some(metrics) = ctx.bot_state.metrics.read().await.as_ref() {
-            match self.kind {
-                TimedSegmentKind::Noise => metrics.record_noise_state_duration(
-                    ctx.guild_id.get(),
-                    &self.profile_name(),
-                    duration_secs,
-                ),
-                TimedSegmentKind::Idle => {
-                    metrics.record_dj_state_duration(ctx.guild_id.get(), "idle", duration_secs)
-                }
-            }
+            metrics.record_noise_state_duration(
+                ctx.guild_id.get(),
+                &self.profile_name(),
+                duration_secs,
+            );
         }
         Ok(())
     }
 
-    fn started_event_name(&self) -> String {
-        match self.kind {
-            TimedSegmentKind::Noise => "noise_started".into(),
-            TimedSegmentKind::Idle => "idle_started".into(),
-        }
-    }
-
     fn loggable_properties(&self) -> serde_json::Value {
-        match self.kind {
-            TimedSegmentKind::Noise => serde_json::json!({
-                "noise_profile": self.profile_name(),
-                "duration_secs": self.duration.as_secs_f32(),
-            }),
-            TimedSegmentKind::Idle => serde_json::json!({
-                "duration_secs": self.duration.as_secs_f32(),
-            }),
-        }
+        serde_json::json!({
+            "noise_profile": self.profile_name(),
+            "duration_secs": self.duration.as_secs_f32(),
+        })
     }
 
     fn state_info_display(&self) -> (String, String) {
         let elapsed = self.started_at.elapsed().as_secs_f32();
         let total = self.duration.as_secs_f32();
-        match self.kind {
-            TimedSegmentKind::Noise => (
-                "PlayingNoise".into(),
-                format!(
-                    "Profile: {} ({:.1}s / {:.1}s)",
-                    self.profile_name(),
-                    elapsed,
-                    total
-                ),
+        (
+            "PlayingNoise".into(),
+            format!(
+                "Profile: {} ({:.1}s / {:.1}s)",
+                self.profile_name(),
+                elapsed,
+                total
             ),
-            TimedSegmentKind::Idle => ("Idle".into(), format!("{:.1}s / {:.1}s", elapsed, total)),
-        }
+        )
     }
 
     fn current_state_display(&self) -> String {
         let elapsed = self.started_at.elapsed().as_secs();
         let total = self.duration.as_secs();
-        match self.kind {
-            TimedSegmentKind::Noise => format!(
-                "Playing noise with profile: **{}** ({}/{}s)",
-                self.profile_name(),
-                elapsed,
-                total
-            ),
-            TimedSegmentKind::Idle => format!("Idle ({}/{}s)", elapsed, total),
-        }
+        format!(
+            "Playing noise with profile: **{}** ({}/{}s)",
+            self.profile_name(),
+            elapsed,
+            total
+        )
     }
 }
