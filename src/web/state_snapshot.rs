@@ -1,3 +1,4 @@
+use crate::audio::dj::segments::StateType;
 use crate::audio::dj::state_machine::format_dj_track_name;
 use crate::state::Data;
 use serde::{Deserialize, Serialize};
@@ -221,9 +222,17 @@ fn dj_state_to_info(state: &crate::audio::dj::state_machine::DJState) -> DJState
             details: format!("Message: {} (loops: {})", message, target_loops),
         },
         DJState::Segment(segment) => {
-            let (state_type, details) = segment.state_info_display();
+            let display = segment.state_display();
+            let elapsed = display.elapsed.as_secs_f32();
+            let total = display.total.as_secs_f32();
+            let details = match &display.state_type {
+                StateType::PlayingNoise { profile } => {
+                    format!("Profile: {profile} ({elapsed:.1}s / {total:.1}s)")
+                }
+                StateType::Idle => format!("{elapsed:.1}s / {total:.1}s"),
+            };
             DJStateInfo {
-                state_type,
+                state_type: display.state_type.name().to_string(),
                 details,
             }
         }
