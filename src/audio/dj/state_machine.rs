@@ -290,7 +290,7 @@ impl DJStateMachine {
                         forced_profile.as_deref(),
                         duration_secs,
                     );
-                    metrics.record_hex_message_completed(self.guild_id.get(), *target_loops as u64);
+                    metrics.record_hex_message_loops(self.guild_id.get(), *target_loops as u64);
                 }
 
                 // Reset the hex playback state
@@ -557,11 +557,6 @@ impl DJStateMachine {
             target_loops,
             self.guild_id
         );
-
-        // Record hex message started metric
-        if let Some(metrics) = bot_state.metrics.read().await.as_ref() {
-            metrics.record_hex_message_started(self.guild_id.get());
-        }
 
         // Push hex message status onto the voice channel status stack
         let obfuscated = crate::commands::voice::obfuscate_message(&message);
