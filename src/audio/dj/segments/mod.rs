@@ -63,6 +63,13 @@ pub trait SegmentPlaybackConfig {
     }
 }
 
+pub struct StateDisplay {
+    pub name: &'static str,
+    pub subject: Option<String>,
+    pub elapsed: Duration,
+    pub total: Duration,
+}
+
 #[async_trait]
 #[typetag::serde(tag = "type")]
 pub trait Segment: Send + Sync + Debug + SegmentPlaybackConfig {
@@ -83,8 +90,7 @@ pub trait Segment: Send + Sync + Debug + SegmentPlaybackConfig {
     }
 
     fn state_name(&self) -> &'static str;
-    fn state_info_display(&self) -> (String, String);
-    fn current_state_display(&self) -> String;
+    fn state_display(&self) -> StateDisplay;
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -211,22 +217,17 @@ impl Segment for NoiseSegment {
         "playing_noise"
     }
 
-    fn state_info_display(&self) -> (String, String) {
-        let elapsed = self.0.started_at.elapsed().as_secs_f32();
-        let total = self.0.duration.as_secs_f32();
-        let details = match self.signal_profile().name {
-            Some(name) => format!("Profile: {name} ({elapsed:.1}s / {total:.1}s)"),
-            None => format!("No profile ({elapsed:.1}s / {total:.1}s)"),
-        };
-        ("PlayingNoise".into(), details)
-    }
-
-    fn current_state_display(&self) -> String {
-        let elapsed = self.0.started_at.elapsed().as_secs();
-        let total = self.0.duration.as_secs();
-        match self.signal_profile().name {
-            Some(name) => format!("Playing noise with profile: **{name}** ({elapsed}/{total}s)"),
-            None => format!("Playing noise with no profile ({elapsed}/{total}s)"),
+    fn state_display(&self) -> StateDisplay {
+        let subject = self.signal_profile().name;
+        StateDisplay {
+            name: if subject.is_some() {
+                "PlayingNoise"
+            } else {
+                "Idle"
+            },
+            subject,
+            elapsed: self.0.started_at.elapsed(),
+            total: self.0.duration,
         }
     }
 }

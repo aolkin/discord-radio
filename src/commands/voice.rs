@@ -1052,7 +1052,15 @@ pub async fn get_dj_state(ctx: Context<'_>) -> Result<(), Error> {
             }
         }
         crate::audio::dj::state_machine::DJState::Segment(segment) => {
-            segment.current_state_display()
+            let display = segment.state_display();
+            let elapsed = display.elapsed.as_secs();
+            let total = display.total.as_secs();
+            match display.subject {
+                Some(subject) => {
+                    format!("{}: **{subject}** ({elapsed}/{total}s)", display.name)
+                }
+                None => format!("{} ({elapsed}/{total}s)", display.name),
+            }
         }
         crate::audio::dj::state_machine::DJState::Stopped => "Stopped".to_string(),
     };
