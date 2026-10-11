@@ -63,22 +63,9 @@ pub trait SegmentPlaybackConfig {
     }
 }
 
-pub enum StateType {
-    PlayingNoise { profile: String },
-    Idle,
-}
-
-impl StateType {
-    pub fn name(&self) -> &'static str {
-        match self {
-            StateType::PlayingNoise { .. } => "PlayingNoise",
-            StateType::Idle => "Idle",
-        }
-    }
-}
-
 pub struct StateDisplay {
-    pub state_type: StateType,
+    pub name: &'static str,
+    pub subject: Option<String>,
     pub elapsed: Duration,
     pub total: Duration,
 }
@@ -231,12 +218,14 @@ impl Segment for NoiseSegment {
     }
 
     fn state_display(&self) -> StateDisplay {
-        let state_type = match self.signal_profile().name {
-            Some(profile) => StateType::PlayingNoise { profile },
-            None => StateType::Idle,
-        };
+        let subject = self.signal_profile().name;
         StateDisplay {
-            state_type,
+            name: if subject.is_some() {
+                "PlayingNoise"
+            } else {
+                "Idle"
+            },
+            subject,
             elapsed: self.0.started_at.elapsed(),
             total: self.0.duration,
         }

@@ -1,5 +1,4 @@
 use crate::audio::dj::manager::{DJStateType, trigger_reload};
-use crate::audio::dj::segments::StateType;
 use crate::commands::utils;
 use crate::commands::utils::{Context, Error};
 use serenity::all::{ChannelId, ChannelType, GuildId};
@@ -1056,11 +1055,11 @@ pub async fn get_dj_state(ctx: Context<'_>) -> Result<(), Error> {
             let display = segment.state_display();
             let elapsed = display.elapsed.as_secs();
             let total = display.total.as_secs();
-            match display.state_type {
-                StateType::PlayingNoise { profile } => {
-                    format!("Playing noise with profile: **{profile}** ({elapsed}/{total}s)")
+            match display.subject {
+                Some(subject) => {
+                    format!("{}: **{subject}** ({elapsed}/{total}s)", display.name)
                 }
-                StateType::Idle => format!("Idle ({elapsed}/{total}s)"),
+                None => format!("{} ({elapsed}/{total}s)", display.name),
             }
         }
         crate::audio::dj::state_machine::DJState::Stopped => "Stopped".to_string(),
