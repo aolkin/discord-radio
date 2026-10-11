@@ -216,7 +216,7 @@ impl DJStateMachine {
                     .await
             }
             DJStateEntry::HexMessage(entry) => self.start_hex_message_state(entry, bot_state).await,
-            DJStateEntry::Noise(entry) => self.start_noise_state(entry, bot_state).await,
+            DJStateEntry::Noise(entry) => self.start_noise_state(entry).await,
         }?;
 
         // Record state transition metric
@@ -245,6 +245,7 @@ impl DJStateMachine {
                 filename,
                 status_message,
                 started_at,
+                forced_profile,
                 ..
             } => {
                 let track_name = format_dj_track_name(filename);
@@ -254,6 +255,7 @@ impl DJStateMachine {
                     metrics.record_dj_state_duration(
                         self.guild_id.get(),
                         "playing_track",
+                        forced_profile.as_deref(),
                         duration_secs,
                     );
                 }
@@ -275,6 +277,7 @@ impl DJStateMachine {
             DJState::PlayingHexMessage {
                 status_message,
                 started_at,
+                forced_profile,
                 target_loops,
                 ..
             } => {
@@ -284,6 +287,7 @@ impl DJStateMachine {
                     metrics.record_dj_state_duration(
                         self.guild_id.get(),
                         "playing_hex_message",
+                        forced_profile.as_deref(),
                         duration_secs,
                     );
                     metrics.record_hex_message_completed(self.guild_id.get(), *target_loops as u64);
@@ -315,6 +319,14 @@ impl DJStateMachine {
                 }
             }
             DJState::Segment(segment) => {
+                if let Some(metrics) = bot_state.metrics.read().await.as_ref() {
+                    metrics.record_dj_state_duration(
+                        self.guild_id.get(),
+                        segment.state_name(),
+                        segment.signal_profile().name.as_deref(),
+                        segment.elapsed().as_secs_f64(),
+                    );
+                }
                 segment.exit(&self.segment_ctx()).await?;
             }
             DJState::Stopped => {}
@@ -622,7 +634,6 @@ impl DJStateMachine {
     async fn start_noise_state(
         &self,
         noise_entry: NoisePeriodEntry,
-        bot_state: &Data,
     ) -> Result<DJState, Box<dyn std::error::Error + Send + Sync>> {
         let duration_secs = if noise_entry.min_duration_seconds >= noise_entry.max_duration_seconds
         {
@@ -641,11 +652,6 @@ impl DJStateMachine {
             duration_secs,
             self.guild_id
         );
-
-        // Record noise state change metric
-        if let Some(metrics) = bot_state.metrics.read().await.as_ref() {
-            metrics.record_noise_state_change(self.guild_id.get(), &noise_profile);
-        }
 
         Ok(NoiseSegment::new(noise_profile, duration).into())
     }
