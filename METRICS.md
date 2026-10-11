@@ -34,21 +34,12 @@ If these environment variables are not set, the bot will run normally without me
 
 ### Hex Message Metrics
 
-- **hex_message_started** (counter): Number of hex messages started
-  - Labels: `guild_id`
-
-- **hex_message_completed** (counter): Number of hex messages completed
-  - Labels: `guild_id`
-
 - **hex_message_loops** (histogram): Number of loops for hex messages
   - Labels: `guild_id`
 
 ### System Metrics
 
 - **bot_heartbeat** (counter): Bot liveness heartbeat (incremented every 60 seconds)
-  - No labels
-
-- **active_guilds** (gauge): Number of guilds with active voice connections
   - No labels
 
 - **active_voice_connections** (gauge): Number of active voice connections

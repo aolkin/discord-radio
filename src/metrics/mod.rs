@@ -22,15 +22,12 @@ pub struct BotMetrics {
     dj_state_duration: Histogram<f64>,
 
     // Hex message metrics
-    hex_message_started: Counter<u64>,
-    hex_message_completed: Counter<u64>,
     hex_message_loops: Histogram<u64>,
 
     // Liveness metric
     heartbeat: Counter<u64>,
 
     // Active state gauges
-    active_guilds: Gauge<u64>,
     active_voice_connections: Gauge<u64>,
 }
 
@@ -49,18 +46,6 @@ impl BotMetrics {
             .with_unit("s")
             .build();
 
-        let hex_message_started = meter
-            .u64_counter("hex_message_started")
-            .with_description("Number of hex messages started")
-            .with_unit("messages")
-            .build();
-
-        let hex_message_completed = meter
-            .u64_counter("hex_message_completed")
-            .with_description("Number of hex messages completed")
-            .with_unit("messages")
-            .build();
-
         let hex_message_loops = meter
             .u64_histogram("hex_message_loops")
             .with_description("Number of loops for hex messages")
@@ -73,12 +58,6 @@ impl BotMetrics {
             .with_unit("heartbeats")
             .build();
 
-        let active_guilds = meter
-            .u64_gauge("active_guilds")
-            .with_description("Number of active guilds")
-            .with_unit("guilds")
-            .build();
-
         let active_voice_connections = meter
             .u64_gauge("active_voice_connections")
             .with_description("Number of active voice connections")
@@ -89,11 +68,8 @@ impl BotMetrics {
             _meter: meter,
             dj_state_transitions,
             dj_state_duration,
-            hex_message_started,
-            hex_message_completed,
             hex_message_loops,
             heartbeat,
-            active_guilds,
             active_voice_connections,
         }
     }
@@ -128,14 +104,7 @@ impl BotMetrics {
     }
 
     // Hex message metrics
-    pub fn record_hex_message_started(&self, guild_id: u64) {
-        self.hex_message_started
-            .add(1, &[KeyValue::new("guild_id", guild_id.to_string())]);
-    }
-
-    pub fn record_hex_message_completed(&self, guild_id: u64, loops: u64) {
-        self.hex_message_completed
-            .add(1, &[KeyValue::new("guild_id", guild_id.to_string())]);
+    pub fn record_hex_message_loops(&self, guild_id: u64, loops: u64) {
         self.hex_message_loops
             .record(loops, &[KeyValue::new("guild_id", guild_id.to_string())]);
     }
@@ -146,10 +115,6 @@ impl BotMetrics {
     }
 
     // Gauge updates
-    pub fn update_active_guilds(&self, count: u64) {
-        self.active_guilds.record(count, &[]);
-    }
-
     pub fn update_active_voice_connections(&self, count: u64) {
         self.active_voice_connections.record(count, &[]);
     }
@@ -236,10 +201,8 @@ pub async fn start_gauge_update_task(metrics_handle: MetricsHandle, bot_state: c
             interval.tick().await;
 
             if let Some(metrics) = metrics_handle.read().await.as_ref() {
-                // Update active guilds count
                 let voice_connections = bot_state.voice_connections.read().await;
                 let guild_count = voice_connections.len() as u64;
-                metrics.update_active_guilds(guild_count);
                 metrics.update_active_voice_connections(guild_count);
             }
         }
