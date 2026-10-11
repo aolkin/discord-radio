@@ -75,7 +75,7 @@ pub async fn hex_playback_task(
                 manager.remove_track(HEX_PLAYBACK_TRACK_NAME).await;
             }
 
-            let callback = Arc::new(move || {
+            let callback = Arc::new(move |_| {
                 notify_clone.notify_one();
             });
 
