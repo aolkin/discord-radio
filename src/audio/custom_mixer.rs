@@ -29,13 +29,7 @@ pub struct MixerTrack {
 }
 
 impl MixerTrack {
-    pub fn new(
-        handle: TrackHandle,
-        source: Box<dyn AudioSource>,
-        volume: f32,
-        loops: bool,
-        end_callback: Option<TrackEndCallback>,
-    ) -> Self {
+    fn new(handle: TrackHandle, source: Box<dyn AudioSource>, volume: f32, loops: bool) -> Self {
         // Convert user volume to amplitude using logarithmic scaling
         let amplitude = perceptual_level_to_amplitude(volume);
         Self {
@@ -44,8 +38,13 @@ impl MixerTrack {
             volume: Arc::new(AtomicF32::new(amplitude)),
             loops,
             active: true,
-            end_callback,
+            end_callback: None,
         }
+    }
+
+    pub fn with_end_callback(mut self, callback: TrackEndCallback) -> Self {
+        self.end_callback = Some(callback);
+        self
     }
 
     pub fn next_frame(&mut self) -> Option<[f32; 2]> {
@@ -97,8 +96,8 @@ pub struct CustomMixer {
     channels: u16,
 }
 
-/// Every method that takes a [`TrackHandle`] treats a handle whose track was
-/// removed or has ended as a no-op and returns `false`.
+/// A [`TrackHandle`] whose track was removed or has ended is a no-op for
+/// `remove_track`, and the `update_*` methods return an error for it.
 impl CustomMixer {
     pub fn new(sample_rate: u32) -> Self {
         Self {
@@ -114,14 +113,17 @@ impl CustomMixer {
         source: Box<dyn AudioSource>,
         volume: f32,
         loops: bool,
-        on_end: Option<TrackEndCallback>,
+        callback: Option<TrackEndCallback>,
     ) -> TrackHandle {
         let handle = TrackHandle(self.next_id);
         self.next_id += 1;
-        self.tracks.insert(
-            handle,
-            MixerTrack::new(handle, source, volume, loops, on_end),
-        );
+
+        let mut track = MixerTrack::new(handle, source, volume, loops);
+        if let Some(cb) = callback {
+            track = track.with_end_callback(cb);
+        }
+        self.tracks.insert(handle, track);
+
         handle
     }
 
@@ -129,37 +131,55 @@ impl CustomMixer {
         self.tracks.remove(&handle).is_some()
     }
 
-    /// `volume` is user-facing (0.0-2.0) and is converted to amplitude using
-    /// perceptual (logarithmic) scaling. 0.0 = silence, 1.0 = unity gain, 2.0 = +18dB boost.
-    pub fn set_volume(&mut self, handle: TrackHandle, volume: f32) -> bool {
+    /// Update the volume of a track.
+    ///
+    /// # Arguments
+    ///
+    /// * `handle` - Handle of the track to update
+    /// * `volume` - User-facing volume (0.0-2.0). This is converted to amplitude using
+    ///   perceptual (logarithmic) scaling. 0.0 = silence, 1.0 = unity gain, 2.0 = +18dB boost.
+    ///
+    /// # Returns
+    ///
+    /// Ok(()) if successful, or an error if the track is not found.
+    pub fn update_track_volume(&mut self, handle: TrackHandle, volume: f32) -> anyhow::Result<()> {
         let Some(track) = self.tracks.get(&handle) else {
-            return false;
+            anyhow::bail!("Track {handle:?} not found");
         };
-        track
-            .volume
-            .store(perceptual_level_to_amplitude(volume), Ordering::Relaxed);
-        true
+
+        // Convert user volume to amplitude using logarithmic scaling
+        let amplitude = perceptual_level_to_amplitude(volume);
+        track.volume.store(amplitude, Ordering::Relaxed);
+        Ok(())
     }
 
-    pub fn set_loops(&mut self, handle: TrackHandle, loops: bool) -> bool {
+    pub fn update_track_loops(&mut self, handle: TrackHandle, loops: bool) -> anyhow::Result<()> {
         let Some(track) = self.tracks.get_mut(&handle) else {
-            return false;
+            anyhow::bail!("Track {handle:?} not found");
         };
+
         track.loops = loops;
-        true
+        Ok(())
     }
 
     pub fn mix_next_frame(&mut self) -> [f32; 2] {
         let mut mixed = [0.0, 0.0];
+        let mut inactive_tracks = Vec::new();
 
-        for track in self.tracks.values_mut() {
+        for (handle, track) in self.tracks.iter_mut() {
             if let Some(frame) = track.next_frame() {
                 mixed[0] += frame[0];
                 mixed[1] += frame[1];
             }
+
+            if !track.active && !track.loops {
+                inactive_tracks.push(*handle);
+            }
         }
 
-        self.tracks.retain(|_, track| track.active || track.loops);
+        for handle in inactive_tracks {
+            self.tracks.remove(&handle);
+        }
 
         mixed[0] = mixed[0].clamp(-1.0, 1.0);
         mixed[1] = mixed[1].clamp(-1.0, 1.0);

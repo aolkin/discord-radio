@@ -204,7 +204,8 @@ impl TrackManager {
             // Set initial volume to 0 in mixer
             {
                 let mut proc = processor.write().await;
-                proc.mixer_mut().set_volume(track.mixer_handle, 0.0);
+                proc.mixer_mut()
+                    .update_track_volume(track.mixer_handle, 0.0)?;
             }
 
             let fade_cancel = CancellationToken::new();
@@ -234,7 +235,7 @@ impl TrackManager {
             // Set volume directly in mixer
             let mut proc = processor.write().await;
             proc.mixer_mut()
-                .set_volume(track.mixer_handle, track.volume);
+                .update_track_volume(track.mixer_handle, track.volume)?;
         }
 
         let key = track.name.clone();
@@ -320,7 +321,8 @@ impl TrackManager {
             track_info.fade_cancel = Some(cancel_token);
         } else {
             let mut proc = processor_arc.write().await;
-            proc.mixer_mut().set_volume(track_info.mixer_handle, volume);
+            proc.mixer_mut()
+                .update_track_volume(track_info.mixer_handle, volume)?;
             track_info.fade_task = None;
             track_info.fade_cancel = None;
         }
@@ -358,7 +360,8 @@ impl TrackManager {
         track_info.loops = loops;
 
         let mut proc = processor_arc.write().await;
-        proc.mixer_mut().set_loops(track_info.mixer_handle, loops);
+        proc.mixer_mut()
+            .update_track_loops(track_info.mixer_handle, loops)?;
 
         self.persist_state().await;
 
@@ -517,7 +520,7 @@ impl TrackManager {
 ///
 /// This function interpolates linearly in user volume space (0.0-2.0), then converts
 /// each intermediate value to amplitude using perceptual scaling. The conversion to
-/// amplitude happens in `CustomMixer::set_volume`.
+/// amplitude happens in `update_track_volume`.
 ///
 /// # Arguments
 ///
@@ -549,7 +552,12 @@ async fn fade_volume_dsp(
 
         {
             let mut proc = processor.write().await;
-            if !proc.mixer_mut().set_volume(handle, current_volume) {
+            if proc
+                .mixer_mut()
+                .update_track_volume(handle, current_volume)
+                .is_err()
+            {
+                // Track might have been removed
                 return Ok(());
             }
         }
