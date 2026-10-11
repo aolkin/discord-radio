@@ -12,7 +12,7 @@ use serenity::all::Http;
 use serenity::model::id::{ChannelId, GuildId};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{RwLock, RwLockReadGuard};
+use tokio::sync::{Mutex, RwLock, RwLockReadGuard};
 use tracing::info;
 
 pub fn format_dj_track_name(filename: &str) -> String {
@@ -135,7 +135,7 @@ impl DJStateMachine {
         self.announcement_channel = channel;
     }
 
-    pub async fn stop(&mut self, track_manager: &mut TrackManager, bot_state: &Data) {
+    pub async fn stop(&mut self, track_manager: &Mutex<TrackManager>, bot_state: &Data) {
         // Clean up current state before stopping
         if let Err(e) = self.cleanup_current_state(track_manager, bot_state).await {
             tracing::error!("Error cleaning up DJ state during stop: {}", e);
@@ -150,7 +150,7 @@ impl DJStateMachine {
 
     pub async fn force_advance(
         &mut self,
-        track_manager: &mut TrackManager,
+        track_manager: &Mutex<TrackManager>,
         bot_state: &Data,
         state_type_filter: Option<DJStateType>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -162,7 +162,7 @@ impl DJStateMachine {
 
     pub async fn force_hex_message(
         &mut self,
-        track_manager: &mut TrackManager,
+        track_manager: &Mutex<TrackManager>,
         bot_state: &Data,
         message: String,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -187,7 +187,7 @@ impl DJStateMachine {
 
     pub async fn advance(
         &mut self,
-        track_manager: &mut TrackManager,
+        track_manager: &Mutex<TrackManager>,
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let ctx = self.segment_ctx();
@@ -201,7 +201,7 @@ impl DJStateMachine {
     async fn transition_to_state(
         &self,
         next_state_type: DJStateEntry,
-        track_manager: &mut TrackManager,
+        track_manager: &Mutex<TrackManager>,
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Record the previous state before transitioning
@@ -236,7 +236,7 @@ impl DJStateMachine {
 
     async fn cleanup_current_state(
         &self,
-        track_manager: &mut TrackManager,
+        track_manager: &Mutex<TrackManager>,
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let current = self.state.read().await;
@@ -258,9 +258,11 @@ impl DJStateMachine {
                     );
                 }
 
+                let mut track_manager = track_manager.lock().await;
                 if track_manager.has_track(&track_name) {
                     track_manager.stop_track(&track_name, 1.0, false).await?;
                 }
+                drop(track_manager);
 
                 // Remove the track status from the stack if present
                 if let Some(status_msg) = status_message {
@@ -324,7 +326,7 @@ impl DJStateMachine {
     async fn start_track_state(
         &self,
         track_entry: TrackEntry,
-        track_manager: &mut TrackManager,
+        track_manager: &Mutex<TrackManager>,
         bot_state: &Data,
     ) -> Result<DJState, Box<dyn std::error::Error + Send + Sync>> {
         let track_name = format_dj_track_name(&track_entry.filename);
@@ -364,6 +366,8 @@ impl DJStateMachine {
         let volume = track_entry.volume.unwrap_or(1.0);
 
         track_manager
+            .lock()
+            .await
             .start_track(StartTrackArgs {
                 name: track_name.clone(),
                 filename: track_entry.filename.clone(),
