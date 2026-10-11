@@ -1,8 +1,7 @@
 use crate::audio::dj::config::DJConfig;
 use crate::audio::dj::profile_machine::ProfileStateMachine;
-use crate::audio::dj::segments::{SegmentCtx, SignalProfilePlayback};
-use crate::audio::dj::state_machine::{DJState, DJStateMachine, format_dj_track_name};
-use crate::audio::tracks::StartTrackArgs;
+use crate::audio::dj::segments::{SegmentCtx, SignalProfilePlayback, TrackPlayback};
+use crate::audio::dj::state_machine::{DJState, DJStateMachine};
 use crate::state::Data;
 use serenity::all::Http;
 use serenity::model::id::{ChannelId, GuildId};
@@ -25,13 +24,6 @@ pub enum DJStateType {
     Track,
     HexMessage,
     Noise,
-}
-
-struct ResumeTrackArgs {
-    filename: String,
-    volume: f32,
-    elapsed: Duration,
-    duration: Duration,
 }
 
 pub async fn dj_task(
@@ -73,12 +65,13 @@ pub async fn dj_task(
             resume_dj_track(
                 &guild_id,
                 &bot_state,
-                ResumeTrackArgs {
+                TrackPlayback {
                     filename: filename.clone(),
                     volume: *volume,
-                    elapsed: started_at.elapsed(),
-                    duration: *duration,
+                    start_position: None,
                 },
+                started_at.elapsed(),
+                *duration,
             )
             .await;
             (forced_profile.clone(), status_message.clone())
@@ -413,18 +406,18 @@ pub async fn dj_task(
     tracing::info!("DJ task terminated for guild {}", guild_id);
 }
 
-async fn resume_dj_track(guild_id: &GuildId, bot_state: &Data, resume_track_args: ResumeTrackArgs) {
-    let ResumeTrackArgs {
-        filename,
-        volume,
-        elapsed,
-        duration,
-    } = resume_track_args;
-    let track_name = format_dj_track_name(&filename);
+async fn resume_dj_track(
+    guild_id: &GuildId,
+    bot_state: &Data,
+    playback: TrackPlayback,
+    elapsed: Duration,
+    duration: Duration,
+) {
+    let track_name = playback.track_name();
     tracing::debug!(
         "Attempting to restore DJ track '{}' (file: {}) in guild {}",
         track_name,
-        filename,
+        playback.filename,
         guild_id
     );
 
@@ -436,22 +429,10 @@ async fn resume_dj_track(guild_id: &GuildId, bot_state: &Data, resume_track_args
             .get(guild_id)
             .expect("TrackManager should be initialized before DJ starts")
             .clone();
-        let mut manager = manager_arc.lock().await;
 
-        if let Err(e) = manager
-            .start_track(StartTrackArgs {
-                name: track_name.clone(),
-                filename: filename.clone(),
-                volume,
-                fade_time: 1.0,
-                loops: false,
-                start_position: Some(elapsed),
-                persist: false,
-            })
-            .await
-        {
+        if let Err(e) = playback.resume(&manager_arc, elapsed).await {
             tracing::warn!(
-                "Failed to restore DJ track '{}' in guild {}: {}",
+                "Failed to restore DJ track '{}' in guild {}: {:#}",
                 track_name,
                 guild_id,
                 e
@@ -464,7 +445,6 @@ async fn resume_dj_track(guild_id: &GuildId, bot_state: &Data, resume_track_args
                 guild_id
             );
         }
-        drop(manager);
     } else {
         tracing::info!(
             "DJ track '{}' has already finished (elapsed: {:.1}s, duration: {:.1}s), will advance to next state",
