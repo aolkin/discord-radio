@@ -560,12 +560,13 @@ pub async fn get_or_create_track_manager(
     bot_state: &Data,
     guild_id: GuildId,
 ) -> Arc<tokio::sync::Mutex<TrackManager>> {
-    // Ensure audio processor exists for this guild
+    if let Some(manager) = bot_state.track_managers.read().await.get(&guild_id) {
+        return manager.clone();
+    }
+
     let processor = get_or_create_audio_processor(bot_state, guild_id).await;
 
     let mut track_managers = bot_state.track_managers.write().await;
-
-    // Check if manager exists, if not create it with the processor
     track_managers
         .entry(guild_id)
         .or_insert_with(|| {
