@@ -1001,16 +1001,6 @@ pub async fn get_dj_state(ctx: Context<'_>) -> Result<(), Error> {
     };
 
     let state_description = match &*state {
-        crate::audio::dj::state_machine::DJState::PlayingTrack {
-            filename,
-            started_at,
-            duration,
-            ..
-        } => {
-            let elapsed = started_at.elapsed().as_secs();
-            let total = duration.as_secs();
-            format!("Playing track: **{}** ({}/{}s)", filename, elapsed, total)
-        }
         crate::audio::dj::state_machine::DJState::PlayingHexMessage {
             started_at,
             target_loops,

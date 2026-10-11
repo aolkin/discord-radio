@@ -1,11 +1,16 @@
-use super::{CommonSegmentPlaybackConfig, TimedSegment};
+use super::{
+    CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
+    TimedSegment,
+};
 use crate::audio::dj::state_machine::format_dj_track_name;
 use crate::audio::tracks::{StartTrackArgs, TrackManager};
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use std::time::Duration;
 use tokio::sync::Mutex;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct TrackSegment {
     timer: TimedSegment,
     filename: String,
@@ -88,6 +93,80 @@ impl Deref for TrackSegment {
     type Target = CommonSegmentPlaybackConfig;
     fn deref(&self) -> &Self::Target {
         &self.timer
+    }
+}
+
+#[async_trait]
+#[typetag::serde]
+impl Segment for TrackSegment {
+    async fn is_complete(&self, _ctx: &SegmentCtx) -> bool {
+        self.timer.is_elapsed()
+    }
+
+    fn elapsed(&self) -> Duration {
+        self.timer.started_at.elapsed()
+    }
+
+    async fn restore(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
+        let elapsed = self.elapsed();
+        if self.timer.is_elapsed() {
+            tracing::info!(
+                "DJ track '{}' has already finished (elapsed: {:.1}s, duration: {:.1}s), will advance to next state",
+                self.track_name(),
+                elapsed.as_secs_f32(),
+                self.timer.duration.as_secs_f32()
+            );
+            return Ok(());
+        }
+        self.resume(ctx.track_manager, elapsed).await?;
+        tracing::info!(
+            "Restored DJ track '{}' at {:.1}s into the segment in guild {}",
+            self.track_name(),
+            elapsed.as_secs_f32(),
+            ctx.guild_id
+        );
+        Ok(())
+    }
+
+    async fn enter(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
+        self.start(ctx.track_manager).await?;
+        tracing::info!(
+            "DJ starting track '{}' (duration: {:.1}s) in guild {}",
+            self.filename,
+            self.timer.duration.as_secs_f32(),
+            ctx.guild_id
+        );
+        Ok(())
+    }
+
+    async fn exit(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
+        Self::stop_file(ctx.track_manager, &self.filename).await
+    }
+
+    fn started_event(&self) -> &'static str {
+        "track_started"
+    }
+
+    fn loggable_properties(&self) -> serde_json::Value {
+        serde_json::json!({
+            "track_name": self.track_name(),
+            "filename": self.filename,
+            "duration_secs": self.timer.duration.as_secs_f32(),
+            "forced_profile": self.signal_profile().name,
+        })
+    }
+
+    fn state_name(&self) -> &'static str {
+        "playing_track"
+    }
+
+    fn state_display(&self) -> StateDisplay {
+        StateDisplay {
+            name: "PlayingTrack",
+            subject: Some(self.filename.clone()),
+            elapsed: self.elapsed(),
+            total: self.timer.duration,
+        }
     }
 }
 
