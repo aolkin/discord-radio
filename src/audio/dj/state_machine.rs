@@ -245,7 +245,6 @@ impl DJStateMachine {
         match &*current {
             DJState::PlayingTrack {
                 filename,
-                volume,
                 status_message,
                 started_at,
                 forced_profile,
@@ -262,13 +261,7 @@ impl DJStateMachine {
                     );
                 }
 
-                TrackPlayback {
-                    filename: filename.clone(),
-                    volume: *volume,
-                    start_position: None,
-                }
-                .stop(track_manager)
-                .await?;
+                TrackPlayback::stop_file(track_manager, filename).await?;
 
                 // Remove the track status from the stack if present
                 if let Some(status_msg) = status_message {

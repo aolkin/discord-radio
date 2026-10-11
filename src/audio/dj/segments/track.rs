@@ -28,8 +28,11 @@ impl TrackPlayback {
         self.start_at(track_manager, Some(position)).await
     }
 
-    pub async fn stop(&self, track_manager: &Mutex<TrackManager>) -> anyhow::Result<()> {
-        let track_name = self.track_name();
+    pub async fn stop_file(
+        track_manager: &Mutex<TrackManager>,
+        filename: &str,
+    ) -> anyhow::Result<()> {
+        let track_name = format_dj_track_name(filename);
         let mut track_manager = track_manager.lock().await;
         if track_manager.has_track(&track_name) {
             track_manager
