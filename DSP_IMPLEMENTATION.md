@@ -16,13 +16,13 @@ Audio Files (Symphonia) → Custom Mixer → DSP Effects Chain → Songbird → 
 
 ## Component Details
 
-### 1. Custom Mixer (`audio/custom_mixer.rs`)
+### 1. Custom Mixer (`audio/mixer.rs`)
 
 Mixes multiple audio sources with independent volume controls.
 
 - **AudioSource trait**: Interface for any audio input
 - **MixerTrack**: Individual track with volume and loop settings
-- **CustomMixer**: Combines multiple tracks frame-by-frame
+- **Mixer**: Combines multiple tracks frame-by-frame
 
 ### 2. Audio Decoder (`audio/decoder.rs`)
 

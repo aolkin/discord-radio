@@ -1,4 +1,4 @@
-use crate::audio::custom_mixer::AudioSource;
+use crate::audio::mixer::AudioSource;
 use std::path::Path;
 use std::time::Duration;
 use symphonia::core::audio::SampleBuffer;

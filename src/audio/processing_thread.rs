@@ -1,6 +1,6 @@
-use crate::audio::custom_mixer::CustomMixer;
 use crate::audio::distributor::AudioDistributor;
 use crate::audio::dsp::chain::RadioEffectChain;
+use crate::audio::mixer::Mixer;
 use crate::audio::opus_encoder::OpusEncoder;
 use crate::audio::profiles::SignalProfile;
 use std::sync::Arc;
@@ -42,7 +42,7 @@ impl ProfileTransition {
 }
 
 pub struct AudioProcessor {
-    mixer: CustomMixer,
+    mixer: Mixer,
     dsp_chain: RadioEffectChain,
     transition: Option<ProfileTransition>,
     current_profile: SignalProfile,
@@ -53,7 +53,7 @@ pub struct AudioProcessor {
 
 impl AudioProcessor {
     pub fn new(initial_profile: SignalProfile) -> Self {
-        let mixer = CustomMixer::new(SAMPLE_RATE);
+        let mixer = Mixer::new(SAMPLE_RATE);
         let dsp_chain = RadioEffectChain::new(SAMPLE_RATE, &initial_profile);
         let opus_encoder = OpusEncoder::default();
 
@@ -68,7 +68,7 @@ impl AudioProcessor {
         }
     }
 
-    pub fn mixer_mut(&mut self) -> &mut CustomMixer {
+    pub fn mixer_mut(&mut self) -> &mut Mixer {
         &mut self.mixer
     }
 
