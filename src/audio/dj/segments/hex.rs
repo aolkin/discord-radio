@@ -216,14 +216,13 @@ async fn run_hex_message(
                         continue;
                     }
                 };
-                let track = {
-                    let mut processor = processor.write().await;
-                    let track = processor
+                let track =
+                    processor
+                        .write()
+                        .await
                         .mixer_mut()
                         .add_track(Box::new(source), volume, false);
-                    progress.current_track.set(track.clone());
-                    track
-                };
+                progress.current_track.set(track.clone());
                 track.ended().await;
             }
             _ => tracing::warn!("Audio file not found: {}", filename),

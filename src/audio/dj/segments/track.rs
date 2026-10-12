@@ -58,11 +58,10 @@ impl TrackSegment {
         start_position: Option<Duration>,
         play_duration: Duration,
     ) -> anyhow::Result<()> {
-        let processor = ctx.audio_processor().await?;
         let path = ctx.bot_state.file_resolver.resolve(&self.filename).await?;
         let source = open_track_source(&path, start_position).map_err(|e| anyhow::anyhow!(e))?;
         let fade_out = FADE_TIME.min(play_duration);
-        let mut processor = processor.write().await;
+        let mut processor = ctx.audio_processor().await?.write_owned().await;
         let mixer = processor.mixer_mut();
         let track = mixer.add_track(Box::new(source), 0.0, false);
         mixer.update_track_volume(track.id, self.volume, FADE_TIME)?;

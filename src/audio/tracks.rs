@@ -111,8 +111,8 @@ impl TrackManager {
         let name = args.name.clone();
         let ended_track = mixer_handle.clone();
         tokio::spawn(async move {
-            ended_track.ended().await;
-            tracing::debug!("Track '{name}' left the mixer in guild {guild_id}");
+            let reason = ended_track.ended().await;
+            tracing::debug!("Track '{name}' left the mixer in guild {guild_id}: {reason:?}");
             let manager_arc = bot_state
                 .track_managers
                 .read()
