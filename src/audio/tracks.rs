@@ -1,4 +1,4 @@
-use crate::audio::custom_mixer::{AudioSource, TrackEndCallback, TrackHandle};
+use crate::audio::custom_mixer::{AudioSource, TrackHandle};
 use crate::audio::decoder::SymphoniaSource;
 use crate::audio::processing_thread::AudioProcessor;
 use crate::state::Data;
@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, oneshot};
 
 #[derive(Clone, Debug)]
 pub struct TrackSnapshot {
@@ -59,18 +59,12 @@ impl TrackManager {
         }
     }
 
+    /// The returned receiver resolves once the track is gone, whether it ended
+    /// or was removed.
     pub async fn start_track(
         &mut self,
         args: StartTrackArgs,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.start_track_with_callback(args, None).await
-    }
-
-    pub async fn start_track_with_callback(
-        &mut self,
-        args: StartTrackArgs,
-        callback: Option<TrackEndCallback>,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<oneshot::Receiver<()>, Box<dyn std::error::Error + Send + Sync>> {
         let resolved_filename = self.bot_state.file_resolver.resolve(&args.filename).await?;
 
         self.validate_and_prepare_track(&args.name, &resolved_filename)
@@ -108,65 +102,36 @@ impl TrackManager {
             source.seek(pos)?;
         }
 
-        // Add to mixer with automatic cleanup callback
-        let mixer_handle = {
+        let (mixer_handle, end_rx) = {
             let mut processor = processor_arc.write().await;
-
-            // Create cleanup callback that removes track from TrackManager when it ends
-            // Only for non-looping tracks
-            // Note: Callbacks are invoked from Songbird's audio thread (no tokio runtime)
-            // We use std::thread::spawn with a runtime handle to bridge to async
-            let final_callback = if !args.loops {
-                let guild_id = self.guild_id;
-                let bot_state = self.bot_state.clone();
-                let track_name_for_cleanup = args.name.clone();
-
-                let cleanup_cb: TrackEndCallback = Arc::new(move |handle| {
-                    let guild_id_copy = guild_id;
-                    let bot_state_copy = bot_state.clone();
-                    let name_copy = track_name_for_cleanup.clone();
-
-                    // Spawn a std::thread that creates its own tokio runtime
-                    std::thread::spawn(move || {
-                        let rt = tokio::runtime::Runtime::new().unwrap();
-                        rt.block_on(async move {
-                            tracing::info!(
-                                "Track '{}' finished in guild {}, cleaning up",
-                                name_copy,
-                                guild_id_copy
-                            );
-                            let track_managers = bot_state_copy.track_managers.read().await;
-                            if let Some(manager_arc) = track_managers.get(&guild_id_copy) {
-                                let mut manager = manager_arc.lock().await;
-                                manager.remove_handle(handle).await;
-                            }
-                        });
-                    });
-                });
-
-                // Combine with user callback if provided
-                if let Some(user_cb) = callback {
-                    Some(Arc::new(move |handle| {
-                        user_cb(handle);
-                        cleanup_cb(handle);
-                    }) as TrackEndCallback)
-                } else {
-                    Some(cleanup_cb)
-                }
-            } else {
-                // Looping tracks: just use user callback if provided
-                callback
-            };
-
             let mixer = processor.mixer_mut();
-            let handle = mixer.add_track(Box::new(source), 0.0, args.loops, final_callback);
+            let (handle, end_rx) = mixer.add_track(Box::new(source), 0.0, args.loops);
             mixer.update_track_volume(
                 handle,
                 args.volume,
                 Duration::from_secs_f32(args.fade_time.max(0.0)),
             )?;
-            handle
+            (handle, end_rx)
         };
+
+        let (gone_tx, gone_rx) = oneshot::channel();
+        let guild_id = self.guild_id;
+        let bot_state = self.bot_state.clone();
+        let name = args.name.clone();
+        tokio::spawn(async move {
+            let _ = end_rx.await;
+            tracing::debug!("Track '{name}' left the mixer in guild {guild_id}");
+            let manager_arc = bot_state
+                .track_managers
+                .read()
+                .await
+                .get(&guild_id)
+                .cloned();
+            if let Some(manager_arc) = manager_arc {
+                manager_arc.lock().await.remove_handle(mixer_handle).await;
+            }
+            let _ = gone_tx.send(());
+        });
 
         // If we're starting from a position other than the beginning, adjust start_time
         // backwards so that elapsed time calculations include the seek position
@@ -190,7 +155,7 @@ impl TrackManager {
 
         self.persist_state().await;
 
-        Ok(())
+        Ok(gone_rx)
     }
 
     async fn validate_and_prepare_track(

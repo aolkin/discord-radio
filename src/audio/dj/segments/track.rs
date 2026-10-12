@@ -70,6 +70,7 @@ impl TrackSegment {
                 persist: false,
             })
             .await
+            .map(drop)
             .map_err(|e| anyhow::anyhow!(e))
     }
 
