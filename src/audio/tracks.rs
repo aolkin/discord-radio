@@ -1,7 +1,6 @@
 use crate::audio::custom_mixer::{AudioSource, TrackHandle};
 use crate::audio::decoder::SymphoniaSource;
 use crate::audio::processing_thread::AudioProcessor;
-use crate::bucket::FileResolver;
 use crate::state::Data;
 use serenity::model::id::GuildId;
 use std::collections::HashMap;
@@ -69,12 +68,8 @@ impl TrackManager {
             return Err(format!("Track '{}' already exists", args.name).into());
         }
 
-        let (source, resolved_filename) = open_track_source(
-            &self.bot_state.file_resolver,
-            &args.filename,
-            args.start_position,
-        )
-        .await?;
+        let resolved_filename = self.bot_state.file_resolver.resolve(&args.filename).await?;
+        let source = open_track_source(&resolved_filename, args.start_position)?;
         let duration = self
             .bot_state
             .duration_cache
@@ -359,20 +354,18 @@ impl TrackManager {
     }
 }
 
-/// Get or create a TrackManager for a guild, ensuring audio processor exists
-async fn open_track_source(
-    file_resolver: &FileResolver,
-    filename: &str,
+fn open_track_source(
+    path: &str,
     start_position: Option<Duration>,
-) -> Result<(SymphoniaSource, String), Box<dyn std::error::Error + Send + Sync>> {
-    let resolved = file_resolver.resolve(filename).await?;
-    let mut source = SymphoniaSource::from_file(&resolved, 48000)?;
+) -> Result<SymphoniaSource, Box<dyn std::error::Error + Send + Sync>> {
+    let mut source = SymphoniaSource::from_file(path, 48000)?;
     if let Some(pos) = start_position {
         source.seek(pos)?;
     }
-    Ok((source, resolved))
+    Ok(source)
 }
 
+/// Get or create a TrackManager for a guild, ensuring audio processor exists
 pub async fn get_or_create_track_manager(
     bot_state: &Data,
     guild_id: GuildId,
