@@ -257,6 +257,7 @@ async fn play_hex_char(
                 loops: false,
                 start_position: None,
                 persist: false,
+                scheduled_fade: None,
             })
             .await
             .map_err(|e| anyhow::anyhow!(e))?

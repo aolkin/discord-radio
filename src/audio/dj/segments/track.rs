@@ -2,6 +2,7 @@ use super::{
     CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
     TimedSegment,
 };
+use crate::audio::custom_mixer::Fade;
 use crate::audio::dj::config::TrackEntry;
 use crate::audio::duration::DurationCache;
 use crate::audio::tracks::{StartTrackArgs, TrackManager};
@@ -11,6 +12,9 @@ use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use std::time::Duration;
 use tokio::sync::Mutex;
+use tokio::sync::oneshot::{self, error::TryRecvError};
+
+const FADE_TIME: Duration = Duration::from_secs(1);
 
 pub fn format_dj_track_name(filename: &str) -> String {
     format!("dj_track_{}", filename)
@@ -22,6 +26,8 @@ pub struct TrackSegment {
     filename: String,
     volume: f32,
     start_position: Option<Duration>,
+    #[serde(skip)]
+    track_gone: std::sync::Mutex<Option<oneshot::Receiver<()>>>,
 }
 
 impl Deref for TrackSegment {
@@ -49,6 +55,7 @@ impl TrackSegment {
             filename,
             volume,
             start_position,
+            track_gone: Default::default(),
         }
     }
 
@@ -56,22 +63,33 @@ impl TrackSegment {
         &self,
         track_manager: &Mutex<TrackManager>,
         start_position: Option<Duration>,
+        play_duration: Duration,
     ) -> anyhow::Result<()> {
-        track_manager
+        let fade_out = FADE_TIME.min(play_duration);
+        let track_gone = track_manager
             .lock()
             .await
             .start_track(StartTrackArgs {
                 name: format_dj_track_name(&self.filename),
                 filename: self.filename.clone(),
                 volume: self.volume,
-                fade_time: 1.0,
+                fade_time: FADE_TIME.as_secs_f32(),
                 loops: false,
                 start_position,
                 persist: false,
+                scheduled_fade: Some((
+                    play_duration - fade_out,
+                    Fade {
+                        target: 0.0,
+                        duration: fade_out,
+                        stop_when_complete: true,
+                    },
+                )),
             })
             .await
-            .map(drop)
-            .map_err(|e| anyhow::anyhow!(e))
+            .map_err(|e| anyhow::anyhow!(e))?;
+        *self.track_gone.lock().unwrap() = Some(track_gone);
+        Ok(())
     }
 
     pub async fn from_entry(track_entry: TrackEntry, duration_cache: &DurationCache) -> Self {
@@ -121,7 +139,14 @@ impl TrackSegment {
 #[typetag::serde]
 impl Segment for TrackSegment {
     async fn is_complete(&self) -> bool {
-        self.timer.is_elapsed()
+        let mut track_gone = self.track_gone.lock().unwrap();
+        let running = track_gone
+            .as_mut()
+            .is_some_and(|rx| matches!(rx.try_recv(), Err(TryRecvError::Empty)));
+        if !running {
+            *track_gone = None;
+        }
+        !running
     }
 
     fn elapsed(&self) -> Duration {
@@ -140,7 +165,12 @@ impl Segment for TrackSegment {
             return Ok(());
         }
         let position = self.start_position.unwrap_or_default() + elapsed;
-        self.start_at(ctx.track_manager, Some(position)).await?;
+        self.start_at(
+            ctx.track_manager,
+            Some(position),
+            self.timer.duration.saturating_sub(elapsed),
+        )
+        .await?;
         tracing::info!(
             "Restored DJ track '{}' at {:.1}s into the segment in guild {}",
             format_dj_track_name(&self.filename),
@@ -151,7 +181,7 @@ impl Segment for TrackSegment {
     }
 
     async fn enter(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
-        self.start_at(ctx.track_manager, self.start_position)
+        self.start_at(ctx.track_manager, self.start_position, self.timer.duration)
             .await?;
         tracing::info!(
             "DJ starting track '{}' (duration: {:.1}s) in guild {}",
@@ -167,7 +197,7 @@ impl Segment for TrackSegment {
         let mut track_manager = ctx.track_manager.lock().await;
         if track_manager.has_track(&track_name) {
             track_manager
-                .stop_track(&track_name, 1.0, false)
+                .stop_track(&track_name, FADE_TIME.as_secs_f32(), false)
                 .await
                 .map_err(|e| anyhow::anyhow!(e))?;
         }

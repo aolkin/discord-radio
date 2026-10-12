@@ -39,6 +39,8 @@ pub struct StartTrackArgs {
     pub loops: bool,
     pub start_position: Option<Duration>,
     pub persist: bool,
+    /// A fade to schedule at the given played time, as in `CustomMixer::add_fade`.
+    pub scheduled_fade: Option<(Duration, Fade)>,
 }
 
 pub struct TrackManager {
@@ -105,6 +107,9 @@ impl TrackManager {
                 args.volume,
                 Duration::from_secs_f32(args.fade_time.max(0.0)),
             )?;
+            if let Some((at, fade)) = args.scheduled_fade {
+                mixer.add_fade(handle, at, fade)?;
+            }
             (handle, end_rx)
         };
 
