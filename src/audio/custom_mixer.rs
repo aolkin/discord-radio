@@ -143,9 +143,7 @@ impl CustomMixer {
     ///
     /// Ok(()) if successful, or an error if the track is not found.
     pub fn update_track_volume(&mut self, handle: TrackHandle, volume: f32) -> anyhow::Result<()> {
-        let Some(track) = self.tracks.get(&handle) else {
-            anyhow::bail!("Track {handle:?} not found");
-        };
+        let track = self.track_mut(handle)?;
 
         // Convert user volume to amplitude using logarithmic scaling
         let amplitude = perceptual_level_to_amplitude(volume);
@@ -154,12 +152,14 @@ impl CustomMixer {
     }
 
     pub fn update_track_loops(&mut self, handle: TrackHandle, loops: bool) -> anyhow::Result<()> {
-        let Some(track) = self.tracks.get_mut(&handle) else {
-            anyhow::bail!("Track {handle:?} not found");
-        };
-
-        track.loops = loops;
+        self.track_mut(handle)?.loops = loops;
         Ok(())
+    }
+
+    fn track_mut(&mut self, handle: TrackHandle) -> anyhow::Result<&mut MixerTrack> {
+        self.tracks
+            .get_mut(&handle)
+            .ok_or_else(|| anyhow::anyhow!("Track {handle:?} not found"))
     }
 
     pub fn mix_next_frame(&mut self) -> [f32; 2] {
