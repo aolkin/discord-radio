@@ -93,8 +93,6 @@ pub trait Segment: Send + Sync + Debug + SegmentPlaybackConfig {
         Ok(())
     }
 
-    fn started_event(&self) -> &'static str;
-
     fn loggable_properties(&self) -> serde_json::Value {
         serde_json::json!({})
     }
@@ -206,10 +204,6 @@ impl Segment for NoiseSegment {
 
     fn elapsed(&self) -> Duration {
         self.0.started_at.elapsed()
-    }
-
-    fn started_event(&self) -> &'static str {
-        "noise_started"
     }
 
     fn loggable_properties(&self) -> serde_json::Value {

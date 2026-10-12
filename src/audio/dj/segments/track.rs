@@ -143,10 +143,6 @@ impl Segment for TrackSegment {
         Self::stop_file(ctx.track_manager, &self.filename).await
     }
 
-    fn started_event(&self) -> &'static str {
-        "track_started"
-    }
-
     fn loggable_properties(&self) -> serde_json::Value {
         serde_json::json!({
             "track_name": self.track_name(),

@@ -572,25 +572,20 @@ impl DJStateMachine {
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let state = self.state.read().await;
-        let (event_type, details): (String, serde_json::Value) = match &*state {
+        let event_type = self.get_state_name(&state);
+        let details = match &*state {
             DJState::PlayingHexMessage {
                 message,
                 target_loops,
                 forced_profile,
                 ..
-            } => (
-                "hex_message_started".into(),
-                serde_json::json!({
-                    "message": message,
-                    "target_loops": target_loops,
-                    "forced_profile": forced_profile,
-                }),
-            ),
-            DJState::Segment(segment) => (
-                segment.started_event().into(),
-                segment.loggable_properties(),
-            ),
-            DJState::Stopped => ("stopped".into(), serde_json::json!({})),
+            } => serde_json::json!({
+                "message": message,
+                "target_loops": target_loops,
+                "forced_profile": forced_profile,
+            }),
+            DJState::Segment(segment) => segment.loggable_properties(),
+            DJState::Stopped => serde_json::json!({}),
         };
         // Drop the read guard before awaiting the log write below so it isn't held
         // across unrelated file I/O.
