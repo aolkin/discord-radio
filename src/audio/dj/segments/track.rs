@@ -2,8 +2,11 @@ use super::{
     CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
     TimedSegment,
 };
+use crate::audio::dj::config::TrackEntry;
+use crate::audio::duration::DurationCache;
 use crate::audio::tracks::{StartTrackArgs, TrackManager};
 use async_trait::async_trait;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use std::time::Duration;
@@ -69,12 +72,54 @@ impl TrackSegment {
             .await
             .map_err(|e| anyhow::anyhow!(e))
     }
+
+    pub async fn from_entry(track_entry: TrackEntry, duration_cache: &DurationCache) -> Self {
+        let duration = duration_cache.get_duration(&track_entry.filename).await;
+        let (start_position, play_duration) = if track_entry.allow_subsection.unwrap_or(false) {
+            if let Some(total_duration) = duration {
+                if total_duration.as_secs_f32() > 240.0 {
+                    let mut rng = rand::rng();
+                    let subsection_duration =
+                        Duration::from_secs_f32(rng.random_range(120.0..240.0));
+                    let latest_start =
+                        total_duration.as_secs_f32() - subsection_duration.as_secs_f32();
+                    let start_secs = rng.random_range(0.0..latest_start.max(0.0));
+                    (
+                        Some(Duration::from_secs_f32(start_secs)),
+                        subsection_duration,
+                    )
+                } else {
+                    (None, duration.unwrap_or(Duration::from_secs(60)))
+                }
+            } else {
+                (None, Duration::from_secs(60))
+            }
+        } else {
+            let max_dur = track_entry
+                .max_duration_seconds
+                .map(Duration::from_secs_f32)
+                .or(duration)
+                .unwrap_or(Duration::from_secs(60));
+            (None, max_dur)
+        };
+
+        let volume = track_entry.volume.unwrap_or(1.0);
+
+        TrackSegment::new(
+            track_entry.filename,
+            volume,
+            start_position,
+            play_duration,
+            track_entry.signal_profile,
+            track_entry.channel_status.as_deref(),
+        )
+    }
 }
 
 #[async_trait]
 #[typetag::serde]
 impl Segment for TrackSegment {
-    async fn is_complete(&self, _ctx: &SegmentCtx) -> bool {
+    async fn is_complete(&self) -> bool {
         self.timer.is_elapsed()
     }
 

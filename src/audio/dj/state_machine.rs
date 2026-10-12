@@ -1,17 +1,14 @@
-use crate::audio::dj::config::{DJConfig, HexMessageEntry, NoisePeriodEntry, TrackEntry};
+use crate::audio::dj::config::DJConfig;
 use crate::audio::dj::manager::{DJStateType, HexMessageRequest};
 use crate::audio::dj::scheduler::{DJStateEntry, WeightedScheduler};
-use crate::audio::dj::segments::SegmentCtx;
-use crate::audio::dj::segments::{
-    HexSegment, NoiseSegment, Segment, SignalProfilePlayback, TrackSegment,
-};
+use crate::audio::dj::segments::{HexSegment, Segment, SignalProfilePlayback, TrackSegment};
+use crate::audio::dj::segments::{NoiseSegment, SegmentCtx};
 use crate::audio::tracks::TrackManager;
 use crate::state::{BotState, Data};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serenity::all::Http;
 use serenity::model::id::{ChannelId, GuildId};
-use std::ops::RangeInclusive;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock, RwLockReadGuard};
@@ -34,9 +31,9 @@ impl DJState {
         NoiseSegment::idle(Duration::from_secs(1)).into()
     }
 
-    pub async fn is_complete(&self, ctx: &SegmentCtx<'_>) -> bool {
+    pub async fn is_complete(&self) -> bool {
         match self {
-            DJState::Segment(segment) => segment.is_complete(ctx).await,
+            DJState::Segment(segment) => segment.is_complete().await,
             DJState::Stopped => true,
         }
     }
@@ -100,6 +97,10 @@ impl DJStateMachine {
         self.state.read().await
     }
 
+    pub async fn is_complete(&self) -> bool {
+        self.current_state().await.is_complete().await
+    }
+
     pub fn update_config(&mut self, config: DJConfig) {
         self.hex_message_announcements =
             config.hex_message_announcements.clone().unwrap_or_default();
@@ -117,8 +118,14 @@ impl DJStateMachine {
         }
         *self.state.write().await = DJState::Stopped;
 
-        // Log the stop event
-        if let Err(e) = self.log_state_transition(bot_state).await {
+        if let Err(e) = bot_state
+            .log_dj_activity(
+                self.guild_id.get(),
+                "stopped".to_string(),
+                serde_json::json!({}),
+            )
+            .await
+        {
             tracing::error!("Failed to log DJ state transition: {}", e);
         }
     }
@@ -141,29 +148,24 @@ impl DJStateMachine {
         bot_state: &Data,
         request: HexMessageRequest,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let from_state = self.get_state_name(&*self.current_state().await);
-        self.cleanup_current_state(track_manager, bot_state).await?;
-
         info!(
             "DJ force transitioning to hex message with custom text: {}",
             request.message
         );
-        let next_state = self.start_custom_hex_message_state(request).await?;
-        self.enter_state(from_state, next_state, track_manager, bot_state)
-            .await
-    }
-
-    pub async fn advance(
-        &mut self,
-        track_manager: &Arc<Mutex<TrackManager>>,
-        bot_state: &Data,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let ctx = self.segment_ctx(track_manager);
-        if !self.state.read().await.is_complete(&ctx).await {
-            return Ok(());
-        }
-
-        self.force_advance(track_manager, bot_state, None).await
+        let defaults = &self.scheduler.config().hex_message_defaults;
+        let loops = request
+            .loops
+            .unwrap_or_else(|| rand::rng().random_range(defaults.loop_min..=defaults.loop_max))
+            as usize;
+        let next_state = HexSegment::new(
+            request.message,
+            request.volume.unwrap_or(1.0),
+            loops,
+            self.pick_random_announcement(),
+            defaults.signal_profile.clone(),
+        )
+        .into();
+        self.enter_state(next_state, track_manager, bot_state).await
     }
 
     async fn transition_to_state(
@@ -172,31 +174,46 @@ impl DJStateMachine {
         track_manager: &Arc<Mutex<TrackManager>>,
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        info!("DJ transitioning to state: {next_state_type}");
+        let next_state = match next_state_type {
+            DJStateEntry::Track(entry) => {
+                TrackSegment::from_entry(entry, &bot_state.duration_cache)
+                    .await
+                    .into()
+            }
+            DJStateEntry::HexMessage(entry) => {
+                HexSegment::from_entry(entry, &self.scheduler.config().hex_message_defaults, || {
+                    self.pick_random_announcement()
+                })
+                .into()
+            }
+            DJStateEntry::Noise(entry) => NoiseSegment::from(entry).into(),
+        };
+
+        self.enter_state(next_state, track_manager, bot_state).await
+    }
+
+    async fn enter_state(
+        &self,
+        next_state: DJState,
+        track_manager: &Arc<Mutex<TrackManager>>,
+        bot_state: &Data,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Record the previous state before transitioning
         let from_state = self.get_state_name(&*self.current_state().await);
 
         self.cleanup_current_state(track_manager, bot_state).await?;
 
-        info!("DJ transitioning to state: {next_state_type}");
-        let next_state = match next_state_type {
-            DJStateEntry::Track(entry) => self.start_track_state(entry, bot_state).await,
-            DJStateEntry::HexMessage(entry) => self.start_hex_message_state(entry).await,
-            DJStateEntry::Noise(entry) => self.start_noise_state(entry).await,
-        }?;
-
-        self.enter_state(from_state, next_state, track_manager, bot_state)
-            .await
-    }
-
-    async fn enter_state(
-        &self,
-        from_state: String,
-        next_state: DJState,
-        track_manager: &Arc<Mutex<TrackManager>>,
-        bot_state: &Data,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if let DJState::Segment(segment) = &next_state {
             segment.enter(&self.segment_ctx(track_manager)).await?;
+
+            if let Some(channel) = self.announcement_channel
+                && let Some(announcement) = segment.announcement()
+                && let Err(e) = channel.say(&self.http, announcement).await
+            {
+                tracing::warn!("Failed to send DJ announcement: {}", e);
+            }
+
             if let Some(status) = segment.channel_status() {
                 bot_state
                     .voice_status_manager
@@ -249,98 +266,6 @@ impl DJStateMachine {
         Ok(())
     }
 
-    async fn start_track_state(
-        &self,
-        track_entry: TrackEntry,
-        bot_state: &Data,
-    ) -> Result<DJState, Box<dyn std::error::Error + Send + Sync>> {
-        let duration = bot_state
-            .duration_cache
-            .get_duration(&track_entry.filename)
-            .await;
-        let (start_position, play_duration) = if track_entry.allow_subsection.unwrap_or(false) {
-            if let Some(total_duration) = duration {
-                if total_duration.as_secs_f32() > 240.0 {
-                    let mut rng = rand::rng();
-                    let subsection_duration =
-                        Duration::from_secs_f32(rng.random_range(120.0..240.0));
-                    let latest_start =
-                        total_duration.as_secs_f32() - subsection_duration.as_secs_f32();
-                    let start_secs = rng.random_range(0.0..latest_start.max(0.0));
-                    (
-                        Some(Duration::from_secs_f32(start_secs)),
-                        subsection_duration,
-                    )
-                } else {
-                    (None, duration.unwrap_or(Duration::from_secs(60)))
-                }
-            } else {
-                (None, Duration::from_secs(60))
-            }
-        } else {
-            let max_dur = track_entry
-                .max_duration_seconds
-                .map(Duration::from_secs_f32)
-                .or(duration)
-                .unwrap_or(Duration::from_secs(60));
-            (None, max_dur)
-        };
-
-        let volume = track_entry.volume.unwrap_or(1.0);
-
-        let segment = TrackSegment::new(
-            track_entry.filename,
-            volume,
-            start_position,
-            play_duration,
-            track_entry.signal_profile,
-            track_entry.channel_status.as_deref(),
-        );
-        Ok(segment.into())
-    }
-
-    async fn start_hex_message_state(
-        &self,
-        hex_entry: HexMessageEntry,
-    ) -> Result<DJState, Box<dyn std::error::Error + Send + Sync>> {
-        let defaults = &self.scheduler.config().hex_message_defaults;
-        let loop_min = hex_entry.loop_min.unwrap_or(defaults.loop_min);
-        let loop_max = hex_entry.loop_max.unwrap_or(defaults.loop_max);
-        let signal_profile = hex_entry
-            .signal_profile
-            .or_else(|| defaults.signal_profile.clone());
-        let announcement = hex_entry
-            .announcement
-            .or_else(|| self.pick_random_announcement());
-
-        Ok(self.play_hex_message(
-            hex_entry.text,
-            1.0,
-            loop_min..=loop_max,
-            signal_profile,
-            announcement,
-        ))
-    }
-
-    async fn start_custom_hex_message_state(
-        &self,
-        request: HexMessageRequest,
-    ) -> Result<DJState, Box<dyn std::error::Error + Send + Sync>> {
-        let defaults = &self.scheduler.config().hex_message_defaults;
-        let loops = match request.loops {
-            Some(loops) => loops..=loops,
-            None => defaults.loop_min..=defaults.loop_max,
-        };
-
-        Ok(self.play_hex_message(
-            request.message,
-            request.volume.unwrap_or(1.0),
-            loops,
-            defaults.signal_profile.clone(),
-            self.pick_random_announcement(),
-        ))
-    }
-
     fn pick_random_announcement(&self) -> Option<String> {
         if !self.hex_message_announcements.is_empty() {
             let mut rng = rand::rng();
@@ -349,55 +274,6 @@ impl DJStateMachine {
         } else {
             None
         }
-    }
-
-    fn play_hex_message(
-        &self,
-        message: String,
-        volume: f32,
-        loops: RangeInclusive<u32>,
-        signal_profile: Option<String>,
-        announcement: Option<String>,
-    ) -> DJState {
-        let target_loops = rand::rng().random_range(loops) as usize;
-
-        if let Some(channel_id) = self.announcement_channel
-            && let Some(announcement_text) = announcement
-        {
-            let http_clone = self.http.clone();
-            tokio::spawn(async move {
-                if let Err(e) = channel_id.say(&http_clone, &announcement_text).await {
-                    tracing::warn!("Failed to send DJ hex message announcement: {}", e);
-                }
-            });
-        }
-
-        HexSegment::new(message, volume, target_loops, signal_profile).into()
-    }
-
-    async fn start_noise_state(
-        &self,
-        noise_entry: NoisePeriodEntry,
-    ) -> Result<DJState, Box<dyn std::error::Error + Send + Sync>> {
-        let duration_secs = if noise_entry.min_duration_seconds >= noise_entry.max_duration_seconds
-        {
-            noise_entry.min_duration_seconds
-        } else {
-            let mut rng = rand::rng();
-            rng.random_range(noise_entry.min_duration_seconds..noise_entry.max_duration_seconds)
-        };
-        let duration = Duration::from_secs_f32(duration_secs);
-
-        let noise_profile = noise_entry.noise_profile.clone();
-
-        tracing::info!(
-            "DJ playing noise with profile '{}' for {:.1}s in guild {}",
-            noise_profile,
-            duration_secs,
-            self.guild_id
-        );
-
-        Ok(NoiseSegment::new(noise_profile, duration).into())
     }
 
     async fn log_state_transition(
