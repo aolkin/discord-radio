@@ -1,3 +1,7 @@
+mod track;
+
+pub use track::TrackSegment;
+
 use crate::audio::dj::serde::{deser_instant, ser_instant};
 use crate::state::BotState;
 use async_trait::async_trait;

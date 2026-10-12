@@ -2,9 +2,11 @@ use crate::audio::dj::config::{DJConfig, HexMessageEntry, NoisePeriodEntry, Trac
 use crate::audio::dj::manager::DJStateType;
 use crate::audio::dj::scheduler::{DJStateEntry, WeightedScheduler};
 use crate::audio::dj::segments::SegmentCtx;
-use crate::audio::dj::segments::{NoiseSegment, Segment, SignalProfilePlayback};
+use crate::audio::dj::segments::{
+    NoiseSegment, Segment, SegmentPlaybackConfig, SignalProfilePlayback, TrackSegment,
+};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
-use crate::audio::tracks::{StartTrackArgs, TrackManager};
+use crate::audio::tracks::TrackManager;
 use crate::state::{BotState, Data};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -248,7 +250,6 @@ impl DJStateMachine {
                 forced_profile,
                 ..
             } => {
-                let track_name = format_dj_track_name(filename);
                 // Record duration metric
                 let duration_secs = started_at.elapsed().as_secs_f64();
                 if let Some(metrics) = bot_state.metrics.read().await.as_ref() {
@@ -260,11 +261,7 @@ impl DJStateMachine {
                     );
                 }
 
-                let mut track_manager = track_manager.lock().await;
-                if track_manager.has_track(&track_name) {
-                    track_manager.stop_track(&track_name, 1.0, false).await?;
-                }
-                drop(track_manager);
+                TrackSegment::stop_file(track_manager, filename).await?;
 
                 // Remove the track status from the stack if present
                 if let Some(status_msg) = status_message {
@@ -341,8 +338,6 @@ impl DJStateMachine {
         track_manager: &Mutex<TrackManager>,
         bot_state: &Data,
     ) -> Result<DJState, Box<dyn std::error::Error + Send + Sync>> {
-        let track_name = format_dj_track_name(&track_entry.filename);
-
         let duration = bot_state
             .duration_cache
             .get_duration(&track_entry.filename)
@@ -377,19 +372,15 @@ impl DJStateMachine {
 
         let volume = track_entry.volume.unwrap_or(1.0);
 
-        track_manager
-            .lock()
-            .await
-            .start_track(StartTrackArgs {
-                name: track_name.clone(),
-                filename: track_entry.filename.clone(),
-                volume,
-                fade_time: 1.0,
-                loops: false,
-                start_position,
-                persist: false,
-            })
-            .await?;
+        let segment = TrackSegment::new(
+            track_entry.filename.clone(),
+            volume,
+            start_position,
+            play_duration,
+            track_entry.signal_profile.clone(),
+            track_entry.channel_status.as_deref(),
+        );
+        segment.start(track_manager).await?;
 
         tracing::info!(
             "DJ starting track '{}' (duration: {:.1}s) in guild {}",
@@ -399,31 +390,13 @@ impl DJStateMachine {
         );
 
         // Push track channel status onto the voice channel status stack if configured
-        let status_message = if let Some(ref status) = track_entry.channel_status {
-            let starts_with_emoji = status.chars().next().is_some_and(|c| {
-                matches!(c as u32,
-                    0x1F300..=0x1F9FF | // Misc Symbols and Pictographs, Emoticons, Transport and Map, Supplemental Symbols
-                    0x2600..=0x26FF |   // Misc symbols
-                    0x2700..=0x27BF |   // Dingbats
-                    0xFE00..=0xFE0F |   // Variation Selectors
-                    0x1F000..=0x1F02F | // Mahjong Tiles, Domino Tiles
-                    0x1F0A0..=0x1F0FF | // Playing Cards
-                    0x1F100..=0x1F64F   // Enclosed characters, Emoticons
-                )
-            });
-            let status_with_emoji = if starts_with_emoji {
-                status.clone()
-            } else {
-                format!("🔊 {}", status)
-            };
+        let status_message = segment.channel_status();
+        if let Some(ref status) = status_message {
             bot_state
                 .voice_status_manager
-                .push_status(self.guild_id, &status_with_emoji, &self.http)
+                .push_status(self.guild_id, status, &self.http)
                 .await;
-            Some(status_with_emoji)
-        } else {
-            None
-        };
+        }
 
         Ok(DJState::PlayingTrack {
             filename: track_entry.filename.clone(),

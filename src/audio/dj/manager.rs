@@ -1,8 +1,7 @@
 use crate::audio::dj::config::DJConfig;
 use crate::audio::dj::profile_machine::ProfileStateMachine;
-use crate::audio::dj::segments::{SegmentCtx, SignalProfilePlayback};
+use crate::audio::dj::segments::{SegmentCtx, SignalProfilePlayback, TrackSegment};
 use crate::audio::dj::state_machine::{DJState, DJStateMachine, format_dj_track_name};
-use crate::audio::tracks::StartTrackArgs;
 use crate::state::Data;
 use serenity::all::Http;
 use serenity::model::id::{ChannelId, GuildId};
@@ -436,22 +435,11 @@ async fn resume_dj_track(guild_id: &GuildId, bot_state: &Data, resume_track_args
             .get(guild_id)
             .expect("TrackManager should be initialized before DJ starts")
             .clone();
-        let mut manager = manager_arc.lock().await;
+        let segment = TrackSegment::new(filename, volume, None, duration, None, None);
 
-        if let Err(e) = manager
-            .start_track(StartTrackArgs {
-                name: track_name.clone(),
-                filename: filename.clone(),
-                volume,
-                fade_time: 1.0,
-                loops: false,
-                start_position: Some(elapsed),
-                persist: false,
-            })
-            .await
-        {
+        if let Err(e) = segment.resume(&manager_arc, elapsed).await {
             tracing::warn!(
-                "Failed to restore DJ track '{}' in guild {}: {}",
+                "Failed to restore DJ track '{}' in guild {}: {:#}",
                 track_name,
                 guild_id,
                 e
@@ -464,7 +452,6 @@ async fn resume_dj_track(guild_id: &GuildId, bot_state: &Data, resume_track_args
                 guild_id
             );
         }
-        drop(manager);
     } else {
         tracing::info!(
             "DJ track '{}' has already finished (elapsed: {:.1}s, duration: {:.1}s), will advance to next state",
