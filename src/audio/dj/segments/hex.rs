@@ -1,6 +1,7 @@
 use super::{
     CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
 };
+use crate::audio::dj::config::{HexMessageDefaults, HexMessageEntry};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
 use crate::audio::tracks::{StartTrackArgs, TrackManager};
 use crate::bucket::FileResolver;
@@ -33,6 +34,7 @@ pub struct HexSegment {
     volume: f32,
     target_loops: usize,
     progress: Arc<HexProgress>,
+    announcement: Option<String>,
     #[serde(skip)]
     run: std::sync::Mutex<Option<JoinHandle<()>>>,
 }
@@ -51,6 +53,7 @@ impl HexSegment {
         message: String,
         volume: f32,
         target_loops: usize,
+        announcement: Option<String>,
         signal_profile: Option<String>,
     ) -> Self {
         let playback_config = CommonSegmentPlaybackConfig {
@@ -63,6 +66,7 @@ impl HexSegment {
             message,
             volume,
             target_loops,
+            announcement,
             progress: Default::default(),
             run: Default::default(),
         }
@@ -80,12 +84,28 @@ impl HexSegment {
         ));
         *self.run.lock().unwrap() = Some(handle);
     }
+
+    pub fn from_entry(
+        hex_entry: HexMessageEntry,
+        defaults: &HexMessageDefaults,
+        default_announcement: impl FnOnce() -> Option<String>,
+    ) -> Self {
+        let loop_min = hex_entry.loop_min.unwrap_or(defaults.loop_min);
+        let loop_max = hex_entry.loop_max.unwrap_or(defaults.loop_max);
+        let signal_profile = hex_entry
+            .signal_profile
+            .or_else(|| defaults.signal_profile.clone());
+        let announcement = hex_entry.announcement.or_else(default_announcement);
+        let loops = rand::rng().random_range(loop_min..=loop_max) as usize;
+
+        Self::new(hex_entry.text, 1.0, loops, announcement, signal_profile)
+    }
 }
 
 #[async_trait]
 #[typetag::serde]
 impl Segment for HexSegment {
-    async fn is_complete(&self, _ctx: &SegmentCtx) -> bool {
+    async fn is_complete(&self) -> bool {
         self.run
             .lock()
             .unwrap()
@@ -137,6 +157,10 @@ impl Segment for HexSegment {
             metrics.record_hex_message_loops(ctx.guild_id.get(), loops_played);
         }
         Ok(())
+    }
+
+    fn announcement(&self) -> &Option<String> {
+        &self.announcement
     }
 
     fn loggable_properties(&self) -> serde_json::Value {

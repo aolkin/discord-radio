@@ -283,7 +283,11 @@ pub async fn dj_task(
             break;
         }
 
-        if let Err(e) = state_machine.advance(&manager_arc, &bot_state).await {
+        if state_machine.is_complete().await
+            && let Err(e) = state_machine
+                .force_advance(&manager_arc, &bot_state, None)
+                .await
+        {
             tracing::error!("DJ state machine error in guild {}: {}", guild_id, e);
         }
 

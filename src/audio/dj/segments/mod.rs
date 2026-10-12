@@ -1,7 +1,9 @@
 mod hex;
+mod noise;
 mod track;
 
 pub use hex::HexSegment;
+pub use noise::NoiseSegment;
 pub use track::TrackSegment;
 
 use crate::audio::dj::serde::{deser_instant, ser_instant};
@@ -83,7 +85,7 @@ pub struct StateDisplay {
 #[async_trait]
 #[typetag::serde(tag = "type")]
 pub trait Segment: Send + Sync + Debug + SegmentPlaybackConfig {
-    async fn is_complete(&self, ctx: &SegmentCtx) -> bool;
+    async fn is_complete(&self) -> bool;
     fn elapsed(&self) -> Duration;
 
     async fn restore(&self, _ctx: &SegmentCtx) -> anyhow::Result<()> {
@@ -94,6 +96,10 @@ pub trait Segment: Send + Sync + Debug + SegmentPlaybackConfig {
     }
     async fn exit(&self, _ctx: &SegmentCtx) -> anyhow::Result<()> {
         Ok(())
+    }
+
+    fn announcement(&self) -> &Option<String> {
+        &None
     }
 
     fn loggable_properties(&self) -> serde_json::Value {
@@ -167,70 +173,5 @@ impl Deref for TimedSegment {
     type Target = CommonSegmentPlaybackConfig;
     fn deref(&self) -> &Self::Target {
         &self.playback_config
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct NoiseSegment(TimedSegment);
-
-impl NoiseSegment {
-    pub fn new(noise_profile: String, duration: Duration) -> Self {
-        let playback_config = CommonSegmentPlaybackConfig {
-            signal_profile: Some(SignalProfilePlayback {
-                name: Some(noise_profile),
-                fade_in_duration: Some(duration.div_f32(2.0)),
-                ..Default::default()
-            }),
-            channel_status: None,
-        };
-        Self(TimedSegment::new(playback_config, duration))
-    }
-
-    pub fn idle(duration: Duration) -> Self {
-        Self(TimedSegment::new(Default::default(), duration))
-    }
-}
-
-impl Deref for NoiseSegment {
-    type Target = CommonSegmentPlaybackConfig;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-#[async_trait]
-#[typetag::serde]
-impl Segment for NoiseSegment {
-    async fn is_complete(&self, _ctx: &SegmentCtx) -> bool {
-        self.0.is_elapsed()
-    }
-
-    fn elapsed(&self) -> Duration {
-        self.0.started_at.elapsed()
-    }
-
-    fn loggable_properties(&self) -> serde_json::Value {
-        serde_json::json!({
-            "noise_profile": self.signal_profile().name,
-            "duration_secs": self.0.duration.as_secs_f32(),
-        })
-    }
-
-    fn state_name(&self) -> &'static str {
-        "playing_noise"
-    }
-
-    fn state_display(&self) -> StateDisplay {
-        let subject = self.signal_profile().name;
-        StateDisplay {
-            name: if subject.is_some() {
-                "PlayingNoise"
-            } else {
-                "Idle"
-            },
-            subject,
-            elapsed: self.0.started_at.elapsed(),
-            total: Some(self.0.duration),
-        }
     }
 }
