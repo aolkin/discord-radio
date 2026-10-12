@@ -51,6 +51,8 @@ When a guild has DJ enabled, you can control it directly from the web portal:
 
 - **Play Hex Message**: Queue a custom hex message to play via the DJ with default settings
 
+- **Play Track**: Force the DJ to play a chosen audio file now, with optional volume, start position, and duration
+
 ### DJ Config Overrides
 
 Customize DJ behavior by overriding configuration values from the web portal:

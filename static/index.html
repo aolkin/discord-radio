@@ -537,6 +537,9 @@
                                 <button class="btn btn-secondary" @click="openPlayHexModal(guild.guild_id)">
                                     Play Hex Message
                                 </button>
+                                <button class="btn btn-secondary" @click="openPlayTrackModal(guild.guild_id)">
+                                    Play Track
+                                </button>
                             </div>
                         </div>
                     </template>
@@ -719,6 +722,60 @@
                         <button type="button" class="btn btn-secondary" @click="closePlayHexModal()">Cancel</button>
                         <button type="submit" class="btn btn-primary" :disabled="hexSaving">
                             <span x-text="hexSaving ? 'Playing...' : 'Play Message'"></span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Play Track Modal -->
+    <div x-show="showPlayTrackModal"
+         x-transition.opacity
+         class="modal-overlay"
+         @click.self="closePlayTrackModal()"
+         @keydown.escape.window="closePlayTrackModal()">
+        <div class="modal-content" x-show="showPlayTrackModal" x-transition>
+            <div class="modal-header">
+                <div class="modal-title">Play Track via DJ</div>
+                <button class="close" @click="closePlayTrackModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div x-show="playTrackMessage.text"
+                     :class="playTrackMessage.type === 'error' ? 'error-message' : 'success-message'"
+                     x-text="playTrackMessage.text"></div>
+
+                <form @submit.prevent="playTrack()">
+                    <div class="form-group">
+                        <label class="form-label">Audio File</label>
+                        <select class="form-input" x-model="playTrackFilename" required>
+                            <option value="">Select audio file...</option>
+                            <template x-for="file in audioFiles" :key="file">
+                                <option :value="file" x-text="file"></option>
+                            </template>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Volume</label>
+                            <input type="number" class="form-input" x-model.number="playTrackVolume"
+                                   min="0" max="2" step="0.1" placeholder="0.0-2.0">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Start (seconds)</label>
+                            <input type="number" class="form-input" x-model.number="playTrackStart"
+                                   min="0" step="0.1">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Duration (seconds)</label>
+                            <input type="number" class="form-input" x-model.number="playTrackDuration"
+                                   min="0" step="0.1">
+                        </div>
+                    </div>
+                    <div class="button-group">
+                        <button type="button" class="btn btn-secondary" @click="closePlayTrackModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary" :disabled="playTrackSaving">
+                            <span x-text="playTrackSaving ? 'Playing...' : 'Play Track'"></span>
                         </button>
                     </div>
                 </form>
@@ -1277,6 +1334,14 @@
                 hexMessageText: '',
                 hexSaving: false,
                 hexMessage: { text: '', type: '' },
+                // Play Track Modal state
+                showPlayTrackModal: false,
+                playTrackFilename: '',
+                playTrackVolume: null,
+                playTrackStart: null,
+                playTrackDuration: null,
+                playTrackSaving: false,
+                playTrackMessage: { text: '', type: '' },
                 // Track State Modal state
                 showTrackStateModal: false,
                 trackName: '',
@@ -1553,6 +1618,73 @@
                         };
                     } finally {
                         this.hexSaving = false;
+                    }
+                },
+
+                // Play Track Modal Functions
+                openPlayTrackModal(guildId) {
+                    this.currentGuildId = guildId;
+                    this.showPlayTrackModal = true;
+                    this.resetPlayTrackForm();
+                },
+
+                closePlayTrackModal() {
+                    this.showPlayTrackModal = false;
+                    this.currentGuildId = null;
+                    this.resetPlayTrackForm();
+                },
+
+                resetPlayTrackForm() {
+                    this.playTrackFilename = '';
+                    this.playTrackVolume = null;
+                    this.playTrackStart = null;
+                    this.playTrackDuration = null;
+                    this.playTrackMessage = { text: '', type: '' };
+                },
+
+                async playTrack() {
+                    this.playTrackSaving = true;
+                    this.playTrackMessage = { text: '', type: '' };
+
+                    try {
+                        const body = { filename: this.playTrackFilename };
+
+                        if (this.playTrackVolume !== null && this.playTrackVolume !== '') {
+                            body.volume = parseFloat(this.playTrackVolume);
+                        }
+
+                        if (this.playTrackStart !== null && this.playTrackStart !== '') {
+                            body.start_position = parseFloat(this.playTrackStart);
+                        }
+
+                        if (this.playTrackDuration !== null && this.playTrackDuration !== '') {
+                            body.duration = parseFloat(this.playTrackDuration);
+                        }
+
+                        const response = await fetch(`/api/guilds/${this.currentGuildId}/track/play`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(body),
+                        });
+
+                        if (!response.ok) {
+                            throw new Error('Failed to play track');
+                        }
+
+                        this.playTrackMessage = {
+                            text: 'Track started successfully!',
+                            type: 'success'
+                        };
+
+                        setTimeout(() => this.closePlayTrackModal(), 1500);
+                    } catch (error) {
+                        console.error('Error playing track:', error);
+                        this.playTrackMessage = {
+                            text: 'Failed to play track. Please try again.',
+                            type: 'error'
+                        };
+                    } finally {
+                        this.playTrackSaving = false;
                     }
                 },
 
