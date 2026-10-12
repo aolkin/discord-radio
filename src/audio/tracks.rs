@@ -250,7 +250,7 @@ impl TrackManager {
         if let Some(info) = info {
             let mut proc = self.audio_processor.write().await;
             proc.mixer_mut()
-                .remove_track(info.mixer_handle, Duration::ZERO);
+                .remove_track(info.mixer_handle, Duration::ZERO, None);
 
             tracing::debug!("Removed track '{}' from guild {}", info.name, self.guild_id);
             self.persist_state().await;
@@ -280,7 +280,7 @@ impl TrackManager {
         {
             let mut proc = self.audio_processor.write().await;
             let mixer = proc.mixer_mut();
-            mixer.remove_track(handle, Duration::from_secs_f32(fade_time.max(0.0)));
+            mixer.remove_track(handle, Duration::from_secs_f32(fade_time.max(0.0)), None);
         }
 
         self.tracks.remove(name);
