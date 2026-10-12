@@ -167,50 +167,6 @@ pub async fn play_message(
     Ok(())
 }
 
-/// Stop the hex message the DJ is playing
-#[poise::command(
-    slash_command,
-    guild_only,
-    default_member_permissions = "ADMINISTRATOR"
-)]
-pub async fn stop_message(ctx: Context<'_>) -> Result<(), Error> {
-    let guild_id = ctx
-        .guild_id()
-        .ok_or("This command can only be used in a server")?;
-    let user_id = ctx.author().id;
-
-    tracing::info!(
-        "User {} executed stop_message in guild {}",
-        user_id,
-        guild_id
-    );
-
-    ctx.defer_ephemeral().await?;
-
-    let is_playing = {
-        let dj_states = ctx.data().dj_states.read().await;
-        match dj_states.get(&guild_id) {
-            Some(state_arc) => matches!(
-                *state_arc.read().await,
-                crate::audio::dj::state_machine::DJState::PlayingHexMessage { .. }
-            ),
-            None => false,
-        }
-    };
-
-    if !is_playing {
-        ctx.say("No message is currently playing").await?;
-        return Ok(());
-    }
-
-    match send_dj_command(ctx.data(), guild_id, DJCommand::StopHexMessage).await {
-        Ok(()) => ctx.say("Message playback stopped").await?,
-        Err(e) => ctx.say(format!("Failed to stop message: {}", e)).await?,
-    };
-
-    Ok(())
-}
-
 fn has_audio_extension(path: &std::path::Path) -> bool {
     path.extension().is_some_and(|ext| {
         matches!(

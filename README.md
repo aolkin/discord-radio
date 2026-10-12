@@ -93,7 +93,6 @@ See [WEB_PORTAL.md](WEB_PORTAL.md) for more details.
 - `/join_voice_channel` - Join a voice channel to broadcast audio
 - `/leave_voice_channel` - Leave the current voice channel
 - `/play_message` - Have the DJ play a text message as hex audio (requires a running DJ)
-- `/stop_message` - Stop the hex message the DJ is playing
 - `/change_track_state` - Start or stop an audio track with fade transition
 - `/get_current_tracks` - Display all currently playing audio tracks
 - `/signal_profile` - Change the audio signal processing profile
