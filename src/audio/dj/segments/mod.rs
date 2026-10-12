@@ -26,13 +26,15 @@ pub struct SegmentCtx<'a> {
     pub http: &'a Http,
 }
 
-async fn audio_processor(ctx: &SegmentCtx<'_>) -> Option<Arc<RwLock<AudioProcessor>>> {
-    ctx.bot_state
-        .audio_processors
-        .read()
-        .await
-        .get(ctx.guild_id)
-        .cloned()
+impl SegmentCtx<'_> {
+    pub async fn audio_processor(&self) -> Option<Arc<RwLock<AudioProcessor>>> {
+        self.bot_state
+            .audio_processors
+            .read()
+            .await
+            .get(self.guild_id)
+            .cloned()
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

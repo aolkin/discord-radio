@@ -1,8 +1,8 @@
 use super::{
     CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
-    TimedSegment, audio_processor,
+    TimedSegment,
 };
-use crate::audio::custom_mixer::AtomicTrackHandle;
+use crate::audio::custom_mixer::PlayingTrack;
 use crate::audio::dj::config::TrackEntry;
 use crate::audio::duration::DurationCache;
 use crate::audio::tracks::open_track_source;
@@ -12,13 +12,8 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use std::time::Duration;
-use tokio::sync::oneshot::{self, error::TryRecvError};
 
 const FADE_TIME: Duration = Duration::from_secs(1);
-
-pub fn format_dj_track_name(filename: &str) -> String {
-    format!("dj_track_{}", filename)
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TrackSegment {
@@ -27,9 +22,7 @@ pub struct TrackSegment {
     volume: f32,
     start_position: Option<Duration>,
     #[serde(skip)]
-    track: AtomicTrackHandle,
-    #[serde(skip)]
-    track_gone: std::sync::Mutex<Option<oneshot::Receiver<()>>>,
+    track: std::sync::Mutex<Option<PlayingTrack>>,
 }
 
 impl Deref for TrackSegment {
@@ -58,7 +51,6 @@ impl TrackSegment {
             volume,
             start_position,
             track: Default::default(),
-            track_gone: Default::default(),
         }
     }
 
@@ -68,22 +60,19 @@ impl TrackSegment {
         start_position: Option<Duration>,
         play_duration: Duration,
     ) -> anyhow::Result<()> {
-        let processor = audio_processor(ctx)
+        let processor = ctx
+            .audio_processor()
             .await
             .with_context(|| format!("No audio processor for guild {}", ctx.guild_id))?;
         let path = ctx.bot_state.file_resolver.resolve(&self.filename).await?;
         let source = open_track_source(&path, start_position).map_err(|e| anyhow::anyhow!(e))?;
         let fade_out = FADE_TIME.min(play_duration);
-        let end_rx = {
-            let mut processor = processor.write().await;
-            let mixer = processor.mixer_mut();
-            let (handle, end_rx) = mixer.add_track(Box::new(source), 0.0, false);
-            self.track.store(handle);
-            mixer.update_track_volume(handle, self.volume, FADE_TIME)?;
-            mixer.remove_track(handle, fade_out, Some(play_duration - fade_out));
-            end_rx
-        };
-        *self.track_gone.lock().unwrap() = Some(end_rx);
+        let mut processor = processor.write().await;
+        let mixer = processor.mixer_mut();
+        let track = mixer.add_track(Box::new(source), 0.0, false);
+        mixer.update_track_volume(track.handle, self.volume, FADE_TIME)?;
+        mixer.remove_track(track.handle, fade_out, Some(play_duration - fade_out));
+        *self.track.lock().unwrap() = Some(track);
         Ok(())
     }
 
@@ -134,14 +123,11 @@ impl TrackSegment {
 #[typetag::serde]
 impl Segment for TrackSegment {
     async fn is_complete(&self) -> bool {
-        let mut track_gone = self.track_gone.lock().unwrap();
-        let running = track_gone
-            .as_mut()
-            .is_some_and(|rx| matches!(rx.try_recv(), Err(TryRecvError::Empty)));
-        if !running {
-            *track_gone = None;
-        }
-        !running
+        self.track
+            .lock()
+            .unwrap()
+            .as_ref()
+            .is_none_or(PlayingTrack::has_ended)
     }
 
     fn elapsed(&self) -> Duration {
@@ -153,7 +139,7 @@ impl Segment for TrackSegment {
         if self.timer.is_elapsed() {
             tracing::info!(
                 "DJ track '{}' has already finished (elapsed: {:.1}s, duration: {:.1}s), will advance to next state",
-                format_dj_track_name(&self.filename),
+                self.filename,
                 elapsed.as_secs_f32(),
                 self.timer.duration.as_secs_f32()
             );
@@ -168,7 +154,7 @@ impl Segment for TrackSegment {
         .await?;
         tracing::info!(
             "Restored DJ track '{}' at {:.1}s into the segment in guild {}",
-            format_dj_track_name(&self.filename),
+            self.filename,
             elapsed.as_secs_f32(),
             ctx.guild_id
         );
@@ -188,21 +174,21 @@ impl Segment for TrackSegment {
     }
 
     async fn exit(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
-        if let Some(handle) = self.track.take()
-            && let Some(processor) = audio_processor(ctx).await
+        let track = self.track.lock().unwrap().take();
+        if let Some(track) = track
+            && let Some(processor) = ctx.audio_processor().await
         {
             processor
                 .write()
                 .await
                 .mixer_mut()
-                .remove_track(handle, FADE_TIME, None);
+                .remove_track(track.handle, FADE_TIME, None);
         }
         Ok(())
     }
 
     fn loggable_properties(&self) -> serde_json::Value {
         serde_json::json!({
-            "track_name": format_dj_track_name(&self.filename),
             "filename": self.filename,
             "duration_secs": self.timer.duration.as_secs_f32(),
             "forced_profile": self.signal_profile().name,

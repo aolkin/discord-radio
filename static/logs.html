@@ -349,7 +349,7 @@
             detail.className = 'log-detail';
             
             const details = content.details;
-            if (details.track_name) {
+            if (details.filename) {
                 detail.textContent = `Track: ${details.filename} (${details.duration_secs}s)`;
                 if (details.forced_profile) {
                     detail.textContent += ` | Profile: ${details.forced_profile}`;

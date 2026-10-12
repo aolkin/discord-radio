@@ -1,27 +1,28 @@
 use std::collections::{BTreeMap, HashMap};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
-use tokio::sync::oneshot;
+use tokio::sync::watch;
 
 use crate::audio::helpers::perceptual_level_to_amplitude;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct TrackHandle(u64);
 
-/// Holds an optional [`TrackHandle`]; 0 means none, which is why handles start at 1.
-#[derive(Debug, Default)]
-pub struct AtomicTrackHandle(AtomicU64);
+/// A track added to the mixer. It has ended once it plays to its end, is
+/// removed, or the mixer is dropped.
+#[derive(Clone, Debug)]
+pub struct PlayingTrack {
+    pub handle: TrackHandle,
+    /// The mixer never sends on this channel; it drops the sender when the track ends.
+    ended_rx: watch::Receiver<()>,
+}
 
-impl AtomicTrackHandle {
-    pub fn store(&self, handle: TrackHandle) {
-        self.0.store(handle.0, Ordering::Relaxed);
+impl PlayingTrack {
+    pub fn has_ended(&self) -> bool {
+        self.ended_rx.has_changed().is_err()
     }
 
-    pub fn take(&self) -> Option<TrackHandle> {
-        match self.0.swap(0, Ordering::Relaxed) {
-            0 => None,
-            raw => Some(TrackHandle(raw)),
-        }
+    pub async fn ended(&self) {
+        let _ = self.ended_rx.clone().changed().await;
     }
 }
 
@@ -58,7 +59,7 @@ pub struct MixerTrack {
     ramp: Option<VolumeRamp>,
     pub loops: bool,
     pub active: bool,
-    end_tx: Option<oneshot::Sender<()>>,
+    ended_tx: Option<watch::Sender<()>>,
 }
 
 impl MixerTrack {
@@ -66,7 +67,7 @@ impl MixerTrack {
         source: Box<dyn AudioSource>,
         volume: f32,
         loops: bool,
-        end_tx: oneshot::Sender<()>,
+        ended_tx: watch::Sender<()>,
     ) -> Self {
         Self {
             source,
@@ -77,7 +78,7 @@ impl MixerTrack {
             ramp: None,
             loops,
             active: true,
-            end_tx: Some(end_tx),
+            ended_tx: Some(ended_tx),
         }
     }
 
@@ -146,9 +147,7 @@ impl MixerTrack {
                             );
                         }
                         self.active = false;
-                        if let Some(end_tx) = self.end_tx.take() {
-                            let _ = end_tx.send(());
-                        }
+                        self.ended_tx = None;
                         return Some([0.0, 0.0]);
                     }
                 }
@@ -177,22 +176,20 @@ impl CustomMixer {
         }
     }
 
-    /// The receiver gets `Ok` when the track plays to its end, and `Err` when
-    /// the track is removed or the mixer is dropped first.
     pub fn add_track(
         &mut self,
         source: Box<dyn AudioSource>,
         volume: f32,
         loops: bool,
-    ) -> (TrackHandle, oneshot::Receiver<()>) {
+    ) -> PlayingTrack {
         let handle = TrackHandle(self.next_id);
         self.next_id += 1;
 
-        let (end_tx, end_rx) = oneshot::channel();
+        let (ended_tx, ended_rx) = watch::channel(());
         self.tracks
-            .insert(handle, MixerTrack::new(source, volume, loops, end_tx));
+            .insert(handle, MixerTrack::new(source, volume, loops, ended_tx));
 
-        (handle, end_rx)
+        PlayingTrack { handle, ended_rx }
     }
 
     /// Ramps the track linearly to silence over `fade`, then removes it.

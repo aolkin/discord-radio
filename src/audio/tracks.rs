@@ -96,24 +96,25 @@ impl TrackManager {
 
         let processor_arc = self.audio_processor.clone();
 
-        let (mixer_handle, end_rx) = {
+        let track = {
             let mut processor = processor_arc.write().await;
             let mixer = processor.mixer_mut();
-            let (handle, end_rx) = mixer.add_track(Box::new(source), 0.0, args.loops);
+            let track = mixer.add_track(Box::new(source), 0.0, args.loops);
             mixer.update_track_volume(
-                handle,
+                track.handle,
                 args.volume,
                 Duration::from_secs_f32(args.fade_time.max(0.0)),
             )?;
-            (handle, end_rx)
+            track
         };
+        let mixer_handle = track.handle;
 
         let (gone_tx, gone_rx) = oneshot::channel();
         let guild_id = self.guild_id;
         let bot_state = self.bot_state.clone();
         let name = args.name.clone();
         tokio::spawn(async move {
-            let _ = end_rx.await;
+            track.ended().await;
             tracing::debug!("Track '{name}' left the mixer in guild {guild_id}");
             let manager_arc = bot_state
                 .track_managers

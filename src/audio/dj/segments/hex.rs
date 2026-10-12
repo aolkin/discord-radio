@@ -1,8 +1,7 @@
 use super::{
     CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
-    audio_processor,
 };
-use crate::audio::custom_mixer::AtomicTrackHandle;
+use crate::audio::custom_mixer::PlayingTrack;
 use crate::audio::dj::config::{HexMessageDefaults, HexMessageEntry};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
 use crate::audio::processing_thread::AudioProcessor;
@@ -26,7 +25,7 @@ struct HexProgress {
     position: AtomicUsize,
     loops: AtomicUsize,
     #[serde(skip)]
-    current_track: AtomicTrackHandle,
+    current_track: std::sync::Mutex<Option<PlayingTrack>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -77,7 +76,8 @@ impl HexSegment {
     }
 
     async fn start_run(&self, ctx: &SegmentCtx<'_>) -> anyhow::Result<()> {
-        let processor = audio_processor(ctx)
+        let processor = ctx
+            .audio_processor()
             .await
             .with_context(|| format!("No audio processor for guild {}", ctx.guild_id))?;
         let handle = tokio::spawn(run_hex_message(
@@ -154,14 +154,15 @@ impl Segment for HexSegment {
             handle.abort();
             let _ = handle.await;
         }
-        if let Some(handle) = self.progress.current_track.take()
-            && let Some(processor) = audio_processor(ctx).await
+        let track = self.progress.current_track.lock().unwrap().take();
+        if let Some(track) = track
+            && let Some(processor) = ctx.audio_processor().await
         {
             processor
                 .write()
                 .await
                 .mixer_mut()
-                .remove_track(handle, Duration::ZERO, None);
+                .remove_track(track.handle, Duration::ZERO, None);
         }
         if let Some(metrics) = ctx.bot_state.metrics.read().await.as_ref() {
             let loops_played = self.progress.loops.load(Ordering::Relaxed) as u64;
@@ -225,16 +226,15 @@ async fn run_hex_message(
                         continue;
                     }
                 };
-                let end_rx = {
+                let track = {
                     let mut processor = processor.write().await;
-                    let (handle, end_rx) =
-                        processor
-                            .mixer_mut()
-                            .add_track(Box::new(source), volume, false);
-                    progress.current_track.store(handle);
-                    end_rx
+                    let track = processor
+                        .mixer_mut()
+                        .add_track(Box::new(source), volume, false);
+                    *progress.current_track.lock().unwrap() = Some(track.clone());
+                    track
                 };
-                let _ = end_rx.await;
+                track.ended().await;
             }
             _ => tracing::warn!("Audio file not found: {}", filename),
         }
