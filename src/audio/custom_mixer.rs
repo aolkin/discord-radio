@@ -68,32 +68,18 @@ impl MixerTrack {
         self.amplitude = perceptual_level_to_amplitude(volume);
     }
 
-    /// Returns true when a fade with `stop_at_end` has finished.
-    fn start_fade(&mut self, fade: Fade) -> bool {
-        if fade.frames == 0 {
-            self.ramp = None;
-            self.set_volume(fade.target);
-            return fade.stop_at_end;
-        }
-        self.ramp = Some(VolumeRamp {
-            target: fade.target,
-            step: (fade.target - self.volume) / fade.frames as f32,
-            frames_left: fade.frames,
-            stop_at_end: fade.stop_at_end,
-        });
-        false
-    }
-
-    /// Returns true when a fade with `stop_at_end` has finished.
-    fn start_due_fades(&mut self) -> bool {
-        let mut finished = false;
+    fn start_due_fades(&mut self) {
         while let Some(entry) = self.pending_fades.first_entry()
             && *entry.key() <= self.played_frames
         {
             let fade = entry.remove();
-            finished |= self.start_fade(fade);
+            self.ramp = Some(VolumeRamp {
+                target: fade.target,
+                step: (fade.target - self.volume) / fade.frames.max(1) as f32,
+                frames_left: fade.frames,
+                stop_at_end: fade.stop_at_end,
+            });
         }
-        finished
     }
 
     /// Returns true when a ramp with `stop_at_end` has just finished.
@@ -101,7 +87,7 @@ impl MixerTrack {
         let Some(ramp) = &mut self.ramp else {
             return false;
         };
-        ramp.frames_left -= 1;
+        ramp.frames_left = ramp.frames_left.saturating_sub(1);
         let (target, step, frames_left, stop_at_end) =
             (ramp.target, ramp.step, ramp.frames_left, ramp.stop_at_end);
         if frames_left == 0 {
@@ -191,37 +177,40 @@ impl CustomMixer {
         (handle, end_rx)
     }
 
-    /// Ramps the track linearly to silence over `fade`, then removes it. The
-    /// ramp starts as in [`Self::update_track_volume`]. Returns false if the
-    /// track does not exist.
+    /// Ramps the track linearly to silence over `fade`, then removes it.
+    /// `at` is how long the track has played (frames the mixer has output for
+    /// it, across loops) when the ramp starts; `None`, or a time already
+    /// reached, starts it before the next frame. A zero `fade` with no `at`
+    /// removes the track at once. Returns false if the track does not exist.
+    ///
+    /// A starting ramp replaces any volume ramp in progress on the track, and a
+    /// ramp scheduled for the same frame as a pending one replaces it.
     pub fn remove_track(
         &mut self,
         handle: TrackHandle,
         fade: Duration,
         at: Option<Duration>,
     ) -> bool {
+        if fade.is_zero() && at.is_none() {
+            return self.tracks.remove(&handle).is_some();
+        }
         self.schedule_fade(handle, 0.0, fade, at, true).is_ok()
     }
 
-    /// Update the volume of a track.
+    /// Update the volume of a track, starting before the next frame.
     ///
     /// * `volume` - User-facing volume (0.0-2.0). This is converted to amplitude using
     ///   perceptual (logarithmic) scaling. 0.0 = silence, 1.0 = unity gain, 2.0 = +18dB boost.
     /// * `fade` - Time to ramp linearly from the current volume. Zero applies it at once.
-    /// * `at` - How long the track has played (frames the mixer has output for it,
-    ///   across loops) when the ramp starts. `None`, or a time already reached,
-    ///   starts it before the next frame.
     ///
-    /// A starting ramp replaces any volume ramp in progress on the track, and a
-    /// ramp scheduled for the same frame as a pending one replaces it.
+    /// Replaces any volume ramp in progress on the track.
     pub fn update_track_volume(
         &mut self,
         handle: TrackHandle,
         volume: f32,
         fade: Duration,
-        at: Option<Duration>,
     ) -> anyhow::Result<()> {
-        self.schedule_fade(handle, volume, fade, at, false)
+        self.schedule_fade(handle, volume, fade, None, false)
     }
 
     fn schedule_fade(
@@ -266,7 +255,8 @@ impl CustomMixer {
         let mut finished_tracks = Vec::new();
 
         for (handle, track) in self.tracks.iter_mut() {
-            if track.start_due_fades() {
+            track.start_due_fades();
+            if track.advance_ramp() {
                 finished_tracks.push(*handle);
                 continue;
             }
@@ -276,8 +266,7 @@ impl CustomMixer {
                 mixed[1] += frame[1];
             }
 
-            let faded_out = track.advance_ramp();
-            if faded_out || (!track.active && !track.loops) {
+            if !track.active && !track.loops {
                 finished_tracks.push(*handle);
             }
         }

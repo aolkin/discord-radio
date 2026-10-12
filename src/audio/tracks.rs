@@ -104,7 +104,6 @@ impl TrackManager {
                 handle,
                 args.volume,
                 Duration::from_secs_f32(args.fade_time.max(0.0)),
-                None,
             )?;
             (handle, end_rx)
         };
@@ -189,7 +188,6 @@ impl TrackManager {
                 track_info.mixer_handle,
                 volume,
                 Duration::from_secs_f32(fade_time.max(0.0)),
-                None,
             )?;
         }
 
