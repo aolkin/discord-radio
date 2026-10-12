@@ -61,7 +61,7 @@ pub async fn dj_task(
     };
 
     let (forced_profile, status_message) = {
-        let segment = &initial_state.0;
+        let segment = &initial_state.segment;
         let track_manager = bot_state
             .track_managers
             .read()

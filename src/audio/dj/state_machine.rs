@@ -15,11 +15,15 @@ use tokio::sync::{Mutex, RwLock, RwLockReadGuard};
 use tracing::info;
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct DJState(pub Box<dyn Segment>);
+pub struct DJState {
+    pub segment: Box<dyn Segment>,
+}
 
 impl<S: Segment + 'static> From<S> for DJState {
     fn from(segment: S) -> Self {
-        DJState(Box::new(segment))
+        DJState {
+            segment: Box::new(segment),
+        }
     }
 }
 
@@ -29,15 +33,15 @@ impl DJState {
     }
 
     pub async fn is_complete(&self) -> bool {
-        self.0.is_complete().await
+        self.segment.is_complete().await
     }
 
     pub fn forced_profile(&self) -> SignalProfilePlayback {
-        self.0.signal_profile()
+        self.segment.signal_profile()
     }
 
     pub fn is_hex_message(&self) -> bool {
-        self.0.state_name() == HexSegment::STATE_NAME
+        self.segment.state_name() == HexSegment::STATE_NAME
     }
 }
 
@@ -194,7 +198,7 @@ impl DJStateMachine {
 
         self.cleanup_current_state(track_manager, bot_state).await?;
 
-        let segment = &next_state.0;
+        let segment = &next_state.segment;
         segment.enter(&self.segment_ctx(track_manager)).await?;
 
         if let Some(channel) = self.announcement_channel
@@ -231,7 +235,7 @@ impl DJStateMachine {
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let current = self.state.read().await;
-        let segment = &current.0;
+        let segment = &current.segment;
         if let Some(metrics) = bot_state.metrics.read().await.as_ref() {
             metrics.record_dj_state_duration(
                 self.guild_id.get(),
@@ -267,7 +271,7 @@ impl DJStateMachine {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let state = self.state.read().await;
         let event_type = self.get_state_name(&state);
-        let details = state.0.loggable_properties();
+        let details = state.segment.loggable_properties();
         // Drop the read guard before awaiting the log write below so it isn't held
         // across unrelated file I/O.
         drop(state);
@@ -278,6 +282,6 @@ impl DJStateMachine {
     }
 
     fn get_state_name(&self, state: &DJState) -> String {
-        state.0.state_name().to_string()
+        state.segment.state_name().to_string()
     }
 }
