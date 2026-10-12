@@ -1,5 +1,7 @@
+mod hex;
 mod track;
 
+pub use hex::HexSegment;
 pub use track::TrackSegment;
 
 use crate::audio::dj::serde::{deser_instant, ser_instant};
@@ -12,6 +14,7 @@ use serenity::model::id::GuildId;
 use std::borrow::ToOwned;
 use std::fmt::Debug;
 use std::ops::Deref;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
 
@@ -19,7 +22,7 @@ pub struct SegmentCtx<'a> {
     pub guild_id: &'a GuildId,
     pub bot_state: &'a BotState,
     pub http: &'a Http,
-    pub track_manager: &'a Mutex<TrackManager>,
+    pub track_manager: &'a Arc<Mutex<TrackManager>>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -74,7 +77,7 @@ pub struct StateDisplay {
     pub name: &'static str,
     pub subject: Option<String>,
     pub elapsed: Duration,
-    pub total: Duration,
+    pub total: Option<Duration>,
 }
 
 #[async_trait]
@@ -227,7 +230,7 @@ impl Segment for NoiseSegment {
             },
             subject,
             elapsed: self.0.started_at.elapsed(),
-            total: self.0.duration,
+            total: Some(self.0.duration),
         }
     }
 }

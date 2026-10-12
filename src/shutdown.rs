@@ -30,14 +30,6 @@ pub async fn setup_shutdown_handler(data: Data) {
         info!("Shutdown triggered by: {}", shutdown_reason);
         info!("Cleaning up...");
 
-        // Abort all hex playback tasks
-        let hex_playback_tasks = data.hex_playback_tasks.write().await;
-        for (guild_id, handle) in hex_playback_tasks.iter() {
-            info!("Aborting hex playback task for guild {}", guild_id);
-            handle.abort();
-        }
-        drop(hex_playback_tasks);
-
         // Stop all audio tracks
         let track_managers = data.track_managers.read().await;
         for (guild_id, manager_arc) in track_managers.iter() {

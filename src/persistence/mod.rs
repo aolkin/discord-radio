@@ -6,8 +6,8 @@ mod utils;
 pub use dj::DjSettingsStore;
 pub use file_store::FileStore;
 pub use types::{
-    ActivityState, DJState, DjSettings, MessagePlaybackState, MultiTrackPlaybackState,
-    ProfileState, RegisteredChannel, TrackState,
+    ActivityState, DJState, DjSettings, MultiTrackPlaybackState, ProfileState, RegisteredChannel,
+    TrackState,
 };
 
 pub(crate) use crate::persistence::types::DJStateSnapshot;
@@ -25,14 +25,6 @@ pub trait StateStore: Send + Sync {
     async fn save_voice_channel(&self, guild_id: GuildId, channel_id: ChannelId) -> Result<()>;
     async fn load_voice_channels(&self) -> Result<HashMap<GuildId, ChannelId>>;
     async fn remove_voice_channel(&self, guild_id: GuildId) -> Result<()>;
-
-    async fn save_message_playback(
-        &self,
-        guild_id: GuildId,
-        state: &MessagePlaybackState,
-    ) -> Result<()>;
-    async fn load_message_playbacks(&self) -> Result<HashMap<GuildId, MessagePlaybackState>>;
-    async fn remove_message_playback(&self, guild_id: GuildId) -> Result<()>;
 
     async fn save_multitrack_playback(
         &self,

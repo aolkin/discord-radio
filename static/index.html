@@ -522,27 +522,6 @@
                     </div>
 
                     <div class="guild-content">
-                    <!-- Hex Playback -->
-                    <template x-if="guild.hex_playback && guild.hex_playback.message">
-                        <div class="section">
-                            <div class="section-title">Hex Playback</div>
-                            <div class="info-item">
-                                <div style="flex: 1;">
-                                    <div class="track-name" x-text="guild.hex_playback.message"></div>
-                                    <div class="track-details">
-                                        Position: <span x-text="guild.hex_playback.current_position"></span> •
-                                        Loop: <span x-text="guild.hex_playback.current_loop"></span><template x-if="guild.hex_playback.target_loops">/<span x-text="guild.hex_playback.target_loops"></span></template>
-                                    </div>
-                                    <div class="track-details">
-                                        🔊 <div class="volume-bar" style="display: inline-block; width: 100px; vertical-align: middle;">
-                                            <div class="volume-fill" :style="'width: ' + (guild.hex_playback.volume * 100) + '%'"></div>
-                                        </div> <span x-text="Math.round(guild.hex_playback.volume * 100) + '%'"></span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </template>
-
                     <!-- DJ State -->
                     <template x-if="guild.dj_state">
                         <div class="section">
@@ -657,7 +636,7 @@
                     </div>
 
                     <!-- Empty State -->
-                    <template x-if="!guild.tracks.length && !guild.hex_playback?.message && !guild.dj_state && !guild.audio_profile">
+                    <template x-if="!guild.tracks.length && !guild.dj_state && !guild.audio_profile">
                         <div class="empty-state">No active features</div>
                     </template>
                     </div>

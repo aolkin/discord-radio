@@ -4,16 +4,6 @@ use serenity::model::id::{ChannelId, GuildId};
 use std::time::SystemTime;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct MessagePlaybackState {
-    pub message: String,
-    pub current_position: usize,
-    #[serde(default)]
-    pub current_loop: usize,
-    #[serde(default)]
-    pub target_loops: Option<usize>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TrackState {
     pub name: String,
     pub filename: String,

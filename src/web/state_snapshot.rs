@@ -13,15 +13,6 @@ pub struct TrackInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HexPlaybackInfo {
-    pub message: Option<String>,
-    pub current_position: usize,
-    pub volume: f32,
-    pub current_loop: usize,
-    pub target_loops: Option<usize>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DJStateInfo {
     pub state_type: String,
     pub details: String,
@@ -38,7 +29,6 @@ pub struct GuildState {
     pub guild_id: String,
     pub in_voice: bool,
     pub tracks: Vec<TrackInfo>,
-    pub hex_playback: Option<HexPlaybackInfo>,
     pub dj_state: Option<DJStateInfo>,
     pub audio_profile: Option<AudioProfileInfo>,
 }
@@ -80,7 +70,6 @@ impl BotSnapshot {
                 guild_id: guild_id.to_string(),
                 in_voice,
                 tracks: Vec::new(),
-                hex_playback: None,
                 dj_state: None,
                 audio_profile: None,
             };
@@ -103,20 +92,6 @@ impl BotSnapshot {
                     .collect();
             }
             drop(track_managers);
-
-            // Get hex playback state
-            let hex_states = bot_state.hex_playback_states.read().await;
-            if let Some(state_arc) = hex_states.get(&guild_id) {
-                let state = state_arc.read().await;
-                guild_state.hex_playback = Some(HexPlaybackInfo {
-                    message: state.message.clone(),
-                    current_position: state.current_position,
-                    volume: state.volume,
-                    current_loop: state.current_loop,
-                    target_loops: state.target_loops,
-                });
-            }
-            drop(hex_states);
 
             // Get DJ state
             let dj_states = bot_state.dj_states.read().await;
@@ -179,21 +154,16 @@ fn dj_state_to_info(state: &crate::audio::dj::state_machine::DJState) -> DJState
     use crate::audio::dj::state_machine::DJState;
 
     match state {
-        DJState::PlayingHexMessage {
-            message,
-            target_loops,
-            ..
-        } => DJStateInfo {
-            state_type: "PlayingHexMessage".to_string(),
-            details: format!("Message: {} (loops: {})", message, target_loops),
-        },
         DJState::Segment(segment) => {
             let display = segment.state_display();
             let elapsed = display.elapsed.as_secs_f32();
-            let total = display.total.as_secs_f32();
+            let time = match display.total {
+                Some(total) => format!("{elapsed:.1}s / {:.1}s", total.as_secs_f32()),
+                None => format!("{elapsed:.1}s"),
+            };
             let details = match display.subject {
-                Some(subject) => format!("{subject} ({elapsed:.1}s / {total:.1}s)"),
-                None => format!("{elapsed:.1}s / {total:.1}s"),
+                Some(subject) => format!("{subject} ({time})"),
+                None => time,
             };
             DJStateInfo {
                 state_type: display.name.to_string(),
