@@ -1,4 +1,4 @@
-use crate::audio::custom_mixer::{AudioSource, TrackHandle};
+use crate::audio::custom_mixer::{AudioSource, Fade, TrackHandle};
 use crate::audio::decoder::SymphoniaSource;
 use crate::audio::processing_thread::AudioProcessor;
 use crate::state::Data;
@@ -100,10 +100,14 @@ impl TrackManager {
             let mut processor = processor_arc.write().await;
             let mixer = processor.mixer_mut();
             let (handle, end_rx) = mixer.add_track(Box::new(source), 0.0, args.loops);
-            mixer.update_track_volume(
+            mixer.add_fade(
                 handle,
-                args.volume,
-                Duration::from_secs_f32(args.fade_time.max(0.0)),
+                Duration::ZERO,
+                Fade {
+                    target: args.volume,
+                    duration: Duration::from_secs_f32(args.fade_time.max(0.0)),
+                    stop_when_complete: false,
+                },
             )?;
             (handle, end_rx)
         };
@@ -184,10 +188,14 @@ impl TrackManager {
         {
             let mut proc = processor_arc.write().await;
             let mixer = proc.mixer_mut();
-            mixer.update_track_volume(
+            mixer.add_fade(
                 track_info.mixer_handle,
-                volume,
-                Duration::from_secs_f32(fade_time.max(0.0)),
+                Duration::ZERO,
+                Fade {
+                    target: volume,
+                    duration: Duration::from_secs_f32(fade_time.max(0.0)),
+                    stop_when_complete: false,
+                },
             )?;
         }
 
@@ -249,8 +257,7 @@ impl TrackManager {
     async fn finish_removing_track(&mut self, info: Option<TrackInfo>) {
         if let Some(info) = info {
             let mut proc = self.audio_processor.write().await;
-            proc.mixer_mut()
-                .remove_track(info.mixer_handle, Duration::ZERO);
+            proc.mixer_mut().remove_track(info.mixer_handle);
 
             tracing::debug!("Removed track '{}' from guild {}", info.name, self.guild_id);
             self.persist_state().await;
@@ -280,7 +287,15 @@ impl TrackManager {
         {
             let mut proc = self.audio_processor.write().await;
             let mixer = proc.mixer_mut();
-            mixer.remove_track(handle, Duration::from_secs_f32(fade_time.max(0.0)));
+            let _ = mixer.add_fade(
+                handle,
+                Duration::ZERO,
+                Fade {
+                    target: 0.0,
+                    duration: Duration::from_secs_f32(fade_time.max(0.0)),
+                    stop_when_complete: true,
+                },
+            );
         }
 
         self.tracks.remove(name);

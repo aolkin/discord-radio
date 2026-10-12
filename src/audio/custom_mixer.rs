@@ -15,12 +15,29 @@ pub trait AudioSource: Send + Sync {
     fn reset(&mut self);
 }
 
+/// Moves a track's volume linearly from its current value to `target` over
+/// `duration`. A zero `duration` sets the volume immediately.
+/// `stop_when_complete` removes the track once `target` is reached.
+#[derive(Clone, Copy, Debug)]
+pub struct Fade {
+    pub target: f32,
+    pub duration: Duration,
+    pub stop_when_complete: bool,
+}
+
+struct ScheduledFade {
+    at_frame: u64,
+    target: f32,
+    frames: u64,
+    stop_when_complete: bool,
+}
+
 /// Moves a track's user volume linearly to `target`, one `step` per frame.
 struct VolumeRamp {
     target: f32,
     step: f32,
-    frames_left: u32,
-    stop_at_end: bool,
+    frames_left: u64,
+    stop_when_complete: bool,
 }
 
 pub struct MixerTrack {
@@ -28,6 +45,9 @@ pub struct MixerTrack {
     /// User-facing volume (0.0-2.0).
     volume: f32,
     amplitude: f32,
+    played_frames: u64,
+    /// Sorted by `at_frame`, latest first.
+    pending_fades: Vec<ScheduledFade>,
     ramp: Option<VolumeRamp>,
     pub loops: bool,
     pub active: bool,
@@ -45,6 +65,8 @@ impl MixerTrack {
             source,
             volume,
             amplitude: perceptual_level_to_amplitude(volume),
+            played_frames: 0,
+            pending_fades: Vec::new(),
             ramp: None,
             loops,
             active: true,
@@ -57,28 +79,57 @@ impl MixerTrack {
         self.amplitude = perceptual_level_to_amplitude(volume);
     }
 
-    fn start_ramp(&mut self, target: f32, frames: u32, stop_at_end: bool) {
-        let frames = frames.max(1);
-        self.ramp = Some(VolumeRamp {
-            target,
-            step: (target - self.volume) / frames as f32,
-            frames_left: frames,
-            stop_at_end,
-        });
+    fn schedule_fade(&mut self, fade: ScheduledFade) {
+        let index = self
+            .pending_fades
+            .partition_point(|pending| pending.at_frame > fade.at_frame);
+        self.pending_fades.insert(index, fade);
     }
 
-    /// Returns true when a ramp with `stop_at_end` has just finished.
+    /// Returns true when a fade with `stop_when_complete` has completed.
+    fn start_fade(&mut self, fade: ScheduledFade) -> bool {
+        if fade.frames == 0 {
+            self.ramp = None;
+            self.set_volume(fade.target);
+            return fade.stop_when_complete;
+        }
+        self.ramp = Some(VolumeRamp {
+            target: fade.target,
+            step: (fade.target - self.volume) / fade.frames as f32,
+            frames_left: fade.frames,
+            stop_when_complete: fade.stop_when_complete,
+        });
+        false
+    }
+
+    /// Returns true when a fade with `stop_when_complete` has completed.
+    fn start_due_fades(&mut self) -> bool {
+        let mut complete = false;
+        while let Some(fade) = self
+            .pending_fades
+            .pop_if(|fade| fade.at_frame <= self.played_frames)
+        {
+            complete |= self.start_fade(fade);
+        }
+        complete
+    }
+
+    /// Returns true when a ramp with `stop_when_complete` has just finished.
     fn advance_ramp(&mut self) -> bool {
         let Some(ramp) = &mut self.ramp else {
             return false;
         };
         ramp.frames_left -= 1;
-        let (target, step, frames_left, stop_at_end) =
-            (ramp.target, ramp.step, ramp.frames_left, ramp.stop_at_end);
+        let (target, step, frames_left, stop_when_complete) = (
+            ramp.target,
+            ramp.step,
+            ramp.frames_left,
+            ramp.stop_when_complete,
+        );
         if frames_left == 0 {
             self.ramp = None;
             self.set_volume(target);
-            stop_at_end
+            stop_when_complete
         } else {
             self.set_volume(target - step * frames_left as f32);
             false
@@ -97,6 +148,7 @@ impl MixerTrack {
         loop {
             match self.source.next_frame() {
                 Some(frame) => {
+                    self.played_frames += 1;
                     return Some([frame[0] * self.amplitude, frame[1] * self.amplitude]);
                 }
                 None => {
@@ -132,7 +184,8 @@ pub struct CustomMixer {
 }
 
 /// A [`TrackHandle`] whose track was removed or has ended is a no-op for
-/// `remove_track`, and the `update_*` methods return an error for it.
+/// `remove_track`, and `add_fade` and the `update_*` methods return an error
+/// for it.
 impl CustomMixer {
     pub fn new(sample_rate: u32) -> Self {
         Self {
@@ -161,55 +214,42 @@ impl CustomMixer {
         (handle, end_rx)
     }
 
-    /// Removes the track. A non-zero `fade` ramps it to silence first and then
-    /// removes it. Returns false if the track does not exist.
-    pub fn remove_track(&mut self, handle: TrackHandle, fade: Duration) -> bool {
-        if fade.is_zero() {
-            return self.tracks.remove(&handle).is_some();
-        }
-        let frames = self.duration_frames(fade);
-        match self.tracks.get_mut(&handle) {
-            Some(track) => {
-                track.start_ramp(0.0, frames, true);
-                true
-            }
-            None => false,
-        }
+    /// Removes the track immediately. Returns false if the track does not exist.
+    pub fn remove_track(&mut self, handle: TrackHandle) -> bool {
+        self.tracks.remove(&handle).is_some()
     }
 
-    /// Update the volume of a track.
+    /// Schedules `fade` to start once the track has played for `at` (the
+    /// frames the mixer has output for it, across loops). An `at` the track
+    /// has already reached starts the fade now. A starting fade replaces any
+    /// fade in progress on the track.
     ///
-    /// # Arguments
-    ///
-    /// * `handle` - Handle of the track to update
-    /// * `volume` - User-facing volume (0.0-2.0). This is converted to amplitude using
-    ///   perceptual (logarithmic) scaling. 0.0 = silence, 1.0 = unity gain, 2.0 = +18dB boost.
-    /// * `fade` - Time to ramp linearly from the current volume. Zero applies it immediately.
-    ///
-    /// # Returns
-    ///
-    /// Ok(()) if successful, or an error if the track is not found.
-    ///
-    /// Replaces any volume ramp in progress on the track.
-    pub fn update_track_volume(
+    /// Volumes are user-facing (0.0-2.0), converted to amplitude using
+    /// perceptual (logarithmic) scaling: 0.0 = silence, 1.0 = unity gain,
+    /// 2.0 = +18dB boost.
+    pub fn add_fade(
         &mut self,
         handle: TrackHandle,
-        volume: f32,
-        fade: Duration,
+        at: Duration,
+        fade: Fade,
     ) -> anyhow::Result<()> {
-        let frames = self.duration_frames(fade);
+        let scheduled = ScheduledFade {
+            at_frame: self.duration_frames(at),
+            target: fade.target,
+            frames: self.duration_frames(fade.duration),
+            stop_when_complete: fade.stop_when_complete,
+        };
         let track = self.track_mut(handle)?;
-        if fade.is_zero() {
-            track.ramp = None;
-            track.set_volume(volume);
-        } else {
-            track.start_ramp(volume, frames, false);
+        if scheduled.at_frame > track.played_frames {
+            track.schedule_fade(scheduled);
+        } else if track.start_fade(scheduled) {
+            self.tracks.remove(&handle);
         }
         Ok(())
     }
 
-    fn duration_frames(&self, duration: Duration) -> u32 {
-        (duration.as_secs_f64() * f64::from(self.sample_rate)).round() as u32
+    fn duration_frames(&self, duration: Duration) -> u64 {
+        (duration.as_secs_f64() * f64::from(self.sample_rate)).round() as u64
     }
 
     pub fn update_track_loops(&mut self, handle: TrackHandle, loops: bool) -> anyhow::Result<()> {
@@ -228,6 +268,11 @@ impl CustomMixer {
         let mut finished_tracks = Vec::new();
 
         for (handle, track) in self.tracks.iter_mut() {
+            if track.start_due_fades() {
+                finished_tracks.push(*handle);
+                continue;
+            }
+
             if let Some(frame) = track.next_frame() {
                 mixed[0] += frame[0];
                 mixed[1] += frame[1];
