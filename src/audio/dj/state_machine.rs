@@ -1,5 +1,5 @@
 use crate::audio::dj::config::{DJConfig, HexMessageEntry, NoisePeriodEntry, TrackEntry};
-use crate::audio::dj::manager::DJStateType;
+use crate::audio::dj::manager::{DJStateType, HexMessageRequest};
 use crate::audio::dj::scheduler::{DJStateEntry, WeightedScheduler};
 use crate::audio::dj::segments::SegmentCtx;
 use crate::audio::dj::segments::{NoiseSegment, Segment, SignalProfilePlayback, TrackSegment};
@@ -10,6 +10,7 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serenity::all::Http;
 use serenity::model::id::{ChannelId, GuildId};
+use std::ops::RangeInclusive;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock, RwLockReadGuard};
@@ -146,16 +147,16 @@ impl DJStateMachine {
         &mut self,
         track_manager: &Mutex<TrackManager>,
         bot_state: &Data,
-        message: String,
+        request: HexMessageRequest,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         self.cleanup_current_state(track_manager, bot_state).await?;
 
         info!(
             "DJ force transitioning to hex message with custom text: {}",
-            message
+            request.message
         );
         let next_state = self
-            .start_custom_hex_message_state(message, bot_state)
+            .start_custom_hex_message_state(request, bot_state)
             .await?;
         *self.state.write().await = next_state;
 
@@ -375,8 +376,8 @@ impl DJStateMachine {
 
         self.play_hex_message(
             hex_entry.text.clone(),
-            loop_min,
-            loop_max,
+            1.0,
+            loop_min..=loop_max,
             forced_profile,
             announcement,
             bot_state,
@@ -386,26 +387,23 @@ impl DJStateMachine {
 
     async fn start_custom_hex_message_state(
         &mut self,
-        message: String,
+        request: HexMessageRequest,
         bot_state: &Data,
     ) -> Result<DJState, Box<dyn std::error::Error + Send + Sync>> {
-        // Use defaults from the DJ config
-        let loop_min = self.scheduler.config().hex_message_defaults.loop_min;
-        let loop_max = self.scheduler.config().hex_message_defaults.loop_max;
-        let forced_profile = self
-            .scheduler
-            .config()
-            .hex_message_defaults
-            .signal_profile
-            .clone();
+        let defaults = &self.scheduler.config().hex_message_defaults;
+        let loops = match request.loops {
+            Some(loops) => loops..=loops,
+            None => defaults.loop_min..=defaults.loop_max,
+        };
+        let forced_profile = defaults.signal_profile.clone();
 
         // Use random default announcement if available
         let announcement = self.pick_random_announcement();
 
         self.play_hex_message(
-            message,
-            loop_min,
-            loop_max,
+            request.message,
+            request.volume.unwrap_or(1.0),
+            loops,
             forced_profile,
             announcement,
             bot_state,
@@ -426,20 +424,13 @@ impl DJStateMachine {
     async fn play_hex_message(
         &self,
         message: String,
-        loop_min: u32,
-        loop_max: u32,
+        volume: f32,
+        loops: RangeInclusive<u32>,
         forced_profile: Option<String>,
         announcement: Option<String>,
         bot_state: &Data,
     ) -> Result<DJState, Box<dyn std::error::Error + Send + Sync>> {
-        let target_loops = {
-            let mut rng = rand::rng();
-            if loop_min == loop_max {
-                loop_min as usize
-            } else {
-                rng.random_range(loop_min..=loop_max) as usize
-            }
-        };
+        let target_loops = rand::rng().random_range(loops) as usize;
 
         let track_managers = bot_state.track_managers.read().await;
         let manager_arc = track_managers
@@ -482,7 +473,7 @@ impl DJStateMachine {
             *state = crate::state::HexPlaybackState::playing(
                 message.clone(),
                 0,
-                1.0,
+                volume,
                 Some(target_loops),
                 Some(obfuscated.clone()),
             );
