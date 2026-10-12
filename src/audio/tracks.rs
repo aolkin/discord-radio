@@ -347,7 +347,7 @@ impl TrackManager {
     }
 }
 
-fn open_track_source(
+pub fn open_track_source(
     path: &str,
     start_position: Option<Duration>,
 ) -> Result<SymphoniaSource, Box<dyn std::error::Error + Send + Sync>> {

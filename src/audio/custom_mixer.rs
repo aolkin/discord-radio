@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, HashMap};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tokio::sync::oneshot;
 
@@ -6,6 +7,23 @@ use crate::audio::helpers::perceptual_level_to_amplitude;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct TrackHandle(u64);
+
+/// Holds an optional [`TrackHandle`]; 0 means none, which is why handles start at 1.
+#[derive(Debug, Default)]
+pub struct AtomicTrackHandle(AtomicU64);
+
+impl AtomicTrackHandle {
+    pub fn store(&self, handle: Option<TrackHandle>) {
+        self.0.store(handle.map_or(0, |h| h.0), Ordering::Relaxed);
+    }
+
+    pub fn take(&self) -> Option<TrackHandle> {
+        match self.0.swap(0, Ordering::Relaxed) {
+            0 => None,
+            raw => Some(TrackHandle(raw)),
+        }
+    }
+}
 
 pub trait AudioSource: Send + Sync {
     fn next_frame(&mut self) -> Option<[f32; 2]>;
@@ -153,7 +171,7 @@ impl CustomMixer {
     pub fn new(sample_rate: u32) -> Self {
         Self {
             tracks: HashMap::new(),
-            next_id: 0,
+            next_id: 1,
             sample_rate,
             channels: 2,
         }

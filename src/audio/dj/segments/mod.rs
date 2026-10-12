@@ -16,7 +16,6 @@ use serenity::model::id::GuildId;
 use std::borrow::ToOwned;
 use std::fmt::Debug;
 use std::ops::Deref;
-use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
 
@@ -24,7 +23,7 @@ pub struct SegmentCtx<'a> {
     pub guild_id: &'a GuildId,
     pub bot_state: &'a BotState,
     pub http: &'a Http,
-    pub track_manager: &'a Arc<Mutex<TrackManager>>,
+    pub track_manager: &'a Mutex<TrackManager>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
