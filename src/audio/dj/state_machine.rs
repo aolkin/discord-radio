@@ -15,14 +15,11 @@ use tokio::sync::{Mutex, RwLock, RwLockReadGuard};
 use tracing::info;
 
 #[derive(Debug, Serialize, Deserialize)]
-pub enum DJState {
-    Segment(Box<dyn Segment>),
-    Stopped,
-}
+pub struct DJState(pub Box<dyn Segment>);
 
 impl<S: Segment + 'static> From<S> for DJState {
     fn from(segment: S) -> Self {
-        DJState::Segment(Box::new(segment))
+        DJState(Box::new(segment))
     }
 }
 
@@ -32,21 +29,15 @@ impl DJState {
     }
 
     pub async fn is_complete(&self) -> bool {
-        match self {
-            DJState::Segment(segment) => segment.is_complete().await,
-            DJState::Stopped => true,
-        }
+        self.0.is_complete().await
     }
 
     pub fn forced_profile(&self) -> SignalProfilePlayback {
-        match self {
-            DJState::Segment(segment) => segment.signal_profile(),
-            DJState::Stopped => Default::default(),
-        }
+        self.0.signal_profile()
     }
 
     pub fn is_hex_message(&self) -> bool {
-        matches!(self, DJState::Segment(segment) if segment.state_name() == HexSegment::STATE_NAME)
+        self.0.state_name() == HexSegment::STATE_NAME
     }
 }
 
@@ -116,7 +107,6 @@ impl DJStateMachine {
         if let Err(e) = self.cleanup_current_state(track_manager, bot_state).await {
             tracing::error!("Error cleaning up DJ state during stop: {}", e);
         }
-        *self.state.write().await = DJState::Stopped;
 
         if let Err(e) = bot_state
             .log_dj_activity(
@@ -204,22 +194,21 @@ impl DJStateMachine {
 
         self.cleanup_current_state(track_manager, bot_state).await?;
 
-        if let DJState::Segment(segment) = &next_state {
-            segment.enter(&self.segment_ctx(track_manager)).await?;
+        let segment = &next_state.0;
+        segment.enter(&self.segment_ctx(track_manager)).await?;
 
-            if let Some(channel) = self.announcement_channel
-                && let Some(announcement) = segment.announcement()
-                && let Err(e) = channel.say(&self.http, announcement).await
-            {
-                tracing::warn!("Failed to send DJ announcement: {}", e);
-            }
+        if let Some(channel) = self.announcement_channel
+            && let Some(announcement) = segment.announcement()
+            && let Err(e) = channel.say(&self.http, announcement).await
+        {
+            tracing::warn!("Failed to send DJ announcement: {}", e);
+        }
 
-            if let Some(status) = segment.channel_status() {
-                bot_state
-                    .voice_status_manager
-                    .push_status(self.guild_id, &status, &self.http)
-                    .await;
-            }
+        if let Some(status) = segment.channel_status() {
+            bot_state
+                .voice_status_manager
+                .push_status(self.guild_id, &status, &self.http)
+                .await;
         }
 
         let to_state = self.get_state_name(&next_state);
@@ -242,25 +231,21 @@ impl DJStateMachine {
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let current = self.state.read().await;
-        match &*current {
-            DJState::Segment(segment) => {
-                if let Some(metrics) = bot_state.metrics.read().await.as_ref() {
-                    metrics.record_dj_state_duration(
-                        self.guild_id.get(),
-                        segment.state_name(),
-                        segment.signal_profile().name.as_deref(),
-                        segment.elapsed().as_secs_f64(),
-                    );
-                }
-                segment.exit(&self.segment_ctx(track_manager)).await?;
-                if let Some(status) = segment.channel_status() {
-                    bot_state
-                        .voice_status_manager
-                        .remove_status(self.guild_id, &status, &self.http)
-                        .await;
-                }
-            }
-            DJState::Stopped => {}
+        let segment = &current.0;
+        if let Some(metrics) = bot_state.metrics.read().await.as_ref() {
+            metrics.record_dj_state_duration(
+                self.guild_id.get(),
+                segment.state_name(),
+                segment.signal_profile().name.as_deref(),
+                segment.elapsed().as_secs_f64(),
+            );
+        }
+        segment.exit(&self.segment_ctx(track_manager)).await?;
+        if let Some(status) = segment.channel_status() {
+            bot_state
+                .voice_status_manager
+                .remove_status(self.guild_id, &status, &self.http)
+                .await;
         }
 
         Ok(())
@@ -282,10 +267,7 @@ impl DJStateMachine {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let state = self.state.read().await;
         let event_type = self.get_state_name(&state);
-        let details = match &*state {
-            DJState::Segment(segment) => segment.loggable_properties(),
-            DJState::Stopped => serde_json::json!({}),
-        };
+        let details = state.0.loggable_properties();
         // Drop the read guard before awaiting the log write below so it isn't held
         // across unrelated file I/O.
         drop(state);
@@ -296,9 +278,6 @@ impl DJStateMachine {
     }
 
     fn get_state_name(&self, state: &DJState) -> String {
-        match state {
-            DJState::Segment(segment) => segment.state_name().to_string(),
-            DJState::Stopped => "stopped".to_string(),
-        }
+        state.0.state_name().to_string()
     }
 }

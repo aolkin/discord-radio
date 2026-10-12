@@ -151,28 +151,18 @@ impl BotSnapshot {
 }
 
 fn dj_state_to_info(state: &crate::audio::dj::state_machine::DJState) -> DJStateInfo {
-    use crate::audio::dj::state_machine::DJState;
-
-    match state {
-        DJState::Segment(segment) => {
-            let display = segment.state_display();
-            let elapsed = display.elapsed.as_secs_f32();
-            let time = match display.total {
-                Some(total) => format!("{elapsed:.1}s / {:.1}s", total.as_secs_f32()),
-                None => format!("{elapsed:.1}s"),
-            };
-            let details = match display.subject {
-                Some(subject) => format!("{subject} ({time})"),
-                None => time,
-            };
-            DJStateInfo {
-                state_type: display.name.to_string(),
-                details,
-            }
-        }
-        DJState::Stopped => DJStateInfo {
-            state_type: "Stopped".to_string(),
-            details: "Stopped".to_string(),
-        },
+    let display = state.0.state_display();
+    let elapsed = display.elapsed.as_secs_f32();
+    let time = match display.total {
+        Some(total) => format!("{elapsed:.1}s / {:.1}s", total.as_secs_f32()),
+        None => format!("{elapsed:.1}s"),
+    };
+    let details = match display.subject {
+        Some(subject) => format!("{subject} ({time})"),
+        None => time,
+    };
+    DJStateInfo {
+        state_type: display.name.to_string(),
+        details,
     }
 }

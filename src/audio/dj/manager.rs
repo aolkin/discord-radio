@@ -60,27 +60,25 @@ pub async fn dj_task(
         DJState::idle()
     };
 
-    let (forced_profile, status_message) = match &initial_state {
-        DJState::Segment(segment) => {
-            let track_manager = bot_state
-                .track_managers
-                .read()
-                .await
-                .get(&guild_id)
-                .expect("TrackManager should be initialized before DJ starts")
-                .clone();
-            let _ = segment
-                .restore(&SegmentCtx {
-                    guild_id: &guild_id,
-                    bot_state: &bot_state,
-                    http: &http,
-                    track_manager: &track_manager,
-                })
-                .await
-                .inspect_err(|e| tracing::warn!("Failed to restore segment: {e:?}"));
-            (segment.signal_profile().name, segment.channel_status())
-        }
-        DJState::Stopped => (None, None),
+    let (forced_profile, status_message) = {
+        let segment = &initial_state.0;
+        let track_manager = bot_state
+            .track_managers
+            .read()
+            .await
+            .get(&guild_id)
+            .expect("TrackManager should be initialized before DJ starts")
+            .clone();
+        let _ = segment
+            .restore(&SegmentCtx {
+                guild_id: &guild_id,
+                bot_state: &bot_state,
+                http: &http,
+                track_manager: &track_manager,
+            })
+            .await
+            .inspect_err(|e| tracing::warn!("Failed to restore segment: {e:?}"));
+        (segment.signal_profile().name, segment.channel_status())
     };
 
     let dj_state = Arc::new(tokio::sync::RwLock::new(initial_state));
@@ -187,7 +185,7 @@ pub async fn dj_task(
 
     let mut current_forced_profile = SignalProfilePlayback::default();
 
-    loop {
+    'dj: loop {
         sleep(Duration::from_millis(DJ_TICK_INTERVAL_MS)).await;
 
         let track_managers = bot_state.track_managers.read().await;
@@ -221,6 +219,8 @@ pub async fn dj_task(
                 DJCommand::Stop => {
                     tracing::info!("Processing stop command for DJ in guild {}", guild_id);
                     state_machine.stop(&manager_arc, &bot_state).await;
+                    tracing::info!("DJ task stopped for guild {}", guild_id);
+                    break 'dj;
                 }
                 DJCommand::SetAnnouncementChannel(new_channel) => {
                     tracing::info!(
@@ -275,12 +275,6 @@ pub async fn dj_task(
                     }
                 }
             }
-        }
-
-        // Check for stop state
-        if matches!(*state_machine.current_state().await, DJState::Stopped) {
-            tracing::info!("DJ task stopped for guild {}", guild_id);
-            break;
         }
 
         if state_machine.is_complete().await

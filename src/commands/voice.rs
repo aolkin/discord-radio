@@ -812,20 +812,15 @@ pub async fn get_dj_state(ctx: Context<'_>) -> Result<(), Error> {
         }
     };
 
-    let state_description = match &*state {
-        crate::audio::dj::state_machine::DJState::Segment(segment) => {
-            let display = segment.state_display();
-            let elapsed = display.elapsed.as_secs();
-            let time = match display.total {
-                Some(total) => format!("{elapsed}/{}s", total.as_secs()),
-                None => format!("{elapsed}s elapsed"),
-            };
-            match display.subject {
-                Some(subject) => format!("{}: **{subject}** ({time})", display.name),
-                None => format!("{} ({time})", display.name),
-            }
-        }
-        crate::audio::dj::state_machine::DJState::Stopped => "Stopped".to_string(),
+    let display = state.0.state_display();
+    let elapsed = display.elapsed.as_secs();
+    let time = match display.total {
+        Some(total) => format!("{elapsed}/{}s", total.as_secs()),
+        None => format!("{elapsed}s elapsed"),
+    };
+    let state_description = match display.subject {
+        Some(subject) => format!("{}: **{subject}** ({time})", display.name),
+        None => format!("{} ({time})", display.name),
     };
 
     ctx.say(format!("DJ State: {}{}", state_description, profile_info))
