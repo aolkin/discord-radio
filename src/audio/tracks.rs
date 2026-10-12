@@ -159,17 +159,13 @@ impl TrackManager {
             };
 
             let mixer = processor.mixer_mut();
-            if args.fade_time > 0.0 {
-                let handle = mixer.add_track(Box::new(source), 0.0, args.loops, final_callback);
-                mixer.update_track_volume(
-                    handle,
-                    args.volume,
-                    Duration::from_secs_f32(args.fade_time),
-                )?;
-                handle
-            } else {
-                mixer.add_track(Box::new(source), args.volume, args.loops, final_callback)
-            }
+            let handle = mixer.add_track(Box::new(source), 0.0, args.loops, final_callback);
+            mixer.update_track_volume(
+                handle,
+                args.volume,
+                Duration::from_secs_f32(args.fade_time.max(0.0)),
+            )?;
+            handle
         };
 
         // If we're starting from a position other than the beginning, adjust start_time
