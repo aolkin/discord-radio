@@ -8,8 +8,6 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
-use tokio::task::JoinHandle;
-use tokio_util::sync::CancellationToken;
 
 #[derive(Clone, Debug)]
 pub struct TrackSnapshot {
@@ -28,8 +26,6 @@ pub struct TrackInfo {
     pub filename: String,
     pub mixer_handle: TrackHandle,
     pub volume: f32,
-    pub fade_task: Option<JoinHandle<()>>,
-    pub fade_cancel: Option<CancellationToken>,
     pub loops: bool,
     pub start_time: std::time::SystemTime,
     pub persist: bool,
@@ -162,12 +158,18 @@ impl TrackManager {
                 callback
             };
 
-            processor.mixer_mut().add_track(
-                Box::new(source),
-                args.volume,
-                args.loops,
-                final_callback,
-            )
+            let mixer = processor.mixer_mut();
+            if args.fade_time > 0.0 {
+                let handle = mixer.add_track(Box::new(source), 0.0, args.loops, final_callback);
+                mixer.ramp_track_volume(
+                    handle,
+                    args.volume,
+                    Duration::from_secs_f32(args.fade_time),
+                )?;
+                handle
+            } else {
+                mixer.add_track(Box::new(source), args.volume, args.loops, final_callback)
+            }
         };
 
         // If we're starting from a position other than the beginning, adjust start_time
@@ -183,63 +185,12 @@ impl TrackManager {
             filename: args.filename.clone(),
             mixer_handle,
             volume: args.volume,
-            fade_task: None,
-            fade_cancel: None,
             loops: args.loops,
             start_time,
             persist: args.persist,
         };
 
-        self.finalize_track_start_dsp(track, args.fade_time, processor_arc.clone())
-            .await
-    }
-
-    async fn finalize_track_start_dsp(
-        &mut self,
-        mut track: TrackInfo,
-        fade_time: f32,
-        processor: Arc<RwLock<AudioProcessor>>,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        if fade_time > 0.0 {
-            // Set initial volume to 0 in mixer
-            {
-                let mut proc = processor.write().await;
-                proc.mixer_mut()
-                    .update_track_volume(track.mixer_handle, 0.0)?;
-            }
-
-            let fade_cancel = CancellationToken::new();
-            let processor_clone = processor.clone();
-            let cancel_clone = fade_cancel.clone();
-            let target_volume = track.volume;
-            let handle = track.mixer_handle;
-
-            let fade_task = tokio::spawn(async move {
-                if let Err(e) = fade_volume_dsp(
-                    processor_clone,
-                    handle,
-                    0.0,
-                    target_volume,
-                    fade_time,
-                    cancel_clone,
-                )
-                .await
-                {
-                    tracing::warn!("Fade in failed: {}", e);
-                }
-            });
-
-            track.fade_task = Some(fade_task);
-            track.fade_cancel = Some(fade_cancel);
-        } else {
-            // Set volume directly in mixer
-            let mut proc = processor.write().await;
-            proc.mixer_mut()
-                .update_track_volume(track.mixer_handle, track.volume)?;
-        }
-
-        let key = track.name.clone();
-        self.tracks.insert(key, track);
+        self.tracks.insert(args.name, track);
 
         self.persist_state().await;
 
@@ -289,42 +240,20 @@ impl TrackManager {
             self.guild_id
         );
 
-        if let Some(cancel_token) = &track_info.fade_cancel {
-            cancel_token.cancel();
-        }
-
-        let current_volume = track_info.volume;
         track_info.volume = volume;
 
-        if fade_time > 0.0 {
-            let cancel_token = CancellationToken::new();
-            let cancel_clone = cancel_token.clone();
-            let processor_clone = processor_arc.clone();
-            let handle = track_info.mixer_handle;
-
-            let fade_task = tokio::spawn(async move {
-                if let Err(e) = fade_volume_dsp(
-                    processor_clone,
-                    handle,
-                    current_volume,
-                    volume,
-                    fade_time,
-                    cancel_clone,
-                )
-                .await
-                {
-                    tracing::warn!("Volume fade failed: {}", e);
-                }
-            });
-
-            track_info.fade_task = Some(fade_task);
-            track_info.fade_cancel = Some(cancel_token);
-        } else {
+        {
             let mut proc = processor_arc.write().await;
-            proc.mixer_mut()
-                .update_track_volume(track_info.mixer_handle, volume)?;
-            track_info.fade_task = None;
-            track_info.fade_cancel = None;
+            let mixer = proc.mixer_mut();
+            if fade_time > 0.0 {
+                mixer.ramp_track_volume(
+                    track_info.mixer_handle,
+                    volume,
+                    Duration::from_secs_f32(fade_time),
+                )?;
+            } else {
+                mixer.update_track_volume(track_info.mixer_handle, volume)?;
+            }
         }
 
         self.persist_state().await;
@@ -410,42 +339,16 @@ impl TrackManager {
             self.guild_id
         );
 
-        if let Some(cancel_token) = &track_info.fade_cancel {
-            cancel_token.cancel();
-        }
-
-        let current_volume = track_info.volume;
         let handle = track_info.mixer_handle;
 
-        if fade_time > 0.0 {
-            let cancel_token = CancellationToken::new();
-            let cancel_clone = cancel_token.clone();
-            let processor_clone = self.audio_processor.clone();
-            let track_name = name.to_string();
-
-            // Spawn fade in background - don't block!
-            tokio::spawn(async move {
-                if let Err(e) = fade_volume_dsp(
-                    processor_clone.clone(),
-                    handle,
-                    current_volume,
-                    0.0,
-                    fade_time,
-                    cancel_clone.clone(),
-                )
-                .await
-                {
-                    tracing::warn!("Fade out failed for track '{}': {}", track_name, e);
-                }
-
-                // Remove from mixer after fade completes
-                let mut proc = processor_clone.write().await;
-                proc.mixer_mut().remove_track(handle);
-            });
-        } else {
-            // No fade - remove immediately
+        {
             let mut proc = self.audio_processor.write().await;
-            proc.mixer_mut().remove_track(handle);
+            let mixer = proc.mixer_mut();
+            if fade_time > 0.0 {
+                mixer.fade_out_and_remove_track(handle, Duration::from_secs_f32(fade_time));
+            } else {
+                mixer.remove_track(handle);
+            }
         }
 
         self.tracks.remove(name);
@@ -517,58 +420,6 @@ impl TrackManager {
             tracing::warn!("Failed to persist multitrack state: {}", e);
         }
     }
-}
-
-/// Fade volume from one level to another over time.
-///
-/// This function interpolates linearly in user volume space (0.0-2.0), then converts
-/// each intermediate value to amplitude using perceptual scaling. The conversion to
-/// amplitude happens in `update_track_volume`.
-///
-/// # Arguments
-///
-/// * `processor` - Audio processor containing the mixer
-/// * `handle` - Mixer handle of the track to fade
-/// * `from_volume` - Starting user volume (0.0-2.0)
-/// * `to_volume` - Target user volume (0.0-2.0)
-/// * `fade_time` - Duration of fade in seconds
-/// * `cancel` - Token to cancel the fade early
-async fn fade_volume_dsp(
-    processor: Arc<RwLock<AudioProcessor>>,
-    handle: TrackHandle,
-    from_volume: f32,
-    to_volume: f32,
-    fade_time: f32,
-    cancel: CancellationToken,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let steps = (fade_time * 50.0) as u32;
-    let step_duration = Duration::from_millis((fade_time * 1000.0 / steps as f32) as u64);
-
-    for i in 0..=steps {
-        if cancel.is_cancelled() {
-            return Ok(());
-        }
-
-        let progress = i as f32 / steps as f32;
-        // Interpolate in user volume space
-        let current_volume = from_volume + (to_volume - from_volume) * progress;
-
-        {
-            let mut proc = processor.write().await;
-            if proc
-                .mixer_mut()
-                .update_track_volume(handle, current_volume)
-                .is_err()
-            {
-                // Track might have been removed
-                return Ok(());
-            }
-        }
-
-        tokio::time::sleep(step_duration).await;
-    }
-
-    Ok(())
 }
 
 /// Get or create a TrackManager for a guild, ensuring audio processor exists

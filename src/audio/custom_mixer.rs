@@ -1,7 +1,5 @@
-use atomic_float::AtomicF32;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use crate::audio::helpers::perceptual_level_to_amplitude;
@@ -19,10 +17,21 @@ pub trait AudioSource: Send + Sync {
     fn reset(&mut self);
 }
 
+/// Moves a track's user volume linearly to `target`, one `step` per frame.
+struct VolumeRamp {
+    target: f32,
+    step: f32,
+    frames_left: u32,
+    remove_at_end: bool,
+}
+
 pub struct MixerTrack {
     pub handle: TrackHandle,
     pub source: Box<dyn AudioSource>,
-    pub volume: Arc<AtomicF32>,
+    /// User-facing volume (0.0-2.0).
+    volume: f32,
+    amplitude: f32,
+    ramp: Option<VolumeRamp>,
     pub loops: bool,
     pub active: bool,
     pub end_callback: Option<TrackEndCallback>,
@@ -30,12 +39,12 @@ pub struct MixerTrack {
 
 impl MixerTrack {
     fn new(handle: TrackHandle, source: Box<dyn AudioSource>, volume: f32, loops: bool) -> Self {
-        // Convert user volume to amplitude using logarithmic scaling
-        let amplitude = perceptual_level_to_amplitude(volume);
         Self {
             handle,
             source,
-            volume: Arc::new(AtomicF32::new(amplitude)),
+            volume,
+            amplitude: perceptual_level_to_amplitude(volume),
+            ramp: None,
             loops,
             active: true,
             end_callback: None,
@@ -45,6 +54,39 @@ impl MixerTrack {
     pub fn with_end_callback(mut self, callback: TrackEndCallback) -> Self {
         self.end_callback = Some(callback);
         self
+    }
+
+    fn set_volume(&mut self, volume: f32) {
+        self.volume = volume;
+        self.amplitude = perceptual_level_to_amplitude(volume);
+    }
+
+    fn start_ramp(&mut self, target: f32, frames: u32, remove_at_end: bool) {
+        let frames = frames.max(1);
+        self.ramp = Some(VolumeRamp {
+            target,
+            step: (target - self.volume) / frames as f32,
+            frames_left: frames,
+            remove_at_end,
+        });
+    }
+
+    /// Returns true when a ramp with `remove_at_end` has just finished.
+    fn advance_ramp(&mut self) -> bool {
+        let Some(ramp) = &mut self.ramp else {
+            return false;
+        };
+        ramp.frames_left -= 1;
+        let (target, step, frames_left, remove_at_end) =
+            (ramp.target, ramp.step, ramp.frames_left, ramp.remove_at_end);
+        if frames_left == 0 {
+            self.ramp = None;
+            self.set_volume(target);
+            remove_at_end
+        } else {
+            self.set_volume(target - step * frames_left as f32);
+            false
+        }
     }
 
     pub fn next_frame(&mut self) -> Option<[f32; 2]> {
@@ -59,8 +101,7 @@ impl MixerTrack {
         loop {
             match self.source.next_frame() {
                 Some(frame) => {
-                    let vol = self.volume.load(Ordering::Relaxed);
-                    return Some([frame[0] * vol, frame[1] * vol]);
+                    return Some([frame[0] * self.amplitude, frame[1] * self.amplitude]);
                 }
                 None => {
                     if self.loops && reset_attempts < MAX_RESET_ATTEMPTS {
@@ -90,7 +131,6 @@ impl MixerTrack {
 pub struct CustomMixer {
     tracks: HashMap<TrackHandle, MixerTrack>,
     next_id: u64,
-    #[allow(dead_code)]
     sample_rate: u32,
     #[allow(dead_code)]
     channels: u16,
@@ -142,13 +182,43 @@ impl CustomMixer {
     /// # Returns
     ///
     /// Ok(()) if successful, or an error if the track is not found.
+    ///
+    /// Cancels any volume ramp in progress on the track.
     pub fn update_track_volume(&mut self, handle: TrackHandle, volume: f32) -> anyhow::Result<()> {
         let track = self.track_mut(handle)?;
-
-        // Convert user volume to amplitude using logarithmic scaling
-        let amplitude = perceptual_level_to_amplitude(volume);
-        track.volume.store(amplitude, Ordering::Relaxed);
+        track.ramp = None;
+        track.set_volume(volume);
         Ok(())
+    }
+
+    /// Ramps the track's user volume linearly from its current value to `volume`
+    /// over `duration`, replacing any ramp in progress.
+    pub fn ramp_track_volume(
+        &mut self,
+        handle: TrackHandle,
+        volume: f32,
+        duration: Duration,
+    ) -> anyhow::Result<()> {
+        let frames = self.duration_frames(duration);
+        self.track_mut(handle)?.start_ramp(volume, frames, false);
+        Ok(())
+    }
+
+    /// Ramps the track to silence over `duration`, then removes it without
+    /// invoking its end callback. Returns false if the track does not exist.
+    pub fn fade_out_and_remove_track(&mut self, handle: TrackHandle, duration: Duration) -> bool {
+        let frames = self.duration_frames(duration);
+        match self.tracks.get_mut(&handle) {
+            Some(track) => {
+                track.start_ramp(0.0, frames, true);
+                true
+            }
+            None => false,
+        }
+    }
+
+    fn duration_frames(&self, duration: Duration) -> u32 {
+        (duration.as_secs_f64() * f64::from(self.sample_rate)).round() as u32
     }
 
     pub fn update_track_loops(&mut self, handle: TrackHandle, loops: bool) -> anyhow::Result<()> {
@@ -164,7 +234,7 @@ impl CustomMixer {
 
     pub fn mix_next_frame(&mut self) -> [f32; 2] {
         let mut mixed = [0.0, 0.0];
-        let mut inactive_tracks = Vec::new();
+        let mut finished_tracks = Vec::new();
 
         for (handle, track) in self.tracks.iter_mut() {
             if let Some(frame) = track.next_frame() {
@@ -172,12 +242,13 @@ impl CustomMixer {
                 mixed[1] += frame[1];
             }
 
-            if !track.active && !track.loops {
-                inactive_tracks.push(*handle);
+            let faded_out = track.advance_ramp();
+            if faded_out || (!track.active && !track.loops) {
+                finished_tracks.push(*handle);
             }
         }
 
-        for handle in inactive_tracks {
+        for handle in finished_tracks {
             self.tracks.remove(&handle);
         }
 
