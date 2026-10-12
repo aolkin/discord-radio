@@ -14,7 +14,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 
 const HEX_TRACK_NAME: &str = "hex_playback";
@@ -243,30 +243,25 @@ async fn play_hex_char(
     filename: String,
     volume: f32,
 ) -> anyhow::Result<()> {
-    let notify = Arc::new(Notify::new());
-    let notify_clone = notify.clone();
-    {
+    let gone = {
         let mut manager = track_manager.lock().await;
         if manager.has_track(HEX_TRACK_NAME) {
             manager.remove_track(HEX_TRACK_NAME).await;
         }
         manager
-            .start_track_with_callback(
-                StartTrackArgs {
-                    name: HEX_TRACK_NAME.to_string(),
-                    filename,
-                    volume,
-                    fade_time: 0.0,
-                    loops: false,
-                    start_position: None,
-                    persist: false,
-                },
-                Some(Arc::new(move |_| notify_clone.notify_one())),
-            )
+            .start_track(StartTrackArgs {
+                name: HEX_TRACK_NAME.to_string(),
+                filename,
+                volume,
+                fade_time: 0.0,
+                loops: false,
+                start_position: None,
+                persist: false,
+            })
             .await
-            .map_err(|e| anyhow::anyhow!(e))?;
-    }
-    notify.notified().await;
+            .map_err(|e| anyhow::anyhow!(e))?
+    };
+    let _ = gone.await;
     Ok(())
 }
 

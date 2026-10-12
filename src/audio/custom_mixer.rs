@@ -1,13 +1,11 @@
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::oneshot;
 
 use crate::audio::helpers::perceptual_level_to_amplitude;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct TrackHandle(u64);
-
-pub type TrackEndCallback = Arc<dyn Fn(TrackHandle) + Send + Sync>;
 
 pub trait AudioSource: Send + Sync {
     fn next_frame(&mut self) -> Option<[f32; 2]>;
@@ -26,7 +24,6 @@ struct VolumeRamp {
 }
 
 pub struct MixerTrack {
-    pub handle: TrackHandle,
     pub source: Box<dyn AudioSource>,
     /// User-facing volume (0.0-2.0).
     volume: f32,
@@ -34,26 +31,25 @@ pub struct MixerTrack {
     ramp: Option<VolumeRamp>,
     pub loops: bool,
     pub active: bool,
-    pub end_callback: Option<TrackEndCallback>,
+    end_tx: Option<oneshot::Sender<()>>,
 }
 
 impl MixerTrack {
-    fn new(handle: TrackHandle, source: Box<dyn AudioSource>, volume: f32, loops: bool) -> Self {
+    fn new(
+        source: Box<dyn AudioSource>,
+        volume: f32,
+        loops: bool,
+        end_tx: oneshot::Sender<()>,
+    ) -> Self {
         Self {
-            handle,
             source,
             volume,
             amplitude: perceptual_level_to_amplitude(volume),
             ramp: None,
             loops,
             active: true,
-            end_callback: None,
+            end_tx: Some(end_tx),
         }
-    }
-
-    pub fn with_end_callback(mut self, callback: TrackEndCallback) -> Self {
-        self.end_callback = Some(callback);
-        self
     }
 
     fn set_volume(&mut self, volume: f32) {
@@ -116,9 +112,8 @@ impl MixerTrack {
                             );
                         }
                         self.active = false;
-                        // Trigger end callback if track ended
-                        if let Some(ref callback) = self.end_callback {
-                            callback(self.handle);
+                        if let Some(end_tx) = self.end_tx.take() {
+                            let _ = end_tx.send(());
                         }
                         return Some([0.0, 0.0]);
                     }
@@ -148,28 +143,26 @@ impl CustomMixer {
         }
     }
 
+    /// The receiver gets `Ok` when the track plays to its end, and `Err` when
+    /// the track is removed or the mixer is dropped first.
     pub fn add_track(
         &mut self,
         source: Box<dyn AudioSource>,
         volume: f32,
         loops: bool,
-        callback: Option<TrackEndCallback>,
-    ) -> TrackHandle {
+    ) -> (TrackHandle, oneshot::Receiver<()>) {
         let handle = TrackHandle(self.next_id);
         self.next_id += 1;
 
-        let mut track = MixerTrack::new(handle, source, volume, loops);
-        if let Some(cb) = callback {
-            track = track.with_end_callback(cb);
-        }
-        self.tracks.insert(handle, track);
+        let (end_tx, end_rx) = oneshot::channel();
+        self.tracks
+            .insert(handle, MixerTrack::new(source, volume, loops, end_tx));
 
-        handle
+        (handle, end_rx)
     }
 
     /// Removes the track. A non-zero `fade` ramps it to silence first and then
-    /// removes it without invoking its end callback. Returns false if the track
-    /// does not exist.
+    /// removes it. Returns false if the track does not exist.
     pub fn remove_track(&mut self, handle: TrackHandle, fade: Duration) -> bool {
         if fade.is_zero() {
             return self.tracks.remove(&handle).is_some();
