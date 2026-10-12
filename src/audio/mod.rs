@@ -6,7 +6,6 @@ pub mod dj;
 pub mod dsp;
 pub mod duration;
 pub mod helpers;
-pub mod manager;
 pub mod opus_encoder;
 pub mod processing_thread;
 pub mod profiles;

@@ -71,86 +71,8 @@ pub async fn restore_voice_channels(
 
     // Restore these features regardless of whether there are voice channels
     // since they can now operate independently of voice connections
-    restore_message_playback(bot_state.clone()).await?;
     restore_multitrack_playback(bot_state.clone()).await?;
     restore_dj_managers(bot_state, ctx.http.clone()).await?;
-
-    Ok(())
-}
-
-async fn restore_message_playback(
-    bot_state: Data,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let saved_playbacks = bot_state.state_store.load_message_playbacks().await?;
-
-    if saved_playbacks.is_empty() {
-        tracing::info!("No saved message playbacks found");
-        return Ok(());
-    }
-
-    tracing::info!("Restoring {} message playback(s)", saved_playbacks.len());
-
-    for (guild_id, playback_state) in saved_playbacks {
-        tracing::info!(
-            "Restoring message playback for guild {}: '{}' at position {}",
-            guild_id,
-            playback_state.message,
-            playback_state.current_position
-        );
-
-        let manager_arc =
-            crate::audio::tracks::get_or_create_track_manager(&bot_state, guild_id).await;
-
-        let playback_state_arc = {
-            let mut states = bot_state.hex_playback_states.write().await;
-            states
-                .entry(guild_id)
-                .or_insert_with(|| {
-                    std::sync::Arc::new(tokio::sync::RwLock::new(
-                        crate::state::HexPlaybackState::stopped(),
-                    ))
-                })
-                .clone()
-        };
-
-        let tasks = bot_state.hex_playback_tasks.read().await;
-        if !tasks.contains_key(&guild_id) {
-            drop(tasks);
-
-            let guild_id_copy = guild_id;
-            let manager_copy = manager_arc.clone();
-            let playback_state_copy = playback_state_arc.clone();
-            let bot_state_copy = bot_state.clone();
-
-            let handle = tokio::spawn(async move {
-                crate::audio::manager::hex_playback_task(
-                    guild_id_copy,
-                    manager_copy,
-                    playback_state_copy,
-                    bot_state_copy,
-                )
-                .await;
-            });
-
-            bot_state
-                .hex_playback_tasks
-                .write()
-                .await
-                .insert(guild_id, handle);
-        }
-
-        {
-            let mut state = playback_state_arc.write().await;
-            *state = crate::state::HexPlaybackState::playing(
-                playback_state.message,
-                playback_state.current_position,
-                1.0,
-                playback_state.target_loops,
-                None, // Status message will be regenerated if needed
-            );
-            state.current_loop = playback_state.current_loop;
-        }
-    }
 
     Ok(())
 }

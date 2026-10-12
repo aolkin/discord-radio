@@ -61,11 +61,6 @@ pub async fn dj_task(
     };
 
     let (forced_profile, status_message) = match &initial_state {
-        DJState::PlayingHexMessage {
-            forced_profile,
-            status_message,
-            ..
-        } => (forced_profile.clone(), status_message.clone()),
         DJState::Segment(segment) => {
             let track_manager = bot_state
                 .track_managers
@@ -309,15 +304,7 @@ pub async fn dj_task(
         }
         drop(current_state);
 
-        // Snapshot the derived bits of the current state needed below, without holding
-        // the read guard across the profile-transition awaits.
-        let (new_forced_profile, is_hex_message) = {
-            let current_state = state_machine.current_state().await;
-            (
-                current_state.forced_profile(),
-                matches!(&*current_state, DJState::PlayingHexMessage { .. }),
-            )
-        };
+        let new_forced_profile = state_machine.current_state().await.forced_profile();
 
         // Handle profile forcing and transitions
         if let Some(ref mut pm) = profile_machine {
@@ -365,27 +352,6 @@ pub async fn dj_task(
             // Update the forced profile tracking
             if new_forced_profile.name != current_forced_profile.name {
                 current_forced_profile = new_forced_profile;
-            }
-        }
-
-        if is_hex_message {
-            let hex_playback_states = bot_state.hex_playback_states.read().await;
-            let should_advance = if let Some(state_arc) = hex_playback_states.get(&guild_id) {
-                let state = state_arc.read().await;
-                state.message.is_none()
-            } else {
-                true
-            };
-            drop(hex_playback_states);
-
-            if should_advance {
-                tracing::info!("DJ detected hex message completion, advancing to next state");
-                if let Err(e) = state_machine
-                    .force_advance(&manager_arc, &bot_state, None)
-                    .await
-                {
-                    tracing::error!("DJ failed to advance after hex message completion: {}", e);
-                }
             }
         }
     }

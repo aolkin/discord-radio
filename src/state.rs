@@ -15,49 +15,8 @@ use songbird::Call;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
-use tokio::task::JoinHandle;
 
 pub type Data = Arc<BotState>;
-
-#[derive(Clone, Debug)]
-pub struct HexPlaybackState {
-    pub message: Option<String>,
-    pub current_position: usize,
-    pub volume: f32,
-    pub current_loop: usize,
-    pub target_loops: Option<usize>,
-    pub status_message: Option<String>, // The obfuscated message pushed to status stack
-}
-
-impl HexPlaybackState {
-    pub fn stopped() -> Self {
-        Self {
-            message: None,
-            current_position: 0,
-            volume: 1.0,
-            current_loop: 0,
-            target_loops: None,
-            status_message: None,
-        }
-    }
-
-    pub fn playing(
-        message: String,
-        position: usize,
-        volume: f32,
-        target_loops: Option<usize>,
-        status_message: Option<String>,
-    ) -> Self {
-        Self {
-            message: Some(message),
-            current_position: position,
-            volume,
-            current_loop: 0,
-            target_loops,
-            status_message,
-        }
-    }
-}
 
 pub struct BotState {
     pub voice_connections: Arc<RwLock<HashMap<GuildId, Arc<Mutex<Call>>>>>,
@@ -65,8 +24,6 @@ pub struct BotState {
     pub content_path: String,
     pub state_store: Arc<dyn StateStore>,
     pub dj_settings: DjSettingsStore,
-    pub hex_playback_states: RwLock<HashMap<GuildId, Arc<RwLock<HexPlaybackState>>>>,
-    pub hex_playback_tasks: RwLock<HashMap<GuildId, JoinHandle<()>>>,
     pub duration_cache: DurationCache,
     pub audio_processors: RwLock<HashMap<GuildId, Arc<RwLock<AudioProcessor>>>>,
     pub profile_manager: ProfileManager,
@@ -115,8 +72,6 @@ impl BotState {
             content_path,
             state_store: state_store.clone(),
             dj_settings,
-            hex_playback_states: RwLock::new(HashMap::new()),
-            hex_playback_tasks: RwLock::new(HashMap::new()),
             audio_processors: RwLock::new(HashMap::new()),
             profile_manager,
             dj_managers: RwLock::new(HashMap::new()),

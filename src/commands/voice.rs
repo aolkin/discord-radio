@@ -587,22 +587,6 @@ pub async fn signal_profile(
     Ok(())
 }
 
-pub fn obfuscate_message(message: &str) -> String {
-    use rand::Rng;
-    let mut rng = rand::rng();
-
-    message
-        .chars()
-        .map(|c| {
-            if c.is_alphanumeric() {
-                if rng.random_bool(0.5) { '?' } else { '¿' }
-            } else {
-                c
-            }
-        })
-        .collect()
-}
-
 /// Manage the radio DJ for automated playback
 #[poise::command(
     slash_command,
@@ -829,55 +813,16 @@ pub async fn get_dj_state(ctx: Context<'_>) -> Result<(), Error> {
     };
 
     let state_description = match &*state {
-        crate::audio::dj::state_machine::DJState::PlayingHexMessage {
-            started_at,
-            target_loops,
-            message,
-            ..
-        } => {
-            let elapsed = started_at.elapsed().as_secs();
-
-            // Try to get current loop from hex playback state
-            if let Some((current_loop, current_position, current_message)) = {
-                let hex_states = ctx.data().hex_playback_states.read().await;
-                if let Some(state_arc) = hex_states.get(&guild_id) {
-                    let state = state_arc.read().await;
-                    Some((
-                        state.current_loop,
-                        state.current_position,
-                        state.message.clone(),
-                    ))
-                } else {
-                    None
-                }
-            } {
-                let msg_len = current_message.as_ref().map(|m| m.len()).unwrap_or(0);
-                let msg_display = current_message.as_deref().unwrap_or("-");
-                format!(
-                    "Playing hex message: **{}** (position {}/{}, loop {}/{}, {}s elapsed)",
-                    msg_display,
-                    current_position,
-                    msg_len * 2,
-                    current_loop + 1,
-                    target_loops,
-                    elapsed
-                )
-            } else {
-                format!(
-                    "Playing hex message: **{}** ({} loops, {}s elapsed)",
-                    message, target_loops, elapsed
-                )
-            }
-        }
         crate::audio::dj::state_machine::DJState::Segment(segment) => {
             let display = segment.state_display();
             let elapsed = display.elapsed.as_secs();
-            let total = display.total.as_secs();
+            let time = match display.total {
+                Some(total) => format!("{elapsed}/{}s", total.as_secs()),
+                None => format!("{elapsed}s elapsed"),
+            };
             match display.subject {
-                Some(subject) => {
-                    format!("{}: **{subject}** ({elapsed}/{total}s)", display.name)
-                }
-                None => format!("{} ({elapsed}/{total}s)", display.name),
+                Some(subject) => format!("{}: **{subject}** ({time})", display.name),
+                None => format!("{} ({time})", display.name),
             }
         }
         crate::audio::dj::state_machine::DJState::Stopped => "Stopped".to_string(),

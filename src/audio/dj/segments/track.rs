@@ -146,7 +146,7 @@ impl Segment for TrackSegment {
             name: "PlayingTrack",
             subject: Some(self.filename.clone()),
             elapsed: self.elapsed(),
-            total: self.timer.duration,
+            total: Some(self.timer.duration),
         }
     }
 }
