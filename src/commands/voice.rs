@@ -338,18 +338,6 @@ pub async fn change_track_state(
             let volume = volume.unwrap_or(1.0);
             let loops = loops.unwrap_or(true);
 
-            // If track exists, fade it out in the background
-            if manager.has_track(&name) {
-                let manager_clone = manager_arc.clone();
-                let name_clone = name.clone();
-                tokio::spawn(async move {
-                    let mut mgr = manager_clone.lock().await;
-                    if let Err(e) = mgr.stop_track(&name_clone, fade_time, false).await {
-                        tracing::warn!("Failed to stop existing track '{}': {}", name_clone, e);
-                    }
-                });
-            }
-
             if let Err(e) = manager
                 .start_track(crate::audio::tracks::StartTrackArgs {
                     name: name.clone(),
@@ -358,7 +346,6 @@ pub async fn change_track_state(
                     fade_time,
                     loops,
                     start_position: None,
-                    persist: true,
                 })
                 .await
             {
@@ -372,7 +359,7 @@ pub async fn change_track_state(
             }
         }
         Some("stop") => {
-            if let Err(e) = manager.stop_track(&name, fade_time, true).await {
+            if let Err(e) = manager.stop_track(&name, fade_time).await {
                 ctx.say(format!("Failed to stop track: {}", e)).await?;
             } else {
                 ctx.say(format!(

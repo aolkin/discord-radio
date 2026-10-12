@@ -167,15 +167,6 @@ pub async fn change_track_state(
             let volume = request.volume.unwrap_or(1.0);
             let loops = request.loops.unwrap_or(true);
 
-            if manager.has_track(&request.name) {
-                let manager_clone = manager_arc.clone();
-                let name_clone = request.name.clone();
-                tokio::spawn(async move {
-                    let mut mgr = manager_clone.lock().await;
-                    let _ = mgr.stop_track(&name_clone, fade_time, false).await;
-                });
-            }
-
             manager
                 .start_track(crate::audio::tracks::StartTrackArgs {
                     name: request.name,
@@ -184,14 +175,13 @@ pub async fn change_track_state(
                     fade_time,
                     loops,
                     start_position: None,
-                    persist: true,
                 })
                 .await
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         }
         Some("stop") => {
             manager
-                .stop_track(&request.name, fade_time, true)
+                .stop_track(&request.name, fade_time)
                 .await
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         }
