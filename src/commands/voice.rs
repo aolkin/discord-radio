@@ -97,7 +97,7 @@ pub async fn leave_voice_channel(ctx: Context<'_>) -> Result<(), Error> {
     Ok(())
 }
 
-/// Convert a text message to hex and play it as audio in voice
+/// Have the DJ play a text message as hex audio
 #[poise::command(
     slash_command,
     guild_only,
@@ -108,9 +108,7 @@ pub async fn play_message(
     #[description = "Message to convert to hex and play"] message: String,
     #[description = "Volume 0.0-2.0 (0=silence, 1.0=unity, 2.0=+18dB boost, default 1.0)"]
     volume: Option<f32>,
-    #[description = "Number of times to loop the message (default infinite)"] loops: Option<u32>,
-    #[description = "Force DJ to play this message using default settings (default false)"]
-    use_dj: Option<bool>,
+    #[description = "Times to loop the message (default from DJ config)"] loops: Option<u32>,
 ) -> Result<(), Error> {
     let guild_id = ctx
         .guild_id()
@@ -132,135 +130,39 @@ pub async fn play_message(
         )
         .await?;
 
-    // Check if use_dj is set to true
-    if use_dj.unwrap_or(false) {
-        // Use DJ to play the message
-        match send_dj_command(
-            ctx.data(),
-            guild_id,
-            DJCommand::ForceHexMessage(message.clone()),
-        )
-        .await
-        {
-            Ok(_) => {
-                reply
-                    .edit(
-                        ctx,
-                        poise::CreateReply::default()
-                            .content(format!(
-                                "DJ is now playing message: \"{}\"\nLoop count and announcement will use DJ defaults.",
-                                message
-                            ))
-                            .ephemeral(true),
-                    )
-                    .await?;
-                return Ok(());
-            }
-            Err(e) => {
-                reply
-                    .edit(
-                        ctx,
-                        poise::CreateReply::default()
-                            .content(format!("Failed to use DJ for message playback: {}\nNote: The DJ must be running to use this option.", e))
-                            .ephemeral(true),
-                    )
-                    .await?;
-                return Ok(());
-            }
-        }
-    }
-
-    let volume = volume.unwrap_or(1.0);
-
-    let manager_arc = get_or_create_track_manager(ctx, guild_id).await;
-    let playback_state = get_or_create_hex_playback_state(ctx, guild_id).await;
-
-    ensure_hex_playback_task(ctx, guild_id, manager_arc.clone(), playback_state.clone()).await;
-
-    // Push status and get the obfuscated message
-    let obfuscated = obfuscate_message(&message);
-    ctx.data()
-        .voice_status_manager
-        .push_status(guild_id, &obfuscated, ctx.http())
-        .await;
-
-    {
-        let mut state = playback_state.write().await;
-        *state = crate::state::HexPlaybackState::playing(
-            message.clone(),
-            0,
-            volume,
-            loops.map(|l| l as usize),
-            Some(obfuscated),
-        );
-    }
-
-    let initial_state = crate::persistence::MessagePlaybackState {
+    let request = crate::audio::dj::manager::HexMessageRequest {
         message: message.clone(),
-        current_position: 0,
-        current_loop: 0,
-        target_loops: loops.map(|l| l as usize),
+        volume,
+        loops,
     };
-    if let Err(e) = ctx
-        .data()
-        .state_store
-        .save_message_playback(guild_id, &initial_state)
+    let content = match send_dj_command(ctx.data(), guild_id, DJCommand::ForceHexMessage(request))
         .await
     {
-        tracing::warn!("Failed to save initial message playback state: {}", e);
-    }
-
+        Ok(()) => {
+            let loops_text = match loops {
+                Some(n) => format!("{n} loops"),
+                None => "DJ default loop count".to_string(),
+            };
+            format!(
+                "DJ is now playing message: \"{}\" ({}, volume {})",
+                message,
+                loops_text,
+                volume.unwrap_or(1.0)
+            )
+        }
+        Err(e) => format!(
+            "Failed to use DJ for message playback: {}\nNote: The DJ must be running to play messages.",
+            e
+        ),
+    };
     reply
         .edit(
             ctx,
             poise::CreateReply::default()
-                .content(format!(
-                    "Now playing message in loop: \"{}\"\nUse /stop_message to stop playback.",
-                    message
-                ))
+                .content(content)
                 .ephemeral(true),
         )
         .await?;
-
-    Ok(())
-}
-
-/// Stop the currently playing message
-#[poise::command(
-    slash_command,
-    guild_only,
-    default_member_permissions = "ADMINISTRATOR"
-)]
-pub async fn stop_message(ctx: Context<'_>) -> Result<(), Error> {
-    let guild_id = ctx
-        .guild_id()
-        .ok_or("This command can only be used in a server")?;
-    let user_id = ctx.author().id;
-
-    tracing::info!(
-        "User {} executed stop_message in guild {}",
-        user_id,
-        guild_id
-    );
-
-    ctx.defer_ephemeral().await?;
-
-    let is_playing = {
-        let states = ctx.data().hex_playback_states.read().await;
-        if let Some(state_arc) = states.get(&guild_id) {
-            let state = state_arc.read().await;
-            state.message.is_some()
-        } else {
-            false
-        }
-    };
-
-    if is_playing {
-        stop_hex_playback(ctx, guild_id).await;
-        ctx.say("Message playback stopped").await?;
-    } else {
-        ctx.say("No message is currently playing").await?;
-    }
 
     Ok(())
 }
@@ -512,38 +414,6 @@ pub async fn get_current_tracks(ctx: Context<'_>) -> Result<(), Error> {
     Ok(())
 }
 
-async fn stop_hex_playback(ctx: Context<'_>, guild_id: GuildId) {
-    let hex_playback_states = ctx.data().hex_playback_states.read().await;
-    if let Some(state_arc) = hex_playback_states.get(&guild_id) {
-        let status_message = {
-            let state = state_arc.read().await;
-            state.status_message.clone()
-        };
-
-        let mut state = state_arc.write().await;
-        *state = crate::state::HexPlaybackState::stopped();
-        drop(state);
-        drop(hex_playback_states);
-
-        if let Err(e) = ctx
-            .data()
-            .state_store
-            .remove_message_playback(guild_id)
-            .await
-        {
-            tracing::warn!("Failed to remove message playback state: {}", e);
-        }
-
-        // Remove status from stack if we had pushed one
-        if let Some(status_msg) = status_message {
-            ctx.data()
-                .voice_status_manager
-                .remove_status(guild_id, &status_msg, ctx.http())
-                .await;
-        }
-    }
-}
-
 async fn join_voice_channel_helper(
     ctx: Context<'_>,
     guild_id: GuildId,
@@ -583,55 +453,6 @@ async fn get_or_create_track_manager(
     guild_id: GuildId,
 ) -> Arc<tokio::sync::Mutex<crate::audio::tracks::TrackManager>> {
     crate::audio::tracks::get_or_create_track_manager(ctx.data(), guild_id).await
-}
-
-async fn get_or_create_hex_playback_state(
-    ctx: Context<'_>,
-    guild_id: GuildId,
-) -> Arc<tokio::sync::RwLock<crate::state::HexPlaybackState>> {
-    let mut states = ctx.data().hex_playback_states.write().await;
-    states
-        .entry(guild_id)
-        .or_insert_with(|| {
-            Arc::new(tokio::sync::RwLock::new(
-                crate::state::HexPlaybackState::stopped(),
-            ))
-        })
-        .clone()
-}
-
-async fn ensure_hex_playback_task(
-    ctx: Context<'_>,
-    guild_id: GuildId,
-    manager_arc: Arc<tokio::sync::Mutex<crate::audio::tracks::TrackManager>>,
-    playback_state: Arc<tokio::sync::RwLock<crate::state::HexPlaybackState>>,
-) {
-    let tasks = ctx.data().hex_playback_tasks.read().await;
-    if tasks.contains_key(&guild_id) {
-        return;
-    }
-    drop(tasks);
-
-    let guild_id_copy = guild_id;
-    let manager_copy = manager_arc.clone();
-    let playback_state_copy = playback_state.clone();
-    let bot_state = ctx.data().clone();
-
-    let handle = tokio::spawn(async move {
-        crate::audio::manager::hex_playback_task(
-            guild_id_copy,
-            manager_copy,
-            playback_state_copy,
-            bot_state,
-        )
-        .await;
-    });
-
-    ctx.data()
-        .hex_playback_tasks
-        .write()
-        .await
-        .insert(guild_id, handle);
 }
 
 async fn autocomplete_profile(ctx: Context<'_>, partial: &'_ str) -> Vec<String> {

@@ -87,13 +87,14 @@ pub async fn play_hex_message(
     let guild_id_parsed: u64 = guild_id.parse().map_err(|_| StatusCode::BAD_REQUEST)?;
     let guild_id = GuildId::new(guild_id_parsed);
 
-    send_dj_command(
-        &bot_state,
-        guild_id,
-        DJCommand::ForceHexMessage(request.message),
-    )
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let request = crate::audio::dj::manager::HexMessageRequest {
+        message: request.message,
+        volume: None,
+        loops: None,
+    };
+    send_dj_command(&bot_state, guild_id, DJCommand::ForceHexMessage(request))
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(StatusCode::OK)
 }

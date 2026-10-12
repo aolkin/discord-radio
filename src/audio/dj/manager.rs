@@ -13,10 +13,18 @@ const DJ_TICK_INTERVAL_MS: u64 = 100;
 
 pub enum DJCommand {
     ForceAdvance(Option<DJStateType>),
-    ForceHexMessage(String),
+    ForceHexMessage(HexMessageRequest),
     ReloadConfig,
     Stop,
     SetAnnouncementChannel(Option<ChannelId>),
+}
+
+/// A hex message for the DJ to play. `volume` and `loops` replace the DJ's
+/// defaults when set.
+pub struct HexMessageRequest {
+    pub message: String,
+    pub volume: Option<f32>,
+    pub loops: Option<u32>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -206,10 +214,10 @@ pub async fn dj_task(
                         tracing::error!("DJ failed to force advance: {}", e);
                     }
                 }
-                DJCommand::ForceHexMessage(message) => {
+                DJCommand::ForceHexMessage(request) => {
                     tracing::info!("Processing force hex message for DJ in guild {}", guild_id);
                     if let Err(e) = state_machine
-                        .force_hex_message(&manager_arc, &bot_state, message)
+                        .force_hex_message(&manager_arc, &bot_state, request)
                         .await
                     {
                         tracing::error!("DJ failed to force hex message: {}", e);
