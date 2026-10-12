@@ -68,14 +68,15 @@ enum Keyframe {
 struct Stop {
     at: u64,
     fade: u64,
-    fading: bool,
 }
 
-/// Moves a track's user volume linearly to `target`, one `step` per frame.
+/// Moves a track's user volume linearly from `from` to `target` over
+/// `frames`, starting at played frame `start`.
 struct VolumeRamp {
+    from: f32,
     target: f32,
-    step: f32,
-    frames_left: u64,
+    start: u64,
+    frames: u64,
 }
 
 pub struct MixerTrack {
@@ -87,7 +88,7 @@ pub struct MixerTrack {
     /// Keyed by the played frame at which the keyframe applies, then by the
     /// order the keyframes were added.
     keyframes: BTreeMap<(u64, u64), Keyframe>,
-    next_keyframe: u64,
+    next_keyframe_id: u64,
     stop: Option<Stop>,
     ramp: Option<VolumeRamp>,
     pub loops: bool,
@@ -108,18 +109,13 @@ impl MixerTrack {
             amplitude: perceptual_level_to_amplitude(volume),
             played_frames: 0,
             keyframes: BTreeMap::new(),
-            next_keyframe: 0,
+            next_keyframe_id: 0,
             stop: None,
             ramp: None,
             loops,
             active: true,
             end_tx,
         }
-    }
-
-    fn set_volume(&mut self, volume: f32) {
-        self.volume = volume;
-        self.amplitude = perceptual_level_to_amplitude(volume);
     }
 
     /// Only the first call has an effect.
@@ -130,16 +126,24 @@ impl MixerTrack {
     }
 
     fn add_keyframe(&mut self, frame: u64, keyframe: Keyframe) {
-        self.keyframes.insert((frame, self.next_keyframe), keyframe);
-        self.next_keyframe += 1;
+        self.keyframes
+            .insert((frame, self.next_keyframe_id), keyframe);
+        self.next_keyframe_id += 1;
     }
 
     fn start_ramp(&mut self, target: f32, frames: u64) {
         self.ramp = Some(VolumeRamp {
+            from: self.volume,
             target,
-            step: (target - self.volume) / frames.max(1) as f32,
-            frames_left: frames,
+            start: self.played_frames,
+            frames,
         });
+    }
+
+    fn stop_fading(&self) -> bool {
+        self.stop
+            .as_ref()
+            .is_some_and(|stop| self.played_frames >= stop.at)
     }
 
     /// Skips `StartFade` keyframes while the stop's fade runs.
@@ -149,7 +153,7 @@ impl MixerTrack {
         {
             match entry.remove() {
                 Keyframe::StartFade { target, frames } => {
-                    if !self.stop.as_ref().is_some_and(|stop| stop.fading) {
+                    if !self.stop_fading() {
                         self.start_ramp(target, frames);
                     }
                 }
@@ -161,37 +165,36 @@ impl MixerTrack {
     }
 
     /// Returns true when the track should stop now.
-    fn stop_due(&mut self) -> bool {
-        let Some(stop) = &mut self.stop else {
-            return false;
-        };
-        if stop.fading {
-            return self.ramp.is_none();
-        }
-        if self.played_frames < stop.at {
-            return false;
-        }
-        if stop.fade == 0 {
-            return true;
-        }
-        stop.fading = true;
-        let fade = stop.fade;
-        self.start_ramp(0.0, fade);
-        false
+    fn stop_due(&self) -> bool {
+        self.stop
+            .as_ref()
+            .is_some_and(|stop| self.played_frames >= stop.at + stop.fade)
     }
 
-    fn advance_ramp(&mut self) {
-        let Some(ramp) = &mut self.ramp else {
-            return;
-        };
-        ramp.frames_left = ramp.frames_left.saturating_sub(1);
-        let (target, step, frames_left) = (ramp.target, ramp.step, ramp.frames_left);
-        if frames_left == 0 {
+    fn update_amplitude(&mut self) {
+        let fading = self.stop_fading();
+        if fading {
             self.ramp = None;
-            self.set_volume(target);
-        } else {
-            self.set_volume(target - step * frames_left as f32);
         }
+        if let Some(ramp) = &self.ramp {
+            let elapsed = self.played_frames - ramp.start;
+            if elapsed >= ramp.frames {
+                self.volume = ramp.target;
+                self.ramp = None;
+            } else {
+                self.volume =
+                    ramp.from + (ramp.target - ramp.from) * elapsed as f32 / ramp.frames as f32;
+            }
+        } else if !fading {
+            return;
+        }
+        let mut level = self.volume;
+        if let Some(stop) = &self.stop
+            && fading
+        {
+            level *= (stop.at + stop.fade - self.played_frames) as f32 / stop.fade as f32;
+        }
+        self.amplitude = perceptual_level_to_amplitude(level);
     }
 
     pub fn next_frame(&mut self) -> Option<[f32; 2]> {
@@ -299,7 +302,6 @@ impl Mixer {
         track.stop = Some(Stop {
             at: at.unwrap_or(track.played_frames),
             fade,
-            fading: false,
         });
         true
     }
@@ -370,7 +372,7 @@ impl Mixer {
                 finished_tracks.push(*handle);
                 continue;
             }
-            track.advance_ramp();
+            track.update_amplitude();
 
             if let Some(frame) = track.next_frame() {
                 mixed[0] += frame[0];
