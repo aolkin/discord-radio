@@ -198,7 +198,7 @@ impl Drop for MixerTrack {
     }
 }
 
-pub struct CustomMixer {
+pub struct Mixer {
     tracks: HashMap<TrackId, MixerTrack>,
     next_id: u64,
     sample_rate: u32,
@@ -208,7 +208,7 @@ pub struct CustomMixer {
 
 /// A [`TrackId`] whose track was removed or has ended is a no-op for
 /// `remove_track`, and the `update_*` methods return an error for it.
-impl CustomMixer {
+impl Mixer {
     pub fn new(sample_rate: u32) -> Self {
         Self {
             tracks: HashMap::new(),

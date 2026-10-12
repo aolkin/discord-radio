@@ -6,8 +6,8 @@ pub use hex::HexSegment;
 pub use noise::NoiseSegment;
 pub use track::TrackSegment;
 
-use crate::audio::custom_mixer::TrackHandle;
 use crate::audio::dj::serde::{deser_instant, ser_instant};
+use crate::audio::mixer::TrackHandle;
 use crate::audio::processing_thread::AudioProcessor;
 use crate::state::BotState;
 use anyhow::Context;

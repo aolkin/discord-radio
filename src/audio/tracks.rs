@@ -1,5 +1,5 @@
-use crate::audio::custom_mixer::{AudioSource, TrackHandle, TrackId};
 use crate::audio::decoder::SymphoniaSource;
+use crate::audio::mixer::{AudioSource, TrackHandle, TrackId};
 use crate::audio::processing_thread::AudioProcessor;
 use crate::state::Data;
 use serenity::model::id::GuildId;
