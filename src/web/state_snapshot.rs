@@ -61,32 +61,13 @@ impl BotSnapshot {
     pub async fn capture(bot_state: &Data) -> Self {
         let mut guilds = Vec::new();
 
-        // Collect all guild IDs from various state maps
-        let mut guild_ids_set = std::collections::HashSet::new();
-
-        // Get guild IDs from voice connections
-        let voice_connections = bot_state.voice_connections.read().await;
-        guild_ids_set.extend(voice_connections.keys().copied());
-        drop(voice_connections);
-
-        // Get guild IDs from other state maps
-        let track_managers = bot_state.track_managers.read().await;
-        guild_ids_set.extend(track_managers.keys().copied());
-        drop(track_managers);
-
-        let hex_states = bot_state.hex_playback_states.read().await;
-        guild_ids_set.extend(hex_states.keys().copied());
-        drop(hex_states);
-
-        let audio_processors = bot_state.audio_processors.read().await;
-        guild_ids_set.extend(audio_processors.keys().copied());
-        drop(audio_processors);
-
-        let dj_states = bot_state.dj_states.read().await;
-        guild_ids_set.extend(dj_states.keys().copied());
-        drop(dj_states);
-
-        let guild_ids: Vec<GuildId> = guild_ids_set.into_iter().collect();
+        let guild_ids: Vec<GuildId> = bot_state
+            .audio_processors
+            .read()
+            .await
+            .keys()
+            .copied()
+            .collect();
 
         for guild_id in guild_ids {
             // Check if guild is actually in voice
