@@ -151,10 +151,12 @@ impl Segment for HexSegment {
 
     fn state_display(&self) -> StateDisplay {
         let current_loop = (self.progress.loops.load(Ordering::Relaxed) + 1).min(self.target_loops);
+        let hex_len = self.message.len() * 2;
+        let current_char = (self.progress.position.load(Ordering::Relaxed) + 1).min(hex_len);
         StateDisplay {
             name: "PlayingHexMessage",
             subject: Some(format!(
-                "{} (loop {current_loop}/{})",
+                "{} (loop {current_loop}/{}, char {current_char}/{hex_len})",
                 self.message, self.target_loops
             )),
             elapsed: self.elapsed(),
