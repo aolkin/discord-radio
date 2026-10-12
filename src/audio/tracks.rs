@@ -5,7 +5,6 @@ use crate::bucket::FileResolver;
 use crate::state::Data;
 use serenity::model::id::GuildId;
 use std::collections::HashMap;
-use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{RwLock, oneshot};
@@ -367,10 +366,6 @@ async fn open_track_source(
     start_position: Option<Duration>,
 ) -> Result<(SymphoniaSource, String), Box<dyn std::error::Error + Send + Sync>> {
     let resolved = file_resolver.resolve(filename).await?;
-    if !Path::new(&resolved).exists() {
-        return Err(format!("Audio file not found: {}", resolved).into());
-    }
-
     let mut source = SymphoniaSource::from_file(&resolved, 48000)?;
     if let Some(pos) = start_position {
         source.seek(pos)?;
