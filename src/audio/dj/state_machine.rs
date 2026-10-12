@@ -48,15 +48,8 @@ impl DJState {
         }
     }
 
-    pub fn name(&self) -> &'static str {
-        match self {
-            DJState::Segment(segment) => segment.state_name(),
-            DJState::Stopped => "stopped",
-        }
-    }
-
     pub fn is_hex_message(&self) -> bool {
-        self.name() == HexSegment::STATE_NAME
+        matches!(self, DJState::Segment(segment) if segment.state_name() == HexSegment::STATE_NAME)
     }
 }
 
@@ -148,14 +141,14 @@ impl DJStateMachine {
         bot_state: &Data,
         request: HexMessageRequest,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let from_state = self.current_state().await.name();
+        let from_state = self.get_state_name(&*self.current_state().await);
         self.cleanup_current_state(track_manager, bot_state).await?;
 
         info!(
             "DJ force transitioning to hex message with custom text: {}",
             request.message
         );
-        let next_state = self.custom_hex_message_state(request);
+        let next_state = self.start_custom_hex_message_state(request).await?;
         self.enter_state(from_state, next_state, track_manager, bot_state)
             .await
     }
@@ -179,14 +172,14 @@ impl DJStateMachine {
         track_manager: &Arc<Mutex<TrackManager>>,
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let from_state = self.current_state().await.name();
+        let from_state = self.get_state_name(&*self.current_state().await);
 
         self.cleanup_current_state(track_manager, bot_state).await?;
 
         info!("DJ transitioning to state: {next_state_type}");
         let next_state = match next_state_type {
             DJStateEntry::Track(entry) => self.start_track_state(entry, bot_state).await?,
-            DJStateEntry::HexMessage(entry) => self.hex_message_state(entry),
+            DJStateEntry::HexMessage(entry) => self.start_hex_message_state(entry).await?,
             DJStateEntry::Noise(entry) => self.start_noise_state(entry).await?,
         };
 
@@ -196,7 +189,7 @@ impl DJStateMachine {
 
     async fn enter_state(
         &self,
-        from_state: &str,
+        from_state: String,
         next_state: DJState,
         track_manager: &Arc<Mutex<TrackManager>>,
         bot_state: &Data,
@@ -211,10 +204,10 @@ impl DJStateMachine {
             }
         }
 
-        let to_state = next_state.name();
+        let to_state = self.get_state_name(&next_state);
         *self.state.write().await = next_state;
         if let Some(metrics) = bot_state.metrics.read().await.as_ref() {
-            metrics.record_dj_state_transition(self.guild_id.get(), from_state, to_state);
+            metrics.record_dj_state_transition(self.guild_id.get(), &from_state, &to_state);
         }
 
         // Log the DJ state transition
@@ -305,7 +298,10 @@ impl DJStateMachine {
         Ok(segment.into())
     }
 
-    fn hex_message_state(&self, hex_entry: HexMessageEntry) -> DJState {
+    async fn start_hex_message_state(
+        &self,
+        hex_entry: HexMessageEntry,
+    ) -> Result<DJState, Box<dyn std::error::Error + Send + Sync>> {
         let defaults = &self.scheduler.config().hex_message_defaults;
         let loop_min = hex_entry.loop_min.unwrap_or(defaults.loop_min);
         let loop_max = hex_entry.loop_max.unwrap_or(defaults.loop_max);
@@ -316,29 +312,32 @@ impl DJStateMachine {
             .announcement
             .or_else(|| self.pick_random_announcement());
 
-        self.hex_segment(
+        Ok(self.play_hex_message(
             hex_entry.text,
             1.0,
             loop_min..=loop_max,
             signal_profile,
             announcement,
-        )
+        ))
     }
 
-    fn custom_hex_message_state(&self, request: HexMessageRequest) -> DJState {
+    async fn start_custom_hex_message_state(
+        &self,
+        request: HexMessageRequest,
+    ) -> Result<DJState, Box<dyn std::error::Error + Send + Sync>> {
         let defaults = &self.scheduler.config().hex_message_defaults;
         let loops = match request.loops {
             Some(loops) => loops..=loops,
             None => defaults.loop_min..=defaults.loop_max,
         };
 
-        self.hex_segment(
+        Ok(self.play_hex_message(
             request.message,
             request.volume.unwrap_or(1.0),
             loops,
             defaults.signal_profile.clone(),
             self.pick_random_announcement(),
-        )
+        ))
     }
 
     fn pick_random_announcement(&self) -> Option<String> {
@@ -351,7 +350,7 @@ impl DJStateMachine {
         }
     }
 
-    fn hex_segment(
+    fn play_hex_message(
         &self,
         message: String,
         volume: f32,
@@ -405,7 +404,7 @@ impl DJStateMachine {
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let state = self.state.read().await;
-        let event_type = state.name().to_string();
+        let event_type = self.get_state_name(&state);
         let details = match &*state {
             DJState::Segment(segment) => segment.loggable_properties(),
             DJState::Stopped => serde_json::json!({}),
@@ -417,5 +416,12 @@ impl DJStateMachine {
         bot_state
             .log_dj_activity(self.guild_id.get(), event_type, details)
             .await
+    }
+
+    fn get_state_name(&self, state: &DJState) -> String {
+        match state {
+            DJState::Segment(segment) => segment.state_name().to_string(),
+            DJState::Stopped => "stopped".to_string(),
+        }
     }
 }

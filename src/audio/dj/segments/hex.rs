@@ -80,18 +80,13 @@ impl HexSegment {
             ctx.track_manager.clone(),
             ctx.bot_state.file_resolver.clone(),
             *ctx.guild_id,
+            shutdown.clone(),
         );
-        let handle = tokio::spawn({
-            let shutdown = shutdown.clone();
-            async move {
-                tokio::select! {
-                    () = shutdown.cancelled() => {}
-                    () = run => {}
-                }
-                let mut track_manager = track_manager.lock().await;
-                if track_manager.has_track(HEX_TRACK_NAME) {
-                    track_manager.remove_track(HEX_TRACK_NAME).await;
-                }
+        let handle = tokio::spawn(async move {
+            run.await;
+            let mut track_manager = track_manager.lock().await;
+            if track_manager.has_track(HEX_TRACK_NAME) {
+                track_manager.remove_track(HEX_TRACK_NAME).await;
             }
         });
         *self.run.lock().unwrap() = Some((shutdown, handle));
@@ -177,7 +172,24 @@ impl Segment for HexSegment {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_hex_message(
+    message: String,
+    volume: f32,
+    target_loops: usize,
+    progress: Arc<HexProgress>,
+    track_manager: Arc<Mutex<TrackManager>>,
+    file_resolver: FileResolver,
+    guild_id: GuildId,
+    shutdown: CancellationToken,
+) {
+    tokio::select! {
+        () = shutdown.cancelled() => {}
+        () = hex_loop(message, volume, target_loops, progress, track_manager, file_resolver, guild_id) => {}
+    }
+}
+
+async fn hex_loop(
     message: String,
     volume: f32,
     target_loops: usize,
