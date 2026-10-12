@@ -1,8 +1,7 @@
 use super::{
     CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
-    TimedSegment,
+    TimedSegment, TrackSlot,
 };
-use crate::audio::custom_mixer::PlayingTrack;
 use crate::audio::dj::config::TrackEntry;
 use crate::audio::duration::DurationCache;
 use crate::audio::tracks::open_track_source;
@@ -21,7 +20,7 @@ pub struct TrackSegment {
     volume: f32,
     start_position: Option<Duration>,
     #[serde(skip)]
-    track: std::sync::Mutex<Option<PlayingTrack>>,
+    track: TrackSlot,
 }
 
 impl Deref for TrackSegment {
@@ -66,9 +65,9 @@ impl TrackSegment {
         let mut processor = processor.write().await;
         let mixer = processor.mixer_mut();
         let track = mixer.add_track(Box::new(source), 0.0, false);
-        mixer.update_track_volume(track.handle, self.volume, FADE_TIME)?;
-        mixer.remove_track(track.handle, fade_out, Some(play_duration - fade_out));
-        *self.track.lock().unwrap() = Some(track);
+        mixer.update_track_volume(track.id, self.volume, FADE_TIME)?;
+        mixer.remove_track(track.id, fade_out, Some(play_duration - fade_out));
+        self.track.set(track);
         Ok(())
     }
 
@@ -119,11 +118,7 @@ impl TrackSegment {
 #[typetag::serde]
 impl Segment for TrackSegment {
     async fn is_complete(&self) -> bool {
-        self.track
-            .lock()
-            .unwrap()
-            .as_ref()
-            .is_none_or(PlayingTrack::has_ended)
+        self.track.has_ended()
     }
 
     fn elapsed(&self) -> Duration {
@@ -170,16 +165,7 @@ impl Segment for TrackSegment {
     }
 
     async fn exit(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
-        let track = self.track.lock().unwrap().take();
-        if let Some(track) = track
-            && let Ok(processor) = ctx.audio_processor().await
-        {
-            processor
-                .write()
-                .await
-                .mixer_mut()
-                .remove_track(track.handle, FADE_TIME, None);
-        }
+        self.track.remove(ctx, FADE_TIME).await;
         Ok(())
     }
 

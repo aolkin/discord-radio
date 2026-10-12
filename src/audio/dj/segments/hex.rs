@@ -1,7 +1,7 @@
 use super::{
     CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
+    TrackSlot,
 };
-use crate::audio::custom_mixer::PlayingTrack;
 use crate::audio::dj::config::{HexMessageDefaults, HexMessageEntry};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
 use crate::audio::processing_thread::AudioProcessor;
@@ -24,7 +24,7 @@ struct HexProgress {
     position: AtomicUsize,
     loops: AtomicUsize,
     #[serde(skip)]
-    current_track: std::sync::Mutex<Option<PlayingTrack>>,
+    current_track: TrackSlot,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -150,16 +150,10 @@ impl Segment for HexSegment {
             handle.abort();
             let _ = handle.await;
         }
-        let track = self.progress.current_track.lock().unwrap().take();
-        if let Some(track) = track
-            && let Ok(processor) = ctx.audio_processor().await
-        {
-            processor
-                .write()
-                .await
-                .mixer_mut()
-                .remove_track(track.handle, Duration::ZERO, None);
-        }
+        self.progress
+            .current_track
+            .remove(ctx, Duration::ZERO)
+            .await;
         if let Some(metrics) = ctx.bot_state.metrics.read().await.as_ref() {
             let loops_played = self.progress.loops.load(Ordering::Relaxed) as u64;
             metrics.record_hex_message_loops(ctx.guild_id.get(), loops_played);
@@ -227,7 +221,7 @@ async fn run_hex_message(
                     let track = processor
                         .mixer_mut()
                         .add_track(Box::new(source), volume, false);
-                    *progress.current_track.lock().unwrap() = Some(track.clone());
+                    progress.current_track.set(track.clone());
                     track
                 };
                 track.ended().await;

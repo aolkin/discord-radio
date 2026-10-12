@@ -1,4 +1,4 @@
-use crate::audio::custom_mixer::{AudioSource, PlayingTrack, TrackHandle};
+use crate::audio::custom_mixer::{AudioSource, TrackHandle, TrackId};
 use crate::audio::decoder::SymphoniaSource;
 use crate::audio::processing_thread::AudioProcessor;
 use crate::state::Data;
@@ -23,7 +23,7 @@ pub struct TrackInfo {
     /// The raw filename or `s3://` key, not a resolved path — persisting the
     /// resolved form would break restoration after an R2 cache eviction.
     pub filename: String,
-    pub playing: PlayingTrack,
+    pub mixer_handle: TrackHandle,
     pub volume: f32,
     pub loops: bool,
     pub start_time: std::time::SystemTime,
@@ -61,7 +61,7 @@ impl TrackManager {
     pub async fn start_track(
         &mut self,
         args: StartTrackArgs,
-    ) -> Result<PlayingTrack, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<TrackHandle, Box<dyn std::error::Error + Send + Sync>> {
         if self.tracks.contains_key(&args.name) {
             return Err(format!("Track '{}' already exists", args.name).into());
         }
@@ -99,7 +99,7 @@ impl TrackManager {
             let mixer = processor.mixer_mut();
             let track = mixer.add_track(Box::new(source), 0.0, args.loops);
             mixer.update_track_volume(
-                track.handle,
+                track.id,
                 args.volume,
                 Duration::from_secs_f32(args.fade_time.max(0.0)),
             )?;
@@ -120,11 +120,7 @@ impl TrackManager {
                 .get(&guild_id)
                 .cloned();
             if let Some(manager_arc) = manager_arc {
-                manager_arc
-                    .lock()
-                    .await
-                    .remove_handle(ended_track.handle)
-                    .await;
+                manager_arc.lock().await.remove_handle(ended_track.id).await;
             }
         });
 
@@ -139,7 +135,7 @@ impl TrackManager {
         let info = TrackInfo {
             name: args.name.clone(),
             filename: args.filename.clone(),
-            playing: track.clone(),
+            mixer_handle: track.clone(),
             volume: args.volume,
             loops: args.loops,
             start_time,
@@ -186,7 +182,7 @@ impl TrackManager {
             let mut proc = processor_arc.write().await;
             let mixer = proc.mixer_mut();
             mixer.update_track_volume(
-                track_info.playing.handle,
+                track_info.mixer_handle.id,
                 volume,
                 Duration::from_secs_f32(fade_time.max(0.0)),
             )?;
@@ -226,17 +222,17 @@ impl TrackManager {
 
         let mut proc = processor_arc.write().await;
         proc.mixer_mut()
-            .update_track_loops(track_info.playing.handle, loops)?;
+            .update_track_loops(track_info.mixer_handle.id, loops)?;
 
         self.persist_state().await;
 
         Ok(())
     }
 
-    async fn remove_handle(&mut self, handle: TrackHandle) {
+    async fn remove_handle(&mut self, id: TrackId) {
         let info = self
             .tracks
-            .extract_if(|_k, info| info.playing.handle == handle)
+            .extract_if(|_k, info| info.mixer_handle.id == id)
             .map(|(_, info)| info)
             .next();
         if let Some(info) = info {
@@ -263,12 +259,12 @@ impl TrackManager {
             self.guild_id
         );
 
-        let handle = track_info.playing.handle;
+        let id = track_info.mixer_handle.id;
 
         {
             let mut proc = self.audio_processor.write().await;
             let mixer = proc.mixer_mut();
-            mixer.remove_track(handle, Duration::from_secs_f32(fade_time.max(0.0)), None);
+            mixer.remove_track(id, Duration::from_secs_f32(fade_time.max(0.0)), None);
         }
 
         self.tracks.remove(name);

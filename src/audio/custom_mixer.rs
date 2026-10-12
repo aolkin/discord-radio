@@ -5,18 +5,18 @@ use tokio::sync::watch;
 use crate::audio::helpers::perceptual_level_to_amplitude;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct TrackHandle(u64);
+pub struct TrackId(u64);
 
 /// A track added to the mixer. It has ended once it plays to its end, is
 /// removed, or the mixer is dropped.
 #[derive(Clone, Debug)]
-pub struct PlayingTrack {
-    pub handle: TrackHandle,
+pub struct TrackHandle {
+    pub id: TrackId,
     /// The mixer never sends on this channel; it drops the sender when the track ends.
     ended_rx: watch::Receiver<()>,
 }
 
-impl PlayingTrack {
+impl TrackHandle {
     pub fn has_ended(&self) -> bool {
         self.ended_rx.has_changed().is_err()
     }
@@ -48,8 +48,8 @@ struct VolumeRamp {
     stop_at_end: bool,
 }
 
-pub struct MixerTrack {
-    pub source: Box<dyn AudioSource>,
+struct MixerTrack {
+    source: Box<dyn AudioSource>,
     /// User-facing volume (0.0-2.0).
     volume: f32,
     amplitude: f32,
@@ -57,8 +57,8 @@ pub struct MixerTrack {
     /// Keyed by the played frame at which the fade starts.
     pending_fades: BTreeMap<u64, Fade>,
     ramp: Option<VolumeRamp>,
-    pub loops: bool,
-    pub active: bool,
+    loops: bool,
+    active: bool,
     ended_tx: Option<watch::Sender<()>>,
 }
 
@@ -157,14 +157,14 @@ impl MixerTrack {
 }
 
 pub struct CustomMixer {
-    tracks: HashMap<TrackHandle, MixerTrack>,
+    tracks: HashMap<TrackId, MixerTrack>,
     next_id: u64,
     sample_rate: u32,
     #[allow(dead_code)]
     channels: u16,
 }
 
-/// A [`TrackHandle`] whose track was removed or has ended is a no-op for
+/// A [`TrackId`] whose track was removed or has ended is a no-op for
 /// `remove_track`, and the `update_*` methods return an error for it.
 impl CustomMixer {
     pub fn new(sample_rate: u32) -> Self {
@@ -181,15 +181,15 @@ impl CustomMixer {
         source: Box<dyn AudioSource>,
         volume: f32,
         loops: bool,
-    ) -> PlayingTrack {
-        let handle = TrackHandle(self.next_id);
+    ) -> TrackHandle {
+        let id = TrackId(self.next_id);
         self.next_id += 1;
 
         let (ended_tx, ended_rx) = watch::channel(());
         self.tracks
-            .insert(handle, MixerTrack::new(source, volume, loops, ended_tx));
+            .insert(id, MixerTrack::new(source, volume, loops, ended_tx));
 
-        PlayingTrack { handle, ended_rx }
+        TrackHandle { id, ended_rx }
     }
 
     /// Ramps the track linearly to silence over `fade`, then removes it.
@@ -200,16 +200,11 @@ impl CustomMixer {
     ///
     /// A starting ramp replaces any volume ramp in progress on the track, and a
     /// ramp scheduled for the same frame as a pending one replaces it.
-    pub fn remove_track(
-        &mut self,
-        handle: TrackHandle,
-        fade: Duration,
-        at: Option<Duration>,
-    ) -> bool {
+    pub fn remove_track(&mut self, id: TrackId, fade: Duration, at: Option<Duration>) -> bool {
         if fade.is_zero() && at.is_none() {
-            return self.tracks.remove(&handle).is_some();
+            return self.tracks.remove(&id).is_some();
         }
-        self.schedule_fade(handle, 0.0, fade, at, true).is_ok()
+        self.schedule_fade(id, 0.0, fade, at, true).is_ok()
     }
 
     /// Update the volume of a track, starting before the next frame.
@@ -221,16 +216,16 @@ impl CustomMixer {
     /// Replaces any volume ramp in progress on the track.
     pub fn update_track_volume(
         &mut self,
-        handle: TrackHandle,
+        id: TrackId,
         volume: f32,
         fade: Duration,
     ) -> anyhow::Result<()> {
-        self.schedule_fade(handle, volume, fade, None, false)
+        self.schedule_fade(id, volume, fade, None, false)
     }
 
     fn schedule_fade(
         &mut self,
-        handle: TrackHandle,
+        id: TrackId,
         target: f32,
         fade: Duration,
         at: Option<Duration>,
@@ -238,7 +233,7 @@ impl CustomMixer {
     ) -> anyhow::Result<()> {
         let frames = self.duration_frames(fade);
         let at_frame = at.map(|at| self.duration_frames(at));
-        let track = self.track_mut(handle)?;
+        let track = self.track_mut(id)?;
         track.pending_fades.insert(
             at_frame.unwrap_or(track.played_frames),
             Fade {
@@ -254,25 +249,25 @@ impl CustomMixer {
         (duration.as_secs_f64() * f64::from(self.sample_rate)).round() as u64
     }
 
-    pub fn update_track_loops(&mut self, handle: TrackHandle, loops: bool) -> anyhow::Result<()> {
-        self.track_mut(handle)?.loops = loops;
+    pub fn update_track_loops(&mut self, id: TrackId, loops: bool) -> anyhow::Result<()> {
+        self.track_mut(id)?.loops = loops;
         Ok(())
     }
 
-    fn track_mut(&mut self, handle: TrackHandle) -> anyhow::Result<&mut MixerTrack> {
+    fn track_mut(&mut self, id: TrackId) -> anyhow::Result<&mut MixerTrack> {
         self.tracks
-            .get_mut(&handle)
-            .ok_or_else(|| anyhow::anyhow!("Track {handle:?} not found"))
+            .get_mut(&id)
+            .ok_or_else(|| anyhow::anyhow!("Track {id:?} not found"))
     }
 
     pub fn mix_next_frame(&mut self) -> [f32; 2] {
         let mut mixed = [0.0, 0.0];
         let mut finished_tracks = Vec::new();
 
-        for (handle, track) in self.tracks.iter_mut() {
+        for (id, track) in self.tracks.iter_mut() {
             track.start_due_fades();
             if track.advance_ramp() {
-                finished_tracks.push(*handle);
+                finished_tracks.push(*id);
                 continue;
             }
 
@@ -282,12 +277,12 @@ impl CustomMixer {
             }
 
             if !track.active && !track.loops {
-                finished_tracks.push(*handle);
+                finished_tracks.push(*id);
             }
         }
 
-        for handle in finished_tracks {
-            self.tracks.remove(&handle);
+        for id in finished_tracks {
+            self.tracks.remove(&id);
         }
 
         mixed[0] = mixed[0].clamp(-1.0, 1.0);
