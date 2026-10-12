@@ -61,7 +61,7 @@ impl TrackManager {
     pub async fn start_track(
         &mut self,
         args: StartTrackArgs,
-    ) -> Result<TrackHandle, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if self.tracks.contains_key(&args.name) {
             return Err(format!("Track '{}' already exists", args.name).into());
         }
@@ -135,7 +135,7 @@ impl TrackManager {
         let track = TrackInfo {
             name: args.name.clone(),
             filename: args.filename.clone(),
-            mixer_handle: mixer_handle.clone(),
+            mixer_handle,
             volume: args.volume,
             loops: args.loops,
             start_time,
@@ -146,7 +146,7 @@ impl TrackManager {
 
         self.persist_state().await;
 
-        Ok(mixer_handle)
+        Ok(())
     }
 
     pub fn has_track(&self, name: &str) -> bool {
