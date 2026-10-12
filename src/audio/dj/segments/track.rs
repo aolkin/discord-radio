@@ -2,7 +2,6 @@ use super::{
     CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
     TimedSegment,
 };
-use crate::audio::custom_mixer::Fade;
 use crate::audio::dj::config::TrackEntry;
 use crate::audio::duration::DurationCache;
 use crate::audio::tracks::{StartTrackArgs, TrackManager};
@@ -77,14 +76,7 @@ impl TrackSegment {
                 loops: false,
                 start_position,
                 persist: false,
-                scheduled_fade: Some((
-                    play_duration - fade_out,
-                    Fade {
-                        target: 0.0,
-                        duration: fade_out,
-                        stop_when_complete: true,
-                    },
-                )),
+                scheduled_removal: Some((play_duration - fade_out, fade_out)),
             })
             .await
             .map_err(|e| anyhow::anyhow!(e))?;
