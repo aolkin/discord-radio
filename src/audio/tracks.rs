@@ -21,7 +21,7 @@ pub struct TrackSnapshot {
 pub struct TrackInfo {
     pub name: String,
     /// The raw filename or `s3://` key, not a resolved path — persisting the
-    /// resolved form would break restoration after an R2 cache eviction.
+    /// resolved form would break restoration after an object storage cache eviction.
     pub filename: String,
     pub mixer_handle: TrackHandle,
     pub volume: f32,

@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 /// Resolves a playlist entry's `filename` to a local filesystem path.
 ///
-/// A `s3://`-prefixed filename is an R2 object key: the prefix is stripped
+/// A `s3://`-prefixed filename is an object storage key: the prefix is stripped
 /// and the remainder is fetched into the file cache if not already cached.
 /// Anything else is joined with the content path directly.
 #[derive(Clone)]
