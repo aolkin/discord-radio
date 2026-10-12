@@ -142,7 +142,7 @@ impl TrackManager {
                             let track_managers = bot_state_copy.track_managers.read().await;
                             if let Some(manager_arc) = track_managers.get(&guild_id_copy) {
                                 let mut manager = manager_arc.lock().await;
-                                manager.remove_ended(handle).await;
+                                manager.remove_handle(handle).await;
                             }
                         });
                     });
@@ -369,23 +369,26 @@ impl TrackManager {
     }
 
     pub async fn remove_track(&mut self, name: &str) {
-        if let Some(info) = self.tracks.remove(name) {
+        let info = self.tracks.remove(name);
+        self.finish_removing_track(info).await;
+    }
+
+    async fn remove_handle(&mut self, handle: TrackHandle) {
+        let info = self
+            .tracks
+            .extract_if(|_k, info| info.mixer_handle == handle)
+            .map(|(_, info)| info)
+            .next();
+        self.finish_removing_track(info).await;
+    }
+
+    async fn finish_removing_track(&mut self, info: Option<TrackInfo>) {
+        if let Some(info) = info {
             let mut proc = self.audio_processor.write().await;
             proc.mixer_mut().remove_track(info.mixer_handle);
 
-            tracing::debug!("Removed track '{}' from guild {}", name, self.guild_id);
+            tracing::debug!("Removed track '{}' from guild {}", info.name, self.guild_id);
             self.persist_state().await;
-        }
-    }
-
-    async fn remove_ended(&mut self, handle: TrackHandle) {
-        let ended = self
-            .tracks
-            .values()
-            .find(|info| info.mixer_handle == handle)
-            .map(|info| info.name.clone());
-        if let Some(name) = ended {
-            self.remove_track(&name).await;
         }
     }
 
