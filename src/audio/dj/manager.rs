@@ -1,7 +1,7 @@
 use crate::audio::dj::config::DJConfig;
 use crate::audio::dj::profile_machine::ProfileStateMachine;
-use crate::audio::dj::segments::{SegmentCtx, SignalProfilePlayback, TrackSegment};
-use crate::audio::dj::state_machine::{DJState, DJStateMachine, format_dj_track_name};
+use crate::audio::dj::segments::{SegmentCtx, SignalProfilePlayback};
+use crate::audio::dj::state_machine::{DJState, DJStateMachine};
 use crate::state::Data;
 use serenity::all::Http;
 use serenity::model::id::{ChannelId, GuildId};
@@ -24,13 +24,6 @@ pub enum DJStateType {
     Track,
     HexMessage,
     Noise,
-}
-
-struct ResumeTrackArgs {
-    filename: String,
-    volume: f32,
-    elapsed: Duration,
-    duration: Duration,
 }
 
 pub async fn dj_task(
@@ -60,39 +53,25 @@ pub async fn dj_task(
     };
 
     let (forced_profile, status_message) = match &initial_state {
-        DJState::PlayingTrack {
-            filename,
-            volume,
-            started_at,
-            duration,
-            forced_profile,
-            status_message,
-            ..
-        } => {
-            resume_dj_track(
-                &guild_id,
-                &bot_state,
-                ResumeTrackArgs {
-                    filename: filename.clone(),
-                    volume: *volume,
-                    elapsed: started_at.elapsed(),
-                    duration: *duration,
-                },
-            )
-            .await;
-            (forced_profile.clone(), status_message.clone())
-        }
         DJState::PlayingHexMessage {
             forced_profile,
             status_message,
             ..
         } => (forced_profile.clone(), status_message.clone()),
         DJState::Segment(segment) => {
+            let track_manager = bot_state
+                .track_managers
+                .read()
+                .await
+                .get(&guild_id)
+                .expect("TrackManager should be initialized before DJ starts")
+                .clone();
             let _ = segment
                 .restore(&SegmentCtx {
                     guild_id: &guild_id,
                     bot_state: &bot_state,
                     http: &http,
+                    track_manager: &track_manager,
                 })
                 .await
                 .inspect_err(|e| tracing::warn!("Failed to restore segment: {e:?}"));
@@ -410,56 +389,6 @@ pub async fn dj_task(
     }
 
     tracing::info!("DJ task terminated for guild {}", guild_id);
-}
-
-async fn resume_dj_track(guild_id: &GuildId, bot_state: &Data, resume_track_args: ResumeTrackArgs) {
-    let ResumeTrackArgs {
-        filename,
-        volume,
-        elapsed,
-        duration,
-    } = resume_track_args;
-    let track_name = format_dj_track_name(&filename);
-    tracing::debug!(
-        "Attempting to restore DJ track '{}' (file: {}) in guild {}",
-        track_name,
-        filename,
-        guild_id
-    );
-
-    if elapsed < duration {
-        let manager_arc = bot_state
-            .track_managers
-            .read()
-            .await
-            .get(guild_id)
-            .expect("TrackManager should be initialized before DJ starts")
-            .clone();
-        let segment = TrackSegment::new(filename, volume, None, duration, None, None);
-
-        if let Err(e) = segment.resume(&manager_arc, elapsed).await {
-            tracing::warn!(
-                "Failed to restore DJ track '{}' in guild {}: {:#}",
-                track_name,
-                guild_id,
-                e
-            );
-        } else {
-            tracing::info!(
-                "Successfully restored DJ track '{}' at position {:.1}s in guild {}",
-                track_name,
-                elapsed.as_secs_f32(),
-                guild_id
-            );
-        }
-    } else {
-        tracing::info!(
-            "DJ track '{}' has already finished (elapsed: {:.1}s, duration: {:.1}s), will advance to next state",
-            track_name,
-            elapsed.as_secs_f32(),
-            duration.as_secs_f32()
-        );
-    }
 }
 
 pub struct DJManager {

@@ -1,16 +1,31 @@
-use super::{CommonSegmentPlaybackConfig, TimedSegment};
-use crate::audio::dj::state_machine::format_dj_track_name;
+use super::{
+    CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
+    TimedSegment,
+};
 use crate::audio::tracks::{StartTrackArgs, TrackManager};
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use std::time::Duration;
 use tokio::sync::Mutex;
 
-#[derive(Debug)]
+pub fn format_dj_track_name(filename: &str) -> String {
+    format!("dj_track_{}", filename)
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct TrackSegment {
     timer: TimedSegment,
     filename: String,
     volume: f32,
     start_position: Option<Duration>,
+}
+
+impl Deref for TrackSegment {
+    type Target = CommonSegmentPlaybackConfig;
+    fn deref(&self) -> &Self::Target {
+        &self.timer
+    }
 }
 
 impl TrackSegment {
@@ -54,26 +69,56 @@ impl TrackSegment {
             .await
             .map_err(|e| anyhow::anyhow!(e))
     }
+}
 
-    pub async fn start(&self, track_manager: &Mutex<TrackManager>) -> anyhow::Result<()> {
-        self.start_at(track_manager, self.start_position).await
+#[async_trait]
+#[typetag::serde]
+impl Segment for TrackSegment {
+    async fn is_complete(&self, _ctx: &SegmentCtx) -> bool {
+        self.timer.is_elapsed()
     }
 
-    pub async fn resume(
-        &self,
-        track_manager: &Mutex<TrackManager>,
-        elapsed: Duration,
-    ) -> anyhow::Result<()> {
+    fn elapsed(&self) -> Duration {
+        self.timer.started_at.elapsed()
+    }
+
+    async fn restore(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
+        let elapsed = self.elapsed();
+        if self.timer.is_elapsed() {
+            tracing::info!(
+                "DJ track '{}' has already finished (elapsed: {:.1}s, duration: {:.1}s), will advance to next state",
+                format_dj_track_name(&self.filename),
+                elapsed.as_secs_f32(),
+                self.timer.duration.as_secs_f32()
+            );
+            return Ok(());
+        }
         let position = self.start_position.unwrap_or_default() + elapsed;
-        self.start_at(track_manager, Some(position)).await
+        self.start_at(ctx.track_manager, Some(position)).await?;
+        tracing::info!(
+            "Restored DJ track '{}' at {:.1}s into the segment in guild {}",
+            format_dj_track_name(&self.filename),
+            elapsed.as_secs_f32(),
+            ctx.guild_id
+        );
+        Ok(())
     }
 
-    pub async fn stop_file(
-        track_manager: &Mutex<TrackManager>,
-        filename: &str,
-    ) -> anyhow::Result<()> {
-        let track_name = format_dj_track_name(filename);
-        let mut track_manager = track_manager.lock().await;
+    async fn enter(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
+        self.start_at(ctx.track_manager, self.start_position)
+            .await?;
+        tracing::info!(
+            "DJ starting track '{}' (duration: {:.1}s) in guild {}",
+            self.filename,
+            self.timer.duration.as_secs_f32(),
+            ctx.guild_id
+        );
+        Ok(())
+    }
+
+    async fn exit(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
+        let track_name = format_dj_track_name(&self.filename);
+        let mut track_manager = ctx.track_manager.lock().await;
         if track_manager.has_track(&track_name) {
             track_manager
                 .stop_track(&track_name, 1.0, false)
@@ -82,12 +127,27 @@ impl TrackSegment {
         }
         Ok(())
     }
-}
 
-impl Deref for TrackSegment {
-    type Target = CommonSegmentPlaybackConfig;
-    fn deref(&self) -> &Self::Target {
-        &self.timer
+    fn loggable_properties(&self) -> serde_json::Value {
+        serde_json::json!({
+            "track_name": format_dj_track_name(&self.filename),
+            "filename": self.filename,
+            "duration_secs": self.timer.duration.as_secs_f32(),
+            "forced_profile": self.signal_profile().name,
+        })
+    }
+
+    fn state_name(&self) -> &'static str {
+        "playing_track"
+    }
+
+    fn state_display(&self) -> StateDisplay {
+        StateDisplay {
+            name: "PlayingTrack",
+            subject: Some(self.filename.clone()),
+            elapsed: self.elapsed(),
+            total: self.timer.duration,
+        }
     }
 }
 

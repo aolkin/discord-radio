@@ -2,9 +2,7 @@ use crate::audio::dj::config::{DJConfig, HexMessageEntry, NoisePeriodEntry, Trac
 use crate::audio::dj::manager::DJStateType;
 use crate::audio::dj::scheduler::{DJStateEntry, WeightedScheduler};
 use crate::audio::dj::segments::SegmentCtx;
-use crate::audio::dj::segments::{
-    NoiseSegment, Segment, SegmentPlaybackConfig, SignalProfilePlayback, TrackSegment,
-};
+use crate::audio::dj::segments::{NoiseSegment, Segment, SignalProfilePlayback, TrackSegment};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
 use crate::audio::tracks::TrackManager;
 use crate::state::{BotState, Data};
@@ -17,21 +15,8 @@ use std::time::Duration;
 use tokio::sync::{Mutex, RwLock, RwLockReadGuard};
 use tracing::info;
 
-pub fn format_dj_track_name(filename: &str) -> String {
-    format!("dj_track_{}", filename)
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 pub enum DJState {
-    PlayingTrack {
-        filename: String,
-        volume: f32,
-        #[serde(serialize_with = "ser_instant", deserialize_with = "deser_instant")]
-        started_at: std::time::Instant,
-        duration: Duration,
-        forced_profile: Option<String>,
-        status_message: Option<String>, // The channel status pushed to status stack
-    },
     PlayingHexMessage {
         message: String,
         #[serde(serialize_with = "ser_instant", deserialize_with = "deser_instant")]
@@ -57,11 +42,6 @@ impl DJState {
 
     pub async fn is_complete(&self, ctx: &SegmentCtx<'_>) -> bool {
         match self {
-            DJState::PlayingTrack {
-                started_at,
-                duration,
-                ..
-            } => started_at.elapsed() >= *duration,
             DJState::PlayingHexMessage { .. } => false,
             DJState::Segment(segment) => segment.is_complete(ctx).await,
             DJState::Stopped => true,
@@ -70,8 +50,7 @@ impl DJState {
 
     pub fn forced_profile(&self) -> SignalProfilePlayback {
         match self {
-            DJState::PlayingTrack { forced_profile, .. }
-            | DJState::PlayingHexMessage { forced_profile, .. } => forced_profile
+            DJState::PlayingHexMessage { forced_profile, .. } => forced_profile
                 .as_ref()
                 .map(|profile| profile.into())
                 .unwrap_or_default(),
@@ -115,11 +94,12 @@ impl DJStateMachine {
         }
     }
 
-    fn segment_ctx(&self) -> SegmentCtx<'_> {
+    fn segment_ctx<'a>(&'a self, track_manager: &'a Mutex<TrackManager>) -> SegmentCtx<'a> {
         SegmentCtx {
             guild_id: &self.guild_id,
             bot_state: &self.bot_state,
             http: &self.http,
+            track_manager,
         }
     }
 
@@ -192,7 +172,7 @@ impl DJStateMachine {
         track_manager: &Mutex<TrackManager>,
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let ctx = self.segment_ctx();
+        let ctx = self.segment_ctx(track_manager);
         if !self.state.read().await.is_complete(&ctx).await {
             return Ok(());
         }
@@ -213,13 +193,20 @@ impl DJStateMachine {
 
         info!("DJ transitioning to state: {next_state_type}");
         let next_state = match next_state_type {
-            DJStateEntry::Track(entry) => {
-                self.start_track_state(entry, track_manager, bot_state)
-                    .await
-            }
+            DJStateEntry::Track(entry) => self.start_track_state(entry, bot_state).await,
             DJStateEntry::HexMessage(entry) => self.start_hex_message_state(entry, bot_state).await,
             DJStateEntry::Noise(entry) => self.start_noise_state(entry).await,
         }?;
+
+        if let DJState::Segment(segment) = &next_state {
+            segment.enter(&self.segment_ctx(track_manager)).await?;
+            if let Some(status) = segment.channel_status() {
+                bot_state
+                    .voice_status_manager
+                    .push_status(self.guild_id, &status, &self.http)
+                    .await;
+            }
+        }
 
         // Record state transition metric
         let to_state = self.get_state_name(&next_state);
@@ -243,34 +230,6 @@ impl DJStateMachine {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let current = self.state.read().await;
         match &*current {
-            DJState::PlayingTrack {
-                filename,
-                status_message,
-                started_at,
-                forced_profile,
-                ..
-            } => {
-                // Record duration metric
-                let duration_secs = started_at.elapsed().as_secs_f64();
-                if let Some(metrics) = bot_state.metrics.read().await.as_ref() {
-                    metrics.record_dj_state_duration(
-                        self.guild_id.get(),
-                        "playing_track",
-                        forced_profile.as_deref(),
-                        duration_secs,
-                    );
-                }
-
-                TrackSegment::stop_file(track_manager, filename).await?;
-
-                // Remove the track status from the stack if present
-                if let Some(status_msg) = status_message {
-                    bot_state
-                        .voice_status_manager
-                        .remove_status(self.guild_id, status_msg, &self.http)
-                        .await;
-                }
-            }
             DJState::PlayingHexMessage {
                 status_message,
                 started_at,
@@ -324,7 +283,13 @@ impl DJStateMachine {
                         segment.elapsed().as_secs_f64(),
                     );
                 }
-                segment.exit(&self.segment_ctx()).await?;
+                segment.exit(&self.segment_ctx(track_manager)).await?;
+                if let Some(status) = segment.channel_status() {
+                    bot_state
+                        .voice_status_manager
+                        .remove_status(self.guild_id, &status, &self.http)
+                        .await;
+                }
             }
             DJState::Stopped => {}
         }
@@ -335,7 +300,6 @@ impl DJStateMachine {
     async fn start_track_state(
         &self,
         track_entry: TrackEntry,
-        track_manager: &Mutex<TrackManager>,
         bot_state: &Data,
     ) -> Result<DJState, Box<dyn std::error::Error + Send + Sync>> {
         let duration = bot_state
@@ -373,39 +337,14 @@ impl DJStateMachine {
         let volume = track_entry.volume.unwrap_or(1.0);
 
         let segment = TrackSegment::new(
-            track_entry.filename.clone(),
+            track_entry.filename,
             volume,
             start_position,
             play_duration,
-            track_entry.signal_profile.clone(),
+            track_entry.signal_profile,
             track_entry.channel_status.as_deref(),
         );
-        segment.start(track_manager).await?;
-
-        tracing::info!(
-            "DJ starting track '{}' (duration: {:.1}s) in guild {}",
-            track_entry.filename,
-            play_duration.as_secs_f32(),
-            self.guild_id
-        );
-
-        // Push track channel status onto the voice channel status stack if configured
-        let status_message = segment.channel_status();
-        if let Some(ref status) = status_message {
-            bot_state
-                .voice_status_manager
-                .push_status(self.guild_id, status, &self.http)
-                .await;
-        }
-
-        Ok(DJState::PlayingTrack {
-            filename: track_entry.filename.clone(),
-            volume,
-            started_at: std::time::Instant::now(),
-            duration: play_duration,
-            forced_profile: track_entry.signal_profile.clone(),
-            status_message,
-        })
+        Ok(segment.into())
     }
 
     async fn start_hex_message_state(
@@ -629,36 +568,20 @@ impl DJStateMachine {
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let state = self.state.read().await;
-        let (event_type, details): (String, serde_json::Value) = match &*state {
-            DJState::PlayingTrack {
-                filename,
-                duration,
-                forced_profile,
-                ..
-            } => (
-                "track_started".into(),
-                serde_json::json!({
-                    "track_name": format_dj_track_name(filename),
-                    "filename": filename,
-                    "duration_secs": duration.as_secs_f32(),
-                    "forced_profile": forced_profile,
-                }),
-            ),
+        let event_type = self.get_state_name(&state);
+        let details = match &*state {
             DJState::PlayingHexMessage {
                 message,
                 target_loops,
                 forced_profile,
                 ..
-            } => (
-                "hex_message_started".into(),
-                serde_json::json!({
-                    "message": message,
-                    "target_loops": target_loops,
-                    "forced_profile": forced_profile,
-                }),
-            ),
-            DJState::Segment(segment) => ("noise_started".into(), segment.loggable_properties()),
-            DJState::Stopped => ("stopped".into(), serde_json::json!({})),
+            } => serde_json::json!({
+                "message": message,
+                "target_loops": target_loops,
+                "forced_profile": forced_profile,
+            }),
+            DJState::Segment(segment) => segment.loggable_properties(),
+            DJState::Stopped => serde_json::json!({}),
         };
         // Drop the read guard before awaiting the log write below so it isn't held
         // across unrelated file I/O.
@@ -671,7 +594,6 @@ impl DJStateMachine {
 
     fn get_state_name(&self, state: &DJState) -> String {
         match state {
-            DJState::PlayingTrack { .. } => "playing_track".to_string(),
             DJState::PlayingHexMessage { .. } => "playing_hex_message".to_string(),
             DJState::Segment(segment) => segment.state_name().to_string(),
             DJState::Stopped => "stopped".to_string(),

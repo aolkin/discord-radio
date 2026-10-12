@@ -3,6 +3,7 @@ mod track;
 pub use track::TrackSegment;
 
 use crate::audio::dj::serde::{deser_instant, ser_instant};
+use crate::audio::tracks::TrackManager;
 use crate::state::BotState;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -12,11 +13,13 @@ use std::borrow::ToOwned;
 use std::fmt::Debug;
 use std::ops::Deref;
 use std::time::Duration;
+use tokio::sync::Mutex;
 
 pub struct SegmentCtx<'a> {
     pub guild_id: &'a GuildId,
     pub bot_state: &'a BotState,
     pub http: &'a Http,
+    pub track_manager: &'a Mutex<TrackManager>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
