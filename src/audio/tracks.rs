@@ -94,22 +94,22 @@ impl TrackManager {
 
         let processor_arc = self.audio_processor.clone();
 
-        let track = {
+        let mixer_handle = {
             let mut processor = processor_arc.write().await;
             let mixer = processor.mixer_mut();
-            let track = mixer.add_track(Box::new(source), 0.0, args.loops);
+            let mixer_handle = mixer.add_track(Box::new(source), 0.0, args.loops);
             mixer.update_track_volume(
-                track.id,
+                mixer_handle.id,
                 args.volume,
                 Duration::from_secs_f32(args.fade_time.max(0.0)),
             )?;
-            track
+            mixer_handle
         };
 
         let guild_id = self.guild_id;
         let bot_state = self.bot_state.clone();
         let name = args.name.clone();
-        let ended_track = track.clone();
+        let ended_track = mixer_handle.clone();
         tokio::spawn(async move {
             ended_track.ended().await;
             tracing::debug!("Track '{name}' left the mixer in guild {guild_id}");
@@ -132,21 +132,21 @@ impl TrackManager {
             std::time::SystemTime::now()
         };
 
-        let info = TrackInfo {
+        let track = TrackInfo {
             name: args.name.clone(),
             filename: args.filename.clone(),
-            mixer_handle: track.clone(),
+            mixer_handle: mixer_handle.clone(),
             volume: args.volume,
             loops: args.loops,
             start_time,
             persist: args.persist,
         };
 
-        self.tracks.insert(args.name, info);
+        self.tracks.insert(args.name, track);
 
         self.persist_state().await;
 
-        Ok(track)
+        Ok(mixer_handle)
     }
 
     pub fn has_track(&self, name: &str) -> bool {
@@ -229,10 +229,10 @@ impl TrackManager {
         Ok(())
     }
 
-    async fn remove_handle(&mut self, id: TrackId) {
+    async fn remove_handle(&mut self, handle: TrackId) {
         let info = self
             .tracks
-            .extract_if(|_k, info| info.mixer_handle.id == id)
+            .extract_if(|_k, info| info.mixer_handle.id == handle)
             .map(|(_, info)| info)
             .next();
         if let Some(info) = info {
@@ -259,12 +259,12 @@ impl TrackManager {
             self.guild_id
         );
 
-        let id = track_info.mixer_handle.id;
+        let handle = track_info.mixer_handle.id;
 
         {
             let mut proc = self.audio_processor.write().await;
             let mixer = proc.mixer_mut();
-            mixer.remove_track(id, Duration::from_secs_f32(fade_time.max(0.0)), None);
+            mixer.remove_track(handle, Duration::from_secs_f32(fade_time.max(0.0)), None);
         }
 
         self.tracks.remove(name);
