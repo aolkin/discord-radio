@@ -1,10 +1,13 @@
 use super::{
     CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
 };
+use crate::audio::custom_mixer::AtomicTrackHandle;
 use crate::audio::dj::config::{HexMessageDefaults, HexMessageEntry};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
-use crate::audio::tracks::{StartTrackArgs, TrackManager};
+use crate::audio::processing_thread::AudioProcessor;
+use crate::audio::tracks::open_track_source;
 use crate::bucket::FileResolver;
+use anyhow::Context;
 use async_trait::async_trait;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -14,15 +17,15 @@ use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
-use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
-
-const HEX_TRACK_NAME: &str = "hex_playback";
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct HexProgress {
     position: AtomicUsize,
     loops: AtomicUsize,
+    #[serde(skip)]
+    current_track: AtomicTrackHandle,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -72,17 +75,21 @@ impl HexSegment {
         }
     }
 
-    fn start_run(&self, ctx: &SegmentCtx) {
+    async fn start_run(&self, ctx: &SegmentCtx<'_>) -> anyhow::Result<()> {
+        let processor = audio_processor(ctx)
+            .await
+            .with_context(|| format!("No audio processor for guild {}", ctx.guild_id))?;
         let handle = tokio::spawn(run_hex_message(
             self.message.clone(),
             self.volume,
             self.target_loops,
             self.progress.clone(),
-            ctx.track_manager.clone(),
+            processor,
             ctx.bot_state.file_resolver.clone(),
             *ctx.guild_id,
         ));
         *self.run.lock().unwrap() = Some(handle);
+        Ok(())
     }
 
     pub fn from_entry(
@@ -118,7 +125,7 @@ impl Segment for HexSegment {
     }
 
     async fn restore(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
-        self.start_run(ctx);
+        self.start_run(ctx).await?;
         tracing::info!(
             "Restored DJ hex message '{}' at loop {}/{} in guild {}",
             self.message,
@@ -130,7 +137,7 @@ impl Segment for HexSegment {
     }
 
     async fn enter(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
-        self.start_run(ctx);
+        self.start_run(ctx).await?;
         tracing::info!(
             "DJ playing hex message '{}' ({} loops) in guild {}",
             self.message,
@@ -146,11 +153,14 @@ impl Segment for HexSegment {
             handle.abort();
             let _ = handle.await;
         }
+        if let Some(handle) = self.progress.current_track.take()
+            && let Some(processor) = audio_processor(ctx).await
         {
-            let mut track_manager = ctx.track_manager.lock().await;
-            if track_manager.has_track(HEX_TRACK_NAME) {
-                track_manager.remove_track(HEX_TRACK_NAME).await;
-            }
+            processor
+                .write()
+                .await
+                .mixer_mut()
+                .remove_track(handle, Duration::ZERO, None);
         }
         if let Some(metrics) = ctx.bot_state.metrics.read().await.as_ref() {
             let loops_played = self.progress.loops.load(Ordering::Relaxed) as u64;
@@ -196,7 +206,7 @@ async fn run_hex_message(
     volume: f32,
     target_loops: usize,
     progress: Arc<HexProgress>,
-    track_manager: Arc<Mutex<TrackManager>>,
+    processor: Arc<RwLock<AudioProcessor>>,
     file_resolver: FileResolver,
     guild_id: GuildId,
 ) {
@@ -206,11 +216,24 @@ async fn run_hex_message(
         let filename = format!("audio/hex/hex_{}.wav", hex_chars[position]);
         match file_resolver.resolve(&filename).await {
             Ok(path) if Path::new(&path).exists() => {
-                if let Err(e) = play_hex_char(&track_manager, filename, volume).await {
-                    tracing::warn!("Failed to start hex track for message '{message}': {e:#}");
-                    tokio::time::sleep(Duration::from_millis(100)).await;
-                    continue;
-                }
+                let source = match open_track_source(&path, None) {
+                    Ok(source) => source,
+                    Err(e) => {
+                        tracing::warn!("Failed to start hex track for message '{message}': {e:#}");
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                        continue;
+                    }
+                };
+                let end_rx = {
+                    let mut processor = processor.write().await;
+                    let (handle, end_rx) =
+                        processor
+                            .mixer_mut()
+                            .add_track(Box::new(source), volume, false);
+                    progress.current_track.store(handle);
+                    end_rx
+                };
+                let _ = end_rx.await;
             }
             _ => tracing::warn!("Audio file not found: {}", filename),
         }
@@ -238,32 +261,13 @@ async fn run_hex_message(
     }
 }
 
-async fn play_hex_char(
-    track_manager: &Mutex<TrackManager>,
-    filename: String,
-    volume: f32,
-) -> anyhow::Result<()> {
-    let gone = {
-        let mut manager = track_manager.lock().await;
-        if manager.has_track(HEX_TRACK_NAME) {
-            manager.remove_track(HEX_TRACK_NAME).await;
-        }
-        manager
-            .start_track(StartTrackArgs {
-                name: HEX_TRACK_NAME.to_string(),
-                filename,
-                volume,
-                fade_time: 0.0,
-                loops: false,
-                start_position: None,
-                persist: false,
-                scheduled_removal: None,
-            })
-            .await
-            .map_err(|e| anyhow::anyhow!(e))?
-    };
-    let _ = gone.await;
-    Ok(())
+async fn audio_processor(ctx: &SegmentCtx<'_>) -> Option<Arc<RwLock<AudioProcessor>>> {
+    ctx.bot_state
+        .audio_processors
+        .read()
+        .await
+        .get(ctx.guild_id)
+        .cloned()
 }
 
 fn message_to_hex_sequence(message: &str) -> Vec<char> {

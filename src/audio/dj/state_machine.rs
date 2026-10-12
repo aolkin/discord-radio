@@ -71,7 +71,7 @@ impl DJStateMachine {
         }
     }
 
-    fn segment_ctx<'a>(&'a self, track_manager: &'a Arc<Mutex<TrackManager>>) -> SegmentCtx<'a> {
+    fn segment_ctx<'a>(&'a self, track_manager: &'a Mutex<TrackManager>) -> SegmentCtx<'a> {
         SegmentCtx {
             guild_id: &self.guild_id,
             bot_state: &self.bot_state,
