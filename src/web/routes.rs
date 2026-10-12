@@ -1,4 +1,4 @@
-use crate::audio::dj::manager::{DJStateType, trigger_reload};
+use crate::audio::dj::manager::{DJCommand, DJStateType, send_dj_command, trigger_reload};
 use crate::bucket::ObjectStoreError;
 use crate::state::Data;
 use crate::web::state_snapshot::BotSnapshot;
@@ -63,9 +63,13 @@ pub async fn advance_dj_state(
         None
     };
 
-    crate::audio::dj::manager::force_advance(&bot_state, guild_id, state_type_filter)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    send_dj_command(
+        &bot_state,
+        guild_id,
+        DJCommand::ForceAdvance(state_type_filter),
+    )
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(StatusCode::OK)
 }
@@ -83,9 +87,13 @@ pub async fn play_hex_message(
     let guild_id_parsed: u64 = guild_id.parse().map_err(|_| StatusCode::BAD_REQUEST)?;
     let guild_id = GuildId::new(guild_id_parsed);
 
-    crate::audio::dj::manager::force_hex_message(&bot_state, guild_id, request.message)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    send_dj_command(
+        &bot_state,
+        guild_id,
+        DJCommand::ForceHexMessage(request.message),
+    )
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(StatusCode::OK)
 }

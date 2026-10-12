@@ -408,13 +408,12 @@ impl DJManager {
         }
     }
 
-    pub async fn set_announcement_channel(
+    pub(crate) async fn send(
         &self,
-        channel_id: Option<ChannelId>,
+        command: DJCommand,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if let Some(tx) = &self.command_tx {
-            tx.send(DJCommand::SetAnnouncementChannel(channel_id))
-                .await?;
+            tx.send(command).await?;
             Ok(())
         } else {
             Err("DJ is not running".into())
@@ -491,8 +490,8 @@ impl DJManager {
     pub async fn stop(&mut self, bot_state: &Data, http: Arc<Http>) {
         if let Some(handle) = self.task_handle.take() {
             // Send graceful stop command
-            if let Some(tx) = &self.command_tx
-                && let Err(e) = tx.send(DJCommand::Stop).await
+            if self.command_tx.is_some()
+                && let Err(e) = self.send(DJCommand::Stop).await
             {
                 tracing::warn!("Failed to send stop command to DJ task: {}", e);
             }
@@ -539,36 +538,12 @@ impl DJManager {
     pub fn is_running(&self) -> bool {
         self.task_handle.is_some()
     }
-
-    pub async fn force_advance(
-        &self,
-        state_type_filter: Option<DJStateType>,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        if let Some(tx) = &self.command_tx {
-            tx.send(DJCommand::ForceAdvance(state_type_filter)).await?;
-            Ok(())
-        } else {
-            Err("DJ is not running".into())
-        }
-    }
-
-    pub async fn force_hex_message(
-        &self,
-        message: String,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        if let Some(tx) = &self.command_tx {
-            tx.send(DJCommand::ForceHexMessage(message)).await?;
-            Ok(())
-        } else {
-            Err("DJ is not running".into())
-        }
-    }
 }
 
-pub async fn force_advance(
+pub async fn send_dj_command(
     bot_state: &Data,
     guild_id: GuildId,
-    state_type_filter: Option<DJStateType>,
+    command: DJCommand,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let dj_managers = bot_state.dj_managers.read().await;
     let manager = dj_managers
@@ -578,23 +553,7 @@ pub async fn force_advance(
     drop(dj_managers);
 
     let mgr = manager.lock().await;
-    mgr.force_advance(state_type_filter).await
-}
-
-pub async fn force_hex_message(
-    bot_state: &Data,
-    guild_id: GuildId,
-    message: String,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let dj_managers = bot_state.dj_managers.read().await;
-    let manager = dj_managers
-        .get(&guild_id)
-        .ok_or("DJ manager not found")?
-        .clone();
-    drop(dj_managers);
-
-    let mgr = manager.lock().await;
-    mgr.force_hex_message(message).await
+    mgr.send(command).await
 }
 
 pub async fn trigger_reload(bot_state: &Data, guild_id: GuildId) {
@@ -606,8 +565,8 @@ pub async fn trigger_reload(bot_state: &Data, guild_id: GuildId) {
     drop(dj_managers);
 
     let manager = manager_arc.lock().await;
-    if let Some(tx) = &manager.command_tx
-        && let Err(e) = tx.send(DJCommand::ReloadConfig).await
+    if manager.command_tx.is_some()
+        && let Err(e) = manager.send(DJCommand::ReloadConfig).await
     {
         tracing::warn!(
             "Failed to send reload command to DJ in guild {}: {}",

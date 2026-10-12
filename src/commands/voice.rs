@@ -1,4 +1,4 @@
-use crate::audio::dj::manager::{DJStateType, trigger_reload};
+use crate::audio::dj::manager::{DJCommand, DJStateType, send_dj_command, trigger_reload};
 use crate::commands::utils;
 use crate::commands::utils::{Context, Error};
 use serenity::all::{ChannelId, ChannelType, GuildId};
@@ -135,8 +135,12 @@ pub async fn play_message(
     // Check if use_dj is set to true
     if use_dj.unwrap_or(false) {
         // Use DJ to play the message
-        match crate::audio::dj::manager::force_hex_message(ctx.data(), guild_id, message.clone())
-            .await
+        match send_dj_command(
+            ctx.data(),
+            guild_id,
+            DJCommand::ForceHexMessage(message.clone()),
+        )
+        .await
         {
             Ok(_) => {
                 reply
@@ -918,7 +922,10 @@ pub async fn manage_dj(
                 return Ok(());
             }
 
-            if let Err(e) = mgr.set_announcement_channel(announcement_channel).await {
+            if let Err(e) = mgr
+                .send(DJCommand::SetAnnouncementChannel(announcement_channel))
+                .await
+            {
                 ctx.say(format!("Failed to configure DJ: {}", e)).await?;
                 return Ok(());
             }
@@ -1122,8 +1129,12 @@ pub async fn advance_dj_state(
         None
     };
 
-    if let Err(e) =
-        crate::audio::dj::manager::force_advance(ctx.data(), guild_id, state_type_filter).await
+    if let Err(e) = send_dj_command(
+        ctx.data(),
+        guild_id,
+        DJCommand::ForceAdvance(state_type_filter),
+    )
+    .await
     {
         ctx.say(format!("Failed to force DJ state advance: {}", e))
             .await?;
