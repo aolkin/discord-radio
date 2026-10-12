@@ -1,17 +1,40 @@
+use super::{CommonSegmentPlaybackConfig, TimedSegment};
 use crate::audio::dj::state_machine::format_dj_track_name;
 use crate::audio::tracks::{StartTrackArgs, TrackManager};
+use std::ops::Deref;
 use std::time::Duration;
 use tokio::sync::Mutex;
 
 #[derive(Debug)]
-pub struct TrackPlayback {
-    pub filename: String,
-    pub volume: f32,
-    pub start_position: Option<Duration>,
+pub struct TrackSegment {
+    timer: TimedSegment,
+    filename: String,
+    volume: f32,
+    start_position: Option<Duration>,
 }
 
-impl TrackPlayback {
-    pub fn track_name(&self) -> String {
+impl TrackSegment {
+    pub fn new(
+        filename: String,
+        volume: f32,
+        start_position: Option<Duration>,
+        duration: Duration,
+        signal_profile: Option<String>,
+        channel_status: Option<&str>,
+    ) -> Self {
+        let playback_config = CommonSegmentPlaybackConfig {
+            signal_profile: signal_profile.map(Into::into),
+            channel_status: channel_status.map(with_status_emoji),
+        };
+        Self {
+            timer: TimedSegment::new(playback_config, duration),
+            filename,
+            volume,
+            start_position,
+        }
+    }
+
+    fn track_name(&self) -> String {
         format_dj_track_name(&self.filename)
     }
 
@@ -65,7 +88,14 @@ impl TrackPlayback {
     }
 }
 
-pub fn with_status_emoji(status: &str) -> String {
+impl Deref for TrackSegment {
+    type Target = CommonSegmentPlaybackConfig;
+    fn deref(&self) -> &Self::Target {
+        &self.timer
+    }
+}
+
+fn with_status_emoji(status: &str) -> String {
     let starts_with_emoji = status.chars().next().is_some_and(|c| {
         matches!(c as u32,
             0x1F300..=0x1F9FF | // Misc Symbols and Pictographs, Emoticons, Transport and Map, Supplemental Symbols

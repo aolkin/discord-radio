@@ -3,7 +3,7 @@ use crate::audio::dj::manager::DJStateType;
 use crate::audio::dj::scheduler::{DJStateEntry, WeightedScheduler};
 use crate::audio::dj::segments::SegmentCtx;
 use crate::audio::dj::segments::{
-    NoiseSegment, Segment, SignalProfilePlayback, TrackPlayback, with_status_emoji,
+    NoiseSegment, Segment, SegmentPlaybackConfig, SignalProfilePlayback, TrackSegment,
 };
 use crate::audio::dj::serde::{deser_instant, ser_instant};
 use crate::audio::tracks::TrackManager;
@@ -261,7 +261,7 @@ impl DJStateMachine {
                     );
                 }
 
-                TrackPlayback::stop_file(track_manager, filename).await?;
+                TrackSegment::stop_file(track_manager, filename).await?;
 
                 // Remove the track status from the stack if present
                 if let Some(status_msg) = status_message {
@@ -370,12 +370,17 @@ impl DJStateMachine {
             (None, max_dur)
         };
 
-        let playback = TrackPlayback {
-            filename: track_entry.filename.clone(),
-            volume: track_entry.volume.unwrap_or(1.0),
+        let volume = track_entry.volume.unwrap_or(1.0);
+
+        let segment = TrackSegment::new(
+            track_entry.filename.clone(),
+            volume,
             start_position,
-        };
-        playback.start(track_manager).await?;
+            play_duration,
+            track_entry.signal_profile.clone(),
+            track_entry.channel_status.as_deref(),
+        );
+        segment.start(track_manager).await?;
 
         tracing::info!(
             "DJ starting track '{}' (duration: {:.1}s) in guild {}",
@@ -385,20 +390,17 @@ impl DJStateMachine {
         );
 
         // Push track channel status onto the voice channel status stack if configured
-        let status_message = if let Some(ref status) = track_entry.channel_status {
-            let status_with_emoji = with_status_emoji(status);
+        let status_message = segment.channel_status();
+        if let Some(ref status) = status_message {
             bot_state
                 .voice_status_manager
-                .push_status(self.guild_id, &status_with_emoji, &self.http)
+                .push_status(self.guild_id, status, &self.http)
                 .await;
-            Some(status_with_emoji)
-        } else {
-            None
-        };
+        }
 
         Ok(DJState::PlayingTrack {
-            filename: playback.filename,
-            volume: playback.volume,
+            filename: track_entry.filename.clone(),
+            volume,
             started_at: std::time::Instant::now(),
             duration: play_duration,
             forced_profile: track_entry.signal_profile.clone(),

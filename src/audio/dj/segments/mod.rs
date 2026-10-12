@@ -1,6 +1,6 @@
 mod track;
 
-pub use track::{TrackPlayback, with_status_emoji};
+pub use track::TrackSegment;
 
 use crate::audio::dj::serde::{deser_instant, ser_instant};
 use crate::state::BotState;
