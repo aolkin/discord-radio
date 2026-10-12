@@ -1,5 +1,5 @@
 use crate::audio::dj::config::DJConfig;
-use crate::audio::dj::manager::{DJStateType, HexMessageRequest};
+use crate::audio::dj::manager::{DJStateType, HexMessageRequest, TrackRequest};
 use crate::audio::dj::scheduler::{DJStateEntry, WeightedScheduler};
 use crate::audio::dj::segments::{HexSegment, Segment, SignalProfilePlayback, TrackSegment};
 use crate::audio::dj::segments::{NoiseSegment, SegmentCtx};
@@ -144,6 +144,36 @@ impl DJStateMachine {
             loops,
             self.pick_random_announcement(),
             defaults.signal_profile.clone(),
+        )
+        .into();
+        self.enter_state(next_state, bot_state).await
+    }
+
+    pub async fn force_track(
+        &self,
+        bot_state: &Data,
+        request: TrackRequest,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        info!("DJ force transitioning to track: {}", request.filename);
+        let start_position = request
+            .start_position
+            .map(Duration::try_from_secs_f32)
+            .transpose()?;
+        let duration = match request.duration {
+            Some(seconds) => Duration::try_from_secs_f32(seconds)?,
+            None => bot_state
+                .duration_cache
+                .get_duration(&request.filename)
+                .await
+                .unwrap_or(Duration::from_secs(60)),
+        };
+        let next_state = TrackSegment::new(
+            request.filename,
+            request.volume.unwrap_or(1.0),
+            start_position,
+            duration,
+            None,
+            None,
         )
         .into();
         self.enter_state(next_state, bot_state).await

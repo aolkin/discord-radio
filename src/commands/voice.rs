@@ -167,6 +167,70 @@ pub async fn play_message(
     Ok(())
 }
 
+/// Have the DJ play an audio track now
+#[poise::command(
+    slash_command,
+    guild_only,
+    default_member_permissions = "ADMINISTRATOR"
+)]
+pub async fn play_track(
+    ctx: Context<'_>,
+    #[description = "Audio filename"]
+    #[autocomplete = "autocomplete_audio_file"]
+    filename: String,
+    #[description = "Volume 0.0-2.0 (0=silence, 1.0=unity, 2.0=+18dB boost, default 1.0)"]
+    volume: Option<f32>,
+    #[description = "Start position in seconds (default 0)"] start_position: Option<f32>,
+    #[description = "Seconds to play (default: track length)"] duration: Option<f32>,
+) -> Result<(), Error> {
+    let guild_id = ctx
+        .guild_id()
+        .ok_or("This command can only be used in a server")?;
+    let user_id = ctx.author().id;
+
+    tracing::info!(
+        "User {} executed play_track with file '{}' in guild {}",
+        user_id,
+        filename,
+        guild_id
+    );
+
+    ctx.defer_ephemeral().await?;
+
+    let request = crate::audio::dj::manager::TrackRequest {
+        filename: filename.clone(),
+        volume,
+        start_position,
+        duration,
+    };
+    if let Err(e) = request.validate() {
+        ctx.say(e).await?;
+        return Ok(());
+    }
+
+    if let Err(e) = ctx.data().file_resolver.resolve(&filename).await {
+        ctx.say(format!("Failed to resolve audio file: {}", e))
+            .await?;
+        return Ok(());
+    }
+
+    let content = match send_dj_command(ctx.data(), guild_id, DJCommand::ForceTrack(request)).await
+    {
+        Ok(()) => format!(
+            "DJ is now playing track: {} (volume {})",
+            filename,
+            volume.unwrap_or(1.0)
+        ),
+        Err(e) => format!(
+            "Failed to use DJ for track playback: {}\nNote: The DJ must be running to play tracks.",
+            e
+        ),
+    };
+    ctx.say(content).await?;
+
+    Ok(())
+}
+
 fn has_audio_extension(path: &std::path::Path) -> bool {
     path.extension().is_some_and(|ext| {
         matches!(

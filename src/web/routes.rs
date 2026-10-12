@@ -1,4 +1,6 @@
-use crate::audio::dj::manager::{DJCommand, DJStateType, send_dj_command, trigger_reload};
+use crate::audio::dj::manager::{
+    DJCommand, DJStateType, TrackRequest, send_dj_command, trigger_reload,
+};
 use crate::bucket::ObjectStoreError;
 use crate::state::Data;
 use crate::web::state_snapshot::BotSnapshot;
@@ -93,6 +95,32 @@ pub async fn play_hex_message(
         loops: None,
     };
     send_dj_command(&bot_state, guild_id, DJCommand::ForceHexMessage(request))
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(StatusCode::OK)
+}
+
+pub async fn play_track(
+    State(bot_state): State<Data>,
+    Path(guild_id): Path<String>,
+    AxumJson(request): AxumJson<TrackRequest>,
+) -> Result<StatusCode, StatusCode> {
+    let guild_id_parsed: u64 = guild_id.parse().map_err(|_| StatusCode::BAD_REQUEST)?;
+    let guild_id = GuildId::new(guild_id_parsed);
+
+    request.validate().map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    bot_state
+        .file_resolver
+        .resolve(&request.filename)
+        .await
+        .map_err(|e| match e {
+            ObjectStoreError::NotFound => StatusCode::NOT_FOUND,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        })?;
+
+    send_dj_command(&bot_state, guild_id, DJCommand::ForceTrack(request))
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
