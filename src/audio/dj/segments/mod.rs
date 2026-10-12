@@ -197,15 +197,6 @@ impl TrackSlot {
         *self.0.lock().unwrap() = Some(handle);
     }
 
-    /// An empty slot counts as ended.
-    pub fn has_ended(&self) -> bool {
-        self.0
-            .lock()
-            .unwrap()
-            .as_ref()
-            .is_none_or(TrackHandle::has_ended)
-    }
-
     pub async fn remove(&self, ctx: &SegmentCtx<'_>, fade: Duration) {
         let handle = self.0.lock().unwrap().take();
         if let Some(handle) = handle

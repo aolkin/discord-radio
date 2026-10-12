@@ -9,7 +9,9 @@ use async_trait::async_trait;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
+use std::sync::Mutex;
 use std::time::Duration;
+use tokio::sync::oneshot::{self, error::TryRecvError};
 
 const FADE_TIME: Duration = Duration::from_secs(1);
 
@@ -21,6 +23,8 @@ pub struct TrackSegment {
     start_position: Option<Duration>,
     #[serde(skip)]
     track: TrackSlot,
+    #[serde(skip)]
+    end_trigger: Mutex<Option<oneshot::Receiver<()>>>,
 }
 
 impl Deref for TrackSegment {
@@ -49,6 +53,7 @@ impl TrackSegment {
             volume,
             start_position,
             track: Default::default(),
+            end_trigger: Default::default(),
         }
     }
 
@@ -60,13 +65,14 @@ impl TrackSegment {
     ) -> anyhow::Result<()> {
         let path = ctx.bot_state.file_resolver.resolve(&self.filename).await?;
         let source = open_track_source(&path, start_position).map_err(|e| anyhow::anyhow!(e))?;
-        let fade_out = FADE_TIME.min(play_duration);
         let mut processor = ctx.audio_processor().await?.write_owned().await;
         let mixer = processor.mixer_mut();
         let track = mixer.add_track(Box::new(source), 0.0, false);
         mixer.update_track_volume(track.id, self.volume, FADE_TIME)?;
-        mixer.remove_track(track.id, fade_out, Some(play_duration - fade_out));
+        let end_trigger = mixer.add_trigger(track.id, play_duration)?;
+        mixer.remove_track(track.id, FADE_TIME, Some(play_duration));
         self.track.set(track);
+        *self.end_trigger.lock().unwrap() = Some(end_trigger);
         Ok(())
     }
 
@@ -117,7 +123,11 @@ impl TrackSegment {
 #[typetag::serde]
 impl Segment for TrackSegment {
     async fn is_complete(&self) -> bool {
-        self.track.has_ended()
+        self.end_trigger
+            .lock()
+            .unwrap()
+            .as_mut()
+            .is_none_or(|rx| !matches!(rx.try_recv(), Err(TryRecvError::Empty)))
     }
 
     fn elapsed(&self) -> Duration {
@@ -164,7 +174,9 @@ impl Segment for TrackSegment {
     }
 
     async fn exit(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
-        self.track.remove(ctx, FADE_TIME).await;
+        if !self.is_complete().await {
+            self.track.remove(ctx, FADE_TIME).await;
+        }
         Ok(())
     }
 
