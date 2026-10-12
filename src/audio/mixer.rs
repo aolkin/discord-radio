@@ -291,7 +291,7 @@ impl Mixer {
         let fade = self.duration_frames(fade);
         let at = at.map(|at| self.duration_frames(at));
         if let Ok(track) = self.track_mut(handle) {
-            let start = at.unwrap_or(track.played_frames);
+            let start = at.map_or(track.played_frames, |at| at.max(track.played_frames));
             if track
                 .stop
                 .as_ref()
