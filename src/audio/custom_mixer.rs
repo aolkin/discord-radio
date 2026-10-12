@@ -11,10 +11,10 @@ pub struct TrackId(u64);
 pub enum StopReason {
     /// A source played to its end.
     Completed,
-    /// Removed with no fade.
+    /// Removed directly.
     Removed,
-    /// A stop_at_end fade finished.
-    Faded,
+    /// Stopped at a requested time.
+    Stopped,
     /// A looping source failed to restart.
     FailedReset,
     /// Dropped before any other reason was set.
