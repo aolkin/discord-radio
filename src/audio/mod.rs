@@ -1,11 +1,11 @@
 pub mod connection;
-pub mod custom_mixer;
 pub mod decoder;
 pub mod distributor;
 pub mod dj;
 pub mod dsp;
 pub mod duration;
 pub mod helpers;
+pub mod mixer;
 pub mod opus_encoder;
 pub mod processing_thread;
 pub mod profiles;
