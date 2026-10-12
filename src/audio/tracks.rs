@@ -1,4 +1,4 @@
-use crate::audio::custom_mixer::AudioSource;
+use crate::audio::custom_mixer::{AudioSource, TrackEndCallback, TrackHandle};
 use crate::audio::decoder::SymphoniaSource;
 use crate::audio::processing_thread::AudioProcessor;
 use crate::state::Data;
@@ -26,6 +26,7 @@ pub struct TrackInfo {
     /// The raw filename or `s3://` key, not a resolved path — persisting the
     /// resolved form would break restoration after an R2 cache eviction.
     pub filename: String,
+    pub mixer_handle: TrackHandle,
     pub volume: f32,
     pub fade_task: Option<JoinHandle<()>>,
     pub fade_cancel: Option<CancellationToken>,
@@ -72,7 +73,7 @@ impl TrackManager {
     pub async fn start_track_with_callback(
         &mut self,
         args: StartTrackArgs,
-        callback: Option<crate::audio::custom_mixer::TrackEndCallback>,
+        callback: Option<TrackEndCallback>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let resolved_filename = self.bot_state.file_resolver.resolve(&args.filename).await?;
 
@@ -112,7 +113,7 @@ impl TrackManager {
         }
 
         // Add to mixer with automatic cleanup callback
-        {
+        let mixer_handle = {
             let mut processor = processor_arc.write().await;
 
             // Create cleanup callback that removes track from TrackManager when it ends
@@ -124,37 +125,35 @@ impl TrackManager {
                 let bot_state = self.bot_state.clone();
                 let track_name_for_cleanup = args.name.clone();
 
-                let cleanup_cb: crate::audio::custom_mixer::TrackEndCallback =
-                    Arc::new(move || {
-                        let guild_id_copy = guild_id;
-                        let bot_state_copy = bot_state.clone();
-                        let name_copy = track_name_for_cleanup.clone();
+                let cleanup_cb: TrackEndCallback = Arc::new(move |handle| {
+                    let guild_id_copy = guild_id;
+                    let bot_state_copy = bot_state.clone();
+                    let name_copy = track_name_for_cleanup.clone();
 
-                        // Spawn a std::thread that creates its own tokio runtime
-                        std::thread::spawn(move || {
-                            let rt = tokio::runtime::Runtime::new().unwrap();
-                            rt.block_on(async move {
-                                tracing::info!(
-                                    "Track '{}' finished in guild {}, cleaning up",
-                                    name_copy,
-                                    guild_id_copy
-                                );
-                                let track_managers = bot_state_copy.track_managers.read().await;
-                                if let Some(manager_arc) = track_managers.get(&guild_id_copy) {
-                                    let mut manager = manager_arc.lock().await;
-                                    manager.remove_track(&name_copy).await;
-                                }
-                            });
+                    // Spawn a std::thread that creates its own tokio runtime
+                    std::thread::spawn(move || {
+                        let rt = tokio::runtime::Runtime::new().unwrap();
+                        rt.block_on(async move {
+                            tracing::info!(
+                                "Track '{}' finished in guild {}, cleaning up",
+                                name_copy,
+                                guild_id_copy
+                            );
+                            let track_managers = bot_state_copy.track_managers.read().await;
+                            if let Some(manager_arc) = track_managers.get(&guild_id_copy) {
+                                let mut manager = manager_arc.lock().await;
+                                manager.remove_handle(handle).await;
+                            }
                         });
                     });
+                });
 
                 // Combine with user callback if provided
                 if let Some(user_cb) = callback {
-                    Some(Arc::new(move || {
-                        user_cb();
-                        cleanup_cb();
-                    })
-                        as crate::audio::custom_mixer::TrackEndCallback)
+                    Some(Arc::new(move |handle| {
+                        user_cb(handle);
+                        cleanup_cb(handle);
+                    }) as TrackEndCallback)
                 } else {
                     Some(cleanup_cb)
                 }
@@ -163,14 +162,13 @@ impl TrackManager {
                 callback
             };
 
-            processor.mixer_mut().add_track_with_callback(
-                args.name.clone(),
+            processor.mixer_mut().add_track(
                 Box::new(source),
                 args.volume,
                 args.loops,
                 final_callback,
-            )?;
-        }
+            )
+        };
 
         // If we're starting from a position other than the beginning, adjust start_time
         // backwards so that elapsed time calculations include the seek position
@@ -183,6 +181,7 @@ impl TrackManager {
         let track = TrackInfo {
             name: args.name.clone(),
             filename: args.filename.clone(),
+            mixer_handle,
             volume: args.volume,
             fade_task: None,
             fade_cancel: None,
@@ -205,19 +204,20 @@ impl TrackManager {
             // Set initial volume to 0 in mixer
             {
                 let mut proc = processor.write().await;
-                proc.mixer_mut().update_track_volume(&track.name, 0.0)?;
+                proc.mixer_mut()
+                    .update_track_volume(track.mixer_handle, 0.0)?;
             }
 
             let fade_cancel = CancellationToken::new();
             let processor_clone = processor.clone();
             let cancel_clone = fade_cancel.clone();
             let target_volume = track.volume;
-            let track_name = track.name.clone();
+            let handle = track.mixer_handle;
 
             let fade_task = tokio::spawn(async move {
                 if let Err(e) = fade_volume_dsp(
                     processor_clone,
-                    track_name,
+                    handle,
                     0.0,
                     target_volume,
                     fade_time,
@@ -235,7 +235,7 @@ impl TrackManager {
             // Set volume directly in mixer
             let mut proc = processor.write().await;
             proc.mixer_mut()
-                .update_track_volume(&track.name, track.volume)?;
+                .update_track_volume(track.mixer_handle, track.volume)?;
         }
 
         let key = track.name.clone();
@@ -300,12 +300,12 @@ impl TrackManager {
             let cancel_token = CancellationToken::new();
             let cancel_clone = cancel_token.clone();
             let processor_clone = processor_arc.clone();
-            let track_name = name.to_string();
+            let handle = track_info.mixer_handle;
 
             let fade_task = tokio::spawn(async move {
                 if let Err(e) = fade_volume_dsp(
                     processor_clone,
-                    track_name,
+                    handle,
                     current_volume,
                     volume,
                     fade_time,
@@ -321,7 +321,8 @@ impl TrackManager {
             track_info.fade_cancel = Some(cancel_token);
         } else {
             let mut proc = processor_arc.write().await;
-            proc.mixer_mut().update_track_volume(name, volume)?;
+            proc.mixer_mut()
+                .update_track_volume(track_info.mixer_handle, volume)?;
             track_info.fade_task = None;
             track_info.fade_cancel = None;
         }
@@ -359,7 +360,8 @@ impl TrackManager {
         track_info.loops = loops;
 
         let mut proc = processor_arc.write().await;
-        proc.mixer_mut().update_track_loops(name, loops)?;
+        proc.mixer_mut()
+            .update_track_loops(track_info.mixer_handle, loops)?;
 
         self.persist_state().await;
 
@@ -367,12 +369,25 @@ impl TrackManager {
     }
 
     pub async fn remove_track(&mut self, name: &str) {
-        if self.tracks.remove(name).is_some() {
-            // Also remove from mixer
-            let mut proc = self.audio_processor.write().await;
-            proc.mixer_mut().remove_track(name);
+        let info = self.tracks.remove(name);
+        self.finish_removing_track(info).await;
+    }
 
-            tracing::debug!("Removed track '{}' from guild {}", name, self.guild_id);
+    async fn remove_handle(&mut self, handle: TrackHandle) {
+        let info = self
+            .tracks
+            .extract_if(|_k, info| info.mixer_handle == handle)
+            .map(|(_, info)| info)
+            .next();
+        self.finish_removing_track(info).await;
+    }
+
+    async fn finish_removing_track(&mut self, info: Option<TrackInfo>) {
+        if let Some(info) = info {
+            let mut proc = self.audio_processor.write().await;
+            proc.mixer_mut().remove_track(info.mixer_handle);
+
+            tracing::debug!("Removed track '{}' from guild {}", info.name, self.guild_id);
             self.persist_state().await;
         }
     }
@@ -400,6 +415,7 @@ impl TrackManager {
         }
 
         let current_volume = track_info.volume;
+        let handle = track_info.mixer_handle;
 
         if fade_time > 0.0 {
             let cancel_token = CancellationToken::new();
@@ -411,7 +427,7 @@ impl TrackManager {
             tokio::spawn(async move {
                 if let Err(e) = fade_volume_dsp(
                     processor_clone.clone(),
-                    track_name.clone(),
+                    handle,
                     current_volume,
                     0.0,
                     fade_time,
@@ -424,12 +440,12 @@ impl TrackManager {
 
                 // Remove from mixer after fade completes
                 let mut proc = processor_clone.write().await;
-                proc.mixer_mut().remove_track(&track_name);
+                proc.mixer_mut().remove_track(handle);
             });
         } else {
             // No fade - remove immediately
             let mut proc = self.audio_processor.write().await;
-            proc.mixer_mut().remove_track(name);
+            proc.mixer_mut().remove_track(handle);
         }
 
         self.tracks.remove(name);
@@ -512,14 +528,14 @@ impl TrackManager {
 /// # Arguments
 ///
 /// * `processor` - Audio processor containing the mixer
-/// * `track_name` - Name of the track to fade
+/// * `handle` - Mixer handle of the track to fade
 /// * `from_volume` - Starting user volume (0.0-2.0)
 /// * `to_volume` - Target user volume (0.0-2.0)
 /// * `fade_time` - Duration of fade in seconds
 /// * `cancel` - Token to cancel the fade early
 async fn fade_volume_dsp(
     processor: Arc<RwLock<AudioProcessor>>,
-    track_name: String,
+    handle: TrackHandle,
     from_volume: f32,
     to_volume: f32,
     fade_time: f32,
@@ -541,7 +557,7 @@ async fn fade_volume_dsp(
             let mut proc = processor.write().await;
             if proc
                 .mixer_mut()
-                .update_track_volume(&track_name, current_volume)
+                .update_track_volume(handle, current_volume)
                 .is_err()
             {
                 // Track might have been removed
