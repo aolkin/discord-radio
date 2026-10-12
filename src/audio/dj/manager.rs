@@ -62,19 +62,11 @@ pub async fn dj_task(
 
     let (forced_profile, status_message) = {
         let segment = &initial_state.segment;
-        let track_manager = bot_state
-            .track_managers
-            .read()
-            .await
-            .get(&guild_id)
-            .expect("TrackManager should be initialized before DJ starts")
-            .clone();
         let _ = segment
             .restore(&SegmentCtx {
                 guild_id: &guild_id,
                 bot_state: &bot_state,
                 http: &http,
-                track_manager: &track_manager,
             })
             .await
             .inspect_err(|e| tracing::warn!("Failed to restore segment: {e:?}"));
@@ -188,20 +180,13 @@ pub async fn dj_task(
     'dj: loop {
         sleep(Duration::from_millis(DJ_TICK_INTERVAL_MS)).await;
 
-        let track_managers = bot_state.track_managers.read().await;
-        let manager_arc = track_managers
-            .get(&guild_id)
-            .expect("TrackManager should be initialized before DJ starts")
-            .clone();
-        drop(track_managers);
-
         // Process any pending commands
         while let Ok(cmd) = command_rx.try_recv() {
             match cmd {
                 DJCommand::ForceAdvance(state_type_filter) => {
                     tracing::info!("Processing force advance for DJ in guild {}", guild_id);
                     if let Err(e) = state_machine
-                        .force_advance(&manager_arc, &bot_state, state_type_filter)
+                        .force_advance(&bot_state, state_type_filter)
                         .await
                     {
                         tracing::error!("DJ failed to force advance: {}", e);
@@ -209,16 +194,13 @@ pub async fn dj_task(
                 }
                 DJCommand::ForceHexMessage(request) => {
                     tracing::info!("Processing force hex message for DJ in guild {}", guild_id);
-                    if let Err(e) = state_machine
-                        .force_hex_message(&manager_arc, &bot_state, request)
-                        .await
-                    {
+                    if let Err(e) = state_machine.force_hex_message(&bot_state, request).await {
                         tracing::error!("DJ failed to force hex message: {}", e);
                     }
                 }
                 DJCommand::Stop => {
                     tracing::info!("Processing stop command for DJ in guild {}", guild_id);
-                    state_machine.stop(&manager_arc, &bot_state).await;
+                    state_machine.stop(&bot_state).await;
                     tracing::info!("DJ task stopped for guild {}", guild_id);
                     break 'dj;
                 }
@@ -278,9 +260,7 @@ pub async fn dj_task(
         }
 
         if state_machine.is_complete().await
-            && let Err(e) = state_machine
-                .force_advance(&manager_arc, &bot_state, None)
-                .await
+            && let Err(e) = state_machine.force_advance(&bot_state, None).await
         {
             tracing::error!("DJ state machine error in guild {}: {}", guild_id, e);
         }

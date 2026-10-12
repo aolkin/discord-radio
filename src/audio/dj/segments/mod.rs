@@ -6,9 +6,11 @@ pub use hex::HexSegment;
 pub use noise::NoiseSegment;
 pub use track::TrackSegment;
 
+use crate::audio::custom_mixer::TrackHandle;
 use crate::audio::dj::serde::{deser_instant, ser_instant};
-use crate::audio::tracks::TrackManager;
+use crate::audio::processing_thread::AudioProcessor;
 use crate::state::BotState;
+use anyhow::Context;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serenity::http::Http;
@@ -16,14 +18,26 @@ use serenity::model::id::GuildId;
 use std::borrow::ToOwned;
 use std::fmt::Debug;
 use std::ops::Deref;
+use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 
 pub struct SegmentCtx<'a> {
     pub guild_id: &'a GuildId,
     pub bot_state: &'a BotState,
     pub http: &'a Http,
-    pub track_manager: &'a Mutex<TrackManager>,
+}
+
+impl SegmentCtx<'_> {
+    pub async fn audio_processor(&self) -> anyhow::Result<Arc<RwLock<AudioProcessor>>> {
+        self.bot_state
+            .audio_processors
+            .read()
+            .await
+            .get(self.guild_id)
+            .cloned()
+            .with_context(|| format!("No audio processor for guild {}", self.guild_id))
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -172,5 +186,36 @@ impl Deref for TimedSegment {
     type Target = CommonSegmentPlaybackConfig;
     fn deref(&self) -> &Self::Target {
         &self.playback_config
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct TrackSlot(std::sync::Mutex<Option<TrackHandle>>);
+
+impl TrackSlot {
+    pub fn set(&self, handle: TrackHandle) {
+        *self.0.lock().unwrap() = Some(handle);
+    }
+
+    /// An empty slot counts as ended.
+    pub fn has_ended(&self) -> bool {
+        self.0
+            .lock()
+            .unwrap()
+            .as_ref()
+            .is_none_or(TrackHandle::has_ended)
+    }
+
+    pub async fn remove(&self, ctx: &SegmentCtx<'_>, fade: Duration) {
+        let handle = self.0.lock().unwrap().take();
+        if let Some(handle) = handle
+            && let Ok(processor) = ctx.audio_processor().await
+        {
+            processor
+                .write()
+                .await
+                .mixer_mut()
+                .remove_track(handle.id, fade, None);
+        }
     }
 }

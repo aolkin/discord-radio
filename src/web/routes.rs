@@ -157,7 +157,6 @@ pub async fn change_track_state(
                     loops,
                     start_position: None,
                     persist: true,
-                    scheduled_removal: None,
                 })
                 .await
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;

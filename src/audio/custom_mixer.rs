@@ -1,26 +1,53 @@
 use std::collections::{BTreeMap, HashMap};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
-use tokio::sync::oneshot;
+use tokio::sync::watch;
 
 use crate::audio::helpers::perceptual_level_to_amplitude;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct TrackHandle(u64);
+pub struct TrackId(u64);
 
-/// Holds an optional [`TrackHandle`]; 0 means none, which is why handles start at 1.
-#[derive(Debug, Default)]
-pub struct AtomicTrackHandle(AtomicU64);
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StopReason {
+    /// A source played to its end.
+    Completed,
+    /// Removed directly.
+    Removed,
+    /// Stopped at a requested time.
+    Stopped,
+    /// A looping source failed to restart.
+    FailedReset,
+    /// Dropped before any other reason was set.
+    Dropped,
+    /// The end signal was lost.
+    Lost,
+}
 
-impl AtomicTrackHandle {
-    pub fn store(&self, handle: TrackHandle) {
-        self.0.store(handle.0, Ordering::Relaxed);
+/// A track added to the mixer. It has ended once it plays to its end, is
+/// removed, or the mixer is dropped.
+#[derive(Clone, Debug)]
+pub struct TrackHandle {
+    pub id: TrackId,
+    /// Set once, when the track ends.
+    end_rx: watch::Receiver<Option<StopReason>>,
+}
+
+impl TrackHandle {
+    pub fn has_ended(&self) -> bool {
+        self.stop_reason().is_some()
     }
 
-    pub fn take(&self) -> Option<TrackHandle> {
-        match self.0.swap(0, Ordering::Relaxed) {
-            0 => None,
-            raw => Some(TrackHandle(raw)),
+    pub fn stop_reason(&self) -> Option<StopReason> {
+        *self.end_rx.borrow()
+    }
+
+    pub async fn ended(&self) -> StopReason {
+        match self.end_rx.clone().wait_for(Option::is_some).await {
+            Ok(reason) => reason.unwrap_or(StopReason::Lost),
+            Err(e) => {
+                tracing::error!("Track {:?} lost its end signal: {e}", self.id);
+                StopReason::Lost
+            }
         }
     }
 }
@@ -58,7 +85,7 @@ pub struct MixerTrack {
     ramp: Option<VolumeRamp>,
     pub loops: bool,
     pub active: bool,
-    end_tx: Option<oneshot::Sender<()>>,
+    end_tx: watch::Sender<Option<StopReason>>,
 }
 
 impl MixerTrack {
@@ -66,7 +93,7 @@ impl MixerTrack {
         source: Box<dyn AudioSource>,
         volume: f32,
         loops: bool,
-        end_tx: oneshot::Sender<()>,
+        end_tx: watch::Sender<Option<StopReason>>,
     ) -> Self {
         Self {
             source,
@@ -77,13 +104,20 @@ impl MixerTrack {
             ramp: None,
             loops,
             active: true,
-            end_tx: Some(end_tx),
+            end_tx,
         }
     }
 
     fn set_volume(&mut self, volume: f32) {
         self.volume = volume;
         self.amplitude = perceptual_level_to_amplitude(volume);
+    }
+
+    /// Only the first call has an effect.
+    fn end(&mut self, reason: StopReason) {
+        self.end_tx.send_modify(|end| {
+            end.get_or_insert(reason);
+        });
     }
 
     fn start_due_fades(&mut self) {
@@ -139,16 +173,17 @@ impl MixerTrack {
                         reset_attempts += 1;
                         // Continue loop to try getting a frame from the reset source
                     } else {
-                        if reset_attempts >= MAX_RESET_ATTEMPTS {
+                        let reason = if reset_attempts >= MAX_RESET_ATTEMPTS {
                             tracing::error!(
                                 "Track failed to reset after {} attempts, stopping playback",
                                 MAX_RESET_ATTEMPTS
                             );
-                        }
+                            StopReason::FailedReset
+                        } else {
+                            StopReason::Completed
+                        };
                         self.active = false;
-                        if let Some(end_tx) = self.end_tx.take() {
-                            let _ = end_tx.send(());
-                        }
+                        self.end(reason);
                         return Some([0.0, 0.0]);
                     }
                 }
@@ -157,15 +192,21 @@ impl MixerTrack {
     }
 }
 
+impl Drop for MixerTrack {
+    fn drop(&mut self) {
+        self.end(StopReason::Dropped);
+    }
+}
+
 pub struct CustomMixer {
-    tracks: HashMap<TrackHandle, MixerTrack>,
+    tracks: HashMap<TrackId, MixerTrack>,
     next_id: u64,
     sample_rate: u32,
     #[allow(dead_code)]
     channels: u16,
 }
 
-/// A [`TrackHandle`] whose track was removed or has ended is a no-op for
+/// A [`TrackId`] whose track was removed or has ended is a no-op for
 /// `remove_track`, and the `update_*` methods return an error for it.
 impl CustomMixer {
     pub fn new(sample_rate: u32) -> Self {
@@ -177,22 +218,20 @@ impl CustomMixer {
         }
     }
 
-    /// The receiver gets `Ok` when the track plays to its end, and `Err` when
-    /// the track is removed or the mixer is dropped first.
     pub fn add_track(
         &mut self,
         source: Box<dyn AudioSource>,
         volume: f32,
         loops: bool,
-    ) -> (TrackHandle, oneshot::Receiver<()>) {
-        let handle = TrackHandle(self.next_id);
+    ) -> TrackHandle {
+        let handle = TrackId(self.next_id);
         self.next_id += 1;
 
-        let (end_tx, end_rx) = oneshot::channel();
+        let (end_tx, end_rx) = watch::channel(None);
         self.tracks
             .insert(handle, MixerTrack::new(source, volume, loops, end_tx));
 
-        (handle, end_rx)
+        TrackHandle { id: handle, end_rx }
     }
 
     /// Ramps the track linearly to silence over `fade`, then removes it.
@@ -203,14 +242,13 @@ impl CustomMixer {
     ///
     /// A starting ramp replaces any volume ramp in progress on the track, and a
     /// ramp scheduled for the same frame as a pending one replaces it.
-    pub fn remove_track(
-        &mut self,
-        handle: TrackHandle,
-        fade: Duration,
-        at: Option<Duration>,
-    ) -> bool {
+    pub fn remove_track(&mut self, handle: TrackId, fade: Duration, at: Option<Duration>) -> bool {
         if fade.is_zero() && at.is_none() {
-            return self.tracks.remove(&handle).is_some();
+            return self
+                .tracks
+                .remove(&handle)
+                .map(|mut track| track.end(StopReason::Removed))
+                .is_some();
         }
         self.schedule_fade(handle, 0.0, fade, at, true).is_ok()
     }
@@ -224,7 +262,7 @@ impl CustomMixer {
     /// Replaces any volume ramp in progress on the track.
     pub fn update_track_volume(
         &mut self,
-        handle: TrackHandle,
+        handle: TrackId,
         volume: f32,
         fade: Duration,
     ) -> anyhow::Result<()> {
@@ -233,7 +271,7 @@ impl CustomMixer {
 
     fn schedule_fade(
         &mut self,
-        handle: TrackHandle,
+        handle: TrackId,
         target: f32,
         fade: Duration,
         at: Option<Duration>,
@@ -257,12 +295,12 @@ impl CustomMixer {
         (duration.as_secs_f64() * f64::from(self.sample_rate)).round() as u64
     }
 
-    pub fn update_track_loops(&mut self, handle: TrackHandle, loops: bool) -> anyhow::Result<()> {
+    pub fn update_track_loops(&mut self, handle: TrackId, loops: bool) -> anyhow::Result<()> {
         self.track_mut(handle)?.loops = loops;
         Ok(())
     }
 
-    fn track_mut(&mut self, handle: TrackHandle) -> anyhow::Result<&mut MixerTrack> {
+    fn track_mut(&mut self, handle: TrackId) -> anyhow::Result<&mut MixerTrack> {
         self.tracks
             .get_mut(&handle)
             .ok_or_else(|| anyhow::anyhow!("Track {handle:?} not found"))
@@ -275,6 +313,7 @@ impl CustomMixer {
         for (handle, track) in self.tracks.iter_mut() {
             track.start_due_fades();
             if track.advance_ramp() {
+                track.end(StopReason::Stopped);
                 finished_tracks.push(*handle);
                 continue;
             }

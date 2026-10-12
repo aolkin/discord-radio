@@ -1,13 +1,12 @@
 use super::{
     CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
+    TrackSlot,
 };
-use crate::audio::custom_mixer::AtomicTrackHandle;
 use crate::audio::dj::config::{HexMessageDefaults, HexMessageEntry};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
 use crate::audio::processing_thread::AudioProcessor;
 use crate::audio::tracks::open_track_source;
 use crate::bucket::FileResolver;
-use anyhow::Context;
 use async_trait::async_trait;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -25,7 +24,7 @@ struct HexProgress {
     position: AtomicUsize,
     loops: AtomicUsize,
     #[serde(skip)]
-    current_track: AtomicTrackHandle,
+    current_track: TrackSlot,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -76,9 +75,7 @@ impl HexSegment {
     }
 
     async fn start_run(&self, ctx: &SegmentCtx<'_>) -> anyhow::Result<()> {
-        let processor = audio_processor(ctx)
-            .await
-            .with_context(|| format!("No audio processor for guild {}", ctx.guild_id))?;
+        let processor = ctx.audio_processor().await?;
         let handle = tokio::spawn(run_hex_message(
             self.message.clone(),
             self.volume,
@@ -153,15 +150,10 @@ impl Segment for HexSegment {
             handle.abort();
             let _ = handle.await;
         }
-        if let Some(handle) = self.progress.current_track.take()
-            && let Some(processor) = audio_processor(ctx).await
-        {
-            processor
-                .write()
-                .await
-                .mixer_mut()
-                .remove_track(handle, Duration::ZERO, None);
-        }
+        self.progress
+            .current_track
+            .remove(ctx, Duration::ZERO)
+            .await;
         if let Some(metrics) = ctx.bot_state.metrics.read().await.as_ref() {
             let loops_played = self.progress.loops.load(Ordering::Relaxed) as u64;
             metrics.record_hex_message_loops(ctx.guild_id.get(), loops_played);
@@ -224,16 +216,14 @@ async fn run_hex_message(
                         continue;
                     }
                 };
-                let end_rx = {
-                    let mut processor = processor.write().await;
-                    let (handle, end_rx) =
-                        processor
-                            .mixer_mut()
-                            .add_track(Box::new(source), volume, false);
-                    progress.current_track.store(handle);
-                    end_rx
-                };
-                let _ = end_rx.await;
+                let track =
+                    processor
+                        .write()
+                        .await
+                        .mixer_mut()
+                        .add_track(Box::new(source), volume, false);
+                progress.current_track.set(track.clone());
+                track.ended().await;
             }
             _ => tracing::warn!("Audio file not found: {}", filename),
         }
@@ -259,15 +249,6 @@ async fn run_hex_message(
         };
         tokio::time::sleep(delay).await;
     }
-}
-
-async fn audio_processor(ctx: &SegmentCtx<'_>) -> Option<Arc<RwLock<AudioProcessor>>> {
-    ctx.bot_state
-        .audio_processors
-        .read()
-        .await
-        .get(ctx.guild_id)
-        .cloned()
 }
 
 fn message_to_hex_sequence(message: &str) -> Vec<char> {
