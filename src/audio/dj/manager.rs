@@ -408,7 +408,7 @@ impl DJManager {
         }
     }
 
-    pub(crate) async fn send(
+    pub async fn send(
         &self,
         command: DJCommand,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -490,9 +490,7 @@ impl DJManager {
     pub async fn stop(&mut self, bot_state: &Data, http: Arc<Http>) {
         if let Some(handle) = self.task_handle.take() {
             // Send graceful stop command
-            if self.command_tx.is_some()
-                && let Err(e) = self.send(DJCommand::Stop).await
-            {
+            if let Err(e) = self.send(DJCommand::Stop).await {
                 tracing::warn!("Failed to send stop command to DJ task: {}", e);
             }
             self.command_tx = None;
