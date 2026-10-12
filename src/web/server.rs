@@ -54,6 +54,10 @@ pub async fn run_web_server(
             post(routes::play_hex_message),
         )
         .route(
+            "/api/guilds/{guild_id}/track/play",
+            post(routes::play_track),
+        )
+        .route(
             "/api/guilds/{guild_id}/tracks",
             post(routes::change_track_state),
         )

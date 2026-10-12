@@ -100,6 +100,44 @@ pub async fn play_hex_message(
 }
 
 #[derive(Debug, Deserialize)]
+pub struct PlayTrackRequest {
+    pub filename: Option<String>,
+    pub volume: Option<f32>,
+}
+
+pub async fn play_track(
+    State(bot_state): State<Data>,
+    Path(guild_id): Path<String>,
+    AxumJson(request): AxumJson<PlayTrackRequest>,
+) -> Result<StatusCode, StatusCode> {
+    let guild_id_parsed: u64 = guild_id.parse().map_err(|_| StatusCode::BAD_REQUEST)?;
+    let guild_id = GuildId::new(guild_id_parsed);
+
+    let Some(filename) = request.filename else {
+        return Err(StatusCode::BAD_REQUEST);
+    };
+
+    bot_state
+        .file_resolver
+        .resolve(&filename)
+        .await
+        .map_err(|e| match e {
+            ObjectStoreError::NotFound => StatusCode::NOT_FOUND,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        })?;
+
+    let request = crate::audio::dj::manager::TrackRequest {
+        filename,
+        volume: request.volume,
+    };
+    send_dj_command(&bot_state, guild_id, DJCommand::ForceTrack(request))
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(StatusCode::OK)
+}
+
+#[derive(Debug, Deserialize)]
 pub struct ChangeTrackStateRequest {
     pub name: String,
     pub state: Option<String>,

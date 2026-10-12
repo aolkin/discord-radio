@@ -106,6 +106,7 @@ Switch between different audio processing profiles:
 - `GET /api/health` - Health check endpoint
 - `POST /api/guilds/:guild_id/dj/advance` - Advance DJ state (optionally to specific state type)
 - `POST /api/guilds/:guild_id/hex/play` - Play hex message via DJ
+- `POST /api/guilds/:guild_id/track/play` - Play audio track via DJ
 - `POST /api/guilds/:guild_id/tracks` - Manage track state (start, stop, update)
 - `POST /api/guilds/:guild_id/profile` - Change signal profile
 - `GET /api/profiles` - List available signal profiles
