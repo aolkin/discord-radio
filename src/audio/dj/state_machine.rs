@@ -172,16 +172,17 @@ impl DJStateMachine {
         track_manager: &Arc<Mutex<TrackManager>>,
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // Record the previous state before transitioning
         let from_state = self.get_state_name(&*self.current_state().await);
 
         self.cleanup_current_state(track_manager, bot_state).await?;
 
         info!("DJ transitioning to state: {next_state_type}");
         let next_state = match next_state_type {
-            DJStateEntry::Track(entry) => self.start_track_state(entry, bot_state).await?,
-            DJStateEntry::HexMessage(entry) => self.start_hex_message_state(entry).await?,
-            DJStateEntry::Noise(entry) => self.start_noise_state(entry).await?,
-        };
+            DJStateEntry::Track(entry) => self.start_track_state(entry, bot_state).await,
+            DJStateEntry::HexMessage(entry) => self.start_hex_message_state(entry).await,
+            DJStateEntry::Noise(entry) => self.start_noise_state(entry).await,
+        }?;
 
         self.enter_state(from_state, next_state, track_manager, bot_state)
             .await
