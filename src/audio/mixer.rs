@@ -11,7 +11,7 @@ pub struct TrackId(u64);
 pub enum StopReason {
     /// A source played to its end.
     Completed,
-    /// Removed directly.
+    /// Removed directly by `remove_track`, bypassing any stop.
     Removed,
     /// Stopped at a requested time.
     Stopped,

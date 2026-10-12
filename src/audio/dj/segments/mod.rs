@@ -197,12 +197,6 @@ impl TrackSlot {
         *self.0.lock().unwrap() = Some(handle);
     }
 
-    pub async fn remove(&self, ctx: &SegmentCtx<'_>) {
-        if let Some((id, processor)) = self.take(ctx).await {
-            processor.write().await.mixer_mut().remove_track(id);
-        }
-    }
-
     pub async fn stop(&self, ctx: &SegmentCtx<'_>, fade: Duration) {
         if let Some((id, processor)) = self.take(ctx).await {
             processor
