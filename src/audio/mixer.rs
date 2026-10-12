@@ -292,17 +292,17 @@ impl Mixer {
         let at = at.map(|at| self.duration_frames(at));
         if let Ok(track) = self.track_mut(handle) {
             let start = at.map_or(track.played_frames, |at| at.max(track.played_frames));
+            let new_stop = Stop {
+                start,
+                end: start + fade,
+            };
             if track
                 .stop
-                .take()
-                .is_some_and(|stop| stop.matches_ramp(&track.ramp))
+                .replace(new_stop)
+                .is_some_and(|old| old.matches_ramp(&track.ramp))
             {
                 track.ramp = None;
             }
-            track.stop = Some(Stop {
-                start,
-                end: start + fade,
-            });
             true
         } else {
             false
