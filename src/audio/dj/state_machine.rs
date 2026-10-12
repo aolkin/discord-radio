@@ -15,10 +15,6 @@ use std::time::Duration;
 use tokio::sync::{Mutex, RwLock, RwLockReadGuard};
 use tracing::info;
 
-pub fn format_dj_track_name(filename: &str) -> String {
-    format!("dj_track_{}", filename)
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 pub enum DJState {
     PlayingHexMessage {

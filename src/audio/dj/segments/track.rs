@@ -2,7 +2,6 @@ use super::{
     CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
     TimedSegment,
 };
-use crate::audio::dj::state_machine::format_dj_track_name;
 use crate::audio::tracks::{StartTrackArgs, TrackManager};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -10,12 +9,23 @@ use std::ops::Deref;
 use std::time::Duration;
 use tokio::sync::Mutex;
 
+pub fn format_dj_track_name(filename: &str) -> String {
+    format!("dj_track_{}", filename)
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TrackSegment {
     timer: TimedSegment,
     filename: String,
     volume: f32,
     start_position: Option<Duration>,
+}
+
+impl Deref for TrackSegment {
+    type Target = CommonSegmentPlaybackConfig;
+    fn deref(&self) -> &Self::Target {
+        &self.timer
+    }
 }
 
 impl TrackSegment {
@@ -59,41 +69,6 @@ impl TrackSegment {
             .await
             .map_err(|e| anyhow::anyhow!(e))
     }
-
-    pub async fn start(&self, track_manager: &Mutex<TrackManager>) -> anyhow::Result<()> {
-        self.start_at(track_manager, self.start_position).await
-    }
-
-    pub async fn resume(
-        &self,
-        track_manager: &Mutex<TrackManager>,
-        elapsed: Duration,
-    ) -> anyhow::Result<()> {
-        let position = self.start_position.unwrap_or_default() + elapsed;
-        self.start_at(track_manager, Some(position)).await
-    }
-
-    pub async fn stop_file(
-        track_manager: &Mutex<TrackManager>,
-        filename: &str,
-    ) -> anyhow::Result<()> {
-        let track_name = format_dj_track_name(filename);
-        let mut track_manager = track_manager.lock().await;
-        if track_manager.has_track(&track_name) {
-            track_manager
-                .stop_track(&track_name, 1.0, false)
-                .await
-                .map_err(|e| anyhow::anyhow!(e))?;
-        }
-        Ok(())
-    }
-}
-
-impl Deref for TrackSegment {
-    type Target = CommonSegmentPlaybackConfig;
-    fn deref(&self) -> &Self::Target {
-        &self.timer
-    }
 }
 
 #[async_trait]
@@ -112,16 +87,17 @@ impl Segment for TrackSegment {
         if self.timer.is_elapsed() {
             tracing::info!(
                 "DJ track '{}' has already finished (elapsed: {:.1}s, duration: {:.1}s), will advance to next state",
-                self.track_name(),
+                format_dj_track_name(&self.filename),
                 elapsed.as_secs_f32(),
                 self.timer.duration.as_secs_f32()
             );
             return Ok(());
         }
-        self.resume(ctx.track_manager, elapsed).await?;
+        let position = self.start_position.unwrap_or_default() + elapsed;
+        self.start_at(ctx.track_manager, Some(position)).await?;
         tracing::info!(
             "Restored DJ track '{}' at {:.1}s into the segment in guild {}",
-            self.track_name(),
+            format_dj_track_name(&self.filename),
             elapsed.as_secs_f32(),
             ctx.guild_id
         );
@@ -129,7 +105,8 @@ impl Segment for TrackSegment {
     }
 
     async fn enter(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
-        self.start(ctx.track_manager).await?;
+        self.start_at(ctx.track_manager, self.start_position)
+            .await?;
         tracing::info!(
             "DJ starting track '{}' (duration: {:.1}s) in guild {}",
             self.filename,
@@ -140,12 +117,20 @@ impl Segment for TrackSegment {
     }
 
     async fn exit(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
-        Self::stop_file(ctx.track_manager, &self.filename).await
+        let track_name = format_dj_track_name(&self.filename);
+        let mut track_manager = ctx.track_manager.lock().await;
+        if track_manager.has_track(&track_name) {
+            track_manager
+                .stop_track(&track_name, 1.0, false)
+                .await
+                .map_err(|e| anyhow::anyhow!(e))?;
+        }
+        Ok(())
     }
 
     fn loggable_properties(&self) -> serde_json::Value {
         serde_json::json!({
-            "track_name": self.track_name(),
+            "track_name": format_dj_track_name(&self.filename),
             "filename": self.filename,
             "duration_secs": self.timer.duration.as_secs_f32(),
             "forced_profile": self.signal_profile().name,
