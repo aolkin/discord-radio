@@ -6,7 +6,6 @@ use crate::audio::custom_mixer::PlayingTrack;
 use crate::audio::dj::config::TrackEntry;
 use crate::audio::duration::DurationCache;
 use crate::audio::tracks::open_track_source;
-use anyhow::Context;
 use async_trait::async_trait;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -60,10 +59,7 @@ impl TrackSegment {
         start_position: Option<Duration>,
         play_duration: Duration,
     ) -> anyhow::Result<()> {
-        let processor = ctx
-            .audio_processor()
-            .await
-            .with_context(|| format!("No audio processor for guild {}", ctx.guild_id))?;
+        let processor = ctx.audio_processor().await?;
         let path = ctx.bot_state.file_resolver.resolve(&self.filename).await?;
         let source = open_track_source(&path, start_position).map_err(|e| anyhow::anyhow!(e))?;
         let fade_out = FADE_TIME.min(play_duration);
@@ -176,7 +172,7 @@ impl Segment for TrackSegment {
     async fn exit(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
         let track = self.track.lock().unwrap().take();
         if let Some(track) = track
-            && let Some(processor) = ctx.audio_processor().await
+            && let Ok(processor) = ctx.audio_processor().await
         {
             processor
                 .write()

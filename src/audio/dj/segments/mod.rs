@@ -9,6 +9,7 @@ pub use track::TrackSegment;
 use crate::audio::dj::serde::{deser_instant, ser_instant};
 use crate::audio::processing_thread::AudioProcessor;
 use crate::state::BotState;
+use anyhow::Context;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serenity::http::Http;
@@ -27,13 +28,14 @@ pub struct SegmentCtx<'a> {
 }
 
 impl SegmentCtx<'_> {
-    pub async fn audio_processor(&self) -> Option<Arc<RwLock<AudioProcessor>>> {
+    pub async fn audio_processor(&self) -> anyhow::Result<Arc<RwLock<AudioProcessor>>> {
         self.bot_state
             .audio_processors
             .read()
             .await
             .get(self.guild_id)
             .cloned()
+            .with_context(|| format!("No audio processor for guild {}", self.guild_id))
     }
 }
 

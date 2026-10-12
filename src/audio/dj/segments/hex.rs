@@ -7,7 +7,6 @@ use crate::audio::dj::serde::{deser_instant, ser_instant};
 use crate::audio::processing_thread::AudioProcessor;
 use crate::audio::tracks::open_track_source;
 use crate::bucket::FileResolver;
-use anyhow::Context;
 use async_trait::async_trait;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -76,10 +75,7 @@ impl HexSegment {
     }
 
     async fn start_run(&self, ctx: &SegmentCtx<'_>) -> anyhow::Result<()> {
-        let processor = ctx
-            .audio_processor()
-            .await
-            .with_context(|| format!("No audio processor for guild {}", ctx.guild_id))?;
+        let processor = ctx.audio_processor().await?;
         let handle = tokio::spawn(run_hex_message(
             self.message.clone(),
             self.volume,
@@ -156,7 +152,7 @@ impl Segment for HexSegment {
         }
         let track = self.progress.current_track.lock().unwrap().take();
         if let Some(track) = track
-            && let Some(processor) = ctx.audio_processor().await
+            && let Ok(processor) = ctx.audio_processor().await
         {
             processor
                 .write()
