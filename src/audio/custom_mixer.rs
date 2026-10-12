@@ -19,6 +19,8 @@ pub enum StopReason {
     FailedReset,
     /// Dropped before any other reason was set.
     Dropped,
+    /// The end signal was lost.
+    Lost,
 }
 
 /// A track added to the mixer. It has ended once it plays to its end, is
@@ -40,12 +42,13 @@ impl TrackHandle {
     }
 
     pub async fn ended(&self) -> StopReason {
-        self.end_rx
-            .clone()
-            .wait_for(Option::is_some)
-            .await
-            .expect("MixerTrack::drop sets a reason before its sender is dropped")
-            .expect("wait_for returned a set reason")
+        match self.end_rx.clone().wait_for(Option::is_some).await {
+            Ok(reason) => reason.unwrap_or(StopReason::Lost),
+            Err(e) => {
+                tracing::error!("Track {:?} lost its end signal: {e}", self.id);
+                StopReason::Lost
+            }
+        }
     }
 }
 
