@@ -34,8 +34,25 @@ impl TrackSegment {
         }
     }
 
-    fn track_name(&self) -> String {
-        format_dj_track_name(&self.filename)
+    async fn start_at(
+        &self,
+        track_manager: &Mutex<TrackManager>,
+        start_position: Option<Duration>,
+    ) -> anyhow::Result<()> {
+        track_manager
+            .lock()
+            .await
+            .start_track(StartTrackArgs {
+                name: format_dj_track_name(&self.filename),
+                filename: self.filename.clone(),
+                volume: self.volume,
+                fade_time: 1.0,
+                loops: false,
+                start_position,
+                persist: false,
+            })
+            .await
+            .map_err(|e| anyhow::anyhow!(e))
     }
 
     pub async fn start(&self, track_manager: &Mutex<TrackManager>) -> anyhow::Result<()> {
@@ -64,27 +81,6 @@ impl TrackSegment {
                 .map_err(|e| anyhow::anyhow!(e))?;
         }
         Ok(())
-    }
-
-    async fn start_at(
-        &self,
-        track_manager: &Mutex<TrackManager>,
-        start_position: Option<Duration>,
-    ) -> anyhow::Result<()> {
-        track_manager
-            .lock()
-            .await
-            .start_track(StartTrackArgs {
-                name: self.track_name(),
-                filename: self.filename.clone(),
-                volume: self.volume,
-                fade_time: 1.0,
-                loops: false,
-                start_position,
-                persist: false,
-            })
-            .await
-            .map_err(|e| anyhow::anyhow!(e))
     }
 }
 
