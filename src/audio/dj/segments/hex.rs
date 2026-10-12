@@ -149,7 +149,10 @@ impl Segment for HexSegment {
         {
             let mut track_manager = ctx.track_manager.lock().await;
             if track_manager.has_track(HEX_TRACK_NAME) {
-                track_manager.remove_track(HEX_TRACK_NAME).await;
+                track_manager
+                    .stop_track(HEX_TRACK_NAME, 0.0, false)
+                    .await
+                    .map_err(|e| anyhow::anyhow!(e))?;
             }
         }
         if let Some(metrics) = ctx.bot_state.metrics.read().await.as_ref() {
@@ -246,7 +249,10 @@ async fn play_hex_char(
     let gone = {
         let mut manager = track_manager.lock().await;
         if manager.has_track(HEX_TRACK_NAME) {
-            manager.remove_track(HEX_TRACK_NAME).await;
+            manager
+                .stop_track(HEX_TRACK_NAME, 0.0, false)
+                .await
+                .map_err(|e| anyhow::anyhow!(e))?;
         }
         manager
             .start_track(StartTrackArgs {
