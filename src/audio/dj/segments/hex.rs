@@ -150,7 +150,7 @@ impl Segment for HexSegment {
             handle.abort();
             let _ = handle.await;
         }
-        self.progress.current_track.stop(ctx, Duration::ZERO).await;
+        self.progress.current_track.stop(Duration::ZERO);
         if let Some(metrics) = ctx.bot_state.metrics.read().await.as_ref() {
             let loops_played = self.progress.loops.load(Ordering::Relaxed) as u64;
             metrics.record_hex_message_loops(ctx.guild_id.get(), loops_played);

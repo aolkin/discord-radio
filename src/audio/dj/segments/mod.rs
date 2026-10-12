@@ -7,7 +7,7 @@ pub use noise::NoiseSegment;
 pub use track::TrackSegment;
 
 use crate::audio::dj::serde::{deser_instant, ser_instant};
-use crate::audio::mixer::{TrackHandle, TrackId};
+use crate::audio::mixer::TrackHandle;
 use crate::audio::processing_thread::AudioProcessor;
 use crate::state::BotState;
 use anyhow::Context;
@@ -197,18 +197,9 @@ impl TrackSlot {
         *self.0.lock().unwrap() = Some(handle);
     }
 
-    pub async fn stop(&self, ctx: &SegmentCtx<'_>, fade: Duration) {
-        if let Some((id, processor)) = self.take(ctx).await {
-            processor
-                .write()
-                .await
-                .mixer_mut()
-                .stop_track(id, fade, None);
+    pub fn stop(&self, fade: Duration) {
+        if let Some(handle) = self.0.lock().unwrap().take() {
+            let _ = handle.stop(fade, None);
         }
-    }
-
-    async fn take(&self, ctx: &SegmentCtx<'_>) -> Option<(TrackId, Arc<RwLock<AudioProcessor>>)> {
-        let handle = self.0.lock().unwrap().take()?;
-        Some((handle.id, ctx.audio_processor().await.ok()?))
     }
 }

@@ -89,19 +89,16 @@ impl TrackManager {
             self.guild_id
         );
 
-        let processor_arc = self.audio_processor.clone();
-
-        let mixer_handle = {
-            let mut processor = processor_arc.write().await;
-            let mixer = processor.mixer_mut();
-            let mixer_handle = mixer.add_track(Box::new(source), 0.0, args.loops);
-            mixer.update_track_volume(
-                mixer_handle.id,
-                args.volume,
-                Duration::from_secs_f32(args.fade_time.max(0.0)),
-            )?;
-            mixer_handle
-        };
+        let mixer_handle = self.audio_processor.write().await.mixer_mut().add_track(
+            Box::new(source),
+            0.0,
+            args.loops,
+        );
+        mixer_handle.set_volume(
+            args.volume,
+            Duration::from_secs_f32(args.fade_time.max(0.0)),
+            None,
+        )?;
 
         let guild_id = self.guild_id;
         let bot_state = self.bot_state.clone();
@@ -155,9 +152,6 @@ impl TrackManager {
         volume: f32,
         fade_time: f32,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // Get processor first to avoid borrowing issues
-        let processor_arc = self.audio_processor.clone();
-
         let track_info = self
             .tracks
             .get_mut(name)
@@ -174,15 +168,11 @@ impl TrackManager {
 
         track_info.volume = volume;
 
-        {
-            let mut proc = processor_arc.write().await;
-            let mixer = proc.mixer_mut();
-            mixer.update_track_volume(
-                track_info.mixer_handle.id,
-                volume,
-                Duration::from_secs_f32(fade_time.max(0.0)),
-            )?;
-        }
+        track_info.mixer_handle.set_volume(
+            volume,
+            Duration::from_secs_f32(fade_time.max(0.0)),
+            None,
+        )?;
 
         self.persist_state().await;
 
@@ -194,9 +184,6 @@ impl TrackManager {
         name: &str,
         loops: bool,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // Get processor first to avoid borrowing issues
-        let processor_arc = self.audio_processor.clone();
-
         let track_info = self
             .tracks
             .get_mut(name)
@@ -216,9 +203,7 @@ impl TrackManager {
 
         track_info.loops = loops;
 
-        let mut proc = processor_arc.write().await;
-        proc.mixer_mut()
-            .update_track_loops(track_info.mixer_handle.id, loops)?;
+        track_info.mixer_handle.set_loops(loops)?;
 
         self.persist_state().await;
 
@@ -254,13 +239,9 @@ impl TrackManager {
             self.guild_id
         );
 
-        let handle = track_info.mixer_handle.id;
-
-        {
-            let mut proc = self.audio_processor.write().await;
-            let mixer = proc.mixer_mut();
-            mixer.stop_track(handle, Duration::from_secs_f32(fade_time.max(0.0)), None);
-        }
+        track_info
+            .mixer_handle
+            .stop(Duration::from_secs_f32(fade_time.max(0.0)), None)?;
 
         self.tracks.remove(name);
         self.persist_state().await;
