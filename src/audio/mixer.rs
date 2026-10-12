@@ -179,15 +179,16 @@ impl MixerTrack {
 
     fn update_amplitude(&mut self) {
         if let Some(ramp) = &self.ramp {
-            let elapsed = self.played_frames - ramp.start;
-            if elapsed >= ramp.end {
+            if self.played_frames >= ramp.end {
                 self.volume = ramp.to;
                 self.ramp = None;
             } else {
-                self.volume = ramp.from + (ramp.to - ramp.from) * elapsed as f32 / ramp.end as f32;
+                let elapsed = self.played_frames.saturating_sub(ramp.start);
+                let progress = elapsed as f32 / (ramp.end - ramp.start) as f32;
+                self.volume = ramp.from + (ramp.to - ramp.from) * progress;
             }
+            self.amplitude = perceptual_level_to_amplitude(self.volume);
         }
-        self.amplitude = perceptual_level_to_amplitude(self.volume);
     }
 
     pub fn next_frame(&mut self) -> Option<[f32; 2]> {
@@ -291,6 +292,13 @@ impl Mixer {
         let at = at.map(|at| self.duration_frames(at));
         if let Ok(track) = self.track_mut(handle) {
             let start = at.unwrap_or(track.played_frames);
+            if track
+                .stop
+                .as_ref()
+                .is_some_and(|stop| stop.matches_ramp(&track.ramp))
+            {
+                track.ramp = None;
+            }
             track.stop = Some(Stop {
                 start,
                 end: start + fade,
