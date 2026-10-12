@@ -7,7 +7,7 @@ pub use noise::NoiseSegment;
 pub use track::TrackSegment;
 
 use crate::audio::dj::serde::{deser_instant, ser_instant};
-use crate::audio::tracks::TrackManager;
+use crate::audio::processing_thread::AudioProcessor;
 use crate::state::BotState;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -16,14 +16,23 @@ use serenity::model::id::GuildId;
 use std::borrow::ToOwned;
 use std::fmt::Debug;
 use std::ops::Deref;
+use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 
 pub struct SegmentCtx<'a> {
     pub guild_id: &'a GuildId,
     pub bot_state: &'a BotState,
     pub http: &'a Http,
-    pub track_manager: &'a Mutex<TrackManager>,
+}
+
+async fn audio_processor(ctx: &SegmentCtx<'_>) -> Option<Arc<RwLock<AudioProcessor>>> {
+    ctx.bot_state
+        .audio_processors
+        .read()
+        .await
+        .get(ctx.guild_id)
+        .cloned()
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

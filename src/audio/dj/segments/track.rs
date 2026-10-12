@@ -1,16 +1,17 @@
 use super::{
     CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
-    TimedSegment,
+    TimedSegment, audio_processor,
 };
+use crate::audio::custom_mixer::AtomicTrackHandle;
 use crate::audio::dj::config::TrackEntry;
 use crate::audio::duration::DurationCache;
-use crate::audio::tracks::{StartTrackArgs, TrackManager};
+use crate::audio::tracks::open_track_source;
+use anyhow::Context;
 use async_trait::async_trait;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use std::time::Duration;
-use tokio::sync::Mutex;
 use tokio::sync::oneshot::{self, error::TryRecvError};
 
 const FADE_TIME: Duration = Duration::from_secs(1);
@@ -25,6 +26,8 @@ pub struct TrackSegment {
     filename: String,
     volume: f32,
     start_position: Option<Duration>,
+    #[serde(skip)]
+    track: AtomicTrackHandle,
     #[serde(skip)]
     track_gone: std::sync::Mutex<Option<oneshot::Receiver<()>>>,
 }
@@ -54,33 +57,33 @@ impl TrackSegment {
             filename,
             volume,
             start_position,
+            track: Default::default(),
             track_gone: Default::default(),
         }
     }
 
     async fn start_at(
         &self,
-        track_manager: &Mutex<TrackManager>,
+        ctx: &SegmentCtx<'_>,
         start_position: Option<Duration>,
         play_duration: Duration,
     ) -> anyhow::Result<()> {
+        let processor = audio_processor(ctx)
+            .await
+            .with_context(|| format!("No audio processor for guild {}", ctx.guild_id))?;
+        let path = ctx.bot_state.file_resolver.resolve(&self.filename).await?;
+        let source = open_track_source(&path, start_position).map_err(|e| anyhow::anyhow!(e))?;
         let fade_out = FADE_TIME.min(play_duration);
-        let track_gone = track_manager
-            .lock()
-            .await
-            .start_track(StartTrackArgs {
-                name: format_dj_track_name(&self.filename),
-                filename: self.filename.clone(),
-                volume: self.volume,
-                fade_time: FADE_TIME.as_secs_f32(),
-                loops: false,
-                start_position,
-                persist: false,
-                scheduled_removal: Some((play_duration - fade_out, fade_out)),
-            })
-            .await
-            .map_err(|e| anyhow::anyhow!(e))?;
-        *self.track_gone.lock().unwrap() = Some(track_gone);
+        let end_rx = {
+            let mut processor = processor.write().await;
+            let mixer = processor.mixer_mut();
+            let (handle, end_rx) = mixer.add_track(Box::new(source), 0.0, false);
+            self.track.store(handle);
+            mixer.update_track_volume(handle, self.volume, FADE_TIME)?;
+            mixer.remove_track(handle, fade_out, Some(play_duration - fade_out));
+            end_rx
+        };
+        *self.track_gone.lock().unwrap() = Some(end_rx);
         Ok(())
     }
 
@@ -158,7 +161,7 @@ impl Segment for TrackSegment {
         }
         let position = self.start_position.unwrap_or_default() + elapsed;
         self.start_at(
-            ctx.track_manager,
+            ctx,
             Some(position),
             self.timer.duration.saturating_sub(elapsed),
         )
@@ -173,7 +176,7 @@ impl Segment for TrackSegment {
     }
 
     async fn enter(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
-        self.start_at(ctx.track_manager, self.start_position, self.timer.duration)
+        self.start_at(ctx, self.start_position, self.timer.duration)
             .await?;
         tracing::info!(
             "DJ starting track '{}' (duration: {:.1}s) in guild {}",
@@ -185,13 +188,14 @@ impl Segment for TrackSegment {
     }
 
     async fn exit(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
-        let track_name = format_dj_track_name(&self.filename);
-        let mut track_manager = ctx.track_manager.lock().await;
-        if track_manager.has_track(&track_name) {
-            track_manager
-                .stop_track(&track_name, FADE_TIME.as_secs_f32(), false)
+        if let Some(handle) = self.track.take()
+            && let Some(processor) = audio_processor(ctx).await
+        {
+            processor
+                .write()
                 .await
-                .map_err(|e| anyhow::anyhow!(e))?;
+                .mixer_mut()
+                .remove_track(handle, FADE_TIME, None);
         }
         Ok(())
     }

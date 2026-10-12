@@ -3,7 +3,6 @@ use crate::audio::dj::manager::{DJStateType, HexMessageRequest};
 use crate::audio::dj::scheduler::{DJStateEntry, WeightedScheduler};
 use crate::audio::dj::segments::{HexSegment, Segment, SignalProfilePlayback, TrackSegment};
 use crate::audio::dj::segments::{NoiseSegment, SegmentCtx};
-use crate::audio::tracks::TrackManager;
 use crate::state::{BotState, Data};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -11,7 +10,7 @@ use serenity::all::Http;
 use serenity::model::id::{ChannelId, GuildId};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{Mutex, RwLock, RwLockReadGuard};
+use tokio::sync::{RwLock, RwLockReadGuard};
 use tracing::info;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -71,12 +70,11 @@ impl DJStateMachine {
         }
     }
 
-    fn segment_ctx<'a>(&'a self, track_manager: &'a Mutex<TrackManager>) -> SegmentCtx<'a> {
+    fn segment_ctx(&self) -> SegmentCtx<'_> {
         SegmentCtx {
             guild_id: &self.guild_id,
             bot_state: &self.bot_state,
             http: &self.http,
-            track_manager,
         }
     }
 
@@ -98,9 +96,9 @@ impl DJStateMachine {
         self.announcement_channel = channel;
     }
 
-    pub async fn stop(&mut self, track_manager: &Arc<Mutex<TrackManager>>, bot_state: &Data) {
+    pub async fn stop(&mut self, bot_state: &Data) {
         // Clean up current state before stopping
-        if let Err(e) = self.cleanup_current_state(track_manager, bot_state).await {
+        if let Err(e) = self.cleanup_current_state(bot_state).await {
             tracing::error!("Error cleaning up DJ state during stop: {}", e);
         }
 
@@ -118,19 +116,16 @@ impl DJStateMachine {
 
     pub async fn force_advance(
         &mut self,
-        track_manager: &Arc<Mutex<TrackManager>>,
         bot_state: &Data,
         state_type_filter: Option<DJStateType>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let Self { scheduler, .. } = self;
         let next_state_type = scheduler.next_state(state_type_filter);
-        self.transition_to_state(next_state_type, track_manager, bot_state)
-            .await
+        self.transition_to_state(next_state_type, bot_state).await
     }
 
     pub async fn force_hex_message(
         &self,
-        track_manager: &Arc<Mutex<TrackManager>>,
         bot_state: &Data,
         request: HexMessageRequest,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -151,13 +146,12 @@ impl DJStateMachine {
             defaults.signal_profile.clone(),
         )
         .into();
-        self.enter_state(next_state, track_manager, bot_state).await
+        self.enter_state(next_state, bot_state).await
     }
 
     async fn transition_to_state(
         &self,
         next_state_type: DJStateEntry,
-        track_manager: &Arc<Mutex<TrackManager>>,
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         info!("DJ transitioning to state: {next_state_type}");
@@ -176,22 +170,21 @@ impl DJStateMachine {
             DJStateEntry::Noise(entry) => NoiseSegment::from(entry).into(),
         };
 
-        self.enter_state(next_state, track_manager, bot_state).await
+        self.enter_state(next_state, bot_state).await
     }
 
     async fn enter_state(
         &self,
         next_state: DJState,
-        track_manager: &Arc<Mutex<TrackManager>>,
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Record the previous state before transitioning
         let from_state = self.get_state_name(&*self.current_state().await);
 
-        self.cleanup_current_state(track_manager, bot_state).await?;
+        self.cleanup_current_state(bot_state).await?;
 
         let segment = &next_state.segment;
-        segment.enter(&self.segment_ctx(track_manager)).await?;
+        segment.enter(&self.segment_ctx()).await?;
 
         if let Some(channel) = self.announcement_channel
             && let Some(announcement) = segment.announcement()
@@ -223,7 +216,6 @@ impl DJStateMachine {
 
     async fn cleanup_current_state(
         &self,
-        track_manager: &Arc<Mutex<TrackManager>>,
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let current = self.state.read().await;
@@ -236,7 +228,7 @@ impl DJStateMachine {
                 segment.elapsed().as_secs_f64(),
             );
         }
-        segment.exit(&self.segment_ctx(track_manager)).await?;
+        segment.exit(&self.segment_ctx()).await?;
         if let Some(status) = segment.channel_status() {
             bot_state
                 .voice_status_manager

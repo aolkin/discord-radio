@@ -39,9 +39,6 @@ pub struct StartTrackArgs {
     pub loops: bool,
     pub start_position: Option<Duration>,
     pub persist: bool,
-    /// `(at, fade)` arguments for a `CustomMixer::remove_track` scheduled when
-    /// the track starts.
-    pub scheduled_removal: Option<(Duration, Duration)>,
 }
 
 pub struct TrackManager {
@@ -108,9 +105,6 @@ impl TrackManager {
                 args.volume,
                 Duration::from_secs_f32(args.fade_time.max(0.0)),
             )?;
-            if let Some((at, fade)) = args.scheduled_removal {
-                mixer.remove_track(handle, fade, Some(at));
-            }
             (handle, end_rx)
         };
 

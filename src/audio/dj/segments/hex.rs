@@ -1,5 +1,6 @@
 use super::{
     CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
+    audio_processor,
 };
 use crate::audio::custom_mixer::AtomicTrackHandle;
 use crate::audio::dj::config::{HexMessageDefaults, HexMessageEntry};
@@ -259,15 +260,6 @@ async fn run_hex_message(
         };
         tokio::time::sleep(delay).await;
     }
-}
-
-async fn audio_processor(ctx: &SegmentCtx<'_>) -> Option<Arc<RwLock<AudioProcessor>>> {
-    ctx.bot_state
-        .audio_processors
-        .read()
-        .await
-        .get(ctx.guild_id)
-        .cloned()
 }
 
 fn message_to_hex_sequence(message: &str) -> Vec<char> {
