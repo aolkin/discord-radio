@@ -32,16 +32,8 @@ impl DJState {
         NoiseSegment::idle(Duration::from_secs(1)).into()
     }
 
-    pub async fn is_complete(&self) -> bool {
-        self.segment.is_complete().await
-    }
-
     pub fn forced_profile(&self) -> SignalProfilePlayback {
         self.segment.signal_profile()
-    }
-
-    pub fn is_hex_message(&self) -> bool {
-        self.segment.state_name() == HexSegment::STATE_NAME
     }
 }
 
@@ -93,7 +85,7 @@ impl DJStateMachine {
     }
 
     pub async fn is_complete(&self) -> bool {
-        self.current_state().await.is_complete().await
+        self.current_state().await.segment.is_complete().await
     }
 
     pub fn update_config(&mut self, config: DJConfig) {
