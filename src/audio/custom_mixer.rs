@@ -13,8 +13,8 @@ pub struct TrackHandle(u64);
 pub struct AtomicTrackHandle(AtomicU64);
 
 impl AtomicTrackHandle {
-    pub fn store(&self, handle: Option<TrackHandle>) {
-        self.0.store(handle.map_or(0, |h| h.0), Ordering::Relaxed);
+    pub fn store(&self, handle: TrackHandle) {
+        self.0.store(handle.0, Ordering::Relaxed);
     }
 
     pub fn take(&self) -> Option<TrackHandle> {

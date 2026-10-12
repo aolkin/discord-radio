@@ -216,11 +216,24 @@ async fn run_hex_message(
         let filename = format!("audio/hex/hex_{}.wav", hex_chars[position]);
         match file_resolver.resolve(&filename).await {
             Ok(path) if Path::new(&path).exists() => {
-                if let Err(e) = play_hex_char(&processor, &progress, &path, volume).await {
-                    tracing::warn!("Failed to start hex track for message '{message}': {e:#}");
-                    tokio::time::sleep(Duration::from_millis(100)).await;
-                    continue;
-                }
+                let source = match open_track_source(&path, None) {
+                    Ok(source) => source,
+                    Err(e) => {
+                        tracing::warn!("Failed to start hex track for message '{message}': {e:#}");
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                        continue;
+                    }
+                };
+                let end_rx = {
+                    let mut processor = processor.write().await;
+                    let (handle, end_rx) =
+                        processor
+                            .mixer_mut()
+                            .add_track(Box::new(source), volume, false);
+                    progress.current_track.store(handle);
+                    end_rx
+                };
+                let _ = end_rx.await;
             }
             _ => tracing::warn!("Audio file not found: {}", filename),
         }
@@ -246,26 +259,6 @@ async fn run_hex_message(
         };
         tokio::time::sleep(delay).await;
     }
-}
-
-async fn play_hex_char(
-    processor: &RwLock<AudioProcessor>,
-    progress: &HexProgress,
-    path: &str,
-    volume: f32,
-) -> anyhow::Result<()> {
-    let source = open_track_source(path, None).map_err(|e| anyhow::anyhow!(e))?;
-    let end_rx = {
-        let mut processor = processor.write().await;
-        let (handle, end_rx) = processor
-            .mixer_mut()
-            .add_track(Box::new(source), volume, false);
-        progress.current_track.store(Some(handle));
-        end_rx
-    };
-    let _ = end_rx.await;
-    progress.current_track.store(None);
-    Ok(())
 }
 
 async fn audio_processor(ctx: &SegmentCtx<'_>) -> Option<Arc<RwLock<AudioProcessor>>> {
