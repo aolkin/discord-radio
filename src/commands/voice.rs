@@ -180,6 +180,8 @@ pub async fn play_track(
     filename: String,
     #[description = "Volume 0.0-2.0 (0=silence, 1.0=unity, 2.0=+18dB boost, default 1.0)"]
     volume: Option<f32>,
+    #[description = "Start position in seconds (default 0)"] start_position: Option<f32>,
+    #[description = "Seconds to play (default: track length)"] duration: Option<f32>,
 ) -> Result<(), Error> {
     let guild_id = ctx
         .guild_id()
@@ -195,16 +197,23 @@ pub async fn play_track(
 
     ctx.defer_ephemeral().await?;
 
+    let request = crate::audio::dj::manager::TrackRequest {
+        filename: filename.clone(),
+        volume,
+        start_position,
+        duration,
+    };
+    if let Err(e) = request.validate() {
+        ctx.say(e).await?;
+        return Ok(());
+    }
+
     if let Err(e) = ctx.data().file_resolver.resolve(&filename).await {
         ctx.say(format!("Failed to resolve audio file: {}", e))
             .await?;
         return Ok(());
     }
 
-    let request = crate::audio::dj::manager::TrackRequest {
-        filename: filename.clone(),
-        volume,
-    };
     let content = match send_dj_command(ctx.data(), guild_id, DJCommand::ForceTrack(request)).await
     {
         Ok(()) => format!(

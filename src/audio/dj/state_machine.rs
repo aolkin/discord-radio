@@ -155,15 +155,22 @@ impl DJStateMachine {
         request: TrackRequest,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         info!("DJ force transitioning to track: {}", request.filename);
-        let duration = bot_state
-            .duration_cache
-            .get_duration(&request.filename)
-            .await
-            .unwrap_or(Duration::from_secs(60));
+        let start_position = request
+            .start_position
+            .map(Duration::try_from_secs_f32)
+            .transpose()?;
+        let duration = match request.duration {
+            Some(seconds) => Duration::try_from_secs_f32(seconds)?,
+            None => bot_state
+                .duration_cache
+                .get_duration(&request.filename)
+                .await
+                .unwrap_or(Duration::from_secs(60)),
+        };
         let next_state = TrackSegment::new(
             request.filename,
             request.volume.unwrap_or(1.0),
-            None,
+            start_position,
             duration,
             None,
             None,

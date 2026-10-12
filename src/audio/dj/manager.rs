@@ -3,6 +3,7 @@ use crate::audio::dj::profile_machine::ProfileStateMachine;
 use crate::audio::dj::segments::{SegmentCtx, SignalProfilePlayback};
 use crate::audio::dj::state_machine::{DJState, DJStateMachine};
 use crate::state::Data;
+use serde::Deserialize;
 use serenity::all::Http;
 use serenity::model::id::{ChannelId, GuildId};
 use std::sync::Arc;
@@ -28,9 +29,29 @@ pub struct HexMessageRequest {
     pub loops: Option<u32>,
 }
 
+/// A track for the DJ to play. `start_position` and `duration` are in seconds.
+#[derive(Debug, Deserialize)]
 pub struct TrackRequest {
     pub filename: String,
     pub volume: Option<f32>,
+    pub start_position: Option<f32>,
+    pub duration: Option<f32>,
+}
+
+impl TrackRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        for (name, value) in [
+            ("start_position", self.start_position),
+            ("duration", self.duration),
+        ] {
+            if let Some(seconds) = value
+                && !(seconds.is_finite() && seconds >= 0.0)
+            {
+                return Err(format!("{name} must be a non-negative number of seconds"));
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
