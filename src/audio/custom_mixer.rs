@@ -9,15 +9,16 @@ pub struct TrackId(u64);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StopReason {
-    /// A non-looping source played to its end.
+    /// A source played to its end.
     Completed,
     /// Removed with no fade.
     Removed,
-    /// A removal fade reached silence.
+    /// A stop_at_end fade finished.
     Faded,
     /// A looping source failed to restart.
     FailedReset,
-    MixerDropped,
+    /// Dropped before any other reason was set.
+    Dropped,
 }
 
 /// A track added to the mixer. It has ended once it plays to its end, is
@@ -25,7 +26,7 @@ pub enum StopReason {
 #[derive(Clone, Debug)]
 pub struct TrackHandle {
     pub id: TrackId,
-    /// The mixer sends the stop reason once, then drops the sender.
+    /// Set once, when the track ends.
     end_rx: watch::Receiver<Option<StopReason>>,
 }
 
@@ -35,18 +36,17 @@ impl TrackHandle {
     }
 
     pub fn stop_reason(&self) -> Option<StopReason> {
-        let reason = *self.end_rx.borrow();
-        reason.or_else(|| {
-            self.end_rx
-                .has_changed()
-                .is_err()
-                .then_some(StopReason::MixerDropped)
-        })
+        *self.end_rx.borrow()
     }
 
     pub async fn ended(&self) -> StopReason {
-        let _ = self.end_rx.clone().changed().await;
-        self.stop_reason().unwrap_or(StopReason::MixerDropped)
+        self.end_rx
+            .clone()
+            .wait_for(Option::is_some)
+            .await
+            .ok()
+            .and_then(|reason| *reason)
+            .unwrap_or(StopReason::Dropped)
     }
 }
 
@@ -83,7 +83,7 @@ pub struct MixerTrack {
     ramp: Option<VolumeRamp>,
     pub loops: bool,
     pub active: bool,
-    end_tx: Option<watch::Sender<Option<StopReason>>>,
+    end_tx: watch::Sender<Option<StopReason>>,
 }
 
 impl MixerTrack {
@@ -102,7 +102,7 @@ impl MixerTrack {
             ramp: None,
             loops,
             active: true,
-            end_tx: Some(end_tx),
+            end_tx,
         }
     }
 
@@ -113,9 +113,9 @@ impl MixerTrack {
 
     /// Only the first call has an effect.
     fn end(&mut self, reason: StopReason) {
-        if let Some(end_tx) = self.end_tx.take() {
-            end_tx.send_replace(Some(reason));
-        }
+        self.end_tx.send_modify(|end| {
+            end.get_or_insert(reason);
+        });
     }
 
     fn start_due_fades(&mut self) {
@@ -187,6 +187,12 @@ impl MixerTrack {
                 }
             }
         }
+    }
+}
+
+impl Drop for MixerTrack {
+    fn drop(&mut self) {
+        self.end(StopReason::Dropped);
     }
 }
 
