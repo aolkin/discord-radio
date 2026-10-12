@@ -15,7 +15,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, Notify};
 use tokio::task::JoinHandle;
-use tokio_util::sync::CancellationToken;
 
 const HEX_TRACK_NAME: &str = "hex_playback";
 
@@ -35,7 +34,7 @@ pub struct HexSegment {
     target_loops: usize,
     progress: Arc<HexProgress>,
     #[serde(skip)]
-    run: std::sync::Mutex<Option<(CancellationToken, JoinHandle<()>)>>,
+    run: std::sync::Mutex<Option<JoinHandle<()>>>,
 }
 
 impl Deref for HexSegment {
@@ -70,9 +69,7 @@ impl HexSegment {
     }
 
     fn start_run(&self, ctx: &SegmentCtx) {
-        let shutdown = CancellationToken::new();
-        let track_manager = ctx.track_manager.clone();
-        let run = run_hex_message(
+        let handle = tokio::spawn(run_hex_message(
             self.message.clone(),
             self.volume,
             self.target_loops,
@@ -80,16 +77,8 @@ impl HexSegment {
             ctx.track_manager.clone(),
             ctx.bot_state.file_resolver.clone(),
             *ctx.guild_id,
-            shutdown.clone(),
-        );
-        let handle = tokio::spawn(async move {
-            run.await;
-            let mut track_manager = track_manager.lock().await;
-            if track_manager.has_track(HEX_TRACK_NAME) {
-                track_manager.remove_track(HEX_TRACK_NAME).await;
-            }
-        });
-        *self.run.lock().unwrap() = Some((shutdown, handle));
+        ));
+        *self.run.lock().unwrap() = Some(handle);
     }
 }
 
@@ -101,7 +90,7 @@ impl Segment for HexSegment {
             .lock()
             .unwrap()
             .as_ref()
-            .is_none_or(|(_, handle)| handle.is_finished())
+            .is_none_or(|handle| handle.is_finished())
     }
 
     fn elapsed(&self) -> Duration {
@@ -133,9 +122,15 @@ impl Segment for HexSegment {
 
     async fn exit(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
         let run = self.run.lock().unwrap().take();
-        if let Some((shutdown, handle)) = run {
-            shutdown.cancel();
+        if let Some(handle) = run {
+            handle.abort();
             let _ = handle.await;
+        }
+        {
+            let mut track_manager = ctx.track_manager.lock().await;
+            if track_manager.has_track(HEX_TRACK_NAME) {
+                track_manager.remove_track(HEX_TRACK_NAME).await;
+            }
         }
         if let Some(metrics) = ctx.bot_state.metrics.read().await.as_ref() {
             let loops_played = self.progress.loops.load(Ordering::Relaxed) as u64;
@@ -172,24 +167,7 @@ impl Segment for HexSegment {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 async fn run_hex_message(
-    message: String,
-    volume: f32,
-    target_loops: usize,
-    progress: Arc<HexProgress>,
-    track_manager: Arc<Mutex<TrackManager>>,
-    file_resolver: FileResolver,
-    guild_id: GuildId,
-    shutdown: CancellationToken,
-) {
-    tokio::select! {
-        () = shutdown.cancelled() => {}
-        () = hex_loop(message, volume, target_loops, progress, track_manager, file_resolver, guild_id) => {}
-    }
-}
-
-async fn hex_loop(
     message: String,
     volume: f32,
     target_loops: usize,
