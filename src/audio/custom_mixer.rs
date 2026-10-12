@@ -44,9 +44,8 @@ impl TrackHandle {
             .clone()
             .wait_for(Option::is_some)
             .await
-            .ok()
-            .and_then(|reason| *reason)
-            .unwrap_or(StopReason::Dropped)
+            .expect("MixerTrack::drop sets a reason before its sender is dropped")
+            .expect("wait_for returned a set reason")
     }
 }
 
@@ -311,7 +310,7 @@ impl CustomMixer {
         for (handle, track) in self.tracks.iter_mut() {
             track.start_due_fades();
             if track.advance_ramp() {
-                track.end(StopReason::Faded);
+                track.end(StopReason::Stopped);
                 finished_tracks.push(*handle);
                 continue;
             }
