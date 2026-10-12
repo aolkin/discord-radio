@@ -294,7 +294,7 @@ impl Mixer {
             let start = at.map_or(track.played_frames, |at| at.max(track.played_frames));
             if track
                 .stop
-                .as_ref()
+                .take()
                 .is_some_and(|stop| stop.matches_ramp(&track.ramp))
             {
                 track.ramp = None;
@@ -398,5 +398,93 @@ impl Mixer {
         mixed[1] = mixed[1].clamp(-1.0, 1.0);
 
         mixed
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct Constant;
+
+    impl AudioSource for Constant {
+        fn next_frame(&mut self) -> Option<[f32; 2]> {
+            Some([1.0, 1.0])
+        }
+        fn seek(&mut self, _: Duration) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            Ok(())
+        }
+        fn duration(&self) -> Option<Duration> {
+            None
+        }
+        fn reset(&mut self) {}
+    }
+
+    fn ms(n: u64) -> Duration {
+        Duration::from_millis(n)
+    }
+
+    fn mixer_with_track() -> (Mixer, TrackHandle) {
+        let mut mixer = Mixer::new(1000);
+        let handle = mixer.add_track(Box::new(Constant), 1.0, false);
+        (mixer, handle)
+    }
+
+    fn pull(mixer: &mut Mixer, frames: usize) -> Vec<f32> {
+        (0..frames).map(|_| mixer.mix_next_frame()[0]).collect()
+    }
+
+    #[test]
+    fn volume_ramp_started_late_ends_after_its_own_length() {
+        let (mut mixer, handle) = mixer_with_track();
+        pull(&mut mixer, 1000);
+        mixer.update_track_volume(handle.id, 0.0, ms(1000)).unwrap();
+        let ramp = pull(&mut mixer, 1000);
+        assert!(ramp[500] > 0.0 && ramp[500] < 1.0);
+        assert_eq!(pull(&mut mixer, 1), [0.0]);
+    }
+
+    #[test]
+    fn stop_fades_then_removes_the_track() {
+        let (mut mixer, handle) = mixer_with_track();
+        mixer.stop_track(handle.id, ms(100), Some(ms(200)));
+        let out = pull(&mut mixer, 300);
+        assert_eq!(out[150], 1.0);
+        assert!(out[250] > 0.0 && out[250] < 1.0);
+        assert!(!handle.has_ended());
+        assert_eq!(pull(&mut mixer, 1), [0.0]);
+        assert_eq!(handle.stop_reason(), Some(StopReason::Stopped));
+
+        let (mut mixer, handle) = mixer_with_track();
+        pull(&mut mixer, 500);
+        mixer.stop_track(handle.id, ms(100), Some(ms(100)));
+        let out = pull(&mut mixer, 100);
+        assert!(out[50] > 0.0 && out[50] < 1.0);
+        assert!(!handle.has_ended());
+        pull(&mut mixer, 1);
+        assert!(handle.has_ended());
+
+        let (mut mixer, handle) = mixer_with_track();
+        pull(&mut mixer, 10);
+        mixer.stop_track(handle.id, Duration::ZERO, None);
+        assert_eq!(pull(&mut mixer, 1), [0.0]);
+        assert_eq!(handle.stop_reason(), Some(StopReason::Stopped));
+    }
+
+    #[test]
+    fn trigger_fires_at_its_frame_even_when_a_stop_lands_there() {
+        let (mut mixer, handle) = mixer_with_track();
+        let mut rx = mixer.add_trigger(handle.id, ms(100)).unwrap();
+        pull(&mut mixer, 100);
+        assert!(rx.try_recv().is_err());
+        pull(&mut mixer, 1);
+        assert!(rx.try_recv().is_ok());
+
+        let (mut mixer, handle) = mixer_with_track();
+        let mut rx = mixer.add_trigger(handle.id, ms(100)).unwrap();
+        mixer.stop_track(handle.id, Duration::ZERO, Some(ms(100)));
+        pull(&mut mixer, 101);
+        assert!(rx.try_recv().is_ok());
+        assert_eq!(handle.stop_reason(), Some(StopReason::Stopped));
     }
 }
