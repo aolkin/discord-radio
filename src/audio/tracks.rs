@@ -4,7 +4,6 @@ use crate::audio::processing_thread::AudioProcessor;
 use crate::state::Data;
 use serenity::model::id::GuildId;
 use std::collections::HashMap;
-use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{RwLock, oneshot};
@@ -65,10 +64,12 @@ impl TrackManager {
         &mut self,
         args: StartTrackArgs,
     ) -> Result<oneshot::Receiver<()>, Box<dyn std::error::Error + Send + Sync>> {
-        let resolved_filename = self.bot_state.file_resolver.resolve(&args.filename).await?;
+        if self.tracks.contains_key(&args.name) {
+            return Err(format!("Track '{}' already exists", args.name).into());
+        }
 
-        self.validate_and_prepare_track(&args.name, &resolved_filename)
-            .await?;
+        let resolved_filename = self.bot_state.file_resolver.resolve(&args.filename).await?;
+        let source = open_track_source(&resolved_filename, args.start_position)?;
         let duration = self
             .bot_state
             .duration_cache
@@ -93,14 +94,7 @@ impl TrackManager {
             self.guild_id
         );
 
-        // Create audio source through DSP pipeline
         let processor_arc = self.audio_processor.clone();
-        let mut source = SymphoniaSource::from_file(&resolved_filename, 48000)?;
-
-        // Seek to start position if specified
-        if let Some(pos) = args.start_position {
-            source.seek(pos)?;
-        }
 
         let (mixer_handle, end_rx) = {
             let mut processor = processor_arc.write().await;
@@ -156,22 +150,6 @@ impl TrackManager {
         self.persist_state().await;
 
         Ok(gone_rx)
-    }
-
-    async fn validate_and_prepare_track(
-        &self,
-        name: &str,
-        filename: &str,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        if self.tracks.contains_key(name) {
-            return Err(format!("Track '{}' already exists", name).into());
-        }
-
-        if !Path::new(filename).exists() {
-            return Err(format!("Audio file not found: {}", filename).into());
-        }
-
-        Ok(())
     }
 
     pub fn has_track(&self, name: &str) -> bool {
@@ -374,6 +352,17 @@ impl TrackManager {
             tracing::warn!("Failed to persist multitrack state: {}", e);
         }
     }
+}
+
+fn open_track_source(
+    path: &str,
+    start_position: Option<Duration>,
+) -> Result<SymphoniaSource, Box<dyn std::error::Error + Send + Sync>> {
+    let mut source = SymphoniaSource::from_file(path, 48000)?;
+    if let Some(pos) = start_position {
+        source.seek(pos)?;
+    }
+    Ok(source)
 }
 
 /// Get or create a TrackManager for a guild, ensuring audio processor exists
