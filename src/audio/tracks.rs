@@ -239,8 +239,14 @@ impl TrackManager {
     }
 
     pub async fn remove_track(&mut self, name: &str) {
-        let info = self.tracks.remove(name);
-        self.finish_removing_track(info).await;
+        if let Some(info) = self.tracks.remove(name) {
+            self.audio_processor.write().await.mixer_mut().remove_track(
+                info.mixer_handle,
+                Duration::ZERO,
+                None,
+            );
+            self.finish_removing_track(info).await;
+        }
     }
 
     async fn remove_handle(&mut self, handle: TrackHandle) {
@@ -249,18 +255,14 @@ impl TrackManager {
             .extract_if(|_k, info| info.mixer_handle == handle)
             .map(|(_, info)| info)
             .next();
-        self.finish_removing_track(info).await;
+        if let Some(info) = info {
+            self.finish_removing_track(info).await;
+        }
     }
 
-    async fn finish_removing_track(&mut self, info: Option<TrackInfo>) {
-        if let Some(info) = info {
-            let mut proc = self.audio_processor.write().await;
-            proc.mixer_mut()
-                .remove_track(info.mixer_handle, Duration::ZERO, None);
-
-            tracing::debug!("Removed track '{}' from guild {}", info.name, self.guild_id);
-            self.persist_state().await;
-        }
+    async fn finish_removing_track(&self, info: TrackInfo) {
+        tracing::debug!("Removed track '{}' from guild {}", info.name, self.guild_id);
+        self.persist_state().await;
     }
 
     pub async fn stop_track(
