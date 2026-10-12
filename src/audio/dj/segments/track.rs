@@ -70,7 +70,7 @@ impl TrackSegment {
         let track = mixer.add_track(Box::new(source), 0.0, false);
         mixer.update_track_volume(track.id, self.volume, FADE_TIME)?;
         let end_trigger = mixer.add_trigger(track.id, play_duration)?;
-        mixer.remove_track(track.id, FADE_TIME, Some(play_duration));
+        mixer.stop_track(track.id, FADE_TIME, Some(play_duration));
         self.track.set(track);
         *self.end_trigger.lock().unwrap() = Some(end_trigger);
         Ok(())
@@ -175,7 +175,7 @@ impl Segment for TrackSegment {
 
     async fn exit(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
         if !self.is_complete().await {
-            self.track.remove(ctx, FADE_TIME).await;
+            self.track.stop(ctx, FADE_TIME).await;
         }
         Ok(())
     }

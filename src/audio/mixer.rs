@@ -24,7 +24,7 @@ pub enum StopReason {
 }
 
 /// A track added to the mixer. It has ended once it plays to its end, is
-/// removed, or the mixer is dropped.
+/// removed or stopped, or the mixer is dropped.
 #[derive(Clone, Debug)]
 pub struct TrackHandle {
     pub id: TrackId,
@@ -62,8 +62,13 @@ pub trait AudioSource: Send + Sync {
 
 enum Keyframe {
     StartFade { target: f32, frames: u64 },
-    Stop,
     Trigger(oneshot::Sender<()>),
+}
+
+struct Stop {
+    at: u64,
+    fade: u64,
+    fading: bool,
 }
 
 /// Moves a track's user volume linearly to `target`, one `step` per frame.
@@ -83,6 +88,7 @@ pub struct MixerTrack {
     /// order the keyframes were added.
     keyframes: BTreeMap<(u64, u64), Keyframe>,
     next_keyframe: u64,
+    stop: Option<Stop>,
     ramp: Option<VolumeRamp>,
     pub loops: bool,
     pub active: bool,
@@ -103,6 +109,7 @@ impl MixerTrack {
             played_frames: 0,
             keyframes: BTreeMap::new(),
             next_keyframe: 0,
+            stop: None,
             ramp: None,
             loops,
             active: true,
@@ -127,27 +134,50 @@ impl MixerTrack {
         self.next_keyframe += 1;
     }
 
-    /// Returns true when a due keyframe is `Stop`.
-    fn apply_due_keyframes(&mut self) -> bool {
-        let mut stop = false;
+    fn start_ramp(&mut self, target: f32, frames: u64) {
+        self.ramp = Some(VolumeRamp {
+            target,
+            step: (target - self.volume) / frames.max(1) as f32,
+            frames_left: frames,
+        });
+    }
+
+    /// Skips `StartFade` keyframes while the stop's fade runs.
+    fn apply_due_keyframes(&mut self) {
         while let Some(entry) = self.keyframes.first_entry()
             && entry.key().0 <= self.played_frames
         {
             match entry.remove() {
                 Keyframe::StartFade { target, frames } => {
-                    self.ramp = Some(VolumeRamp {
-                        target,
-                        step: (target - self.volume) / frames.max(1) as f32,
-                        frames_left: frames,
-                    });
+                    if !self.stop.as_ref().is_some_and(|stop| stop.fading) {
+                        self.start_ramp(target, frames);
+                    }
                 }
-                Keyframe::Stop => stop = true,
                 Keyframe::Trigger(tx) => {
                     let _ = tx.send(());
                 }
             }
         }
-        stop
+    }
+
+    /// Returns true when the track should stop now.
+    fn stop_due(&mut self) -> bool {
+        let Some(stop) = &mut self.stop else {
+            return false;
+        };
+        if stop.fading {
+            return self.ramp.is_none();
+        }
+        if self.played_frames < stop.at {
+            return false;
+        }
+        if stop.fade == 0 {
+            return true;
+        }
+        stop.fading = true;
+        let fade = stop.fade;
+        self.start_ramp(0.0, fade);
+        false
     }
 
     fn advance_ramp(&mut self) {
@@ -219,7 +249,7 @@ pub struct Mixer {
 }
 
 /// A [`TrackId`] whose track was removed or has ended is a no-op for
-/// `remove_track`, and the `update_*` methods return an error for it.
+/// `remove_track` and `stop_track`, and the `update_*` methods return an error for it.
 impl Mixer {
     pub fn new(sample_rate: u32) -> Self {
         Self {
@@ -246,41 +276,36 @@ impl Mixer {
         TrackHandle { id: handle, end_rx }
     }
 
-    /// Ramps the track linearly to silence over `fade`, then stops it.
-    /// `at` is how long the track has played (frames the mixer has output for
-    /// it, across loops) when the ramp starts; `None`, or a time already
-    /// reached, starts it before the next frame. A zero `fade` with no `at`
-    /// removes the track at once. Returns false if the track does not exist.
-    ///
-    /// A starting ramp replaces any volume ramp in progress on the track. The
-    /// stop is unconditional: a later volume change does not cancel it.
-    pub fn remove_track(&mut self, handle: TrackId, fade: Duration, at: Option<Duration>) -> bool {
-        if fade.is_zero() && at.is_none() {
-            return self
-                .tracks
-                .remove(&handle)
-                .map(|mut track| track.end(StopReason::Removed))
-                .is_some();
-        }
-        let frames = self.duration_frames(fade);
-        let at_frame = at.map(|at| self.duration_frames(at));
+    /// Removes the track at once. Returns false if the track does not exist.
+    pub fn remove_track(&mut self, handle: TrackId) -> bool {
+        self.tracks
+            .remove(&handle)
+            .map(|mut track| track.end(StopReason::Removed))
+            .is_some()
+    }
+
+    /// Sets the track's stop, replacing any earlier one. Once the track has
+    /// played for `at` (frames the mixer has output for it, across loops;
+    /// `None` means now), it ramps linearly to silence over `fade`, then
+    /// stops. A zero `fade` stops it at `at`, after the keyframes due then.
+    /// The ramp replaces any volume ramp in progress, and volume changes
+    /// are ignored while it runs. Returns false if the track does not exist.
+    pub fn stop_track(&mut self, handle: TrackId, fade: Duration, at: Option<Duration>) -> bool {
+        let fade = self.duration_frames(fade);
+        let at = at.map(|at| self.duration_frames(at));
         let Ok(track) = self.track_mut(handle) else {
             return false;
         };
-        let start = at_frame.unwrap_or(track.played_frames);
-        track.add_keyframe(
-            start,
-            Keyframe::StartFade {
-                target: 0.0,
-                frames,
-            },
-        );
-        track.add_keyframe(start + frames, Keyframe::Stop);
+        track.stop = Some(Stop {
+            at: at.unwrap_or(track.played_frames),
+            fade,
+            fading: false,
+        });
         true
     }
 
     /// The receiver gets `()` once the track has played for `at` (see
-    /// [`Self::remove_track`]), or an error if the track ends first.
+    /// [`Self::stop_track`]), or an error if the track ends first.
     pub fn add_trigger(
         &mut self,
         handle: TrackId,
@@ -339,7 +364,8 @@ impl Mixer {
         let mut finished_tracks = Vec::new();
 
         for (handle, track) in self.tracks.iter_mut() {
-            if track.apply_due_keyframes() {
+            track.apply_due_keyframes();
+            if track.stop_due() {
                 track.end(StopReason::Stopped);
                 finished_tracks.push(*handle);
                 continue;
