@@ -15,6 +15,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, Notify};
 use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 
 const HEX_TRACK_NAME: &str = "hex_playback";
 
@@ -34,7 +35,7 @@ pub struct HexSegment {
     target_loops: usize,
     progress: Arc<HexProgress>,
     #[serde(skip)]
-    run: std::sync::Mutex<Option<JoinHandle<()>>>,
+    run: std::sync::Mutex<Option<(CancellationToken, JoinHandle<()>)>>,
 }
 
 impl Deref for HexSegment {
@@ -69,7 +70,9 @@ impl HexSegment {
     }
 
     fn start_run(&self, ctx: &SegmentCtx) {
-        let handle = tokio::spawn(run_hex_message(
+        let shutdown = CancellationToken::new();
+        let track_manager = ctx.track_manager.clone();
+        let run = run_hex_message(
             self.message.clone(),
             self.volume,
             self.target_loops,
@@ -77,8 +80,21 @@ impl HexSegment {
             ctx.track_manager.clone(),
             ctx.bot_state.file_resolver.clone(),
             *ctx.guild_id,
-        ));
-        *self.run.lock().unwrap() = Some(handle);
+        );
+        let handle = tokio::spawn({
+            let shutdown = shutdown.clone();
+            async move {
+                tokio::select! {
+                    () = shutdown.cancelled() => {}
+                    () = run => {}
+                }
+                let mut track_manager = track_manager.lock().await;
+                if track_manager.has_track(HEX_TRACK_NAME) {
+                    track_manager.remove_track(HEX_TRACK_NAME).await;
+                }
+            }
+        });
+        *self.run.lock().unwrap() = Some((shutdown, handle));
     }
 }
 
@@ -90,7 +106,7 @@ impl Segment for HexSegment {
             .lock()
             .unwrap()
             .as_ref()
-            .is_none_or(JoinHandle::is_finished)
+            .is_none_or(|(_, handle)| handle.is_finished())
     }
 
     fn elapsed(&self) -> Duration {
@@ -121,18 +137,14 @@ impl Segment for HexSegment {
     }
 
     async fn exit(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
-        let handle = self.run.lock().unwrap().take();
-        if let Some(handle) = handle {
-            handle.abort();
+        let run = self.run.lock().unwrap().take();
+        if let Some((shutdown, handle)) = run {
+            shutdown.cancel();
             let _ = handle.await;
         }
-        let mut track_manager = ctx.track_manager.lock().await;
-        if track_manager.has_track(HEX_TRACK_NAME) {
-            track_manager.remove_track(HEX_TRACK_NAME).await;
-        }
-        drop(track_manager);
         if let Some(metrics) = ctx.bot_state.metrics.read().await.as_ref() {
-            metrics.record_hex_message_loops(ctx.guild_id.get(), self.target_loops as u64);
+            let loops_played = self.progress.loops.load(Ordering::Relaxed) as u64;
+            metrics.record_hex_message_loops(ctx.guild_id.get(), loops_played);
         }
         Ok(())
     }
