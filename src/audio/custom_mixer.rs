@@ -22,7 +22,7 @@ struct VolumeRamp {
     target: f32,
     step: f32,
     frames_left: u32,
-    remove_at_end: bool,
+    stop_at_end: bool,
 }
 
 pub struct MixerTrack {
@@ -61,28 +61,28 @@ impl MixerTrack {
         self.amplitude = perceptual_level_to_amplitude(volume);
     }
 
-    fn start_ramp(&mut self, target: f32, frames: u32, remove_at_end: bool) {
+    fn start_ramp(&mut self, target: f32, frames: u32, stop_at_end: bool) {
         let frames = frames.max(1);
         self.ramp = Some(VolumeRamp {
             target,
             step: (target - self.volume) / frames as f32,
             frames_left: frames,
-            remove_at_end,
+            stop_at_end,
         });
     }
 
-    /// Returns true when a ramp with `remove_at_end` has just finished.
+    /// Returns true when a ramp with `stop_at_end` has just finished.
     fn advance_ramp(&mut self) -> bool {
         let Some(ramp) = &mut self.ramp else {
             return false;
         };
         ramp.frames_left -= 1;
-        let (target, step, frames_left, remove_at_end) =
-            (ramp.target, ramp.step, ramp.frames_left, ramp.remove_at_end);
+        let (target, step, frames_left, stop_at_end) =
+            (ramp.target, ramp.step, ramp.frames_left, ramp.stop_at_end);
         if frames_left == 0 {
             self.ramp = None;
             self.set_volume(target);
-            remove_at_end
+            stop_at_end
         } else {
             self.set_volume(target - step * frames_left as f32);
             false
@@ -167,8 +167,21 @@ impl CustomMixer {
         handle
     }
 
-    pub fn remove_track(&mut self, handle: TrackHandle) -> bool {
-        self.tracks.remove(&handle).is_some()
+    /// Removes the track. A non-zero `fade` ramps it to silence first and then
+    /// removes it without invoking its end callback. Returns false if the track
+    /// does not exist.
+    pub fn remove_track(&mut self, handle: TrackHandle, fade: Duration) -> bool {
+        if fade.is_zero() {
+            return self.tracks.remove(&handle).is_some();
+        }
+        let frames = self.duration_frames(fade);
+        match self.tracks.get_mut(&handle) {
+            Some(track) => {
+                track.start_ramp(0.0, frames, true);
+                true
+            }
+            None => false,
+        }
     }
 
     /// Update the volume of a track.
@@ -178,43 +191,28 @@ impl CustomMixer {
     /// * `handle` - Handle of the track to update
     /// * `volume` - User-facing volume (0.0-2.0). This is converted to amplitude using
     ///   perceptual (logarithmic) scaling. 0.0 = silence, 1.0 = unity gain, 2.0 = +18dB boost.
+    /// * `fade` - Time to ramp linearly from the current volume. Zero applies it immediately.
     ///
     /// # Returns
     ///
     /// Ok(()) if successful, or an error if the track is not found.
     ///
-    /// Cancels any volume ramp in progress on the track.
-    pub fn update_track_volume(&mut self, handle: TrackHandle, volume: f32) -> anyhow::Result<()> {
-        let track = self.track_mut(handle)?;
-        track.ramp = None;
-        track.set_volume(volume);
-        Ok(())
-    }
-
-    /// Ramps the track's user volume linearly from its current value to `volume`
-    /// over `duration`, replacing any ramp in progress.
-    pub fn ramp_track_volume(
+    /// Replaces any volume ramp in progress on the track.
+    pub fn update_track_volume(
         &mut self,
         handle: TrackHandle,
         volume: f32,
-        duration: Duration,
+        fade: Duration,
     ) -> anyhow::Result<()> {
-        let frames = self.duration_frames(duration);
-        self.track_mut(handle)?.start_ramp(volume, frames, false);
-        Ok(())
-    }
-
-    /// Ramps the track to silence over `duration`, then removes it without
-    /// invoking its end callback. Returns false if the track does not exist.
-    pub fn fade_out_and_remove_track(&mut self, handle: TrackHandle, duration: Duration) -> bool {
-        let frames = self.duration_frames(duration);
-        match self.tracks.get_mut(&handle) {
-            Some(track) => {
-                track.start_ramp(0.0, frames, true);
-                true
-            }
-            None => false,
+        let frames = self.duration_frames(fade);
+        let track = self.track_mut(handle)?;
+        if fade.is_zero() {
+            track.ramp = None;
+            track.set_volume(volume);
+        } else {
+            track.start_ramp(volume, frames, false);
         }
+        Ok(())
     }
 
     fn duration_frames(&self, duration: Duration) -> u32 {
