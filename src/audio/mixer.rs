@@ -171,8 +171,7 @@ pub struct MixerTrack {
     /// User-facing volume (0.0-2.0).
     volume: f32,
     amplitude: f32,
-    played_frames: u64,
-    shared_played_frames: Arc<AtomicU64>,
+    played_frames: Arc<AtomicU64>,
     /// Keyed by the played frame at which the keyframe applies, then by the
     /// order the keyframes were added.
     keyframes: BTreeMap<(u64, u64), Keyframe>,
@@ -190,7 +189,7 @@ impl MixerTrack {
         source: Box<dyn AudioSource>,
         volume: f32,
         loops: bool,
-        shared_played_frames: Arc<AtomicU64>,
+        played_frames: Arc<AtomicU64>,
         commands: mpsc::Receiver<TrackCommand>,
         end_tx: watch::Sender<Option<StopReason>>,
     ) -> Self {
@@ -198,8 +197,7 @@ impl MixerTrack {
             source,
             volume,
             amplitude: perceptual_level_to_amplitude(volume),
-            played_frames: 0,
-            shared_played_frames,
+            played_frames,
             keyframes: BTreeMap::new(),
             next_keyframe_id: 0,
             stop: None,
@@ -232,8 +230,13 @@ impl MixerTrack {
         }
     }
 
+    fn played_frames(&self) -> u64 {
+        self.played_frames.load(Ordering::Relaxed)
+    }
+
     fn start_frame(&self, at: Option<u64>) -> u64 {
-        at.map_or(self.played_frames, |at| at.max(self.played_frames))
+        let played_frames = self.played_frames();
+        at.map_or(played_frames, |at| at.max(played_frames))
     }
 
     fn stop(&mut self, fade: u64, at: Option<u64>) {
@@ -267,13 +270,14 @@ impl MixerTrack {
     fn active_stop(&self) -> Option<&Stop> {
         self.stop
             .as_ref()
-            .filter(|stop| self.played_frames >= stop.start)
+            .filter(|stop| self.played_frames() >= stop.start)
     }
 
     /// Skips `StartFade` keyframes while the stop's fade runs.
     fn apply_due_keyframes(&mut self) {
+        let played_frames = self.played_frames();
         while let Some(entry) = self.keyframes.first_entry()
-            && entry.key().0 <= self.played_frames
+            && entry.key().0 <= played_frames
         {
             match entry.remove() {
                 Keyframe::StartFade { target, frames } => {
@@ -281,8 +285,8 @@ impl MixerTrack {
                         self.ramp = Some(VolumeRamp {
                             from: self.volume,
                             to: target,
-                            start: self.played_frames,
-                            end: self.played_frames + frames,
+                            start: played_frames,
+                            end: played_frames + frames,
                         });
                     }
                 }
@@ -304,12 +308,13 @@ impl MixerTrack {
     }
 
     fn update_amplitude(&mut self) {
+        let played_frames = self.played_frames();
         if let Some(ramp) = &self.ramp {
-            if self.played_frames >= ramp.end {
+            if played_frames >= ramp.end {
                 self.volume = ramp.to;
                 self.ramp = None;
             } else {
-                let elapsed = self.played_frames.saturating_sub(ramp.start);
+                let elapsed = played_frames.saturating_sub(ramp.start);
                 let progress = elapsed as f32 / (ramp.end - ramp.start) as f32;
                 self.volume = ramp.from + (ramp.to - ramp.from) * progress;
             }
@@ -329,9 +334,7 @@ impl MixerTrack {
         loop {
             match self.source.next_frame() {
                 Some(frame) => {
-                    self.played_frames += 1;
-                    self.shared_played_frames
-                        .store(self.played_frames, Ordering::Relaxed);
+                    self.played_frames.fetch_add(1, Ordering::Relaxed);
                     return Some([frame[0] * self.amplitude, frame[1] * self.amplitude]);
                 }
                 None => {
@@ -443,7 +446,7 @@ impl Mixer {
             track.apply_due_keyframes();
             if track
                 .active_stop()
-                .is_some_and(|stop| track.played_frames >= stop.end)
+                .is_some_and(|stop| track.played_frames() >= stop.end)
             {
                 track.end(StopReason::Stopped);
                 finished_tracks.push(*handle);
