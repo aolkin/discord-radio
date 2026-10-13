@@ -4,7 +4,7 @@ use super::{
 };
 use crate::audio::dj::config::TrackEntry;
 use crate::audio::duration::DurationCache;
-use crate::audio::mixer::MixerTrackArgs;
+use crate::audio::mixer::{MixerTrackArgs, TrackCommand};
 use crate::audio::tracks::open_track_source;
 use async_trait::async_trait;
 use rand::Rng;
@@ -80,8 +80,10 @@ impl TrackSegment {
                     ..Default::default()
                 },
             );
-        let end_trigger = track.add_trigger(play_duration)?;
-        track.stop(FADE_TIME, Some(play_duration))?;
+        let (add_trigger, end_trigger) = TrackCommand::add_trigger(play_duration);
+        anyhow::ensure!(track.send(add_trigger)?, "Track {:?} has ended", track.id);
+        let stop = TrackCommand::stop(FADE_TIME, Some(play_duration));
+        anyhow::ensure!(track.send(stop)?, "Track {:?} has ended", track.id);
         self.track.set(track);
         *self.end_trigger.lock().unwrap() = Some(end_trigger);
         Ok(())

@@ -27,7 +27,11 @@ pub enum StopReason {
 
 const COMMAND_QUEUE_SIZE: usize = 10;
 
-enum TrackCommand {
+/// An edit to a track, sent with [`TrackHandle::send`]. The mixer applies
+/// edits at the start of its next chunk, in the order they were sent.
+pub struct TrackCommand(Edit);
+
+enum Edit {
     SetVolume {
         volume: f32,
         fade: Duration,
@@ -44,9 +48,39 @@ enum TrackCommand {
     },
 }
 
+impl TrackCommand {
+    /// * `volume` - User-facing volume (0.0-2.0). This is converted to amplitude using
+    ///   perceptual (logarithmic) scaling. 0.0 = silence, 1.0 = unity gain, 2.0 = +18dB boost.
+    /// * `fade` - Time to ramp linearly from the current volume. Zero applies it at once.
+    /// * `at` - When the ramp starts (see [`Self::stop`]).
+    ///
+    /// Replaces any volume ramp in progress on the track.
+    pub fn set_volume(volume: f32, fade: Duration, at: Option<Duration>) -> Self {
+        Self(Edit::SetVolume { volume, fade, at })
+    }
+
+    pub fn set_loops(loops: bool) -> Self {
+        Self(Edit::SetLoops(loops))
+    }
+
+    /// Sets the track's stop, replacing any earlier one. Once the track has
+    /// played for `at` (frames the mixer has output for it, across loops;
+    /// `None` means now), it ramps linearly to silence over `fade`, then
+    /// stops, overwriting any in-progress volume ramp at the time.
+    pub fn stop(fade: Duration, at: Option<Duration>) -> Self {
+        Self(Edit::Stop { fade, at })
+    }
+
+    /// The receiver gets `()` once the track has played for `at` (see
+    /// [`Self::stop`]), or an error if the track ends first.
+    pub fn add_trigger(at: Duration) -> (Self, oneshot::Receiver<()>) {
+        let (tx, rx) = oneshot::channel();
+        (Self(Edit::AddTrigger { at, tx }), rx)
+    }
+}
+
 /// A track added to the mixer. It has ended once it plays to its end, is
-/// removed or stopped, or the mixer is dropped. Dropping a handle does not
-/// remove the track.
+/// removed or stopped, or the mixer is dropped.
 #[derive(Clone, Debug)]
 pub struct TrackHandle {
     pub id: TrackId,
@@ -57,9 +91,6 @@ pub struct TrackHandle {
     end_rx: watch::Receiver<Option<StopReason>>,
 }
 
-/// The mixer applies the edits at the start of its next chunk, in the order
-/// they were sent. Each edit returns an error when the track has ended or its
-/// command queue is full.
 impl TrackHandle {
     pub fn has_ended(&self) -> bool {
         self.stop_reason().is_some()
@@ -79,41 +110,16 @@ impl TrackHandle {
         }
     }
 
-    /// * `volume` - User-facing volume (0.0-2.0). This is converted to amplitude using
-    ///   perceptual (logarithmic) scaling. 0.0 = silence, 1.0 = unity gain, 2.0 = +18dB boost.
-    /// * `fade` - Time to ramp linearly from the current volume. Zero applies it at once.
-    /// * `at` - When the ramp starts (see [`Self::stop`]).
-    ///
-    /// Replaces any volume ramp in progress on the track.
-    pub fn set_volume(
-        &self,
-        volume: f32,
-        fade: Duration,
-        at: Option<Duration>,
-    ) -> anyhow::Result<()> {
-        self.send(TrackCommand::SetVolume { volume, fade, at })
-    }
-
-    pub fn set_loops(&self, loops: bool) -> anyhow::Result<()> {
-        self.send(TrackCommand::SetLoops(loops))
-    }
-
-    /// Sets the track's stop, replacing any earlier one. Once the track has
-    /// played for `at` (frames the mixer has output for it, across loops;
-    /// `None` means now), it ramps linearly to silence over `fade`, then
-    /// stops. A zero `fade` stops it at `at`, after the keyframes due then.
-    /// The ramp replaces any volume ramp in progress, and volume changes
-    /// are ignored while it runs.
-    pub fn stop(&self, fade: Duration, at: Option<Duration>) -> anyhow::Result<()> {
-        self.send(TrackCommand::Stop { fade, at })
-    }
-
-    /// The receiver gets `()` once the track has played for `at` (see
-    /// [`Self::stop`]), or an error if the track ends first.
-    pub fn add_trigger(&self, at: Duration) -> anyhow::Result<oneshot::Receiver<()>> {
-        let (tx, rx) = oneshot::channel();
-        self.send(TrackCommand::AddTrigger { at, tx })?;
-        Ok(rx)
+    /// Returns `Ok(false)` if the track has ended, and an error if its
+    /// command queue is full.
+    pub fn send(&self, command: TrackCommand) -> anyhow::Result<bool> {
+        match self.commands.try_send(command) {
+            Ok(()) => Ok(true),
+            Err(mpsc::error::TrySendError::Closed(_)) => Ok(false),
+            Err(mpsc::error::TrySendError::Full(_)) => {
+                anyhow::bail!("Track {:?} command queue is full", self.id)
+            }
+        }
     }
 
     /// Total frames played, including loops.
@@ -121,17 +127,6 @@ impl TrackHandle {
         Duration::from_secs_f64(
             self.played_frames.load(Ordering::Relaxed) as f64 / f64::from(self.sample_rate),
         )
-    }
-
-    fn send(&self, command: TrackCommand) -> anyhow::Result<()> {
-        self.commands.try_send(command).map_err(|e| match e {
-            mpsc::error::TrySendError::Full(_) => {
-                anyhow::anyhow!("Track {:?} command queue is full", self.id)
-            }
-            mpsc::error::TrySendError::Closed(_) => {
-                anyhow::anyhow!("Track {:?} has ended", self.id)
-            }
-        })
     }
 }
 
@@ -190,7 +185,8 @@ pub struct MixerTrack {
     /// User-facing volume (0.0-2.0).
     volume: f32,
     amplitude: f32,
-    played_frames: Arc<AtomicU64>,
+    played_frames: u64,
+    shared_played_frames: Arc<AtomicU64>,
     /// Keyed by the played frame at which the keyframe applies, then by the
     /// order the keyframes were added.
     keyframes: BTreeMap<(u64, u64), Keyframe>,
@@ -208,7 +204,7 @@ impl MixerTrack {
         source: Box<dyn AudioSource>,
         volume: f32,
         loops: bool,
-        played_frames: Arc<AtomicU64>,
+        shared_played_frames: Arc<AtomicU64>,
         commands: mpsc::Receiver<TrackCommand>,
         end_tx: watch::Sender<Option<StopReason>>,
     ) -> Self {
@@ -216,7 +212,8 @@ impl MixerTrack {
             source,
             volume,
             amplitude: perceptual_level_to_amplitude(volume),
-            played_frames,
+            played_frames: 0,
+            shared_played_frames,
             keyframes: BTreeMap::new(),
             next_keyframe_id: 0,
             stop: None,
@@ -228,33 +225,27 @@ impl MixerTrack {
         }
     }
 
-    fn played_frames(&self) -> u64 {
-        self.played_frames.load(Ordering::Relaxed)
-    }
-
     fn apply_commands(&mut self, sample_rate: u32) {
         let frames =
             |duration: Duration| (duration.as_secs_f64() * f64::from(sample_rate)).round() as u64;
-        while let Ok(command) = self.commands.try_recv() {
-            match command {
-                TrackCommand::SetVolume { volume, fade, at } => self.add_keyframe(
+        while let Ok(TrackCommand(edit)) = self.commands.try_recv() {
+            match edit {
+                Edit::SetVolume { volume, fade, at } => self.add_keyframe(
                     self.start_frame(at.map(frames)),
                     Keyframe::StartFade {
                         target: volume,
                         frames: frames(fade),
                     },
                 ),
-                TrackCommand::SetLoops(loops) => self.loops = loops,
-                TrackCommand::Stop { fade, at } => self.stop(frames(fade), at.map(frames)),
-                TrackCommand::AddTrigger { at, tx } => {
-                    self.add_keyframe(frames(at), Keyframe::Trigger(tx))
-                }
+                Edit::SetLoops(loops) => self.loops = loops,
+                Edit::Stop { fade, at } => self.stop(frames(fade), at.map(frames)),
+                Edit::AddTrigger { at, tx } => self.add_keyframe(frames(at), Keyframe::Trigger(tx)),
             }
         }
     }
 
     fn start_frame(&self, at: Option<u64>) -> u64 {
-        at.map_or(self.played_frames(), |at| at.max(self.played_frames()))
+        at.map_or(self.played_frames, |at| at.max(self.played_frames))
     }
 
     fn stop(&mut self, fade: u64, at: Option<u64>) {
@@ -288,14 +279,13 @@ impl MixerTrack {
     fn active_stop(&self) -> Option<&Stop> {
         self.stop
             .as_ref()
-            .filter(|stop| self.played_frames() >= stop.start)
+            .filter(|stop| self.played_frames >= stop.start)
     }
 
     /// Skips `StartFade` keyframes while the stop's fade runs.
     fn apply_due_keyframes(&mut self) {
-        let played_frames = self.played_frames();
         while let Some(entry) = self.keyframes.first_entry()
-            && entry.key().0 <= played_frames
+            && entry.key().0 <= self.played_frames
         {
             match entry.remove() {
                 Keyframe::StartFade { target, frames } => {
@@ -303,8 +293,8 @@ impl MixerTrack {
                         self.ramp = Some(VolumeRamp {
                             from: self.volume,
                             to: target,
-                            start: played_frames,
-                            end: played_frames + frames,
+                            start: self.played_frames,
+                            end: self.played_frames + frames,
                         });
                     }
                 }
@@ -327,11 +317,11 @@ impl MixerTrack {
 
     fn update_amplitude(&mut self) {
         if let Some(ramp) = &self.ramp {
-            if self.played_frames() >= ramp.end {
+            if self.played_frames >= ramp.end {
                 self.volume = ramp.to;
                 self.ramp = None;
             } else {
-                let elapsed = self.played_frames().saturating_sub(ramp.start);
+                let elapsed = self.played_frames.saturating_sub(ramp.start);
                 let progress = elapsed as f32 / (ramp.end - ramp.start) as f32;
                 self.volume = ramp.from + (ramp.to - ramp.from) * progress;
             }
@@ -351,7 +341,9 @@ impl MixerTrack {
         loop {
             match self.source.next_frame() {
                 Some(frame) => {
-                    self.played_frames.fetch_add(1, Ordering::Relaxed);
+                    self.played_frames += 1;
+                    self.shared_played_frames
+                        .store(self.played_frames, Ordering::Relaxed);
                     return Some([frame[0] * self.amplitude, frame[1] * self.amplitude]);
                 }
                 None => {
@@ -463,7 +455,7 @@ impl Mixer {
             track.apply_due_keyframes();
             if track
                 .active_stop()
-                .is_some_and(|stop| track.played_frames() >= stop.end)
+                .is_some_and(|stop| track.played_frames >= stop.end)
             {
                 track.end(StopReason::Stopped);
                 finished_tracks.push(*handle);
@@ -530,7 +522,9 @@ mod tests {
     fn volume_ramp_started_late_ends_after_its_own_length() {
         let (mut mixer, handle) = mixer_with_track();
         pull(&mut mixer, 1000);
-        handle.set_volume(0.0, ms(1000), None).unwrap();
+        handle
+            .send(TrackCommand::set_volume(0.0, ms(1000), None))
+            .unwrap();
         let ramp = pull(&mut mixer, 1000);
         assert!(ramp[500] > 0.0 && ramp[500] < 1.0);
         assert_eq!(pull(&mut mixer, 1), [0.0]);
@@ -539,7 +533,9 @@ mod tests {
     #[test]
     fn stop_fades_then_removes_the_track() {
         let (mut mixer, handle) = mixer_with_track();
-        handle.stop(ms(100), Some(ms(200))).unwrap();
+        handle
+            .send(TrackCommand::stop(ms(100), Some(ms(200))))
+            .unwrap();
         let out = pull(&mut mixer, 300);
         assert_eq!(out[150], 1.0);
         assert!(out[250] > 0.0 && out[250] < 1.0);
@@ -549,7 +545,9 @@ mod tests {
 
         let (mut mixer, handle) = mixer_with_track();
         pull(&mut mixer, 500);
-        handle.stop(ms(100), Some(ms(100))).unwrap();
+        handle
+            .send(TrackCommand::stop(ms(100), Some(ms(100))))
+            .unwrap();
         let out = pull(&mut mixer, 100);
         assert!(out[50] > 0.0 && out[50] < 1.0);
         assert!(!handle.has_ended());
@@ -558,24 +556,30 @@ mod tests {
 
         let (mut mixer, handle) = mixer_with_track();
         pull(&mut mixer, 10);
-        handle.stop(Duration::ZERO, None).unwrap();
+        handle
+            .send(TrackCommand::stop(Duration::ZERO, None))
+            .unwrap();
         assert_eq!(pull(&mut mixer, 1), [0.0]);
         assert_eq!(handle.stop_reason(), Some(StopReason::Stopped));
-        assert!(handle.set_loops(true).is_err());
+        assert!(!handle.send(TrackCommand::set_loops(true)).unwrap());
     }
 
     #[test]
     fn trigger_fires_at_its_frame_even_when_a_stop_lands_there() {
         let (mut mixer, handle) = mixer_with_track();
-        let mut rx = handle.add_trigger(ms(100)).unwrap();
+        let (trigger, mut rx) = TrackCommand::add_trigger(ms(100));
+        handle.send(trigger).unwrap();
         pull(&mut mixer, 100);
         assert!(rx.try_recv().is_err());
         pull(&mut mixer, 1);
         assert!(rx.try_recv().is_ok());
 
         let (mut mixer, handle) = mixer_with_track();
-        let mut rx = handle.add_trigger(ms(100)).unwrap();
-        handle.stop(Duration::ZERO, Some(ms(100))).unwrap();
+        let (trigger, mut rx) = TrackCommand::add_trigger(ms(100));
+        handle.send(trigger).unwrap();
+        handle
+            .send(TrackCommand::stop(Duration::ZERO, Some(ms(100))))
+            .unwrap();
         pull(&mut mixer, 101);
         assert!(rx.try_recv().is_ok());
         assert_eq!(handle.stop_reason(), Some(StopReason::Stopped));

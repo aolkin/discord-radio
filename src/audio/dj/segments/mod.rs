@@ -7,7 +7,7 @@ pub use noise::NoiseSegment;
 pub use track::TrackSegment;
 
 use crate::audio::dj::serde::{deser_instant, ser_instant};
-use crate::audio::mixer::TrackHandle;
+use crate::audio::mixer::{TrackCommand, TrackHandle};
 use crate::audio::processing_thread::AudioProcessor;
 use crate::state::BotState;
 use anyhow::Context;
@@ -199,7 +199,7 @@ impl TrackSlot {
 
     pub fn stop(&self, fade: Duration) {
         if let Some(handle) = self.0.lock().unwrap().take() {
-            let _ = handle.stop(fade, None);
+            let _ = handle.send(TrackCommand::stop(fade, None));
         }
     }
 }

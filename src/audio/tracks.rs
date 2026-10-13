@@ -1,5 +1,5 @@
 use crate::audio::decoder::SymphoniaSource;
-use crate::audio::mixer::{AudioSource, MixerTrackArgs, TrackHandle, TrackId};
+use crate::audio::mixer::{AudioSource, MixerTrackArgs, TrackCommand, TrackHandle, TrackId};
 use crate::audio::processing_thread::AudioProcessor;
 use crate::state::Data;
 use serenity::model::id::GuildId;
@@ -166,11 +166,11 @@ impl TrackManager {
 
         track_info.volume = volume;
 
-        track_info.mixer_handle.set_volume(
-            volume,
-            Duration::from_secs_f32(fade_time.max(0.0)),
-            None,
-        )?;
+        let set_volume =
+            TrackCommand::set_volume(volume, Duration::from_secs_f32(fade_time.max(0.0)), None);
+        if !track_info.mixer_handle.send(set_volume)? {
+            return Err(format!("Track {:?} has ended", track_info.mixer_handle.id).into());
+        }
 
         self.persist_state().await;
 
@@ -201,7 +201,10 @@ impl TrackManager {
 
         track_info.loops = loops;
 
-        track_info.mixer_handle.set_loops(loops)?;
+        let set_loops = TrackCommand::set_loops(loops);
+        if !track_info.mixer_handle.send(set_loops)? {
+            return Err(format!("Track {:?} has ended", track_info.mixer_handle.id).into());
+        }
 
         self.persist_state().await;
 
@@ -237,9 +240,10 @@ impl TrackManager {
             self.guild_id
         );
 
-        track_info
-            .mixer_handle
-            .stop(Duration::from_secs_f32(fade_time.max(0.0)), None)?;
+        let stop = TrackCommand::stop(Duration::from_secs_f32(fade_time.max(0.0)), None);
+        if !track_info.mixer_handle.send(stop)? {
+            return Err(format!("Track {:?} has ended", track_info.mixer_handle.id).into());
+        }
 
         self.tracks.remove(name);
         self.persist_state().await;
