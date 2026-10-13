@@ -7,7 +7,7 @@ pub use noise::NoiseSegment;
 pub use track::TrackSegment;
 
 use crate::audio::dj::serde::{deser_instant, ser_instant};
-use crate::audio::mixer::{TrackHandle, TrackId};
+use crate::audio::mixer::{Mixer, TrackCommand, TrackHandle};
 use crate::audio::processing_thread::AudioProcessor;
 use crate::state::BotState;
 use anyhow::Context;
@@ -20,7 +20,7 @@ use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::RwLock;
+use tokio::sync::{OwnedRwLockMappedWriteGuard, OwnedRwLockWriteGuard, RwLock};
 
 pub struct SegmentCtx<'a> {
     pub guild_id: &'a GuildId,
@@ -37,6 +37,13 @@ impl SegmentCtx<'_> {
             .get(self.guild_id)
             .cloned()
             .with_context(|| format!("No audio processor for guild {}", self.guild_id))
+    }
+
+    pub async fn mixer(
+        &self,
+    ) -> anyhow::Result<OwnedRwLockMappedWriteGuard<AudioProcessor, Mixer>> {
+        let processor = self.audio_processor().await?.write_owned().await;
+        Ok(OwnedRwLockWriteGuard::map(processor, |p| p.mixer_mut()))
     }
 }
 
@@ -197,18 +204,9 @@ impl TrackSlot {
         *self.0.lock().unwrap() = Some(handle);
     }
 
-    pub async fn stop(&self, ctx: &SegmentCtx<'_>, fade: Duration) {
-        if let Some((id, processor)) = self.take(ctx).await {
-            processor
-                .write()
-                .await
-                .mixer_mut()
-                .stop_track(id, fade, None);
+    pub fn stop(&self, fade: Duration) {
+        if let Some(handle) = self.0.lock().unwrap().take() {
+            let _ = handle.send(TrackCommand::Stop { fade, at: None });
         }
-    }
-
-    async fn take(&self, ctx: &SegmentCtx<'_>) -> Option<(TrackId, Arc<RwLock<AudioProcessor>>)> {
-        let handle = self.0.lock().unwrap().take()?;
-        Some((handle.id, ctx.audio_processor().await.ok()?))
     }
 }

@@ -4,6 +4,7 @@ use super::{
 };
 use crate::audio::dj::config::TrackEntry;
 use crate::audio::duration::DurationCache;
+use crate::audio::mixer::TrackCommand;
 use crate::audio::tracks::open_track_source;
 use async_trait::async_trait;
 use rand::Rng;
@@ -65,12 +66,26 @@ impl TrackSegment {
     ) -> anyhow::Result<()> {
         let path = ctx.bot_state.file_resolver.resolve(&self.filename).await?;
         let source = open_track_source(&path, start_position).map_err(|e| anyhow::anyhow!(e))?;
-        let mut processor = ctx.audio_processor().await?.write_owned().await;
-        let mixer = processor.mixer_mut();
-        let track = mixer.add_track(Box::new(source), 0.0, false);
-        mixer.update_track_volume(track.id, self.volume, FADE_TIME)?;
-        let end_trigger = mixer.add_trigger(track.id, play_duration)?;
-        mixer.stop_track(track.id, FADE_TIME, Some(play_duration));
+        let (end_tx, end_trigger) = tokio::sync::oneshot::channel();
+        let track = ctx.mixer().await?.add_track(
+            source,
+            0.0,
+            vec![
+                TrackCommand::SetVolume {
+                    volume: self.volume,
+                    fade: FADE_TIME,
+                    at: None,
+                },
+                TrackCommand::AddTrigger {
+                    at: play_duration,
+                    tx: end_tx,
+                },
+                TrackCommand::Stop {
+                    fade: FADE_TIME,
+                    at: Some(play_duration),
+                },
+            ],
+        );
         self.track.set(track);
         *self.end_trigger.lock().unwrap() = Some(end_trigger);
         Ok(())
@@ -173,9 +188,9 @@ impl Segment for TrackSegment {
         Ok(())
     }
 
-    async fn exit(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
+    async fn exit(&self, _ctx: &SegmentCtx) -> anyhow::Result<()> {
         if !self.is_complete().await {
-            self.track.stop(ctx, FADE_TIME).await;
+            self.track.stop(FADE_TIME);
         }
         Ok(())
     }

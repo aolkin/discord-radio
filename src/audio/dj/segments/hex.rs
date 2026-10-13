@@ -4,6 +4,7 @@ use super::{
 };
 use crate::audio::dj::config::{HexMessageDefaults, HexMessageEntry};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
+use crate::audio::mixer::TrackCommand;
 use crate::audio::processing_thread::AudioProcessor;
 use crate::audio::tracks::open_track_source;
 use crate::bucket::FileResolver;
@@ -150,7 +151,7 @@ impl Segment for HexSegment {
             handle.abort();
             let _ = handle.await;
         }
-        self.progress.current_track.stop(ctx, Duration::ZERO).await;
+        self.progress.current_track.stop(Duration::ZERO);
         if let Some(metrics) = ctx.bot_state.metrics.read().await.as_ref() {
             let loops_played = self.progress.loops.load(Ordering::Relaxed) as u64;
             metrics.record_hex_message_loops(ctx.guild_id.get(), loops_played);
@@ -213,14 +214,14 @@ async fn run_hex_message(
                         continue;
                     }
                 };
-                let track =
-                    processor
-                        .write()
-                        .await
-                        .mixer_mut()
-                        .add_track(Box::new(source), volume, false);
-                progress.current_track.set(track.clone());
-                track.ended().await;
+                let (ended_tx, ended) = tokio::sync::oneshot::channel();
+                let track = processor.write().await.mixer_mut().add_track(
+                    source,
+                    volume,
+                    vec![TrackCommand::AddStopTrigger(ended_tx)],
+                );
+                progress.current_track.set(track);
+                let _ = ended.await;
             }
             _ => tracing::warn!("Audio file not found: {}", filename),
         }

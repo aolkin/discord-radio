@@ -135,6 +135,7 @@ impl AudioProcessor {
 
         // Advance transitions based on how many frames we're about to render
         self.process_transitions(FRAME_SIZE);
+        self.mixer.drain_commands();
 
         for frame in buffer.iter_mut() {
             let mixed = self.mixer.mix_next_frame();

@@ -1,5 +1,5 @@
 use crate::audio::decoder::SymphoniaSource;
-use crate::audio::mixer::{AudioSource, TrackHandle, TrackId};
+use crate::audio::mixer::{AudioSource, StopReason, TrackCommand, TrackHandle, TrackId};
 use crate::audio::processing_thread::AudioProcessor;
 use crate::state::Data;
 use serenity::model::id::GuildId;
@@ -89,26 +89,30 @@ impl TrackManager {
             self.guild_id
         );
 
-        let processor_arc = self.audio_processor.clone();
-
-        let mixer_handle = {
-            let mut processor = processor_arc.write().await;
-            let mixer = processor.mixer_mut();
-            let mixer_handle = mixer.add_track(Box::new(source), 0.0, args.loops);
-            mixer.update_track_volume(
-                mixer_handle.id,
-                args.volume,
-                Duration::from_secs_f32(args.fade_time.max(0.0)),
-            )?;
-            mixer_handle
-        };
+        let (ended_tx, ended) = tokio::sync::oneshot::channel();
+        let mixer_handle = self.audio_processor.write().await.mixer_mut().add_track(
+            source,
+            0.0,
+            vec![
+                TrackCommand::SetLoops(args.loops),
+                TrackCommand::SetVolume {
+                    volume: args.volume,
+                    fade: Duration::from_secs_f32(args.fade_time.max(0.0)),
+                    at: None,
+                },
+                TrackCommand::AddStopTrigger(ended_tx),
+            ],
+        );
 
         let guild_id = self.guild_id;
         let bot_state = self.bot_state.clone();
         let name = args.name.clone();
         let ended_track = mixer_handle.clone();
         tokio::spawn(async move {
-            let reason = ended_track.ended().await;
+            let reason = ended.await.unwrap_or_else(|e| {
+                tracing::error!("Track '{name}' lost its end signal: {e}");
+                StopReason::Lost
+            });
             tracing::debug!("Track '{name}' left the mixer in guild {guild_id}: {reason:?}");
             let manager_arc = bot_state
                 .track_managers
@@ -155,9 +159,6 @@ impl TrackManager {
         volume: f32,
         fade_time: f32,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // Get processor first to avoid borrowing issues
-        let processor_arc = self.audio_processor.clone();
-
         let track_info = self
             .tracks
             .get_mut(name)
@@ -174,14 +175,17 @@ impl TrackManager {
 
         track_info.volume = volume;
 
+        let set_volume = TrackCommand::SetVolume {
+            volume,
+            fade: Duration::from_secs_f32(fade_time.max(0.0)),
+            at: None,
+        };
+        if !track_info
+            .mixer_handle
+            .send(set_volume)
+            .map_err(|e| format!("Track '{name}': {e:#}"))?
         {
-            let mut proc = processor_arc.write().await;
-            let mixer = proc.mixer_mut();
-            mixer.update_track_volume(
-                track_info.mixer_handle.id,
-                volume,
-                Duration::from_secs_f32(fade_time.max(0.0)),
-            )?;
+            return Err(format!("Track '{}' has ended", name).into());
         }
 
         self.persist_state().await;
@@ -194,9 +198,6 @@ impl TrackManager {
         name: &str,
         loops: bool,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // Get processor first to avoid borrowing issues
-        let processor_arc = self.audio_processor.clone();
-
         let track_info = self
             .tracks
             .get_mut(name)
@@ -216,9 +217,14 @@ impl TrackManager {
 
         track_info.loops = loops;
 
-        let mut proc = processor_arc.write().await;
-        proc.mixer_mut()
-            .update_track_loops(track_info.mixer_handle.id, loops)?;
+        let set_loops = TrackCommand::SetLoops(loops);
+        if !track_info
+            .mixer_handle
+            .send(set_loops)
+            .map_err(|e| format!("Track '{name}': {e:#}"))?
+        {
+            return Err(format!("Track '{}' has ended", name).into());
+        }
 
         self.persist_state().await;
 
@@ -254,12 +260,16 @@ impl TrackManager {
             self.guild_id
         );
 
-        let handle = track_info.mixer_handle.id;
-
+        let stop = TrackCommand::Stop {
+            fade: Duration::from_secs_f32(fade_time.max(0.0)),
+            at: None,
+        };
+        if !track_info
+            .mixer_handle
+            .send(stop)
+            .map_err(|e| format!("Track '{name}': {e:#}"))?
         {
-            let mut proc = self.audio_processor.write().await;
-            let mixer = proc.mixer_mut();
-            mixer.stop_track(handle, Duration::from_secs_f32(fade_time.max(0.0)), None);
+            return Err(format!("Track '{}' has ended", name).into());
         }
 
         self.tracks.remove(name);
@@ -317,12 +327,12 @@ impl TrackManager {
 pub fn open_track_source(
     path: &str,
     start_position: Option<Duration>,
-) -> Result<SymphoniaSource, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<Box<dyn AudioSource>, Box<dyn std::error::Error + Send + Sync>> {
     let mut source = SymphoniaSource::from_file(path, 48000)?;
     if let Some(pos) = start_position {
         source.seek(pos)?;
     }
-    Ok(source)
+    Ok(Box::new(source))
 }
 
 /// Get or create a TrackManager for a guild, ensuring audio processor exists
