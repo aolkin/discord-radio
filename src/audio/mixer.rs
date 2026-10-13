@@ -1,4 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot, watch};
 
@@ -22,6 +24,8 @@ pub enum StopReason {
     /// The end signal was lost.
     Lost,
 }
+
+const COMMAND_QUEUE_SIZE: usize = 10;
 
 enum TrackCommand {
     SetVolume {
@@ -47,13 +51,15 @@ enum TrackCommand {
 pub struct TrackHandle {
     pub id: TrackId,
     sample_rate: u32,
-    commands: mpsc::UnboundedSender<TrackCommand>,
+    played_frames: Arc<AtomicU64>,
+    commands: mpsc::Sender<TrackCommand>,
     /// Set once, when the track ends.
     end_rx: watch::Receiver<Option<StopReason>>,
 }
 
 /// The mixer applies the edits at the start of its next chunk, in the order
-/// they were sent. Each edit returns an error once the track has ended.
+/// they were sent. Each edit returns an error when the track has ended or its
+/// command queue is full.
 impl TrackHandle {
     pub fn has_ended(&self) -> bool {
         self.stop_reason().is_some()
@@ -120,10 +126,22 @@ impl TrackHandle {
         Ok(rx)
     }
 
+    /// Total frames played, including loops.
+    pub fn elapsed(&self) -> Duration {
+        Duration::from_secs_f64(
+            self.played_frames.load(Ordering::Relaxed) as f64 / f64::from(self.sample_rate),
+        )
+    }
+
     fn send(&self, command: TrackCommand) -> anyhow::Result<()> {
-        self.commands
-            .send(command)
-            .map_err(|_| anyhow::anyhow!("Track {:?} has ended", self.id))
+        self.commands.try_send(command).map_err(|e| match e {
+            mpsc::error::TrySendError::Full(_) => {
+                anyhow::anyhow!("Track {:?} command queue is full", self.id)
+            }
+            mpsc::error::TrySendError::Closed(_) => {
+                anyhow::anyhow!("Track {:?} has ended", self.id)
+            }
+        })
     }
 
     fn frames(&self, duration: Duration) -> u64 {
@@ -170,7 +188,7 @@ pub struct MixerTrack {
     /// User-facing volume (0.0-2.0).
     volume: f32,
     amplitude: f32,
-    played_frames: u64,
+    played_frames: Arc<AtomicU64>,
     /// Keyed by the played frame at which the keyframe applies, then by the
     /// order the keyframes were added.
     keyframes: BTreeMap<(u64, u64), Keyframe>,
@@ -179,7 +197,7 @@ pub struct MixerTrack {
     ramp: Option<VolumeRamp>,
     pub loops: bool,
     pub active: bool,
-    commands: mpsc::UnboundedReceiver<TrackCommand>,
+    commands: mpsc::Receiver<TrackCommand>,
     end_tx: watch::Sender<Option<StopReason>>,
 }
 
@@ -188,14 +206,15 @@ impl MixerTrack {
         source: Box<dyn AudioSource>,
         volume: f32,
         loops: bool,
-        commands: mpsc::UnboundedReceiver<TrackCommand>,
+        played_frames: Arc<AtomicU64>,
+        commands: mpsc::Receiver<TrackCommand>,
         end_tx: watch::Sender<Option<StopReason>>,
     ) -> Self {
         Self {
             source,
             volume,
             amplitude: perceptual_level_to_amplitude(volume),
-            played_frames: 0,
+            played_frames,
             keyframes: BTreeMap::new(),
             next_keyframe_id: 0,
             stop: None,
@@ -205,6 +224,10 @@ impl MixerTrack {
             commands,
             end_tx,
         }
+    }
+
+    fn played_frames(&self) -> u64 {
+        self.played_frames.load(Ordering::Relaxed)
     }
 
     fn apply_commands(&mut self) {
@@ -225,7 +248,7 @@ impl MixerTrack {
     }
 
     fn start_frame(&self, at: Option<u64>) -> u64 {
-        at.map_or(self.played_frames, |at| at.max(self.played_frames))
+        at.map_or(self.played_frames(), |at| at.max(self.played_frames()))
     }
 
     fn stop(&mut self, fade: u64, at: Option<u64>) {
@@ -259,13 +282,14 @@ impl MixerTrack {
     fn active_stop(&self) -> Option<&Stop> {
         self.stop
             .as_ref()
-            .filter(|stop| self.played_frames >= stop.start)
+            .filter(|stop| self.played_frames() >= stop.start)
     }
 
     /// Skips `StartFade` keyframes while the stop's fade runs.
     fn apply_due_keyframes(&mut self) {
+        let played_frames = self.played_frames();
         while let Some(entry) = self.keyframes.first_entry()
-            && entry.key().0 <= self.played_frames
+            && entry.key().0 <= played_frames
         {
             match entry.remove() {
                 Keyframe::StartFade { target, frames } => {
@@ -273,8 +297,8 @@ impl MixerTrack {
                         self.ramp = Some(VolumeRamp {
                             from: self.volume,
                             to: target,
-                            start: self.played_frames,
-                            end: self.played_frames + frames,
+                            start: played_frames,
+                            end: played_frames + frames,
                         });
                     }
                 }
@@ -297,11 +321,11 @@ impl MixerTrack {
 
     fn update_amplitude(&mut self) {
         if let Some(ramp) = &self.ramp {
-            if self.played_frames >= ramp.end {
+            if self.played_frames() >= ramp.end {
                 self.volume = ramp.to;
                 self.ramp = None;
             } else {
-                let elapsed = self.played_frames.saturating_sub(ramp.start);
+                let elapsed = self.played_frames().saturating_sub(ramp.start);
                 let progress = elapsed as f32 / (ramp.end - ramp.start) as f32;
                 self.volume = ramp.from + (ramp.to - ramp.from) * progress;
             }
@@ -321,7 +345,7 @@ impl MixerTrack {
         loop {
             match self.source.next_frame() {
                 Some(frame) => {
-                    self.played_frames += 1;
+                    self.played_frames.fetch_add(1, Ordering::Relaxed);
                     return Some([frame[0] * self.amplitude, frame[1] * self.amplitude]);
                 }
                 None => {
@@ -382,16 +406,25 @@ impl Mixer {
         let handle = TrackId(self.next_id);
         self.next_id += 1;
 
-        let (commands_tx, commands_rx) = mpsc::unbounded_channel();
+        let (commands_tx, commands_rx) = mpsc::channel(COMMAND_QUEUE_SIZE);
         let (end_tx, end_rx) = watch::channel(None);
+        let played_frames = Arc::new(AtomicU64::new(0));
         self.tracks.insert(
             handle,
-            MixerTrack::new(source, volume, loops, commands_rx, end_tx),
+            MixerTrack::new(
+                source,
+                volume,
+                loops,
+                played_frames.clone(),
+                commands_rx,
+                end_tx,
+            ),
         );
 
         TrackHandle {
             id: handle,
             sample_rate: self.sample_rate,
+            played_frames,
             commands: commands_tx,
             end_rx,
         }
@@ -420,7 +453,7 @@ impl Mixer {
             track.apply_due_keyframes();
             if track
                 .active_stop()
-                .is_some_and(|stop| track.played_frames >= stop.end)
+                .is_some_and(|stop| track.played_frames() >= stop.end)
             {
                 track.end(StopReason::Stopped);
                 finished_tracks.push(*handle);
