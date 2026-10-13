@@ -327,12 +327,12 @@ impl TrackManager {
 pub fn open_track_source(
     path: &str,
     start_position: Option<Duration>,
-) -> Result<SymphoniaSource, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<Box<dyn AudioSource>, Box<dyn std::error::Error + Send + Sync>> {
     let mut source = SymphoniaSource::from_file(path, 48000)?;
     if let Some(pos) = start_position {
         source.seek(pos)?;
     }
-    Ok(source)
+    Ok(Box::new(source))
 }
 
 /// Get or create a TrackManager for a guild, ensuring audio processor exists

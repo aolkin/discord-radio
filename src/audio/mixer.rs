@@ -363,7 +363,7 @@ impl Mixer {
     /// Applies `commands` in order before the mixer plays the track.
     pub fn add_track(
         &mut self,
-        source: impl AudioSource + 'static,
+        source: Box<dyn AudioSource>,
         volume: f32,
         commands: Vec<TrackCommand>,
     ) -> TrackHandle {
@@ -372,8 +372,7 @@ impl Mixer {
 
         let (commands_tx, commands_rx) = mpsc::channel(COMMAND_QUEUE_SIZE);
         let played_frames = Arc::new(AtomicU64::new(0));
-        let mut track =
-            MixerTrack::new(Box::new(source), volume, played_frames.clone(), commands_rx);
+        let mut track = MixerTrack::new(source, volume, played_frames.clone(), commands_rx);
         for command in commands {
             track.apply(command, self.sample_rate);
         }
@@ -464,7 +463,7 @@ mod tests {
     fn mixer_with_track() -> (Mixer, TrackHandle, oneshot::Receiver<StopReason>) {
         let mut mixer = Mixer::new(1000);
         let (stop_trigger, ended) = TrackCommand::add_stop_trigger();
-        let handle = mixer.add_track(Constant, 1.0, vec![stop_trigger]);
+        let handle = mixer.add_track(Box::new(Constant), 1.0, vec![stop_trigger]);
         (mixer, handle, ended)
     }
 
