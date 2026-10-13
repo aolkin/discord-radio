@@ -284,13 +284,12 @@ impl Mixer {
     /// Sets the track's stop, replacing any earlier one. Once the track has
     /// played for `at` (frames the mixer has output for it, across loops;
     /// `None` means now), it ramps linearly to silence over `fade`, then
-    /// stops. A zero `fade` stops it at `at`, after the keyframes due then.
-    /// The ramp replaces any volume ramp in progress, and volume changes
-    /// are ignored while it runs. Returns false if the track does not exist.
+    /// stops, overwriting any in-progress volume ramp at the time.
+    /// Returns false if the track does not exist.
     pub fn stop_track(&mut self, handle: TrackId, fade: Duration, at: Option<Duration>) -> bool {
-        let fade = self.duration_frames(fade);
-        let at = at.map(|at| self.duration_frames(at));
         if let Ok(track) = self.track_mut(handle) {
+            let fade = self.duration_frames(fade);
+            let at = at.map(|at| self.duration_frames(at));
             let start = at.map_or(track.played_frames, |at| at.max(track.played_frames));
             if track
                 .stop
