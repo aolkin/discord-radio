@@ -30,16 +30,16 @@ const COMMAND_QUEUE_SIZE: usize = 10;
 enum TrackCommand {
     SetVolume {
         volume: f32,
-        fade: u64,
-        at: Option<u64>,
+        fade: Duration,
+        at: Option<Duration>,
     },
     SetLoops(bool),
     Stop {
-        fade: u64,
-        at: Option<u64>,
+        fade: Duration,
+        at: Option<Duration>,
     },
     AddTrigger {
-        at: u64,
+        at: Duration,
         tx: oneshot::Sender<()>,
     },
 }
@@ -91,11 +91,7 @@ impl TrackHandle {
         fade: Duration,
         at: Option<Duration>,
     ) -> anyhow::Result<()> {
-        self.send(TrackCommand::SetVolume {
-            volume,
-            fade: self.frames(fade),
-            at: at.map(|at| self.frames(at)),
-        })
+        self.send(TrackCommand::SetVolume { volume, fade, at })
     }
 
     pub fn set_loops(&self, loops: bool) -> anyhow::Result<()> {
@@ -109,20 +105,14 @@ impl TrackHandle {
     /// The ramp replaces any volume ramp in progress, and volume changes
     /// are ignored while it runs.
     pub fn stop(&self, fade: Duration, at: Option<Duration>) -> anyhow::Result<()> {
-        self.send(TrackCommand::Stop {
-            fade: self.frames(fade),
-            at: at.map(|at| self.frames(at)),
-        })
+        self.send(TrackCommand::Stop { fade, at })
     }
 
     /// The receiver gets `()` once the track has played for `at` (see
     /// [`Self::stop`]), or an error if the track ends first.
     pub fn add_trigger(&self, at: Duration) -> anyhow::Result<oneshot::Receiver<()>> {
         let (tx, rx) = oneshot::channel();
-        self.send(TrackCommand::AddTrigger {
-            at: self.frames(at),
-            tx,
-        })?;
+        self.send(TrackCommand::AddTrigger { at, tx })?;
         Ok(rx)
     }
 
@@ -142,10 +132,6 @@ impl TrackHandle {
                 anyhow::anyhow!("Track {:?} has ended", self.id)
             }
         })
-    }
-
-    fn frames(&self, duration: Duration) -> u64 {
-        (duration.as_secs_f64() * f64::from(self.sample_rate)).round() as u64
     }
 }
 
@@ -230,19 +216,23 @@ impl MixerTrack {
         self.played_frames.load(Ordering::Relaxed)
     }
 
-    fn apply_commands(&mut self) {
+    fn apply_commands(&mut self, sample_rate: u32) {
+        let frames =
+            |duration: Duration| (duration.as_secs_f64() * f64::from(sample_rate)).round() as u64;
         while let Ok(command) = self.commands.try_recv() {
             match command {
                 TrackCommand::SetVolume { volume, fade, at } => self.add_keyframe(
-                    self.start_frame(at),
+                    self.start_frame(at.map(frames)),
                     Keyframe::StartFade {
                         target: volume,
-                        frames: fade,
+                        frames: frames(fade),
                     },
                 ),
                 TrackCommand::SetLoops(loops) => self.loops = loops,
-                TrackCommand::Stop { fade, at } => self.stop(fade, at),
-                TrackCommand::AddTrigger { at, tx } => self.add_keyframe(at, Keyframe::Trigger(tx)),
+                TrackCommand::Stop { fade, at } => self.stop(frames(fade), at.map(frames)),
+                TrackCommand::AddTrigger { at, tx } => {
+                    self.add_keyframe(frames(at), Keyframe::Trigger(tx))
+                }
             }
         }
     }
@@ -441,7 +431,7 @@ impl Mixer {
     /// Applies the edits sent through each track's [`TrackHandle`].
     pub fn drain_commands(&mut self) {
         for track in self.tracks.values_mut() {
-            track.apply_commands();
+            track.apply_commands(self.sample_rate);
         }
     }
 
