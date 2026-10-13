@@ -21,13 +21,12 @@ pub struct TrackSnapshot {
 pub struct TrackInfo {
     pub name: String,
     /// The raw filename or `s3://` key, not a resolved path — persisting the
-    /// resolved form would break restoration after an R2 cache eviction.
+    /// resolved form would break restoration after an object storage cache eviction.
     pub filename: String,
     pub mixer_handle: TrackHandle,
     pub volume: f32,
     pub loops: bool,
     pub start_time: std::time::SystemTime,
-    pub persist: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -38,7 +37,6 @@ pub struct StartTrackArgs {
     pub fade_time: f32,
     pub loops: bool,
     pub start_position: Option<Duration>,
-    pub persist: bool,
 }
 
 pub struct TrackManager {
@@ -62,12 +60,11 @@ impl TrackManager {
         &mut self,
         args: StartTrackArgs,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        if self.tracks.contains_key(&args.name) {
-            return Err(format!("Track '{}' already exists", args.name).into());
-        }
-
         let resolved_filename = self.bot_state.file_resolver.resolve(&args.filename).await?;
         let source = open_track_source(&resolved_filename, args.start_position)?;
+        if self.tracks.contains_key(&args.name) {
+            self.stop_track(&args.name, args.fade_time).await?;
+        }
         let duration = self
             .bot_state
             .duration_cache
@@ -139,7 +136,6 @@ impl TrackManager {
             volume: args.volume,
             loops: args.loops,
             start_time,
-            persist: args.persist,
         };
 
         self.tracks.insert(args.name, track);
@@ -245,7 +241,6 @@ impl TrackManager {
         &mut self,
         name: &str,
         fade_time: f32,
-        persist: bool,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let track_info = self
             .tracks
@@ -268,9 +263,7 @@ impl TrackManager {
         }
 
         self.tracks.remove(name);
-        if persist {
-            self.persist_state().await;
-        }
+        self.persist_state().await;
 
         Ok(())
     }
@@ -295,28 +288,11 @@ impl TrackManager {
         snapshots
     }
 
-    pub async fn stop_all_tracks(
-        &mut self,
-        fade_time: f32,
-        persist: bool,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let track_names: Vec<String> = self.tracks.keys().cloned().collect();
-
-        for name in track_names {
-            if let Err(e) = self.stop_track(&name, fade_time, persist).await {
-                tracing::warn!("Failed to stop track {}: {}", name, e);
-            }
-        }
-
-        Ok(())
-    }
-
     async fn persist_state(&self) {
         let state = crate::persistence::MultiTrackPlaybackState {
             tracks: self
                 .tracks
                 .values()
-                .filter(|info| info.persist)
                 .map(|info| crate::persistence::TrackState {
                     name: info.name.clone(),
                     filename: info.filename.clone(),
