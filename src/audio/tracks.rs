@@ -166,8 +166,11 @@ impl TrackManager {
 
         track_info.volume = volume;
 
-        let set_volume =
-            TrackCommand::set_volume(volume, Duration::from_secs_f32(fade_time.max(0.0)), None);
+        let set_volume = TrackCommand::SetVolume {
+            volume,
+            fade: Duration::from_secs_f32(fade_time.max(0.0)),
+            at: None,
+        };
         if !track_info.mixer_handle.send(set_volume)? {
             return Err(format!("Track '{}' has ended", name).into());
         }
@@ -201,7 +204,7 @@ impl TrackManager {
 
         track_info.loops = loops;
 
-        let set_loops = TrackCommand::set_loops(loops);
+        let set_loops = TrackCommand::SetLoops(loops);
         if !track_info.mixer_handle.send(set_loops)? {
             return Err(format!("Track '{}' has ended", name).into());
         }
@@ -240,7 +243,10 @@ impl TrackManager {
             self.guild_id
         );
 
-        let stop = TrackCommand::stop(Duration::from_secs_f32(fade_time.max(0.0)), None);
+        let stop = TrackCommand::Stop {
+            fade: Duration::from_secs_f32(fade_time.max(0.0)),
+            at: None,
+        };
         if !track_info.mixer_handle.send(stop)? {
             return Err(format!("Track '{}' has ended", name).into());
         }

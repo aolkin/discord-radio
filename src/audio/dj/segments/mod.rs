@@ -199,7 +199,7 @@ impl TrackSlot {
 
     pub fn stop(&self, fade: Duration) {
         if let Some(handle) = self.0.lock().unwrap().take() {
-            let _ = handle.send(TrackCommand::stop(fade, None));
+            let _ = handle.send(TrackCommand::Stop { fade, at: None });
         }
     }
 }

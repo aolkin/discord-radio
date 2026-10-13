@@ -82,7 +82,10 @@ impl TrackSegment {
             );
         let (add_trigger, end_trigger) = TrackCommand::add_trigger(play_duration);
         anyhow::ensure!(track.send(add_trigger)?, "Track {:?} has ended", track.id);
-        let stop = TrackCommand::stop(FADE_TIME, Some(play_duration));
+        let stop = TrackCommand::Stop {
+            fade: FADE_TIME,
+            at: Some(play_duration),
+        };
         anyhow::ensure!(track.send(stop)?, "Track {:?} has ended", track.id);
         self.track.set(track);
         *self.end_trigger.lock().unwrap() = Some(end_trigger);
