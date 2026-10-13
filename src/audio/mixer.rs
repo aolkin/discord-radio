@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 use std::time::Duration;
-use tokio::sync::watch;
+use tokio::sync::{oneshot, watch};
 
 use crate::audio::helpers::perceptual_level_to_amplitude;
 
@@ -11,7 +11,7 @@ pub struct TrackId(u64);
 pub enum StopReason {
     /// A source played to its end.
     Completed,
-    /// Removed directly.
+    /// Removed directly by `remove_track`, bypassing any stop.
     Removed,
     /// Stopped at a requested time.
     Stopped,
@@ -24,7 +24,7 @@ pub enum StopReason {
 }
 
 /// A track added to the mixer. It has ended once it plays to its end, is
-/// removed, or the mixer is dropped.
+/// removed or stopped, or the mixer is dropped.
 #[derive(Clone, Debug)]
 pub struct TrackHandle {
     pub id: TrackId,
@@ -60,18 +60,30 @@ pub trait AudioSource: Send + Sync {
     fn reset(&mut self);
 }
 
-struct Fade {
-    target: f32,
-    frames: u64,
-    stop_at_end: bool,
+enum Keyframe {
+    StartFade { target: f32, frames: u64 },
+    Trigger(oneshot::Sender<()>),
 }
 
-/// Moves a track's user volume linearly to `target`, one `step` per frame.
+struct Stop {
+    start: u64,
+    end: u64,
+}
+
+/// Moves a track's user volume linearly from `from` to `target` over
+/// `frames`, starting at played frame `start`.
 struct VolumeRamp {
-    target: f32,
-    step: f32,
-    frames_left: u64,
-    stop_at_end: bool,
+    from: f32,
+    to: f32,
+    start: u64,
+    end: u64,
+}
+
+impl Stop {
+    fn matches_ramp(&self, ramp: &Option<VolumeRamp>) -> bool {
+        ramp.as_ref()
+            .is_some_and(|ramp| ramp.to == 0.0 && ramp.end == self.end)
+    }
 }
 
 pub struct MixerTrack {
@@ -80,8 +92,11 @@ pub struct MixerTrack {
     volume: f32,
     amplitude: f32,
     played_frames: u64,
-    /// Keyed by the played frame at which the fade starts.
-    pending_fades: BTreeMap<u64, Fade>,
+    /// Keyed by the played frame at which the keyframe applies, then by the
+    /// order the keyframes were added.
+    keyframes: BTreeMap<(u64, u64), Keyframe>,
+    next_keyframe_id: u64,
+    stop: Option<Stop>,
     ramp: Option<VolumeRamp>,
     pub loops: bool,
     pub active: bool,
@@ -100,17 +115,14 @@ impl MixerTrack {
             volume,
             amplitude: perceptual_level_to_amplitude(volume),
             played_frames: 0,
-            pending_fades: BTreeMap::new(),
+            keyframes: BTreeMap::new(),
+            next_keyframe_id: 0,
+            stop: None,
             ramp: None,
             loops,
             active: true,
             end_tx,
         }
-    }
-
-    fn set_volume(&mut self, volume: f32) {
-        self.volume = volume;
-        self.amplitude = perceptual_level_to_amplitude(volume);
     }
 
     /// Only the first call has an effect.
@@ -120,35 +132,62 @@ impl MixerTrack {
         });
     }
 
-    fn start_due_fades(&mut self) {
-        while let Some(entry) = self.pending_fades.first_entry()
-            && *entry.key() <= self.played_frames
+    fn add_keyframe(&mut self, frame: u64, keyframe: Keyframe) {
+        self.keyframes
+            .insert((frame, self.next_keyframe_id), keyframe);
+        self.next_keyframe_id += 1;
+    }
+
+    fn active_stop(&self) -> Option<&Stop> {
+        self.stop
+            .as_ref()
+            .filter(|stop| self.played_frames >= stop.start)
+    }
+
+    /// Skips `StartFade` keyframes while the stop's fade runs.
+    fn apply_due_keyframes(&mut self) {
+        while let Some(entry) = self.keyframes.first_entry()
+            && entry.key().0 <= self.played_frames
         {
-            let fade = entry.remove();
+            match entry.remove() {
+                Keyframe::StartFade { target, frames } => {
+                    if self.active_stop().is_none() {
+                        self.ramp = Some(VolumeRamp {
+                            from: self.volume,
+                            to: target,
+                            start: self.played_frames,
+                            end: self.played_frames + frames,
+                        });
+                    }
+                }
+                Keyframe::Trigger(tx) => {
+                    let _ = tx.send(());
+                }
+            }
+        }
+        if let Some(stop) = self.active_stop()
+            && !stop.matches_ramp(&self.ramp)
+        {
             self.ramp = Some(VolumeRamp {
-                target: fade.target,
-                step: (fade.target - self.volume) / fade.frames.max(1) as f32,
-                frames_left: fade.frames,
-                stop_at_end: fade.stop_at_end,
+                from: self.volume,
+                to: 0.0,
+                start: stop.start,
+                end: stop.end,
             });
         }
     }
 
-    /// Returns true when a ramp with `stop_at_end` has just finished.
-    fn advance_ramp(&mut self) -> bool {
-        let Some(ramp) = &mut self.ramp else {
-            return false;
-        };
-        ramp.frames_left = ramp.frames_left.saturating_sub(1);
-        let (target, step, frames_left, stop_at_end) =
-            (ramp.target, ramp.step, ramp.frames_left, ramp.stop_at_end);
-        if frames_left == 0 {
-            self.ramp = None;
-            self.set_volume(target);
-            stop_at_end
-        } else {
-            self.set_volume(target - step * frames_left as f32);
-            false
+    fn update_amplitude(&mut self) {
+        if let Some(ramp) = &self.ramp {
+            if self.played_frames >= ramp.end {
+                self.volume = ramp.to;
+                self.ramp = None;
+            } else {
+                let elapsed = self.played_frames.saturating_sub(ramp.start);
+                let progress = elapsed as f32 / (ramp.end - ramp.start) as f32;
+                self.volume = ramp.from + (ramp.to - ramp.from) * progress;
+            }
+            self.amplitude = perceptual_level_to_amplitude(self.volume);
         }
     }
 
@@ -207,7 +246,7 @@ pub struct Mixer {
 }
 
 /// A [`TrackId`] whose track was removed or has ended is a no-op for
-/// `remove_track`, and the `update_*` methods return an error for it.
+/// `remove_track` and `stop_track`, and the `update_*` methods return an error for it.
 impl Mixer {
     pub fn new(sample_rate: u32) -> Self {
         Self {
@@ -234,23 +273,52 @@ impl Mixer {
         TrackHandle { id: handle, end_rx }
     }
 
-    /// Ramps the track linearly to silence over `fade`, then removes it.
-    /// `at` is how long the track has played (frames the mixer has output for
-    /// it, across loops) when the ramp starts; `None`, or a time already
-    /// reached, starts it before the next frame. A zero `fade` with no `at`
-    /// removes the track at once. Returns false if the track does not exist.
-    ///
-    /// A starting ramp replaces any volume ramp in progress on the track, and a
-    /// ramp scheduled for the same frame as a pending one replaces it.
-    pub fn remove_track(&mut self, handle: TrackId, fade: Duration, at: Option<Duration>) -> bool {
-        if fade.is_zero() && at.is_none() {
-            return self
-                .tracks
-                .remove(&handle)
-                .map(|mut track| track.end(StopReason::Removed))
-                .is_some();
+    /// Removes the track at once. Returns false if the track does not exist.
+    pub fn remove_track(&mut self, handle: TrackId) -> bool {
+        self.tracks
+            .remove(&handle)
+            .map(|mut track| track.end(StopReason::Removed))
+            .is_some()
+    }
+
+    /// Sets the track's stop, replacing any earlier one. Once the track has
+    /// played for `at` (frames the mixer has output for it, across loops;
+    /// `None` means now), it ramps linearly to silence over `fade`, then
+    /// stops, overwriting any in-progress volume ramp at the time.
+    /// Returns false if the track does not exist.
+    pub fn stop_track(&mut self, handle: TrackId, fade: Duration, at: Option<Duration>) -> bool {
+        let fade = self.duration_frames(fade);
+        let at = at.map(|at| self.duration_frames(at));
+        if let Ok(track) = self.track_mut(handle) {
+            if track
+                .active_stop()
+                .is_some_and(|stop| stop.matches_ramp(&track.ramp))
+            {
+                track.ramp = None;
+            }
+            let start = at.map_or(track.played_frames, |at| at.max(track.played_frames));
+            track.stop = Some(Stop {
+                start,
+                end: start + fade,
+            });
+            true
+        } else {
+            false
         }
-        self.schedule_fade(handle, 0.0, fade, at, true).is_ok()
+    }
+
+    /// The receiver gets `()` once the track has played for `at` (see
+    /// [`Self::stop_track`]), or an error if the track ends first.
+    pub fn add_trigger(
+        &mut self,
+        handle: TrackId,
+        at: Duration,
+    ) -> anyhow::Result<oneshot::Receiver<()>> {
+        let at_frame = self.duration_frames(at);
+        let (tx, rx) = oneshot::channel();
+        self.track_mut(handle)?
+            .add_keyframe(at_frame, Keyframe::Trigger(tx));
+        Ok(rx)
     }
 
     /// Update the volume of a track, starting before the next frame.
@@ -266,26 +334,14 @@ impl Mixer {
         volume: f32,
         fade: Duration,
     ) -> anyhow::Result<()> {
-        self.schedule_fade(handle, volume, fade, None, false)
-    }
-
-    fn schedule_fade(
-        &mut self,
-        handle: TrackId,
-        target: f32,
-        fade: Duration,
-        at: Option<Duration>,
-        stop_at_end: bool,
-    ) -> anyhow::Result<()> {
         let frames = self.duration_frames(fade);
-        let at_frame = at.map(|at| self.duration_frames(at));
         let track = self.track_mut(handle)?;
-        track.pending_fades.insert(
-            at_frame.unwrap_or(track.played_frames),
-            Fade {
-                target,
+        let start = track.played_frames;
+        track.add_keyframe(
+            start,
+            Keyframe::StartFade {
+                target: volume,
                 frames,
-                stop_at_end,
             },
         );
         Ok(())
@@ -311,12 +367,16 @@ impl Mixer {
         let mut finished_tracks = Vec::new();
 
         for (handle, track) in self.tracks.iter_mut() {
-            track.start_due_fades();
-            if track.advance_ramp() {
+            track.apply_due_keyframes();
+            if track
+                .active_stop()
+                .is_some_and(|stop| track.played_frames >= stop.end)
+            {
                 track.end(StopReason::Stopped);
                 finished_tracks.push(*handle);
                 continue;
             }
+            track.update_amplitude();
 
             if let Some(frame) = track.next_frame() {
                 mixed[0] += frame[0];
@@ -336,5 +396,93 @@ impl Mixer {
         mixed[1] = mixed[1].clamp(-1.0, 1.0);
 
         mixed
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct Constant;
+
+    impl AudioSource for Constant {
+        fn next_frame(&mut self) -> Option<[f32; 2]> {
+            Some([1.0, 1.0])
+        }
+        fn seek(&mut self, _: Duration) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            Ok(())
+        }
+        fn duration(&self) -> Option<Duration> {
+            None
+        }
+        fn reset(&mut self) {}
+    }
+
+    fn ms(n: u64) -> Duration {
+        Duration::from_millis(n)
+    }
+
+    fn mixer_with_track() -> (Mixer, TrackHandle) {
+        let mut mixer = Mixer::new(1000);
+        let handle = mixer.add_track(Box::new(Constant), 1.0, false);
+        (mixer, handle)
+    }
+
+    fn pull(mixer: &mut Mixer, frames: usize) -> Vec<f32> {
+        (0..frames).map(|_| mixer.mix_next_frame()[0]).collect()
+    }
+
+    #[test]
+    fn volume_ramp_started_late_ends_after_its_own_length() {
+        let (mut mixer, handle) = mixer_with_track();
+        pull(&mut mixer, 1000);
+        mixer.update_track_volume(handle.id, 0.0, ms(1000)).unwrap();
+        let ramp = pull(&mut mixer, 1000);
+        assert!(ramp[500] > 0.0 && ramp[500] < 1.0);
+        assert_eq!(pull(&mut mixer, 1), [0.0]);
+    }
+
+    #[test]
+    fn stop_fades_then_removes_the_track() {
+        let (mut mixer, handle) = mixer_with_track();
+        mixer.stop_track(handle.id, ms(100), Some(ms(200)));
+        let out = pull(&mut mixer, 300);
+        assert_eq!(out[150], 1.0);
+        assert!(out[250] > 0.0 && out[250] < 1.0);
+        assert!(!handle.has_ended());
+        assert_eq!(pull(&mut mixer, 1), [0.0]);
+        assert_eq!(handle.stop_reason(), Some(StopReason::Stopped));
+
+        let (mut mixer, handle) = mixer_with_track();
+        pull(&mut mixer, 500);
+        mixer.stop_track(handle.id, ms(100), Some(ms(100)));
+        let out = pull(&mut mixer, 100);
+        assert!(out[50] > 0.0 && out[50] < 1.0);
+        assert!(!handle.has_ended());
+        pull(&mut mixer, 1);
+        assert!(handle.has_ended());
+
+        let (mut mixer, handle) = mixer_with_track();
+        pull(&mut mixer, 10);
+        mixer.stop_track(handle.id, Duration::ZERO, None);
+        assert_eq!(pull(&mut mixer, 1), [0.0]);
+        assert_eq!(handle.stop_reason(), Some(StopReason::Stopped));
+    }
+
+    #[test]
+    fn trigger_fires_at_its_frame_even_when_a_stop_lands_there() {
+        let (mut mixer, handle) = mixer_with_track();
+        let mut rx = mixer.add_trigger(handle.id, ms(100)).unwrap();
+        pull(&mut mixer, 100);
+        assert!(rx.try_recv().is_err());
+        pull(&mut mixer, 1);
+        assert!(rx.try_recv().is_ok());
+
+        let (mut mixer, handle) = mixer_with_track();
+        let mut rx = mixer.add_trigger(handle.id, ms(100)).unwrap();
+        mixer.stop_track(handle.id, Duration::ZERO, Some(ms(100)));
+        pull(&mut mixer, 101);
+        assert!(rx.try_recv().is_ok());
+        assert_eq!(handle.stop_reason(), Some(StopReason::Stopped));
     }
 }

@@ -259,7 +259,7 @@ impl TrackManager {
         {
             let mut proc = self.audio_processor.write().await;
             let mixer = proc.mixer_mut();
-            mixer.remove_track(handle, Duration::from_secs_f32(fade_time.max(0.0)), None);
+            mixer.stop_track(handle, Duration::from_secs_f32(fade_time.max(0.0)), None);
         }
 
         self.tracks.remove(name);
