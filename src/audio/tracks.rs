@@ -114,7 +114,7 @@ impl TrackManager {
         let ended_track = mixer_handle.clone();
         tokio::spawn(async move {
             let reason = ended.await.unwrap_or_else(|e| {
-                tracing::error!("Track {:?} lost its end signal: {e}", ended_track.id);
+                tracing::error!("Track '{name}' lost its end signal: {e}");
                 StopReason::Lost
             });
             tracing::debug!("Track '{name}' left the mixer in guild {guild_id}: {reason:?}");
@@ -184,7 +184,11 @@ impl TrackManager {
             fade: Duration::from_secs_f32(fade_time.max(0.0)),
             at: None,
         };
-        if !track_info.mixer_handle.send(set_volume)? {
+        if !track_info
+            .mixer_handle
+            .send(set_volume)
+            .map_err(|e| format!("Track '{name}': {e:#}"))?
+        {
             return Err(format!("Track '{}' has ended", name).into());
         }
 
@@ -218,7 +222,11 @@ impl TrackManager {
         track_info.loops = loops;
 
         let set_loops = TrackCommand::SetLoops(loops);
-        if !track_info.mixer_handle.send(set_loops)? {
+        if !track_info
+            .mixer_handle
+            .send(set_loops)
+            .map_err(|e| format!("Track '{name}': {e:#}"))?
+        {
             return Err(format!("Track '{}' has ended", name).into());
         }
 
@@ -260,7 +268,11 @@ impl TrackManager {
             fade: Duration::from_secs_f32(fade_time.max(0.0)),
             at: None,
         };
-        if !track_info.mixer_handle.send(stop)? {
+        if !track_info
+            .mixer_handle
+            .send(stop)
+            .map_err(|e| format!("Track '{name}': {e:#}"))?
+        {
             return Err(format!("Track '{}' has ended", name).into());
         }
 

@@ -90,7 +90,7 @@ impl TrackHandle {
             Ok(()) => Ok(true),
             Err(mpsc::error::TrySendError::Closed(_)) => Ok(false),
             Err(mpsc::error::TrySendError::Full(_)) => {
-                anyhow::bail!("Track {:?} command queue is full", self.id)
+                anyhow::bail!("Track command queue is full")
             }
         }
     }
