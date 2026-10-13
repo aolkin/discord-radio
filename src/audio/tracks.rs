@@ -1,5 +1,5 @@
 use crate::audio::decoder::SymphoniaSource;
-use crate::audio::mixer::{AudioSource, TrackHandle, TrackId};
+use crate::audio::mixer::{AudioSource, MixerTrackArgs, TrackHandle, TrackId};
 use crate::audio::processing_thread::AudioProcessor;
 use crate::state::Data;
 use serenity::model::id::GuildId;
@@ -91,14 +91,12 @@ impl TrackManager {
 
         let mixer_handle = self.audio_processor.write().await.mixer_mut().add_track(
             Box::new(source),
-            0.0,
-            args.loops,
+            MixerTrackArgs {
+                volume: args.volume,
+                loops: args.loops,
+                fade_in: Duration::from_secs_f32(args.fade_time.max(0.0)),
+            },
         );
-        mixer_handle.set_volume(
-            args.volume,
-            Duration::from_secs_f32(args.fade_time.max(0.0)),
-            None,
-        )?;
 
         let guild_id = self.guild_id;
         let bot_state = self.bot_state.clone();

@@ -4,6 +4,7 @@ use super::{
 };
 use crate::audio::dj::config::TrackEntry;
 use crate::audio::duration::DurationCache;
+use crate::audio::mixer::MixerTrackArgs;
 use crate::audio::tracks::open_track_source;
 use async_trait::async_trait;
 use rand::Rng;
@@ -71,8 +72,14 @@ impl TrackSegment {
             .write()
             .await
             .mixer_mut()
-            .add_track(Box::new(source), 0.0, false);
-        track.set_volume(self.volume, FADE_TIME, None)?;
+            .add_track(
+                Box::new(source),
+                MixerTrackArgs {
+                    volume: self.volume,
+                    fade_in: FADE_TIME,
+                    ..Default::default()
+                },
+            );
         let end_trigger = track.add_trigger(play_duration)?;
         track.stop(FADE_TIME, Some(play_duration))?;
         self.track.set(track);

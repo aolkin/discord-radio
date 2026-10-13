@@ -4,6 +4,7 @@ use super::{
 };
 use crate::audio::dj::config::{HexMessageDefaults, HexMessageEntry};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
+use crate::audio::mixer::MixerTrackArgs;
 use crate::audio::processing_thread::AudioProcessor;
 use crate::audio::tracks::open_track_source;
 use crate::bucket::FileResolver;
@@ -213,12 +214,13 @@ async fn run_hex_message(
                         continue;
                     }
                 };
-                let track =
-                    processor
-                        .write()
-                        .await
-                        .mixer_mut()
-                        .add_track(Box::new(source), volume, false);
+                let track = processor.write().await.mixer_mut().add_track(
+                    Box::new(source),
+                    MixerTrackArgs {
+                        volume,
+                        ..Default::default()
+                    },
+                );
                 progress.current_track.set(track.clone());
                 track.ended().await;
             }

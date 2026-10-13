@@ -148,6 +148,22 @@ enum Keyframe {
     Trigger(oneshot::Sender<()>),
 }
 
+pub struct MixerTrackArgs {
+    pub volume: f32,
+    pub loops: bool,
+    pub fade_in: Duration,
+}
+
+impl Default for MixerTrackArgs {
+    fn default() -> Self {
+        Self {
+            volume: 1.0,
+            loops: false,
+            fade_in: Duration::ZERO,
+        }
+    }
+}
+
 struct Stop {
     start: u64,
     end: u64,
@@ -387,30 +403,34 @@ impl Mixer {
         }
     }
 
-    pub fn add_track(
-        &mut self,
-        source: Box<dyn AudioSource>,
-        volume: f32,
-        loops: bool,
-    ) -> TrackHandle {
+    pub fn add_track(&mut self, source: Box<dyn AudioSource>, args: MixerTrackArgs) -> TrackHandle {
         let handle = TrackId(self.next_id);
         self.next_id += 1;
 
         let (commands_tx, commands_rx) = mpsc::channel(COMMAND_QUEUE_SIZE);
         let (end_tx, end_rx) = watch::channel(None);
         let played_frames = Arc::new(AtomicU64::new(0));
-        self.tracks.insert(
-            handle,
-            MixerTrack::new(
-                source,
-                volume,
-                loops,
-                played_frames.clone(),
-                commands_rx,
-                end_tx,
-            ),
+        let mut track = MixerTrack::new(
+            source,
+            args.volume,
+            args.loops,
+            played_frames.clone(),
+            commands_rx,
+            end_tx,
         );
-
+        let fade_in_frames =
+            (args.fade_in.as_secs_f64() * f64::from(self.sample_rate)).round() as u64;
+        if fade_in_frames > 0 {
+            track.volume = 0.0;
+            track.amplitude = perceptual_level_to_amplitude(0.0);
+            track.ramp = Some(VolumeRamp {
+                from: 0.0,
+                to: args.volume,
+                start: 0,
+                end: fade_in_frames,
+            });
+        }
+        self.tracks.insert(handle, track);
         TrackHandle {
             id: handle,
             sample_rate: self.sample_rate,
@@ -497,7 +517,7 @@ mod tests {
 
     fn mixer_with_track() -> (Mixer, TrackHandle) {
         let mut mixer = Mixer::new(1000);
-        let handle = mixer.add_track(Box::new(Constant), 1.0, false);
+        let handle = mixer.add_track(Box::new(Constant), MixerTrackArgs::default());
         (mixer, handle)
     }
 
