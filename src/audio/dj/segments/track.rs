@@ -4,7 +4,7 @@ use super::{
 };
 use crate::audio::dj::config::TrackEntry;
 use crate::audio::duration::DurationCache;
-use crate::audio::mixer::{MixerTrackArgs, TrackCommand};
+use crate::audio::mixer::TrackCommand;
 use crate::audio::tracks::open_track_source;
 use async_trait::async_trait;
 use rand::Rng;
@@ -74,23 +74,20 @@ impl TrackSegment {
             .await
             .mixer_mut()
             .add_track(
-                Box::new(source),
-                MixerTrackArgs {
-                    volume: 0.0,
-                    commands: vec![
-                        TrackCommand::SetVolume {
-                            volume: self.volume,
-                            fade: FADE_TIME,
-                            at: None,
-                        },
-                        add_trigger,
-                        TrackCommand::Stop {
-                            fade: FADE_TIME,
-                            at: Some(play_duration),
-                        },
-                    ],
-                    ..Default::default()
-                },
+                source,
+                0.0,
+                vec![
+                    TrackCommand::SetVolume {
+                        volume: self.volume,
+                        fade: FADE_TIME,
+                        at: None,
+                    },
+                    add_trigger,
+                    TrackCommand::Stop {
+                        fade: FADE_TIME,
+                        at: Some(play_duration),
+                    },
+                ],
             );
         self.track.set(track);
         *self.end_trigger.lock().unwrap() = Some(end_trigger);

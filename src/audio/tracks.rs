@@ -1,7 +1,5 @@
 use crate::audio::decoder::SymphoniaSource;
-use crate::audio::mixer::{
-    AudioSource, MixerTrackArgs, StopReason, TrackCommand, TrackHandle, TrackId,
-};
+use crate::audio::mixer::{AudioSource, StopReason, TrackCommand, TrackHandle, TrackId};
 use crate::audio::processing_thread::AudioProcessor;
 use crate::state::Data;
 use serenity::model::id::GuildId;
@@ -93,19 +91,17 @@ impl TrackManager {
 
         let (stop_trigger, ended) = TrackCommand::add_stop_trigger();
         let mixer_handle = self.audio_processor.write().await.mixer_mut().add_track(
-            Box::new(source),
-            MixerTrackArgs {
-                volume: 0.0,
-                loops: args.loops,
-                commands: vec![
-                    TrackCommand::SetVolume {
-                        volume: args.volume,
-                        fade: Duration::from_secs_f32(args.fade_time.max(0.0)),
-                        at: None,
-                    },
-                    stop_trigger,
-                ],
-            },
+            source,
+            0.0,
+            vec![
+                TrackCommand::SetLoops(args.loops),
+                TrackCommand::SetVolume {
+                    volume: args.volume,
+                    fade: Duration::from_secs_f32(args.fade_time.max(0.0)),
+                    at: None,
+                },
+                stop_trigger,
+            ],
         );
 
         let guild_id = self.guild_id;

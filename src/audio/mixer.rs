@@ -116,23 +116,6 @@ enum Keyframe {
     Trigger(oneshot::Sender<()>),
 }
 
-pub struct MixerTrackArgs {
-    pub volume: f32,
-    pub loops: bool,
-    /// Applied in order when the track is added, before the mixer plays it.
-    pub commands: Vec<TrackCommand>,
-}
-
-impl Default for MixerTrackArgs {
-    fn default() -> Self {
-        Self {
-            volume: 1.0,
-            loops: false,
-            commands: Vec::new(),
-        }
-    }
-}
-
 struct Stop {
     start: u64,
     end: u64,
@@ -176,7 +159,6 @@ impl MixerTrack {
     fn new(
         source: Box<dyn AudioSource>,
         volume: f32,
-        loops: bool,
         played_frames: Arc<AtomicU64>,
         commands: mpsc::Receiver<TrackCommand>,
     ) -> Self {
@@ -189,7 +171,7 @@ impl MixerTrack {
             next_keyframe_id: 0,
             stop: None,
             ramp: None,
-            loops,
+            loops: false,
             active: true,
             commands,
             stop_triggers: Vec::new(),
@@ -378,20 +360,21 @@ impl Mixer {
         }
     }
 
-    pub fn add_track(&mut self, source: Box<dyn AudioSource>, args: MixerTrackArgs) -> TrackHandle {
+    /// Applies `commands` in order before the mixer plays the track.
+    pub fn add_track(
+        &mut self,
+        source: impl AudioSource + 'static,
+        volume: f32,
+        commands: Vec<TrackCommand>,
+    ) -> TrackHandle {
         let handle = TrackId(self.next_id);
         self.next_id += 1;
 
         let (commands_tx, commands_rx) = mpsc::channel(COMMAND_QUEUE_SIZE);
         let played_frames = Arc::new(AtomicU64::new(0));
-        let mut track = MixerTrack::new(
-            source,
-            args.volume,
-            args.loops,
-            played_frames.clone(),
-            commands_rx,
-        );
-        for command in args.commands {
+        let mut track =
+            MixerTrack::new(Box::new(source), volume, played_frames.clone(), commands_rx);
+        for command in commands {
             track.apply(command, self.sample_rate);
         }
         self.tracks.insert(handle, track);
@@ -481,13 +464,7 @@ mod tests {
     fn mixer_with_track() -> (Mixer, TrackHandle, oneshot::Receiver<StopReason>) {
         let mut mixer = Mixer::new(1000);
         let (stop_trigger, ended) = TrackCommand::add_stop_trigger();
-        let handle = mixer.add_track(
-            Box::new(Constant),
-            MixerTrackArgs {
-                commands: vec![stop_trigger],
-                ..Default::default()
-            },
-        );
+        let handle = mixer.add_track(Constant, 1.0, vec![stop_trigger]);
         (mixer, handle, ended)
     }
 
