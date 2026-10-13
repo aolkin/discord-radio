@@ -287,17 +287,16 @@ impl Mixer {
     /// stops, overwriting any in-progress volume ramp at the time.
     /// Returns false if the track does not exist.
     pub fn stop_track(&mut self, handle: TrackId, fade: Duration, at: Option<Duration>) -> bool {
+        let fade = self.duration_frames(fade);
+        let at = at.map(|at| self.duration_frames(at));
         if let Ok(track) = self.track_mut(handle) {
-            let fade = self.duration_frames(fade);
-            let at = at.map(|at| self.duration_frames(at));
-            let start = at.map_or(track.played_frames, |at| at.max(track.played_frames));
             if track
-                .stop
-                .take()
+                .active_stop()
                 .is_some_and(|stop| stop.matches_ramp(&track.ramp))
             {
                 track.ramp = None;
             }
+            let start = at.map_or(track.played_frames, |at| at.max(track.played_frames));
             track.stop = Some(Stop {
                 start,
                 end: start + fade,
