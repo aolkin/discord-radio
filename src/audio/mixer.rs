@@ -50,27 +50,15 @@ pub enum TrackCommand {
         fade: Duration,
         at: Option<Duration>,
     },
+    /// The receiver of `tx` gets `()` once the track has played for `at` (see
+    /// [`Self::Stop`]), or an error if the track ends first.
     AddTrigger {
         at: Duration,
         tx: oneshot::Sender<()>,
     },
-    AddStopTrigger(oneshot::Sender<StopReason>),
-}
-
-impl TrackCommand {
-    /// The receiver gets `()` once the track has played for `at` (see
-    /// [`Self::Stop`]), or an error if the track ends first.
-    pub fn add_trigger(at: Duration) -> (Self, oneshot::Receiver<()>) {
-        let (tx, rx) = oneshot::channel();
-        (Self::AddTrigger { at, tx }, rx)
-    }
-
     /// The receiver gets the reason the track ends, or an error if the
     /// track is lost without one.
-    pub fn add_stop_trigger() -> (Self, oneshot::Receiver<StopReason>) {
-        let (tx, rx) = oneshot::channel();
-        (Self::AddStopTrigger(tx), rx)
-    }
+    AddStopTrigger(oneshot::Sender<StopReason>),
 }
 
 /// A track added to the mixer.
@@ -462,8 +450,12 @@ mod tests {
 
     fn mixer_with_track() -> (Mixer, TrackHandle, oneshot::Receiver<StopReason>) {
         let mut mixer = Mixer::new(1000);
-        let (stop_trigger, ended) = TrackCommand::add_stop_trigger();
-        let handle = mixer.add_track(Box::new(Constant), 1.0, vec![stop_trigger]);
+        let (stop_tx, ended) = oneshot::channel();
+        let handle = mixer.add_track(
+            Box::new(Constant),
+            1.0,
+            vec![TrackCommand::AddStopTrigger(stop_tx)],
+        );
         (mixer, handle, ended)
     }
 
@@ -534,16 +526,20 @@ mod tests {
     #[test]
     fn trigger_fires_at_its_frame_even_when_a_stop_lands_there() {
         let (mut mixer, handle, _) = mixer_with_track();
-        let (trigger, mut rx) = TrackCommand::add_trigger(ms(100));
-        handle.send(trigger).unwrap();
+        let (tx, mut fired) = oneshot::channel();
+        handle
+            .send(TrackCommand::AddTrigger { at: ms(100), tx })
+            .unwrap();
         pull(&mut mixer, 100);
-        assert!(rx.try_recv().is_err());
+        assert!(fired.try_recv().is_err());
         pull(&mut mixer, 1);
-        assert!(rx.try_recv().is_ok());
+        assert!(fired.try_recv().is_ok());
 
         let (mut mixer, handle, mut ended) = mixer_with_track();
-        let (trigger, mut rx) = TrackCommand::add_trigger(ms(100));
-        handle.send(trigger).unwrap();
+        let (tx, mut fired) = oneshot::channel();
+        handle
+            .send(TrackCommand::AddTrigger { at: ms(100), tx })
+            .unwrap();
         handle
             .send(TrackCommand::Stop {
                 fade: Duration::ZERO,
@@ -551,7 +547,7 @@ mod tests {
             })
             .unwrap();
         pull(&mut mixer, 101);
-        assert!(rx.try_recv().is_ok());
+        assert!(fired.try_recv().is_ok());
         assert_eq!(ended.try_recv(), Ok(StopReason::Stopped));
     }
 }

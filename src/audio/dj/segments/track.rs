@@ -66,7 +66,7 @@ impl TrackSegment {
     ) -> anyhow::Result<()> {
         let path = ctx.bot_state.file_resolver.resolve(&self.filename).await?;
         let source = open_track_source(&path, start_position).map_err(|e| anyhow::anyhow!(e))?;
-        let (add_trigger, end_trigger) = TrackCommand::add_trigger(play_duration);
+        let (end_tx, end_trigger) = tokio::sync::oneshot::channel();
         let track = ctx
             .audio_processor()
             .await?
@@ -82,7 +82,10 @@ impl TrackSegment {
                         fade: FADE_TIME,
                         at: None,
                     },
-                    add_trigger,
+                    TrackCommand::AddTrigger {
+                        at: play_duration,
+                        tx: end_tx,
+                    },
                     TrackCommand::Stop {
                         fade: FADE_TIME,
                         at: Some(play_duration),

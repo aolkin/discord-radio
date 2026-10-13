@@ -214,11 +214,11 @@ async fn run_hex_message(
                         continue;
                     }
                 };
-                let (stop_trigger, ended) = TrackCommand::add_stop_trigger();
+                let (ended_tx, ended) = tokio::sync::oneshot::channel();
                 let track = processor.write().await.mixer_mut().add_track(
                     source,
                     volume,
-                    vec![stop_trigger],
+                    vec![TrackCommand::AddStopTrigger(ended_tx)],
                 );
                 progress.current_track.set(track);
                 let _ = ended.await;

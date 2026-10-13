@@ -89,7 +89,7 @@ impl TrackManager {
             self.guild_id
         );
 
-        let (stop_trigger, ended) = TrackCommand::add_stop_trigger();
+        let (ended_tx, ended) = tokio::sync::oneshot::channel();
         let mixer_handle = self.audio_processor.write().await.mixer_mut().add_track(
             source,
             0.0,
@@ -100,7 +100,7 @@ impl TrackManager {
                     fade: Duration::from_secs_f32(args.fade_time.max(0.0)),
                     at: None,
                 },
-                stop_trigger,
+                TrackCommand::AddStopTrigger(ended_tx),
             ],
         );
 
