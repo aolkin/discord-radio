@@ -66,6 +66,7 @@ impl TrackSegment {
     ) -> anyhow::Result<()> {
         let path = ctx.bot_state.file_resolver.resolve(&self.filename).await?;
         let source = open_track_source(&path, start_position).map_err(|e| anyhow::anyhow!(e))?;
+        let (add_trigger, end_trigger) = TrackCommand::add_trigger(play_duration);
         let track = ctx
             .audio_processor()
             .await?
@@ -75,18 +76,22 @@ impl TrackSegment {
             .add_track(
                 Box::new(source),
                 MixerTrackArgs {
-                    volume: self.volume,
-                    fade_in: FADE_TIME,
+                    volume: 0.0,
+                    commands: vec![
+                        TrackCommand::SetVolume {
+                            volume: self.volume,
+                            fade: FADE_TIME,
+                            at: None,
+                        },
+                        add_trigger,
+                        TrackCommand::Stop {
+                            fade: FADE_TIME,
+                            at: Some(play_duration),
+                        },
+                    ],
                     ..Default::default()
                 },
             );
-        let (add_trigger, end_trigger) = TrackCommand::add_trigger(play_duration);
-        anyhow::ensure!(track.send(add_trigger)?, "Track {:?} has ended", track.id);
-        let stop = TrackCommand::Stop {
-            fade: FADE_TIME,
-            at: Some(play_duration),
-        };
-        anyhow::ensure!(track.send(stop)?, "Track {:?} has ended", track.id);
         self.track.set(track);
         *self.end_trigger.lock().unwrap() = Some(end_trigger);
         Ok(())

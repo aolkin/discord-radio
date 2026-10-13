@@ -1,5 +1,7 @@
 use crate::audio::decoder::SymphoniaSource;
-use crate::audio::mixer::{AudioSource, MixerTrackArgs, TrackCommand, TrackHandle, TrackId};
+use crate::audio::mixer::{
+    AudioSource, MixerTrackArgs, StopReason, TrackCommand, TrackHandle, TrackId,
+};
 use crate::audio::processing_thread::AudioProcessor;
 use crate::state::Data;
 use serenity::model::id::GuildId;
@@ -89,12 +91,20 @@ impl TrackManager {
             self.guild_id
         );
 
+        let (stop_trigger, ended) = TrackCommand::add_stop_trigger();
         let mixer_handle = self.audio_processor.write().await.mixer_mut().add_track(
             Box::new(source),
             MixerTrackArgs {
-                volume: args.volume,
+                volume: 0.0,
                 loops: args.loops,
-                fade_in: Duration::from_secs_f32(args.fade_time.max(0.0)),
+                commands: vec![
+                    TrackCommand::SetVolume {
+                        volume: args.volume,
+                        fade: Duration::from_secs_f32(args.fade_time.max(0.0)),
+                        at: None,
+                    },
+                    stop_trigger,
+                ],
             },
         );
 
@@ -103,7 +113,10 @@ impl TrackManager {
         let name = args.name.clone();
         let ended_track = mixer_handle.clone();
         tokio::spawn(async move {
-            let reason = ended_track.ended().await;
+            let reason = ended.await.unwrap_or_else(|e| {
+                tracing::error!("Track {:?} lost its end signal: {e}", ended_track.id);
+                StopReason::Lost
+            });
             tracing::debug!("Track '{name}' left the mixer in guild {guild_id}: {reason:?}");
             let manager_arc = bot_state
                 .track_managers

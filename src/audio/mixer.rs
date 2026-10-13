@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
-use tokio::sync::{mpsc, oneshot, watch};
+use tokio::sync::{mpsc, oneshot};
 
 use crate::audio::helpers::perceptual_level_to_amplitude;
 
@@ -54,6 +54,7 @@ pub enum TrackCommand {
         at: Duration,
         tx: oneshot::Sender<()>,
     },
+    AddStopTrigger(oneshot::Sender<StopReason>),
 }
 
 impl TrackCommand {
@@ -63,39 +64,25 @@ impl TrackCommand {
         let (tx, rx) = oneshot::channel();
         (Self::AddTrigger { at, tx }, rx)
     }
+
+    /// The receiver gets the reason the track ends, or an error if the
+    /// track is lost without one.
+    pub fn add_stop_trigger() -> (Self, oneshot::Receiver<StopReason>) {
+        let (tx, rx) = oneshot::channel();
+        (Self::AddStopTrigger(tx), rx)
+    }
 }
 
-/// A track added to the mixer. It has ended once it plays to its end, is
-/// removed or stopped, or the mixer is dropped.
+/// A track added to the mixer.
 #[derive(Clone, Debug)]
 pub struct TrackHandle {
     pub id: TrackId,
     sample_rate: u32,
     played_frames: Arc<AtomicU64>,
     commands: mpsc::Sender<TrackCommand>,
-    /// Set once, when the track ends.
-    end_rx: watch::Receiver<Option<StopReason>>,
 }
 
 impl TrackHandle {
-    pub fn has_ended(&self) -> bool {
-        self.stop_reason().is_some()
-    }
-
-    pub fn stop_reason(&self) -> Option<StopReason> {
-        *self.end_rx.borrow()
-    }
-
-    pub async fn ended(&self) -> StopReason {
-        match self.end_rx.clone().wait_for(Option::is_some).await {
-            Ok(reason) => reason.unwrap_or(StopReason::Lost),
-            Err(e) => {
-                tracing::error!("Track {:?} lost its end signal: {e}", self.id);
-                StopReason::Lost
-            }
-        }
-    }
-
     /// Returns `Ok(false)` if the track has ended, and an error if its
     /// command queue is full.
     pub fn send(&self, command: TrackCommand) -> anyhow::Result<bool> {
@@ -132,7 +119,8 @@ enum Keyframe {
 pub struct MixerTrackArgs {
     pub volume: f32,
     pub loops: bool,
-    pub fade_in: Duration,
+    /// Applied in order when the track is added, before the mixer plays it.
+    pub commands: Vec<TrackCommand>,
 }
 
 impl Default for MixerTrackArgs {
@@ -140,7 +128,7 @@ impl Default for MixerTrackArgs {
         Self {
             volume: 1.0,
             loops: false,
-            fade_in: Duration::ZERO,
+            commands: Vec::new(),
         }
     }
 }
@@ -181,7 +169,7 @@ pub struct MixerTrack {
     pub loops: bool,
     pub active: bool,
     commands: mpsc::Receiver<TrackCommand>,
-    end_tx: watch::Sender<Option<StopReason>>,
+    stop_triggers: Vec<oneshot::Sender<StopReason>>,
 }
 
 impl MixerTrack {
@@ -191,7 +179,6 @@ impl MixerTrack {
         loops: bool,
         played_frames: Arc<AtomicU64>,
         commands: mpsc::Receiver<TrackCommand>,
-        end_tx: watch::Sender<Option<StopReason>>,
     ) -> Self {
         Self {
             source,
@@ -205,28 +192,33 @@ impl MixerTrack {
             loops,
             active: true,
             commands,
-            end_tx,
+            stop_triggers: Vec::new(),
         }
     }
 
     fn apply_commands(&mut self, sample_rate: u32) {
+        while let Ok(command) = self.commands.try_recv() {
+            self.apply(command, sample_rate);
+        }
+    }
+
+    fn apply(&mut self, command: TrackCommand, sample_rate: u32) {
         let frames =
             |duration: Duration| (duration.as_secs_f64() * f64::from(sample_rate)).round() as u64;
-        while let Ok(command) = self.commands.try_recv() {
-            match command {
-                TrackCommand::SetVolume { volume, fade, at } => self.add_keyframe(
-                    self.start_frame(at.map(frames)),
-                    Keyframe::StartFade {
-                        target: volume,
-                        frames: frames(fade),
-                    },
-                ),
-                TrackCommand::SetLoops(loops) => self.loops = loops,
-                TrackCommand::Stop { fade, at } => self.stop(frames(fade), at.map(frames)),
-                TrackCommand::AddTrigger { at, tx } => {
-                    self.add_keyframe(frames(at), Keyframe::Trigger(tx))
-                }
+        match command {
+            TrackCommand::SetVolume { volume, fade, at } => self.add_keyframe(
+                self.start_frame(at.map(frames)),
+                Keyframe::StartFade {
+                    target: volume,
+                    frames: frames(fade),
+                },
+            ),
+            TrackCommand::SetLoops(loops) => self.loops = loops,
+            TrackCommand::Stop { fade, at } => self.stop(frames(fade), at.map(frames)),
+            TrackCommand::AddTrigger { at, tx } => {
+                self.add_keyframe(frames(at), Keyframe::Trigger(tx))
             }
+            TrackCommand::AddStopTrigger(tx) => self.stop_triggers.push(tx),
         }
     }
 
@@ -256,9 +248,9 @@ impl MixerTrack {
 
     /// Only the first call has an effect.
     fn end(&mut self, reason: StopReason) {
-        self.end_tx.send_modify(|end| {
-            end.get_or_insert(reason);
-        });
+        for tx in self.stop_triggers.drain(..) {
+            let _ = tx.send(reason);
+        }
     }
 
     fn add_keyframe(&mut self, frame: u64, keyframe: Keyframe) {
@@ -391,7 +383,6 @@ impl Mixer {
         self.next_id += 1;
 
         let (commands_tx, commands_rx) = mpsc::channel(COMMAND_QUEUE_SIZE);
-        let (end_tx, end_rx) = watch::channel(None);
         let played_frames = Arc::new(AtomicU64::new(0));
         let mut track = MixerTrack::new(
             source,
@@ -399,19 +390,9 @@ impl Mixer {
             args.loops,
             played_frames.clone(),
             commands_rx,
-            end_tx,
         );
-        let fade_in_frames =
-            (args.fade_in.as_secs_f64() * f64::from(self.sample_rate)).round() as u64;
-        if fade_in_frames > 0 {
-            track.volume = 0.0;
-            track.amplitude = perceptual_level_to_amplitude(0.0);
-            track.ramp = Some(VolumeRamp {
-                from: 0.0,
-                to: args.volume,
-                start: 0,
-                end: fade_in_frames,
-            });
+        for command in args.commands {
+            track.apply(command, self.sample_rate);
         }
         self.tracks.insert(handle, track);
         TrackHandle {
@@ -419,7 +400,6 @@ impl Mixer {
             sample_rate: self.sample_rate,
             played_frames,
             commands: commands_tx,
-            end_rx,
         }
     }
 
@@ -498,10 +478,17 @@ mod tests {
         Duration::from_millis(n)
     }
 
-    fn mixer_with_track() -> (Mixer, TrackHandle) {
+    fn mixer_with_track() -> (Mixer, TrackHandle, oneshot::Receiver<StopReason>) {
         let mut mixer = Mixer::new(1000);
-        let handle = mixer.add_track(Box::new(Constant), MixerTrackArgs::default());
-        (mixer, handle)
+        let (stop_trigger, ended) = TrackCommand::add_stop_trigger();
+        let handle = mixer.add_track(
+            Box::new(Constant),
+            MixerTrackArgs {
+                commands: vec![stop_trigger],
+                ..Default::default()
+            },
+        );
+        (mixer, handle, ended)
     }
 
     fn pull(mixer: &mut Mixer, frames: usize) -> Vec<f32> {
@@ -511,7 +498,7 @@ mod tests {
 
     #[test]
     fn volume_ramp_started_late_ends_after_its_own_length() {
-        let (mut mixer, handle) = mixer_with_track();
+        let (mut mixer, handle, _) = mixer_with_track();
         pull(&mut mixer, 1000);
         handle
             .send(TrackCommand::SetVolume {
@@ -527,7 +514,7 @@ mod tests {
 
     #[test]
     fn stop_fades_then_removes_the_track() {
-        let (mut mixer, handle) = mixer_with_track();
+        let (mut mixer, handle, mut ended) = mixer_with_track();
         handle
             .send(TrackCommand::Stop {
                 fade: ms(100),
@@ -537,11 +524,11 @@ mod tests {
         let out = pull(&mut mixer, 300);
         assert_eq!(out[150], 1.0);
         assert!(out[250] > 0.0 && out[250] < 1.0);
-        assert!(!handle.has_ended());
+        assert!(ended.try_recv().is_err());
         assert_eq!(pull(&mut mixer, 1), [0.0]);
-        assert_eq!(handle.stop_reason(), Some(StopReason::Stopped));
+        assert_eq!(ended.try_recv(), Ok(StopReason::Stopped));
 
-        let (mut mixer, handle) = mixer_with_track();
+        let (mut mixer, handle, mut ended) = mixer_with_track();
         pull(&mut mixer, 500);
         handle
             .send(TrackCommand::Stop {
@@ -551,11 +538,11 @@ mod tests {
             .unwrap();
         let out = pull(&mut mixer, 100);
         assert!(out[50] > 0.0 && out[50] < 1.0);
-        assert!(!handle.has_ended());
+        assert!(ended.try_recv().is_err());
         pull(&mut mixer, 1);
-        assert!(handle.has_ended());
+        assert!(ended.try_recv().is_ok());
 
-        let (mut mixer, handle) = mixer_with_track();
+        let (mut mixer, handle, mut ended) = mixer_with_track();
         pull(&mut mixer, 10);
         handle
             .send(TrackCommand::Stop {
@@ -564,13 +551,13 @@ mod tests {
             })
             .unwrap();
         assert_eq!(pull(&mut mixer, 1), [0.0]);
-        assert_eq!(handle.stop_reason(), Some(StopReason::Stopped));
+        assert_eq!(ended.try_recv(), Ok(StopReason::Stopped));
         assert!(!handle.send(TrackCommand::SetLoops(true)).unwrap());
     }
 
     #[test]
     fn trigger_fires_at_its_frame_even_when_a_stop_lands_there() {
-        let (mut mixer, handle) = mixer_with_track();
+        let (mut mixer, handle, _) = mixer_with_track();
         let (trigger, mut rx) = TrackCommand::add_trigger(ms(100));
         handle.send(trigger).unwrap();
         pull(&mut mixer, 100);
@@ -578,7 +565,7 @@ mod tests {
         pull(&mut mixer, 1);
         assert!(rx.try_recv().is_ok());
 
-        let (mut mixer, handle) = mixer_with_track();
+        let (mut mixer, handle, mut ended) = mixer_with_track();
         let (trigger, mut rx) = TrackCommand::add_trigger(ms(100));
         handle.send(trigger).unwrap();
         handle
@@ -589,6 +576,6 @@ mod tests {
             .unwrap();
         pull(&mut mixer, 101);
         assert!(rx.try_recv().is_ok());
-        assert_eq!(handle.stop_reason(), Some(StopReason::Stopped));
+        assert_eq!(ended.try_recv(), Ok(StopReason::Stopped));
     }
 }
