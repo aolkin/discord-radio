@@ -67,31 +67,25 @@ impl TrackSegment {
         let path = ctx.bot_state.file_resolver.resolve(&self.filename).await?;
         let source = open_track_source(&path, start_position).map_err(|e| anyhow::anyhow!(e))?;
         let (end_tx, end_trigger) = tokio::sync::oneshot::channel();
-        let track = ctx
-            .audio_processor()
-            .await?
-            .write()
-            .await
-            .mixer_mut()
-            .add_track(
-                source,
-                0.0,
-                vec![
-                    TrackCommand::SetVolume {
-                        volume: self.volume,
-                        fade: FADE_TIME,
-                        at: None,
-                    },
-                    TrackCommand::AddTrigger {
-                        at: play_duration,
-                        tx: end_tx,
-                    },
-                    TrackCommand::Stop {
-                        fade: FADE_TIME,
-                        at: Some(play_duration),
-                    },
-                ],
-            );
+        let track = ctx.mixer().await?.add_track(
+            source,
+            0.0,
+            vec![
+                TrackCommand::SetVolume {
+                    volume: self.volume,
+                    fade: FADE_TIME,
+                    at: None,
+                },
+                TrackCommand::AddTrigger {
+                    at: play_duration,
+                    tx: end_tx,
+                },
+                TrackCommand::Stop {
+                    fade: FADE_TIME,
+                    at: Some(play_duration),
+                },
+            ],
+        );
         self.track.set(track);
         *self.end_trigger.lock().unwrap() = Some(end_trigger);
         Ok(())

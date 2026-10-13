@@ -7,7 +7,7 @@ pub use noise::NoiseSegment;
 pub use track::TrackSegment;
 
 use crate::audio::dj::serde::{deser_instant, ser_instant};
-use crate::audio::mixer::{TrackCommand, TrackHandle};
+use crate::audio::mixer::{Mixer, TrackCommand, TrackHandle};
 use crate::audio::processing_thread::AudioProcessor;
 use crate::state::BotState;
 use anyhow::Context;
@@ -20,7 +20,7 @@ use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::RwLock;
+use tokio::sync::{OwnedRwLockMappedWriteGuard, OwnedRwLockWriteGuard, RwLock};
 
 pub struct SegmentCtx<'a> {
     pub guild_id: &'a GuildId,
@@ -37,6 +37,13 @@ impl SegmentCtx<'_> {
             .get(self.guild_id)
             .cloned()
             .with_context(|| format!("No audio processor for guild {}", self.guild_id))
+    }
+
+    pub async fn mixer(
+        &self,
+    ) -> anyhow::Result<OwnedRwLockMappedWriteGuard<AudioProcessor, Mixer>> {
+        let processor = self.audio_processor().await?.write_owned().await;
+        Ok(OwnedRwLockWriteGuard::map(processor, |p| p.mixer_mut()))
     }
 }
 
