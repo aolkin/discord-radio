@@ -24,7 +24,14 @@ pub struct SegmentCtx<'a> {
     bot_state: &'a BotState,
 }
 
-impl SegmentCtx<'_> {
+impl<'a> SegmentCtx<'a> {
+    pub fn new(guild_id: &'a GuildId, bot_state: &'a BotState) -> Self {
+        Self {
+            guild_id,
+            bot_state,
+        }
+    }
+
     pub async fn audio_processor(&self) -> ProcessorRef {
         self.bot_state.audio_processor(*self.guild_id).await
     }

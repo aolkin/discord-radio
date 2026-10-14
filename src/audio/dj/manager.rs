@@ -90,10 +90,7 @@ pub async fn dj_task(
     let (forced_profile, status_message) = {
         let segment = &initial_state.segment;
         let _ = segment
-            .restore(&SegmentCtx {
-                guild_id: &guild_id,
-                bot_state: &bot_state,
-            })
+            .restore(&SegmentCtx::new(&guild_id, &bot_state))
             .await
             .inspect_err(|e| tracing::warn!("Failed to restore segment: {e:?}"));
         (segment.signal_profile().name, segment.channel_status())

@@ -71,10 +71,7 @@ impl DJStateMachine {
     }
 
     fn segment_ctx(&self) -> SegmentCtx<'_> {
-        SegmentCtx {
-            guild_id: &self.guild_id,
-            bot_state: &self.bot_state,
-        }
+        SegmentCtx::new(&self.guild_id, &self.bot_state)
     }
 
     pub async fn current_state(&self) -> RwLockReadGuard<'_, DJState> {
