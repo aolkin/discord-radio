@@ -1,7 +1,7 @@
 use crate::audio::dj::manager::DJManager;
 use crate::audio::dj::state_machine::DJState;
 use crate::audio::duration::DurationCache;
-use crate::audio::processing_thread::AudioProcessor;
+use crate::audio::processing::processor::AudioProcessor;
 use crate::audio::profiles::ProfileManager;
 use crate::audio::tracks::TrackManager;
 use crate::bucket::{FileResolver, ObjectStore};

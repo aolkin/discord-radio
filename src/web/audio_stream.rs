@@ -153,9 +153,7 @@ pub async fn audio_stream(
     let processors = bot_state.audio_processors.read().await;
     let processor = processors.get(&guild_id).ok_or(StatusCode::NOT_FOUND)?;
 
-    // Get the distributor and subscribe to Opus packets (pre-encoded by AudioProcessor)
-    let distributor = processor.read().await.distributor();
-    let receiver = distributor.subscribe_opus();
+    let receiver = processor.read().await.stream_opus();
 
     drop(processors);
 

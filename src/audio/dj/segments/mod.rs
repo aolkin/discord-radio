@@ -7,8 +7,8 @@ pub use noise::NoiseSegment;
 pub use track::TrackSegment;
 
 use crate::audio::dj::serde::{deser_instant, ser_instant};
-use crate::audio::mixer::{Mixer, TrackCommand, TrackHandle};
-use crate::audio::processing_thread::AudioProcessor;
+use crate::audio::processing::mixer::{Mixer, TrackCommand, TrackHandle};
+use crate::audio::processing::processor::AudioProcessor;
 use crate::state::BotState;
 use anyhow::Context;
 use async_trait::async_trait;

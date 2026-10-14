@@ -1,6 +1,8 @@
-use crate::audio::decoder::SymphoniaSource;
-use crate::audio::mixer::{AudioSource, StopReason, TrackCommand, TrackHandle, TrackId};
-use crate::audio::processing_thread::AudioProcessor;
+use crate::audio::codec::decoder::SymphoniaSource;
+use crate::audio::processing::mixer::{
+    AudioSource, StopReason, TrackCommand, TrackHandle, TrackId,
+};
+use crate::audio::processing::processor::AudioProcessor;
 use crate::state::Data;
 use serenity::model::id::GuildId;
 use std::collections::HashMap;
