@@ -38,4 +38,3 @@ runs:
         key: ${{ runner.os }}-cargo-${{ inputs.cache-key-suffix && format('{0}-', inputs.cache-key-suffix) || '' }}${{ hashFiles('Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-cargo-${{ inputs.cache-key-suffix && format('{0}-', inputs.cache-key-suffix) || '' }}
-          ${{ runner.os }}-cargo-
