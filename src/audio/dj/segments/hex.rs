@@ -75,19 +75,18 @@ impl HexSegment {
         }
     }
 
-    async fn start_run(&self, ctx: &SegmentCtx<'_>) -> anyhow::Result<()> {
-        let processor = ctx.audio_processor().await?;
+    async fn start_run(&self, ctx: &SegmentCtx<'_>) {
+        let processor = ctx.audio_processor().await;
         let handle = tokio::spawn(run_hex_message(
             self.message.clone(),
             self.volume,
             self.target_loops,
             self.progress.clone(),
             processor,
-            ctx.bot_state.file_resolver.clone(),
+            ctx.file_resolver().clone(),
             *ctx.guild_id,
         ));
         *self.run.lock().unwrap() = Some(handle);
-        Ok(())
     }
 
     pub fn from_entry(
@@ -123,7 +122,7 @@ impl Segment for HexSegment {
     }
 
     async fn restore(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
-        self.start_run(ctx).await?;
+        self.start_run(ctx).await;
         tracing::info!(
             "Restored DJ hex message '{}' at loop {}/{} in guild {}",
             self.message,
@@ -135,7 +134,7 @@ impl Segment for HexSegment {
     }
 
     async fn enter(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
-        self.start_run(ctx).await?;
+        self.start_run(ctx).await;
         tracing::info!(
             "DJ playing hex message '{}' ({} loops) in guild {}",
             self.message,
@@ -214,7 +213,7 @@ async fn run_hex_message(
                     }
                 };
                 let (ended_tx, ended) = tokio::sync::oneshot::channel();
-                let track = processor.write().await.mixer_mut().add_track(
+                let track = processor.write().await.add_track(
                     source,
                     volume,
                     vec![TrackCommand::AddStopTrigger(ended_tx)],

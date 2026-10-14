@@ -2,13 +2,12 @@ use crate::audio::codec::decoder::SymphoniaSource;
 use crate::audio::processing::mixer::{
     AudioSource, StopReason, TrackCommand, TrackHandle, TrackId,
 };
-use crate::audio::processing::processor::AudioProcessor;
-use crate::state::Data;
+use crate::audio::processing::processor::ProcessorRef;
+use crate::state::{BotState, Data};
 use serenity::model::id::GuildId;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::RwLock;
 
 #[derive(Clone, Debug)]
 pub struct TrackSnapshot {
@@ -45,11 +44,11 @@ pub struct TrackManager {
     tracks: HashMap<String, TrackInfo>,
     guild_id: GuildId,
     bot_state: Data,
-    audio_processor: Arc<RwLock<AudioProcessor>>,
+    audio_processor: ProcessorRef,
 }
 
 impl TrackManager {
-    pub fn new(guild_id: GuildId, bot_state: Data, processor: Arc<RwLock<AudioProcessor>>) -> Self {
+    pub fn new(guild_id: GuildId, bot_state: Data, processor: ProcessorRef) -> Self {
         Self {
             tracks: HashMap::new(),
             guild_id,
@@ -92,7 +91,7 @@ impl TrackManager {
         );
 
         let (ended_tx, ended) = tokio::sync::oneshot::channel();
-        let mixer_handle = self.audio_processor.write().await.mixer_mut().add_track(
+        let mixer_handle = self.audio_processor.write().await.add_track(
             source,
             0.0,
             vec![
@@ -346,7 +345,7 @@ pub async fn get_or_create_track_manager(
         return manager.clone();
     }
 
-    let processor = get_or_create_audio_processor(bot_state, guild_id).await;
+    let processor = bot_state.audio_processor(guild_id).await;
 
     let mut track_managers = bot_state.track_managers.write().await;
     track_managers
@@ -358,40 +357,8 @@ pub async fn get_or_create_track_manager(
         .clone()
 }
 
-/// Get or create audio processor for a guild
-pub async fn get_or_create_audio_processor(
-    bot_state: &Data,
-    guild_id: GuildId,
-) -> Arc<RwLock<AudioProcessor>> {
-    // Try to get existing processor
-    {
-        let processors = bot_state.audio_processors.read().await;
-        if let Some(processor) = processors.get(&guild_id) {
-            return processor.clone();
-        }
-    }
-
-    // Create new processor with default profile
-    tracing::debug!(
-        "Creating audio processor for guild {} (no voice connection yet)",
-        guild_id
-    );
-
-    let initial_profile = load_default_profile(bot_state);
-    let processor = Arc::new(RwLock::new(AudioProcessor::new(initial_profile)));
-
-    // Store the processor
-    let mut processors = bot_state.audio_processors.write().await;
-    // Double-check in case another task created it while we were waiting
-    processors
-        .entry(guild_id)
-        .or_insert_with(|| processor.clone());
-
-    processor
-}
-
 /// Load default profile, using fallback if not found
-fn load_default_profile(bot_state: &Data) -> crate::audio::profiles::SignalProfile {
+pub fn load_default_profile(bot_state: &BotState) -> crate::audio::profiles::SignalProfile {
     // Try to get the "clear" profile
     if let Some(profile) = bot_state.profile_manager.get_profile("clear").cloned() {
         return profile;

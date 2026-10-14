@@ -7,43 +7,37 @@ pub use noise::NoiseSegment;
 pub use track::TrackSegment;
 
 use crate::audio::dj::serde::{deser_instant, ser_instant};
-use crate::audio::processing::mixer::{Mixer, TrackCommand, TrackHandle};
-use crate::audio::processing::processor::AudioProcessor;
+use crate::audio::processing::mixer::{TrackCommand, TrackHandle};
+use crate::audio::processing::processor::ProcessorRef;
+use crate::bucket::FileResolver;
 use crate::state::BotState;
-use anyhow::Context;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use serenity::http::Http;
 use serenity::model::id::GuildId;
 use std::borrow::ToOwned;
 use std::fmt::Debug;
 use std::ops::Deref;
-use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{OwnedRwLockMappedWriteGuard, OwnedRwLockWriteGuard, RwLock};
 
 pub struct SegmentCtx<'a> {
     pub guild_id: &'a GuildId,
-    pub bot_state: &'a BotState,
-    pub http: &'a Http,
+    bot_state: &'a BotState,
 }
 
-impl SegmentCtx<'_> {
-    pub async fn audio_processor(&self) -> anyhow::Result<Arc<RwLock<AudioProcessor>>> {
-        self.bot_state
-            .audio_processors
-            .read()
-            .await
-            .get(self.guild_id)
-            .cloned()
-            .with_context(|| format!("No audio processor for guild {}", self.guild_id))
+impl<'a> SegmentCtx<'a> {
+    pub fn new(guild_id: &'a GuildId, bot_state: &'a BotState) -> Self {
+        Self {
+            guild_id,
+            bot_state,
+        }
     }
 
-    pub async fn mixer(
-        &self,
-    ) -> anyhow::Result<OwnedRwLockMappedWriteGuard<AudioProcessor, Mixer>> {
-        let processor = self.audio_processor().await?.write_owned().await;
-        Ok(OwnedRwLockWriteGuard::map(processor, |p| p.mixer_mut()))
+    pub async fn audio_processor(&self) -> ProcessorRef {
+        self.bot_state.audio_processor(*self.guild_id).await
+    }
+
+    pub fn file_resolver(&self) -> &FileResolver {
+        &self.bot_state.file_resolver
     }
 }
 

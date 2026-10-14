@@ -1,7 +1,7 @@
 use crate::audio::dj::manager::DJManager;
 use crate::audio::dj::state_machine::DJState;
 use crate::audio::duration::DurationCache;
-use crate::audio::processing::processor::AudioProcessor;
+use crate::audio::processing::processor::{AudioProcessor, ProcessorRef};
 use crate::audio::profiles::ProfileManager;
 use crate::audio::tracks::TrackManager;
 use crate::bucket::{FileResolver, ObjectStore};
@@ -79,6 +79,24 @@ impl BotState {
             logs_base_path,
             file_resolver,
         }
+    }
+
+    pub async fn audio_processor(&self, guild_id: GuildId) -> ProcessorRef {
+        let processors = self.audio_processors.read().await;
+        if let Some(processor) = processors.get(&guild_id) {
+            return processor.clone();
+        }
+        drop(processors);
+
+        let mut processors = self.audio_processors.write().await;
+        // Double-check in case another task created it while we were waiting
+        processors
+            .entry(guild_id)
+            .or_insert_with(|| {
+                let initial_profile = crate::audio::tracks::load_default_profile(self);
+                Arc::new(RwLock::new(AudioProcessor::new(initial_profile)))
+            })
+            .clone()
     }
 
     /// Log a member activity event
