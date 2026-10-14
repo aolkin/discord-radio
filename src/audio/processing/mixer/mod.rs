@@ -334,8 +334,6 @@ pub struct Mixer {
     tracks: HashMap<TrackId, MixerTrack>,
     next_id: u64,
     sample_rate: u32,
-    #[allow(dead_code)]
-    channels: u16,
 }
 
 impl Mixer {
@@ -344,7 +342,6 @@ impl Mixer {
             tracks: HashMap::new(),
             next_id: 1,
             sample_rate,
-            channels: 2,
         }
     }
 
@@ -374,6 +371,7 @@ impl Mixer {
     }
 
     /// Removes the track at once. Returns false if the track does not exist.
+    #[allow(dead_code)]
     pub fn remove_track(&mut self, handle: TrackId) -> bool {
         self.tracks
             .remove(&handle)

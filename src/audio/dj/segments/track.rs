@@ -66,8 +66,8 @@ impl TrackSegment {
     ) -> anyhow::Result<()> {
         let path = ctx.bot_state.file_resolver.resolve(&self.filename).await?;
         let source = open_track_source(&path, start_position).map_err(|e| anyhow::anyhow!(e))?;
-        let (end_tx, end_trigger) = tokio::sync::oneshot::channel();
-        let track = ctx.mixer().await?.add_track(
+        let (end_tx, end_trigger) = oneshot::channel();
+        let track = ctx.audio_processor().await.write().await.add_track(
             source,
             0.0,
             vec![

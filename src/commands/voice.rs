@@ -1,8 +1,15 @@
-use crate::audio::dj::manager::{DJCommand, DJStateType, send_dj_command, trigger_reload};
+use crate::audio::connection::setup_voice_connection;
+use crate::audio::dj::config::DJConfig;
+use crate::audio::dj::manager::{
+    DJCommand, DJManager, DJStateType, send_dj_command, trigger_reload,
+};
+use crate::audio::processing::processor::ProcessorRef;
+use crate::audio::tracks::get_or_create_track_manager;
 use crate::commands::utils;
 use crate::commands::utils::{Context, Error};
 use serenity::all::{ChannelId, ChannelType, GuildId};
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
 /// Join a voice channel to broadcast audio
 #[poise::command(
@@ -41,7 +48,8 @@ pub async fn join_voice_channel(
     }
 
     if let Err(e) = join_voice_channel_helper(ctx, guild_id, channel).await {
-        ctx.say(e).await?;
+        ctx.say(format!("Failed to join the voice channel: {e}"))
+            .await?;
         return Ok(());
     }
 
@@ -317,7 +325,7 @@ pub async fn change_track_state(
 
     ctx.defer_ephemeral().await?;
 
-    let manager_arc = get_or_create_track_manager(ctx, guild_id).await;
+    let manager_arc = get_or_create_track_manager(ctx.data(), guild_id).await;
     let mut manager = manager_arc.lock().await;
     let fade_time = fade_time.unwrap_or(1.0);
 
@@ -469,41 +477,15 @@ async fn join_voice_channel_helper(
     ctx: Context<'_>,
     guild_id: GuildId,
     channel_id: ChannelId,
-) -> Result<(), String> {
+) -> anyhow::Result<ProcessorRef> {
     let manager = songbird::get(ctx.serenity_context())
         .await
         .expect("Songbird Voice client placed in at initialisation.")
         .clone();
 
-    match manager.join(guild_id, channel_id).await {
-        Ok(handle_lock) => {
-            tracing::info!("Joined voice channel");
-
-            if let Err(e) = crate::audio::connection::setup_voice_connection(
-                handle_lock.clone(),
-                guild_id,
-                ctx.data().clone(),
-            )
-            .await
-            {
-                return Err(format!("Failed to setup voice connection: {}", e));
-            }
-
-            // Create track manager for this guild
-            // This ensures any running DJ or other audio features can use it immediately
-            let _track_manager = get_or_create_track_manager(ctx, guild_id).await;
-
-            Ok(())
-        }
-        Err(e) => Err(format!("Failed to join the voice channel: {}", e)),
-    }
-}
-
-async fn get_or_create_track_manager(
-    ctx: Context<'_>,
-    guild_id: GuildId,
-) -> Arc<tokio::sync::Mutex<crate::audio::tracks::TrackManager>> {
-    crate::audio::tracks::get_or_create_track_manager(ctx.data(), guild_id).await
+    let handle_lock = manager.join(guild_id, channel_id).await?;
+    tracing::info!("Joined voice channel");
+    Ok(setup_voice_connection(handle_lock.clone(), guild_id, ctx.data().clone()).await)
 }
 
 async fn autocomplete_profile(ctx: Context<'_>, partial: &'_ str) -> Vec<String> {
@@ -674,15 +656,14 @@ pub async fn manage_dj(
             let settings = ctx.data().dj_settings.get(guild_id).await;
 
             let config_path = format!("dj_configs/{}.json", config);
-            let mut dj_config =
-                match crate::audio::dj::config::DJConfig::load_from_file(&config_path) {
-                    Ok(cfg) => cfg.with_overrides(&settings),
-                    Err(e) => {
-                        ctx.say(format!("Failed to load DJ config '{}': {}", config, e))
-                            .await?;
-                        return Ok(());
-                    }
-                };
+            let mut dj_config = match DJConfig::load_from_file(&config_path) {
+                Ok(cfg) => cfg.with_overrides(&settings),
+                Err(e) => {
+                    ctx.say(format!("Failed to load DJ config '{}': {}", config, e))
+                        .await?;
+                    return Ok(());
+                }
+            };
 
             if let Err(e) = dj_config
                 .apply_dj_settings(&settings, &ctx.data().file_resolver)
@@ -692,17 +673,10 @@ pub async fn manage_dj(
                 return Ok(());
             }
 
-            // Create track manager for this guild (no longer requires voice connection)
-            let _track_manager = get_or_create_track_manager(ctx, guild_id).await;
-
             let mut dj_managers = ctx.data().dj_managers.write().await;
             let manager = dj_managers
                 .entry(guild_id)
-                .or_insert_with(|| {
-                    Arc::new(tokio::sync::Mutex::new(
-                        crate::audio::dj::manager::DJManager::new(guild_id),
-                    ))
-                })
+                .or_insert_with(|| Arc::new(Mutex::new(DJManager::new(guild_id))))
                 .clone();
             drop(dj_managers);
 

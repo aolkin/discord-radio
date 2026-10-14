@@ -1,3 +1,4 @@
+use crate::audio::processing::processor::ProcessorRef;
 use crate::state::Data;
 use raw_adapter::ProcessedAudioAdapter;
 use serenity::model::id::GuildId;
@@ -11,7 +12,7 @@ pub async fn setup_voice_connection(
     handle_lock: Arc<Mutex<Call>>,
     guild_id: GuildId,
     bot_state: Data,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+) -> ProcessorRef {
     {
         let mut voice_connections = bot_state.voice_connections.write().await;
         voice_connections.insert(guild_id, handle_lock.clone());
@@ -42,7 +43,7 @@ pub async fn setup_voice_connection(
     drop(call);
 
     // Get or create DSP processor with default "clear" profile
-    let processor = crate::audio::tracks::get_or_create_audio_processor(&bot_state, guild_id).await;
+    let processor = bot_state.audio_processor(guild_id).await;
 
     // Start the adapter with the processor to connect it to Songbird
     let adapter = ProcessedAudioAdapter::new(processor.clone());
@@ -80,5 +81,5 @@ pub async fn setup_voice_connection(
 
     tracing::info!("Initialized audio DSP processor for guild {}", guild_id);
 
-    Ok(())
+    processor
 }

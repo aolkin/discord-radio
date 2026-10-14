@@ -1,9 +1,10 @@
 use crate::audio::codec::opus_encoder::OpusEncoder;
 use crate::audio::dsp::chain::RadioEffectChain;
-use crate::audio::processing::mixer::Mixer;
+use crate::audio::processing::mixer::{AudioSource, Mixer, TrackCommand, TrackHandle};
 use crate::audio::profiles::SignalProfile;
-use tokio::sync::broadcast;
+use std::sync::Arc;
 use tokio::sync::broadcast::Receiver;
+use tokio::sync::{RwLock, broadcast};
 
 const SAMPLE_RATE: u32 = 48000;
 const FRAME_SIZE: usize = 960; // 20ms at 48kHz
@@ -43,6 +44,8 @@ impl ProfileTransition {
     }
 }
 
+pub type ProcessorRef = Arc<RwLock<AudioProcessor>>;
+
 pub struct AudioProcessor {
     mixer: Mixer,
     dsp_chain: RadioEffectChain,
@@ -70,8 +73,13 @@ impl AudioProcessor {
         }
     }
 
-    pub fn mixer_mut(&mut self) -> &mut Mixer {
-        &mut self.mixer
+    pub fn add_track(
+        &mut self,
+        source: Box<dyn AudioSource>,
+        volume: f32,
+        commands: Vec<TrackCommand>,
+    ) -> TrackHandle {
+        self.mixer.add_track(source, volume, commands)
     }
 
     pub fn stream_opus(&self) -> Receiver<Vec<u8>> {

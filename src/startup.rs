@@ -1,7 +1,11 @@
-use crate::audio::tracks::StartTrackArgs;
+use crate::audio::connection::setup_voice_connection;
+use crate::audio::dj::config::DJConfig;
+use crate::audio::dj::manager::DJManager;
+use crate::audio::tracks::{StartTrackArgs, get_or_create_track_manager};
 use crate::state::Data;
 use poise::serenity_prelude::Http;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
 pub async fn restore_state(
     _http: Arc<Http>,
@@ -18,53 +22,35 @@ pub async fn restore_voice_channels(
 
     if saved_channels.is_empty() {
         tracing::info!("No saved voice channels found");
-    } else {
-        tracing::info!("Restoring {} voice channel(s)", saved_channels.len());
+        return Ok(());
+    }
 
-        let manager = songbird::get(ctx)
-            .await
-            .expect("Songbird Voice client placed in at initialisation.")
-            .clone();
+    tracing::info!("Restoring {} voice channel(s)", saved_channels.len());
 
-        for (guild_id, channel_id) in saved_channels {
-            match manager.join(guild_id, channel_id).await {
-                Ok(handle_lock) => {
-                    tracing::info!(
-                        "Rejoined voice channel {} in guild {}",
-                        channel_id,
-                        guild_id
-                    );
+    let manager = songbird::get(ctx)
+        .await
+        .expect("Songbird Voice client placed in at initialisation.")
+        .clone();
 
-                    if let Err(e) = crate::audio::connection::setup_voice_connection(
-                        handle_lock.clone(),
-                        guild_id,
-                        bot_state.clone(),
-                    )
-                    .await
-                    {
-                        tracing::error!(
-                            "Failed to setup voice connection for guild {} channel {}: {:?}",
-                            guild_id,
-                            channel_id,
-                            e
-                        );
-                        let _ = bot_state.state_store.remove_voice_channel(guild_id).await;
-                    } else {
-                        // Create track manager for this guild so it's available for DJ and other features
-                        let _manager_arc =
-                            crate::audio::tracks::get_or_create_track_manager(&bot_state, guild_id)
-                                .await;
-                    }
-                }
-                Err(e) => {
-                    tracing::error!(
-                        "Failed to rejoin voice channel {} in guild {}: {:?}",
-                        channel_id,
-                        guild_id,
-                        e
-                    );
-                    let _ = bot_state.state_store.remove_voice_channel(guild_id).await;
-                }
+    for (guild_id, channel_id) in saved_channels {
+        match manager.join(guild_id, channel_id).await {
+            Ok(handle_lock) => {
+                tracing::info!(
+                    "Rejoined voice channel {} in guild {}",
+                    channel_id,
+                    guild_id
+                );
+
+                setup_voice_connection(handle_lock.clone(), guild_id, bot_state.clone()).await;
+            }
+            Err(e) => {
+                tracing::error!(
+                    "Failed to rejoin voice channel {} in guild {}: {:?}",
+                    channel_id,
+                    guild_id,
+                    e
+                );
+                let _ = bot_state.state_store.remove_voice_channel(guild_id).await;
             }
         }
     }
@@ -99,9 +85,7 @@ async fn restore_multitrack_playback(
             guild_id
         );
 
-        let manager_arc =
-            crate::audio::tracks::get_or_create_track_manager(&bot_state, guild_id).await;
-
+        let manager_arc = get_or_create_track_manager(&bot_state, guild_id).await;
         let mut manager = manager_arc.lock().await;
 
         for track in multitrack_state.tracks {
@@ -174,7 +158,7 @@ async fn restore_multitrack_playback(
 
 async fn restore_dj_managers(
     bot_state: Data,
-    http: Arc<poise::serenity_prelude::Http>,
+    http: Arc<Http>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let saved_dj_states = bot_state.state_store.load_dj_states().await?;
 
@@ -191,14 +175,10 @@ async fn restore_dj_managers(
             continue;
         }
 
-        // Create track manager for this guild (no longer requires voice connection)
-        let _manager_arc =
-            crate::audio::tracks::get_or_create_track_manager(&bot_state, guild_id).await;
-
         let settings = bot_state.dj_settings.get(guild_id).await;
 
         let config_path = format!("dj_configs/{}.json", dj_state.config_name);
-        let mut dj_config = match crate::audio::dj::config::DJConfig::load_from_file(&config_path) {
+        let mut dj_config = match DJConfig::load_from_file(&config_path) {
             Ok(cfg) => cfg.with_overrides(&settings),
             Err(e) => {
                 tracing::error!(
@@ -229,11 +209,7 @@ async fn restore_dj_managers(
         let mut dj_managers = bot_state.dj_managers.write().await;
         let manager = dj_managers
             .entry(guild_id)
-            .or_insert_with(|| {
-                Arc::new(tokio::sync::Mutex::new(
-                    crate::audio::dj::manager::DJManager::new(guild_id),
-                ))
-            })
+            .or_insert_with(|| Arc::new(Mutex::new(DJManager::new(guild_id))))
             .clone();
         drop(dj_managers);
 

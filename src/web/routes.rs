@@ -145,7 +145,7 @@ pub async fn change_track_state(
     let guild_id_parsed: u64 = guild_id.parse().map_err(|_| StatusCode::BAD_REQUEST)?;
     let guild_id = GuildId::new(guild_id_parsed);
 
-    let manager_arc = crate::audio::tracks::get_or_create_track_manager(&bot_state, guild_id).await;
+    let manager_arc = get_or_create_track_manager(&bot_state, guild_id).await;
     let mut manager = manager_arc.lock().await;
     let fade_time = request.fade_time.unwrap_or(1.0);
 
@@ -638,6 +638,7 @@ pub async fn get_default_state_weights(
 
 // Log retrieval endpoints
 
+use crate::audio::tracks::get_or_create_track_manager;
 use crate::logging::{LogReader, guild_logs_dir};
 use axum::extract::Query;
 
