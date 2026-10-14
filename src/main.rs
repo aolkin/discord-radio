@@ -249,11 +249,11 @@ async fn main() -> Result<(), Error> {
         std::env::var("GRAFANA_API_KEY"),
     ) {
         match metrics::init_metrics(metrics_url, api_key) {
-            Ok(provider) => {
+            Ok((provider, bot_metrics)) => {
                 tracing::info!("Metrics initialized successfully");
 
                 // Start heartbeat task
-                metrics::start_heartbeat_task();
+                metrics::start_heartbeat_task(bot_metrics);
                 Some(provider)
             }
             Err(e) => {
@@ -307,8 +307,8 @@ async fn main() -> Result<(), Error> {
     ));
 
     // Start gauge update task if metrics are configured
-    if metrics::get().is_some() {
-        metrics::start_gauge_update_task(data.clone());
+    if let Some(bot_metrics) = metrics::get() {
+        metrics::start_gauge_update_task(bot_metrics, data.clone());
     }
 
     let data_for_setup = data.clone();

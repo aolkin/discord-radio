@@ -123,7 +123,7 @@ impl BotMetrics {
 pub fn init_metrics(
     metrics_url: String,
     api_key: String,
-) -> Result<SdkMeterProvider, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<(SdkMeterProvider, &'static BotMetrics), Box<dyn std::error::Error + Send + Sync>> {
     info!("Initializing metrics with OTLP HTTP exporter");
 
     // Create OTLP exporter
@@ -164,12 +164,10 @@ pub fn init_metrics(
         .build();
 
     let meter = provider.meter("radio-bot");
-    METRICS
-        .set(BotMetrics::new(meter))
-        .map_err(|_| "Metrics already initialized")?;
+    let metrics = METRICS.get_or_init(|| BotMetrics::new(meter));
 
     info!("Metrics initialized successfully");
-    Ok(provider)
+    Ok((provider, metrics))
 }
 
 static METRICS: OnceLock<BotMetrics> = OnceLock::new();
@@ -180,31 +178,26 @@ pub fn get() -> Option<&'static BotMetrics> {
 }
 
 /// Start the heartbeat task that sends a liveness metric every minute
-pub fn start_heartbeat_task() {
+pub fn start_heartbeat_task(metrics: &'static BotMetrics) {
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_secs(60));
         loop {
             interval.tick().await;
-
-            if let Some(metrics) = get() {
-                metrics.record_heartbeat();
-            }
+            metrics.record_heartbeat();
         }
     });
 }
 
 /// Start a task to periodically update gauge metrics
-pub fn start_gauge_update_task(bot_state: crate::state::Data) {
+pub fn start_gauge_update_task(metrics: &'static BotMetrics, bot_state: crate::state::Data) {
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_secs(60));
         loop {
             interval.tick().await;
 
-            if let Some(metrics) = get() {
-                let voice_connections = bot_state.voice_connections.read().await;
-                let guild_count = voice_connections.len() as u64;
-                metrics.update_active_voice_connections(guild_count);
-            }
+            let voice_connections = bot_state.voice_connections.read().await;
+            let guild_count = voice_connections.len() as u64;
+            metrics.update_active_voice_connections(guild_count);
         }
     });
 }
