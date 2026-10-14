@@ -98,6 +98,7 @@ impl BotState {
             })
             .clone()
     }
+
     pub async fn dj_manager(&self, guild_id: GuildId) -> Arc<Mutex<DJManager>> {
         let managers = self.dj_managers.read().await;
         if let Some(manager) = managers.get(&guild_id) {
