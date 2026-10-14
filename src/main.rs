@@ -244,18 +244,16 @@ async fn main() -> Result<(), Error> {
     let (shutdown_tx, _shutdown_rx) = tokio::sync::broadcast::channel(16);
 
     // Initialize metrics if configured
-    let metrics_handle = metrics::create_metrics_handle();
     let _metrics_provider = if let (Ok(metrics_url), Ok(api_key)) = (
         std::env::var("GRAFANA_METRICS_URL"),
         std::env::var("GRAFANA_API_KEY"),
     ) {
         match metrics::init_metrics(metrics_url, api_key) {
-            Ok((provider, bot_metrics)) => {
+            Ok(provider) => {
                 tracing::info!("Metrics initialized successfully");
-                *metrics_handle.write().await = Some(bot_metrics);
 
                 // Start heartbeat task
-                metrics::start_heartbeat_task(metrics_handle.clone()).await;
+                metrics::start_heartbeat_task();
                 Some(provider)
             }
             Err(e) => {
@@ -305,13 +303,12 @@ async fn main() -> Result<(), Error> {
         state_store,
         dj_settings_store,
         shutdown_tx,
-        metrics_handle.clone(),
         file_cache,
     ));
 
     // Start gauge update task if metrics are configured
-    if metrics_handle.read().await.is_some() {
-        metrics::start_gauge_update_task(metrics_handle.clone(), data.clone()).await;
+    if metrics::get().is_some() {
+        metrics::start_gauge_update_task(data.clone());
     }
 
     let data_for_setup = data.clone();
