@@ -106,7 +106,7 @@ impl TrackManager {
         );
 
         let guild_id = self.guild_id;
-        let bot_state = self.bot_state.clone();
+        let bot_state = self.bot_state;
         let name = args.name.clone();
         let ended_track = mixer_handle.clone();
         tokio::spawn(async move {
@@ -351,7 +351,7 @@ pub async fn get_or_create_track_manager(
     track_managers
         .entry(guild_id)
         .or_insert_with(|| {
-            let manager = TrackManager::new(guild_id, bot_state.clone(), processor);
+            let manager = TrackManager::new(guild_id, bot_state, processor);
             Arc::new(tokio::sync::Mutex::new(manager))
         })
         .clone()

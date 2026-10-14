@@ -90,7 +90,7 @@ pub async fn dj_task(
     let (forced_profile, status_message) = {
         let segment = &initial_state.segment;
         let _ = segment
-            .restore(&SegmentCtx::new(&guild_id, &bot_state))
+            .restore(&SegmentCtx::new(&guild_id, bot_state))
             .await
             .inspect_err(|e| tracing::warn!("Failed to restore segment: {e:?}"));
         (segment.signal_profile().name, segment.channel_status())
@@ -109,7 +109,7 @@ pub async fn dj_task(
         announcement_channel,
         http.clone(),
         dj_state,
-        bot_state.clone(),
+        bot_state,
     );
 
     // Initialize profile state machine
@@ -431,7 +431,7 @@ impl DJManager {
         let config_name = config.name.clone();
         let (tx, rx) = mpsc::channel(10);
         let guild_id = self.guild_id;
-        let bot_state_clone = bot_state.clone();
+        let bot_state_clone = bot_state;
         let http_clone = http.clone();
         let handle = tokio::spawn(async move {
             dj_task(

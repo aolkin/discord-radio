@@ -481,7 +481,7 @@ async fn join_voice_channel_helper(
 
     let handle_lock = manager.join(guild_id, channel_id).await?;
     tracing::info!("Joined voice channel");
-    Ok(setup_voice_connection(handle_lock.clone(), guild_id, ctx.data().clone()).await)
+    Ok(setup_voice_connection(handle_lock.clone(), guild_id, ctx.data()).await)
 }
 
 async fn autocomplete_profile(ctx: Context<'_>, partial: &'_ str) -> Vec<String> {
@@ -683,7 +683,7 @@ pub async fn manage_dj(
             if let Err(e) = mgr
                 .start(
                     dj_config,
-                    ctx.data().clone(),
+                    ctx.data(),
                     ctx.serenity_context().http.clone(),
                     announcement_channel,
                     None,

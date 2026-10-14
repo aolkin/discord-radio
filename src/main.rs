@@ -11,7 +11,7 @@ mod state;
 mod voice_status;
 mod web;
 
-use crate::state::BotState;
+use crate::state::{BotState, Data};
 use poise::serenity_prelude::{self as serenity, GatewayIntents};
 use songbird::SerenityInit;
 use std::sync::Arc;
@@ -19,7 +19,7 @@ use tracing::info;
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 
-async fn on_error(error: poise::FrameworkError<'_, Arc<BotState>, Error>) {
+async fn on_error(error: poise::FrameworkError<'_, Data, Error>) {
     match error {
         poise::FrameworkError::Command { error, ctx, .. } => {
             tracing::error!("Error in command '{}': {:?}", ctx.command().name, error);
@@ -51,7 +51,7 @@ async fn on_error(error: poise::FrameworkError<'_, Arc<BotState>, Error>) {
 }
 
 struct Handler {
-    data: Arc<BotState>,
+    data: Data,
 }
 
 #[serenity::async_trait]
@@ -67,7 +67,7 @@ impl serenity::EventHandler for Handler {
             tracing::error!("Failed to restore activity state: {:?}", e);
         }
 
-        if let Err(e) = crate::startup::restore_voice_channels(&ctx, self.data.clone()).await {
+        if let Err(e) = crate::startup::restore_voice_channels(&ctx, self.data).await {
             tracing::error!("Failed to restore voice channels: {:?}", e);
         }
     }
@@ -298,20 +298,19 @@ async fn main() -> Result<(), Error> {
             .map_err(|e| format!("Failed to create file cache at {file_cache_dir:?}: {e}"))?,
     );
 
-    let data = Arc::new(BotState::new(
+    let data: Data = Box::leak(Box::new(BotState::new(
         content_path,
         state_store,
         dj_settings_store,
         shutdown_tx,
         file_cache,
-    ));
+    )));
 
     // Start gauge update task if metrics are configured
     if let Some(bot_metrics) = metrics::get() {
-        metrics::start_gauge_update_task(bot_metrics, data.clone());
+        metrics::start_gauge_update_task(bot_metrics, data);
     }
 
-    let data_for_setup = data.clone();
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
             commands: vec![
@@ -334,7 +333,7 @@ async fn main() -> Result<(), Error> {
             on_error: |error| Box::pin(on_error(error)),
             ..Default::default()
         })
-        .setup(|ctx, _ready, framework| {
+        .setup(move |ctx, _ready, framework| {
             Box::pin(async move {
                 poise::builtins::register_globally(ctx, &framework.options().commands).await?;
                 let command_names: Vec<_> = framework
@@ -348,7 +347,7 @@ async fn main() -> Result<(), Error> {
                     framework.options().commands.len(),
                     command_names.join(", ")
                 );
-                Ok(data_for_setup.clone())
+                Ok(data)
             })
         })
         .build();
@@ -358,17 +357,16 @@ async fn main() -> Result<(), Error> {
 
     let mut client = serenity::Client::builder(&discord_token, intents)
         .framework(framework)
-        .event_handler(Handler { data: data.clone() })
+        .event_handler(Handler { data })
         .register_songbird()
         .await?;
 
     // Set up graceful shutdown handling
-    shutdown::setup_shutdown_handler(data.clone()).await;
+    shutdown::setup_shutdown_handler(data).await;
 
     // Start web server in background
-    let web_data = data.clone();
     tokio::spawn(async move {
-        if let Err(e) = web::run_web_server(web_data, web_port).await {
+        if let Err(e) = web::run_web_server(data, web_port).await {
             tracing::error!("Web server error: {}", e);
         }
     });
