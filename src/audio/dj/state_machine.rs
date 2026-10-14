@@ -217,7 +217,7 @@ impl DJStateMachine {
 
         let to_state = self.get_state_name(&next_state);
         *self.state.write().await = next_state;
-        if let Some(metrics) = bot_state.metrics.read().await.as_ref() {
+        if let Some(metrics) = crate::metrics::get() {
             metrics.record_dj_state_transition(self.guild_id.get(), &from_state, &to_state);
         }
 
@@ -229,7 +229,7 @@ impl DJStateMachine {
     async fn cleanup_current_state(&self, bot_state: &Data) {
         let current = self.state.read().await;
         let segment = &current.segment;
-        if let Some(metrics) = bot_state.metrics.read().await.as_ref() {
+        if let Some(metrics) = crate::metrics::get() {
             metrics.record_dj_state_duration(
                 self.guild_id.get(),
                 segment.state_name(),
