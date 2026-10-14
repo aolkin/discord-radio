@@ -98,6 +98,19 @@ impl BotState {
             })
             .clone()
     }
+    pub async fn dj_manager(&self, guild_id: GuildId) -> Arc<Mutex<DJManager>> {
+        let managers = self.dj_managers.read().await;
+        if let Some(manager) = managers.get(&guild_id) {
+            return manager.clone();
+        }
+        drop(managers);
+
+        let mut managers = self.dj_managers.write().await;
+        managers
+            .entry(guild_id)
+            .or_insert_with(|| Arc::new(Mutex::new(DJManager::new(guild_id))))
+            .clone()
+    }
 
     /// Log a member activity event
     pub async fn log_member_activity(
