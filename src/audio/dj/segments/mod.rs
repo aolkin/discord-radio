@@ -9,10 +9,10 @@ pub use track::TrackSegment;
 use crate::audio::dj::serde::{deser_instant, ser_instant};
 use crate::audio::processing::mixer::{TrackCommand, TrackHandle};
 use crate::audio::processing::processor::ProcessorRef;
+use crate::bucket::FileResolver;
 use crate::state::BotState;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use serenity::http::Http;
 use serenity::model::id::GuildId;
 use std::borrow::ToOwned;
 use std::fmt::Debug;
@@ -21,13 +21,16 @@ use std::time::Duration;
 
 pub struct SegmentCtx<'a> {
     pub guild_id: &'a GuildId,
-    pub bot_state: &'a BotState,
-    pub http: &'a Http,
+    bot_state: &'a BotState,
 }
 
 impl SegmentCtx<'_> {
     pub async fn audio_processor(&self) -> ProcessorRef {
         self.bot_state.audio_processor(*self.guild_id).await
+    }
+
+    pub fn file_resolver(&self) -> &FileResolver {
+        &self.bot_state.file_resolver
     }
 }
 

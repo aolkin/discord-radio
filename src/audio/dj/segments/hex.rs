@@ -83,7 +83,7 @@ impl HexSegment {
             self.target_loops,
             self.progress.clone(),
             processor,
-            ctx.bot_state.file_resolver.clone(),
+            ctx.file_resolver().clone(),
             *ctx.guild_id,
         ));
         *self.run.lock().unwrap() = Some(handle);

@@ -93,7 +93,6 @@ pub async fn dj_task(
             .restore(&SegmentCtx {
                 guild_id: &guild_id,
                 bot_state: &bot_state,
-                http: &http,
             })
             .await
             .inspect_err(|e| tracing::warn!("Failed to restore segment: {e:?}"));

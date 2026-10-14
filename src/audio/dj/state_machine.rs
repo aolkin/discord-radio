@@ -74,7 +74,6 @@ impl DJStateMachine {
         SegmentCtx {
             guild_id: &self.guild_id,
             bot_state: &self.bot_state,
-            http: &self.http,
         }
     }
 
