@@ -431,13 +431,12 @@ impl DJManager {
         let config_name = config.name.clone();
         let (tx, rx) = mpsc::channel(10);
         let guild_id = self.guild_id;
-        let bot_state_clone = bot_state;
         let http_clone = http.clone();
         let handle = tokio::spawn(async move {
             dj_task(
                 guild_id,
                 config,
-                bot_state_clone,
+                bot_state,
                 rx,
                 announcement_channel,
                 http_clone,
