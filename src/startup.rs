@@ -1,11 +1,9 @@
 use crate::audio::connection::setup_voice_connection;
 use crate::audio::dj::config::DJConfig;
-use crate::audio::dj::manager::DJManager;
 use crate::audio::tracks::{StartTrackArgs, get_or_create_track_manager};
 use crate::state::Data;
 use poise::serenity_prelude::Http;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 
 pub async fn restore_voice_channels(
     ctx: &poise::serenity_prelude::Context,
@@ -199,12 +197,7 @@ async fn restore_dj_managers(
             dj_state.config_name
         );
 
-        let mut dj_managers = bot_state.dj_managers.write().await;
-        let manager = dj_managers
-            .entry(guild_id)
-            .or_insert_with(|| Arc::new(Mutex::new(DJManager::new(guild_id))))
-            .clone();
-        drop(dj_managers);
+        let manager = bot_state.dj_manager(guild_id).await;
 
         let mut mgr = manager.lock().await;
 

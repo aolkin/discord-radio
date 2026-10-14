@@ -1,15 +1,11 @@
 use crate::audio::connection::setup_voice_connection;
 use crate::audio::dj::config::DJConfig;
-use crate::audio::dj::manager::{
-    DJCommand, DJManager, DJStateType, send_dj_command, trigger_reload,
-};
+use crate::audio::dj::manager::{DJCommand, DJStateType, send_dj_command, trigger_reload};
 use crate::audio::processing::processor::ProcessorRef;
 use crate::audio::tracks::get_or_create_track_manager;
 use crate::commands::utils;
 use crate::commands::utils::{Context, Error};
 use serenity::all::{ChannelId, ChannelType, GuildId};
-use std::sync::Arc;
-use tokio::sync::Mutex;
 
 /// Join a voice channel to broadcast audio
 #[poise::command(
@@ -673,12 +669,7 @@ pub async fn manage_dj(
                 return Ok(());
             }
 
-            let mut dj_managers = ctx.data().dj_managers.write().await;
-            let manager = dj_managers
-                .entry(guild_id)
-                .or_insert_with(|| Arc::new(Mutex::new(DJManager::new(guild_id))))
-                .clone();
-            drop(dj_managers);
+            let manager = ctx.data().dj_manager(guild_id).await;
 
             let mut mgr = manager.lock().await;
             if mgr.is_running() {
