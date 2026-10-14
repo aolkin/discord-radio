@@ -19,9 +19,7 @@ pub async fn setup_voice_connection(
     }
 
     let mut call = handle_lock.lock().await;
-    let event_handler = crate::handlers::voice::ConnectionEventHandler {
-        data: bot_state.clone(),
-    };
+    let event_handler = crate::handlers::voice::ConnectionEventHandler { data: bot_state };
 
     call.add_global_event(
         songbird::Event::Core(songbird::events::CoreEvent::DriverConnect),

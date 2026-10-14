@@ -3,7 +3,7 @@ use crate::audio::dj::manager::{DJStateType, HexMessageRequest, TrackRequest};
 use crate::audio::dj::scheduler::{DJStateEntry, WeightedScheduler};
 use crate::audio::dj::segments::{HexSegment, Segment, SignalProfilePlayback, TrackSegment};
 use crate::audio::dj::segments::{NoiseSegment, SegmentCtx};
-use crate::state::{BotState, Data};
+use crate::state::Data;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serenity::all::Http;
@@ -43,7 +43,7 @@ pub struct DJStateMachine {
     announcement_channel: Option<ChannelId>,
     http: Arc<Http>,
     hex_message_announcements: Vec<String>,
-    bot_state: Arc<BotState>,
+    bot_state: Data,
 }
 
 impl DJStateMachine {
@@ -54,7 +54,7 @@ impl DJStateMachine {
         announcement_channel: Option<ChannelId>,
         http: Arc<Http>,
         state: Arc<RwLock<DJState>>,
-        bot_state: Arc<BotState>,
+        bot_state: Data,
     ) -> Self {
         let hex_message_announcements =
             config.hex_message_announcements.clone().unwrap_or_default();
@@ -71,7 +71,7 @@ impl DJStateMachine {
     }
 
     fn segment_ctx(&self) -> SegmentCtx<'_> {
-        SegmentCtx::new(&self.guild_id, &self.bot_state)
+        SegmentCtx::new(&self.guild_id, self.bot_state)
     }
 
     pub async fn current_state(&self) -> RwLockReadGuard<'_, DJState> {

@@ -32,7 +32,7 @@ pub async fn restore_voice_channels(
                     guild_id
                 );
 
-                setup_voice_connection(handle_lock.clone(), guild_id, bot_state.clone()).await;
+                setup_voice_connection(handle_lock.clone(), guild_id, bot_state).await;
             }
             Err(e) => {
                 tracing::error!(
@@ -48,7 +48,7 @@ pub async fn restore_voice_channels(
 
     // Restore these features regardless of whether there are voice channels
     // since they can now operate independently of voice connections
-    restore_multitrack_playback(bot_state.clone()).await?;
+    restore_multitrack_playback(bot_state).await?;
     restore_dj_managers(bot_state, ctx.http.clone()).await?;
 
     Ok(())
@@ -217,7 +217,7 @@ async fn restore_dj_managers(
         if let Err(e) = mgr
             .start(
                 dj_config,
-                bot_state.clone(),
+                bot_state,
                 http.clone(),
                 announcement_channel,
                 dj_state.state_machine,
