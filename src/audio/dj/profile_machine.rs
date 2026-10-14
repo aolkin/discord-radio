@@ -1,6 +1,6 @@
 use crate::audio::dj::config::SignalProfileEntry;
 use crate::audio::dj::segments::{
-    CommonSegmentPlaybackConfig, SignalProfilePlayback, TimedSegment,
+    CommonSegmentPlaybackConfig, Completed, SignalProfilePlayback, TimedSegment,
 };
 use crate::audio::dj::weighted_choice::WeightedSelector;
 use rand::Rng;
@@ -65,6 +65,22 @@ impl ProfileStateMachine {
             profiles,
             selector,
             forced: SignalProfilePlayback::default(),
+        }
+    }
+
+    pub fn profile_name(&self) -> Option<String> {
+        self.forced.name.clone().or_else(|| {
+            self.current
+                .as_ref()
+                .and_then(|c| c.signal_profile.as_ref()?.name.clone())
+        })
+    }
+
+    /// Never resolves while a forced profile is active.
+    pub fn completed(&self) -> Completed {
+        match &self.current {
+            Some(segment) => segment.completed(),
+            None => Box::pin(std::future::pending()),
         }
     }
 
