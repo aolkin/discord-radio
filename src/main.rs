@@ -362,13 +362,6 @@ async fn main() -> Result<(), Error> {
         .register_songbird()
         .await?;
 
-    // Restore saved state (excluding voice channels which need Context)
-    tracing::info!("Restoring saved state...");
-    let http_for_restore = client.http.clone();
-    if let Err(e) = startup::restore_state(http_for_restore, data.clone()).await {
-        tracing::error!("Failed to restore state: {:?}", e);
-    }
-
     // Set up graceful shutdown handling
     shutdown::setup_shutdown_handler(data.clone()).await;
 

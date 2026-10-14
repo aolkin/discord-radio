@@ -7,13 +7,6 @@ use poise::serenity_prelude::Http;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-pub async fn restore_state(
-    _http: Arc<Http>,
-    _bot_state: Data,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    Ok(())
-}
-
 pub async fn restore_voice_channels(
     ctx: &poise::serenity_prelude::Context,
     bot_state: Data,
