@@ -188,11 +188,10 @@ impl Segment for TrackSegment {
         Ok(())
     }
 
-    async fn exit(&self, _ctx: &SegmentCtx) -> anyhow::Result<()> {
+    async fn exit(&self, _ctx: &SegmentCtx) {
         if !self.is_complete().await {
             self.track.stop(FADE_TIME);
         }
-        Ok(())
     }
 
     fn loggable_properties(&self) -> serde_json::Value {

@@ -97,21 +97,15 @@ impl DJStateMachine {
     }
 
     pub async fn stop(&mut self, bot_state: &Data) {
-        // Clean up current state before stopping
-        if let Err(e) = self.cleanup_current_state(bot_state).await {
-            tracing::error!("Error cleaning up DJ state during stop: {}", e);
-        }
+        self.cleanup_current_state(bot_state).await;
 
-        if let Err(e) = bot_state
+        bot_state
             .log_dj_activity(
                 self.guild_id.get(),
                 "stopped".to_string(),
                 serde_json::json!({}),
             )
-            .await
-        {
-            tracing::error!("Failed to log DJ state transition: {}", e);
-        }
+            .await;
     }
 
     pub async fn force_advance(
@@ -121,7 +115,22 @@ impl DJStateMachine {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let Self { scheduler, .. } = self;
         let next_state_type = scheduler.next_state(state_type_filter);
-        self.transition_to_state(next_state_type, bot_state).await
+        info!("DJ transitioning to state: {next_state_type}");
+        let next_state = match next_state_type {
+            DJStateEntry::Track(entry) => {
+                TrackSegment::from_entry(entry, &bot_state.duration_cache)
+                    .await
+                    .into()
+            }
+            DJStateEntry::HexMessage(entry) => {
+                HexSegment::from_entry(entry, &self.scheduler.config().hex_message_defaults, || {
+                    self.pick_random_announcement()
+                })
+                .into()
+            }
+            DJStateEntry::Noise(entry) => NoiseSegment::from(entry).into(),
+        };
+        self.enter_state(next_state, bot_state).await
     }
 
     pub async fn force_hex_message(
@@ -179,30 +188,6 @@ impl DJStateMachine {
         self.enter_state(next_state, bot_state).await
     }
 
-    async fn transition_to_state(
-        &self,
-        next_state_type: DJStateEntry,
-        bot_state: &Data,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        info!("DJ transitioning to state: {next_state_type}");
-        let next_state = match next_state_type {
-            DJStateEntry::Track(entry) => {
-                TrackSegment::from_entry(entry, &bot_state.duration_cache)
-                    .await
-                    .into()
-            }
-            DJStateEntry::HexMessage(entry) => {
-                HexSegment::from_entry(entry, &self.scheduler.config().hex_message_defaults, || {
-                    self.pick_random_announcement()
-                })
-                .into()
-            }
-            DJStateEntry::Noise(entry) => NoiseSegment::from(entry).into(),
-        };
-
-        self.enter_state(next_state, bot_state).await
-    }
-
     async fn enter_state(
         &self,
         next_state: DJState,
@@ -211,7 +196,7 @@ impl DJStateMachine {
         // Record the previous state before transitioning
         let from_state = self.get_state_name(&*self.current_state().await);
 
-        self.cleanup_current_state(bot_state).await?;
+        self.cleanup_current_state(bot_state).await;
 
         let segment = &next_state.segment;
         segment.enter(&self.segment_ctx()).await?;
@@ -236,18 +221,12 @@ impl DJStateMachine {
             metrics.record_dj_state_transition(self.guild_id.get(), &from_state, &to_state);
         }
 
-        // Log the DJ state transition
-        if let Err(e) = self.log_state_transition(bot_state).await {
-            tracing::error!("Failed to log DJ state transition: {}", e);
-        }
+        self.log_state_transition(bot_state).await;
 
         Ok(())
     }
 
-    async fn cleanup_current_state(
-        &self,
-        bot_state: &Data,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn cleanup_current_state(&self, bot_state: &Data) {
         let current = self.state.read().await;
         let segment = &current.segment;
         if let Some(metrics) = bot_state.metrics.read().await.as_ref() {
@@ -258,15 +237,13 @@ impl DJStateMachine {
                 segment.elapsed().as_secs_f64(),
             );
         }
-        segment.exit(&self.segment_ctx()).await?;
+        segment.exit(&self.segment_ctx()).await;
         if let Some(status) = segment.channel_status() {
             bot_state
                 .voice_status_manager
                 .remove_status(self.guild_id, &status, &self.http)
                 .await;
         }
-
-        Ok(())
     }
 
     fn pick_random_announcement(&self) -> Option<String> {
@@ -279,10 +256,7 @@ impl DJStateMachine {
         }
     }
 
-    async fn log_state_transition(
-        &self,
-        bot_state: &Data,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn log_state_transition(&self, bot_state: &Data) -> bool {
         let state = self.state.read().await;
         let event_type = self.get_state_name(&state);
         let details = state.segment.loggable_properties();
