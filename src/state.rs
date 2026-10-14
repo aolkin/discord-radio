@@ -128,7 +128,7 @@ impl BotState {
         guild_id: u64,
         event_type: String,
         details: serde_json::Value,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ) -> bool {
         #[derive(Serialize)]
         struct DJActivityEntry {
             timestamp: String,
@@ -145,7 +145,13 @@ impl BotState {
             details,
         };
 
-        logger.log(&entry).await
+        logger
+            .log(&entry)
+            .await
+            .inspect_err(|e| {
+                tracing::error!("Failed to log DJ state transition: {}", e);
+            })
+            .is_ok()
     }
 }
 

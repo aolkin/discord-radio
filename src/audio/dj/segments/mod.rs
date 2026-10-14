@@ -114,9 +114,7 @@ pub trait Segment: Send + Sync + Debug + SegmentPlaybackConfig {
     async fn enter(&self, _ctx: &SegmentCtx) -> anyhow::Result<()> {
         Ok(())
     }
-    async fn exit(&self, _ctx: &SegmentCtx) -> anyhow::Result<()> {
-        Ok(())
-    }
+    async fn exit(&self, _ctx: &SegmentCtx) {}
 
     fn announcement(&self) -> &Option<String> {
         &None

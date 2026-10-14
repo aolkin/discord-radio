@@ -145,7 +145,7 @@ impl Segment for HexSegment {
         Ok(())
     }
 
-    async fn exit(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
+    async fn exit(&self, ctx: &SegmentCtx) {
         let run = self.run.lock().unwrap().take();
         if let Some(handle) = run {
             handle.abort();
@@ -156,7 +156,6 @@ impl Segment for HexSegment {
             let loops_played = self.progress.loops.load(Ordering::Relaxed) as u64;
             metrics.record_hex_message_loops(ctx.guild_id.get(), loops_played);
         }
-        Ok(())
     }
 
     fn announcement(&self) -> &Option<String> {
