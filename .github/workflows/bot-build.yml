@@ -17,8 +17,6 @@ jobs:
 
       - name: Setup Rust and cache dependencies
         uses: ./.github/actions/setup-rust-and-cache
-        with:
-          cache-key-suffix: release
 
       - name: Build release
         env:
