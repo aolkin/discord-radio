@@ -1,9 +1,11 @@
-use crate::audio::raw_adapter::ProcessedAudioAdapter;
 use crate::state::Data;
+use raw_adapter::ProcessedAudioAdapter;
 use serenity::model::id::GuildId;
 use songbird::Call;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+
+mod raw_adapter;
 
 pub async fn setup_voice_connection(
     handle_lock: Arc<Mutex<Call>>,

@@ -4,8 +4,8 @@ use super::{
 };
 use crate::audio::dj::config::{HexMessageDefaults, HexMessageEntry};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
-use crate::audio::mixer::TrackCommand;
-use crate::audio::processing_thread::AudioProcessor;
+use crate::audio::processing::mixer::TrackCommand;
+use crate::audio::processing::processor::AudioProcessor;
 use crate::audio::tracks::open_track_source;
 use crate::bucket::FileResolver;
 use async_trait::async_trait;

@@ -1,4 +1,4 @@
-use crate::audio::processing_thread::AudioProcessor;
+use crate::audio::processing::processor::AudioProcessor;
 use songbird::input::RawAdapter;
 use std::io::{Read, Seek, SeekFrom};
 use std::sync::{Arc, Mutex};

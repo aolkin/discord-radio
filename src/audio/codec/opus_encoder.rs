@@ -4,6 +4,7 @@ use std::sync::Arc;
 const SAMPLE_RATE: u32 = 48000;
 const FRAME_SIZE: usize = 960; // 20ms at 48kHz
 const BITRATE: Bitrate = Bitrate::Bits(64000); // 64 kbps for good quality voice
+const MAX_PACKET_SIZE: usize = 4000; // max size ~4000 bytes is plenty for our use
 
 /// Opus encoder wrapper for converting PCM frames to Opus packets
 pub struct OpusEncoder {
@@ -39,21 +40,13 @@ impl OpusEncoder {
             interleaved.push(frame[1]);
         }
 
-        // Encode to opus packet (max size ~4000 bytes is plenty for our use)
-        let mut output = vec![0u8; 4000];
+        // Encode to opus packet
+        let mut output = vec![0u8; MAX_PACKET_SIZE];
         let mut encoder = self.encoder.lock();
         let len = encoder.encode_float(&interleaved, &mut output)?;
 
         output.truncate(len);
         Ok(output)
-    }
-
-    /// Clone the encoder for use in multiple contexts
-    #[allow(dead_code)]
-    pub fn clone_encoder(&self) -> Self {
-        Self {
-            encoder: self.encoder.clone(),
-        }
     }
 }
 
@@ -64,4 +57,25 @@ impl Default for OpusEncoder {
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_opus_encode_tone() {
+        let encoder = OpusEncoder::default();
+
+        // Create test frames (simple sine wave)
+        let mut frames = Vec::with_capacity(FRAME_SIZE);
+        for i in 0..FRAME_SIZE {
+            let t = i as f32 / SAMPLE_RATE as f32;
+            let sample = (2.0 * std::f32::consts::PI * 440.0 * t).sin() * 0.5;
+            frames.push([sample, sample]);
+        }
+
+        let result = encoder.encode(&frames);
+        assert!(result.is_ok());
+
+        let packet = result.unwrap();
+        assert!(!packet.is_empty());
+    }
+}

@@ -1,12 +1,14 @@
-use crate::audio::distributor::AudioDistributor;
+use crate::audio::codec::opus_encoder::OpusEncoder;
 use crate::audio::dsp::chain::RadioEffectChain;
-use crate::audio::mixer::Mixer;
-use crate::audio::opus_encoder::OpusEncoder;
+use crate::audio::processing::mixer::Mixer;
 use crate::audio::profiles::SignalProfile;
-use std::sync::Arc;
+use tokio::sync::broadcast;
+use tokio::sync::broadcast::Receiver;
 
 const SAMPLE_RATE: u32 = 48000;
 const FRAME_SIZE: usize = 960; // 20ms at 48kHz
+
+const CHANNEL_CAPACITY: usize = 16; // Buffer up to 16 chunks (320ms at 20ms per chunk)
 
 pub struct ProfileTransition {
     pub from: SignalProfile,
@@ -47,8 +49,8 @@ pub struct AudioProcessor {
     transition: Option<ProfileTransition>,
     current_profile: SignalProfile,
     samples_processed: u64, // Total stereo frames processed (not individual samples)
-    distributor: Arc<AudioDistributor>,
     opus_encoder: OpusEncoder,
+    opus_stream: broadcast::Sender<Vec<u8>>,
 }
 
 impl AudioProcessor {
@@ -63,8 +65,8 @@ impl AudioProcessor {
             transition: None,
             current_profile: initial_profile,
             samples_processed: 0,
-            distributor: Arc::new(AudioDistributor::new()),
             opus_encoder,
+            opus_stream: broadcast::channel(CHANNEL_CAPACITY).0,
         }
     }
 
@@ -72,9 +74,8 @@ impl AudioProcessor {
         &mut self.mixer
     }
 
-    /// Get a reference to the audio distributor for subscribing to audio frames
-    pub fn distributor(&self) -> Arc<AudioDistributor> {
-        self.distributor.clone()
+    pub fn stream_opus(&self) -> Receiver<Vec<u8>> {
+        self.opus_stream.subscribe()
     }
 
     pub fn start_profile_transition(&mut self, to_profile: SignalProfile, duration_ms: f32) {
@@ -145,17 +146,14 @@ impl AudioProcessor {
         // Track total frames processed (stereo frames, not individual samples)
         self.samples_processed += FRAME_SIZE as u64;
 
-        // Broadcast PCM frames to Songbird subscribers
-        self.distributor.broadcast_pcm(buffer.clone());
-
         // Encode to Opus and broadcast to web clients
-        match self.opus_encoder.encode(&buffer) {
-            Ok(opus_packet) => {
-                self.distributor.broadcast_opus(opus_packet);
-            }
-            Err(e) => {
-                tracing::error!("Opus encoding error: {:?}", e);
-            }
+        if self.opus_stream.receiver_count() > 0
+            && let Err(e) = self
+                .opus_encoder
+                .encode(&buffer)
+                .map(|packet| self.opus_stream.send(packet))
+        {
+            tracing::error!("Opus encoding error: {:?}", e);
         }
 
         // Check if generation is keeping up with real-time

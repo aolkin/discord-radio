@@ -4,7 +4,7 @@ use super::{
 };
 use crate::audio::dj::config::TrackEntry;
 use crate::audio::duration::DurationCache;
-use crate::audio::mixer::TrackCommand;
+use crate::audio::processing::mixer::TrackCommand;
 use crate::audio::tracks::open_track_source;
 use async_trait::async_trait;
 use rand::Rng;
