@@ -1,4 +1,6 @@
-use crate::audio::dj::config::{DJConfig, HexMessageEntry, NoisePeriodEntry, TrackEntry};
+use crate::audio::dj::config::{
+    DJConfig, HexMessageEntry, NoisePeriodEntry, SignalProfileEntry, TrackEntry,
+};
 use crate::audio::dj::manager::DJStateType;
 use crate::audio::dj::weighted_choice::WeightedSelector;
 use rand::Rng;
@@ -16,6 +18,7 @@ pub struct WeightedScheduler {
     track_selector: WeightedSelector,
     hex_message_selector: WeightedSelector,
     noise_selector: WeightedSelector,
+    signal_profile_selector: WeightedSelector,
 }
 
 impl WeightedScheduler {
@@ -37,7 +40,15 @@ impl WeightedScheduler {
             track_selector,
             hex_message_selector,
             noise_selector,
+            signal_profile_selector: WeightedSelector::new(5, 0.3),
         }
+    }
+
+    pub fn next_signal_profile(&mut self) -> SignalProfileEntry {
+        self.signal_profile_selector
+            .choose(&self.config.signal_profiles)
+            .unwrap_or(&DEFAULT_SIGNAL_PROFILE)
+            .to_owned()
     }
 
     pub fn next_state(&mut self, filter: Option<DJStateType>) -> DJStateEntry {
@@ -114,6 +125,15 @@ static DEFAULT_NOISE_PERIOD: LazyLock<NoisePeriodEntry> = LazyLock::new(|| Noise
     max_duration_seconds: 2.0,
     weight: 1,
 });
+
+static DEFAULT_SIGNAL_PROFILE: LazyLock<SignalProfileEntry> =
+    LazyLock::new(|| SignalProfileEntry {
+        profile_name: "clear".to_string(),
+        weight: 1,
+        fade_duration_seconds: 3.0,
+        min_time_seconds: 60.0,
+        max_time_seconds: 120.0,
+    });
 
 #[cfg(test)]
 mod tests;

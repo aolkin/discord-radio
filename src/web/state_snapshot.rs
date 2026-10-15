@@ -22,7 +22,7 @@ pub struct DJStateInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioProfileInfo {
     pub name: String,
-    pub forced: bool,
+    pub source: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,19 +108,18 @@ impl BotSnapshot {
                 let processor = processor_arc.read().await;
                 let profile_name = processor.current_profile_name().to_string();
 
-                // Check if profile is forced by DJ state
                 let dj_states = bot_state.dj_states.read().await;
-                let is_forced = if let Some(state_arc) = dj_states.get(&guild_id) {
+                let source = if let Some(state_arc) = dj_states.get(&guild_id) {
                     let state = state_arc.read().await;
-                    state.forced_profile().is_some()
+                    Some(state.profile_source().to_string())
                 } else {
-                    false
+                    None
                 };
                 drop(dj_states);
 
                 guild_state.audio_profile = Some(AudioProfileInfo {
                     name: profile_name,
-                    forced: is_forced,
+                    source,
                 });
             }
             drop(audio_processors);

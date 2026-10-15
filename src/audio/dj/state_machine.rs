@@ -2,9 +2,10 @@ use crate::audio::dj::config::DJConfig;
 use crate::audio::dj::manager::{
     ADVANCE_RETRY_DELAY, DJCommand, DJStateType, HexMessageRequest, TrackRequest,
 };
-use crate::audio::dj::profile_machine::ProfileStateMachine;
 use crate::audio::dj::scheduler::{DJStateEntry, WeightedScheduler};
-use crate::audio::dj::segments::{HexSegment, Segment, SignalProfilePlayback, TrackSegment};
+use crate::audio::dj::segments::{
+    Completed, HexSegment, Segment, SignalProfilePlayback, TrackSegment,
+};
 use crate::audio::dj::segments::{NoiseSegment, SegmentCtx};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
 use crate::state::Data;
@@ -14,8 +15,10 @@ use serenity::all::Http;
 use serenity::model::id::{ChannelId, GuildId};
 use std::ops::Deref;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::{RwLock, RwLockReadGuard, mpsc};
+
+pub const DEFAULT_PROFILE_FADE: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SegmentContainer {
@@ -47,19 +50,89 @@ impl<S: Segment + 'static> From<S> for SegmentContainer {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub enum BackgroundProfile {
+    Manual(SignalProfilePlayback),
+    Rotating {
+        profile: SignalProfilePlayback,
+        #[serde(serialize_with = "ser_instant", deserialize_with = "deser_instant")]
+        started_at: Instant,
+        duration: Duration,
+    },
+}
+
+impl BackgroundProfile {
+    pub fn completed(&self) -> Completed {
+        match self {
+            Self::Manual(_) => Completed::when(std::future::pending()),
+            Self::Rotating {
+                started_at,
+                duration,
+                ..
+            } => Completed::at(*started_at + *duration),
+        }
+    }
+}
+
+impl Default for BackgroundProfile {
+    fn default() -> Self {
+        Self::Rotating {
+            profile: "clear".to_string().into(),
+            started_at: Instant::now(),
+            duration: Duration::ZERO,
+        }
+    }
+}
+
+/// Ordered from lowest to highest priority.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, strum::Display)]
+#[strum(serialize_all = "lowercase")]
+pub enum ProfileSource {
+    Rotating,
+    Manual,
+    Forced,
+    Override,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct DJState {
     pub segment: SegmentContainer,
+    pub background_profile: BackgroundProfile,
+    pub override_profile: Option<SignalProfilePlayback>,
 }
 
 impl DJState {
     pub fn idle() -> Self {
         Self {
             segment: NoiseSegment::idle(Duration::from_secs(1)).into(),
+            background_profile: BackgroundProfile::default(),
+            override_profile: None,
         }
     }
 
-    pub fn forced_profile(&self) -> Option<SignalProfilePlayback> {
-        self.segment.signal_profile()
+    pub fn effective_profile(&self) -> SignalProfilePlayback {
+        if let Some(profile) = &self.override_profile {
+            return profile.clone();
+        }
+        if let Some(forced) = self.segment.signal_profile() {
+            return forced;
+        }
+        match &self.background_profile {
+            BackgroundProfile::Manual(profile) | BackgroundProfile::Rotating { profile, .. } => {
+                profile.clone()
+            }
+        }
+    }
+
+    pub fn profile_source(&self) -> ProfileSource {
+        if self.override_profile.is_some() {
+            ProfileSource::Override
+        } else if self.segment.signal_profile().is_some() {
+            ProfileSource::Forced
+        } else if let BackgroundProfile::Manual(_) = self.background_profile {
+            ProfileSource::Manual
+        } else {
+            ProfileSource::Rotating
+        }
     }
 }
 
@@ -72,7 +145,7 @@ pub struct DJStateMachine {
     hex_message_announcements: Vec<String>,
     bot_state: Data,
     config_name: String,
-    profile_machine: ProfileStateMachine,
+    applied_profile: Option<(SignalProfilePlayback, ProfileSource)>,
 }
 
 impl DJStateMachine {
@@ -92,22 +165,18 @@ impl DJStateMachine {
             config_name
         );
 
-        let signal_profiles = config.signal_profiles.clone();
         let hex_message_announcements =
             config.hex_message_announcements.clone().unwrap_or_default();
 
         let initial_state = restored_state.unwrap_or_else(DJState::idle);
 
-        let (forced_profile, status_message) = {
+        let status_message = {
             let segment = &initial_state.segment;
             let _ = segment
                 .restore(&SegmentCtx::new(&guild_id, bot_state))
                 .await
                 .inspect_err(|e| tracing::warn!("Failed to restore segment: {e:?}"));
-            (
-                segment.signal_profile().map(|profile| profile.name),
-                segment.channel_status(),
-            )
+            segment.channel_status()
         };
 
         let state = Arc::new(RwLock::new(initial_state));
@@ -116,19 +185,6 @@ impl DJStateMachine {
             .write()
             .await
             .insert(guild_id, state.clone());
-
-        let initial_profile_name = if let Some(profile_name) = forced_profile {
-            Some(profile_name)
-        } else if let Ok(profile_states) = bot_state.state_store.load_profile_states().await {
-            profile_states
-                .get(&guild_id)
-                .filter(|ps| !ps.bypass)
-                .map(|ps| ps.profile_name.clone())
-        } else {
-            None
-        };
-        let profile_machine =
-            ProfileStateMachine::new(signal_profiles, initial_profile_name.as_deref());
 
         if let Some(status_msg) = status_message {
             bot_state
@@ -151,7 +207,7 @@ impl DJStateMachine {
             hex_message_announcements,
             bot_state,
             config_name,
-            profile_machine,
+            applied_profile: None,
         }
     }
 
@@ -160,14 +216,8 @@ impl DJStateMachine {
         let bot_state = self.bot_state;
 
         'dj: loop {
-            let forced_profile = self.current_state().await.forced_profile();
-            if let Some((profile_name, fade_secs, reason)) =
-                self.profile_machine.update(forced_profile)
-            {
-                self.apply_profile_transition(Some(&profile_name), fade_secs, reason)
-                    .await;
-            }
-            let profile_completed = self.profile_machine.ready_to_advance();
+            self.update_profile().await;
+            let rotation_due = self.current_state().await.background_profile.completed();
             self.persist_state().await;
 
             tokio::select! {
@@ -184,7 +234,7 @@ impl DJStateMachine {
                         tokio::time::sleep(ADVANCE_RETRY_DELAY).await;
                     }
                 }
-                _ = profile_completed => { }
+                _ = rotation_due => self.rotate_profile().await,
             };
         }
 
@@ -197,46 +247,47 @@ impl DJStateMachine {
         tracing::info!("DJ task terminated for guild {}", guild_id);
     }
 
-    async fn apply_profile_transition(
-        &self,
-        profile_name: Option<&str>,
-        fade_secs: f32,
-        reason: &str,
-    ) {
-        if let Some(profile_name) = profile_name {
-            let processors = self.bot_state.audio_processors.read().await;
-            if let Some(processor_arc) = processors.get(&self.guild_id)
-                && let Some(new_profile) = self.bot_state.profile_manager.get_profile(profile_name)
-            {
+    async fn rotate_profile(&mut self) {
+        let entry = self.scheduler.next_signal_profile();
+        let fade = Duration::from_secs_f32(entry.fade_duration_seconds);
+        let hold_secs = rand::rng().random_range(entry.min_time_seconds..entry.max_time_seconds);
+        self.state.write().await.background_profile = BackgroundProfile::Rotating {
+            profile: SignalProfilePlayback {
+                fade_in_duration: Some(fade),
+                ..entry.profile_name.into()
+            },
+            started_at: Instant::now(),
+            duration: fade + Duration::from_secs_f32(hold_secs),
+        };
+    }
+
+    async fn update_profile(&mut self) {
+        let state = self.state.read().await;
+        let source = state.profile_source();
+        let target = state.effective_profile();
+        drop(state);
+
+        let previous = self.applied_profile.as_ref();
+        if previous.map(|(p, _)| &p.name) != Some(&target.name) {
+            let fade = match previous {
+                None => Duration::ZERO,
+                Some((_, previous_source)) if source >= *previous_source => target.fade_in(),
+                Some((previous, _)) => previous.fade_out(),
+            };
+            let processor_arc = self.bot_state.audio_processor(self.guild_id).await;
+            if let Some(new_profile) = self.bot_state.profile_manager.get_profile(&target.name) {
                 let mut processor = processor_arc.write().await;
-                processor.start_profile_transition(new_profile.clone(), fade_secs * 1000.0);
+                processor
+                    .start_profile_transition(new_profile.clone(), fade.as_secs_f32() * 1000.0);
 
                 tracing::info!(
-                    "DJ transitioning to profile '{}' over {:.1}s {} in guild {}",
-                    profile_name,
-                    fade_secs,
-                    reason,
+                    "DJ transitioning to profile '{}' over {:.1}s in guild {}",
+                    target.name,
+                    fade.as_secs_f32(),
                     self.guild_id
                 );
             }
-
-            // Persist the profile state for restoration on restart
-            let profile_state = crate::persistence::ProfileState {
-                profile_name: profile_name.to_string(),
-                bypass: false,
-            };
-            if let Err(e) = self
-                .bot_state
-                .state_store
-                .save_profile_state(self.guild_id, &profile_state)
-                .await
-            {
-                tracing::warn!(
-                    "Failed to save profile state for guild {}: {}",
-                    self.guild_id,
-                    e
-                );
-            }
+            self.applied_profile = Some((target, source));
         }
     }
 
@@ -452,6 +503,21 @@ impl DJStateMachine {
                     self.guild_id
                 );
                 self.set_announcement_channel(new_channel);
+                Ok(())
+            }
+            DJCommand::SetBackgroundProfile(profile) => {
+                let mut state = self.state.write().await;
+                match profile {
+                    Some(profile) => state.background_profile = BackgroundProfile::Manual(profile),
+                    None if matches!(state.background_profile, BackgroundProfile::Manual(_)) => {
+                        state.background_profile = BackgroundProfile::default();
+                    }
+                    None => {}
+                }
+                Ok(())
+            }
+            DJCommand::SetOverrideProfile(profile_override) => {
+                self.state.write().await.override_profile = profile_override;
                 Ok(())
             }
         };

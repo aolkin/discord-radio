@@ -23,12 +23,6 @@ pub struct MultiTrackPlaybackState {
     pub tracks: Vec<TrackState>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct ProfileState {
-    pub profile_name: String,
-    pub bypass: bool,
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct DjSettings {
     #[serde(default)]

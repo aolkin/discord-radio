@@ -6,8 +6,7 @@ mod utils;
 pub use dj::DjSettingsStore;
 pub use file_store::FileStore;
 pub use types::{
-    ActivityState, DJState, DjSettings, MultiTrackPlaybackState, ProfileState, RegisteredChannel,
-    TrackState,
+    ActivityState, DJState, DjSettings, MultiTrackPlaybackState, RegisteredChannel, TrackState,
 };
 
 pub(crate) use crate::persistence::types::DJStateSnapshot;
@@ -35,9 +34,6 @@ pub trait StateStore: Send + Sync {
     async fn load_multitrack_playbacks(&self) -> Result<HashMap<GuildId, MultiTrackPlaybackState>>;
     #[allow(dead_code)]
     async fn remove_multitrack_playback(&self, guild_id: GuildId) -> Result<()>;
-
-    async fn save_profile_state(&self, guild_id: GuildId, state: &ProfileState) -> Result<()>;
-    async fn load_profile_states(&self) -> Result<HashMap<GuildId, ProfileState>>;
 
     async fn save_dj_state(&self, guild_id: GuildId, state: &DJStateSnapshot) -> Result<()>;
     async fn load_dj_states(&self) -> Result<HashMap<GuildId, DJState>>;

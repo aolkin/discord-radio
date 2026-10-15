@@ -1,6 +1,4 @@
-use super::{
-    DJState, MultiTrackPlaybackState, ProfileState, RegisteredChannel, Result, StateStore,
-};
+use super::{DJState, MultiTrackPlaybackState, RegisteredChannel, Result, StateStore};
 use crate::persistence::types::DJStateSnapshot;
 use async_trait::async_trait;
 use serde::Serialize;
@@ -107,10 +105,6 @@ impl FileStore {
         PersistedMap::new(self.base_path.clone(), "multitrack_playbacks.json")
     }
 
-    fn profile_states(&self) -> PersistedMap<GuildId, ProfileState> {
-        PersistedMap::new(self.base_path.clone(), "profile_states.json")
-    }
-
     fn dj_states(&self) -> PersistedMap<GuildId, DJState> {
         PersistedMap::new(self.base_path.clone(), "dj_states.json")
     }
@@ -156,14 +150,6 @@ impl StateStore for FileStore {
 
     async fn remove_multitrack_playback(&self, guild_id: GuildId) -> Result<()> {
         self.multitrack_playbacks().remove(&guild_id).await
-    }
-
-    async fn save_profile_state(&self, guild_id: GuildId, state: &ProfileState) -> Result<()> {
-        self.profile_states().insert(guild_id, state).await
-    }
-
-    async fn load_profile_states(&self) -> Result<HashMap<GuildId, ProfileState>> {
-        self.profile_states().load_all().await
     }
 
     async fn save_dj_state(&self, guild_id: GuildId, state: &DJStateSnapshot) -> Result<()> {

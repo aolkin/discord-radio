@@ -1,4 +1,5 @@
 use crate::audio::dj::config::DJConfig;
+use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::{DJState, DJStateMachine};
 use crate::state::Data;
 use serde::Deserialize;
@@ -17,6 +18,8 @@ pub enum DJCommand {
     ForceTrack(TrackRequest),
     Stop,
     SetAnnouncementChannel(Option<ChannelId>),
+    SetBackgroundProfile(Option<SignalProfilePlayback>),
+    SetOverrideProfile(Option<SignalProfilePlayback>),
 }
 
 /// A hex message for the DJ to play. `volume` and `loops` replace the DJ's
@@ -115,7 +118,6 @@ impl DJManager {
             self.status_message = Some(status.clone());
         }
 
-        let config_name = config.name.clone();
         let (tx, rx) = mpsc::channel(10);
         let guild_id = self.guild_id;
         let http_clone = http.clone();
@@ -135,22 +137,6 @@ impl DJManager {
 
         self.task_handle = Some(handle);
         self.command_tx = Some(tx);
-
-        // Save DJ state to persistence (initial state will be Idle)
-        let idle = DJState::idle();
-        let dj_state = crate::persistence::DJStateSnapshot {
-            config_name: &config_name,
-            running: true,
-            announcement_channel_id: announcement_channel.map(|id| id.get()),
-            state_machine: &idle,
-        };
-        if let Err(e) = bot_state
-            .state_store
-            .save_dj_state(guild_id, &dj_state)
-            .await
-        {
-            tracing::warn!("Failed to save DJ state for guild {}: {}", guild_id, e);
-        }
 
         Ok(())
     }

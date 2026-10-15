@@ -1,4 +1,6 @@
 use crate::audio::dj::manager::{DJCommand, DJStateType, TrackRequest, send_dj_command};
+use crate::audio::dj::segments::SignalProfilePlayback;
+use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
 use crate::bucket::ObjectStoreError;
 use crate::state::Data;
 use crate::web::state_snapshot::BotSnapshot;
@@ -8,6 +10,7 @@ use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse, Json};
 use serde::{Deserialize, Serialize};
 use serenity::model::id::GuildId;
+use std::time::Duration;
 
 pub async fn index() -> Html<&'static str> {
     Html(include_str!("../../static/index.html"))
@@ -208,69 +211,77 @@ pub async fn change_track_state(
     Ok(StatusCode::OK)
 }
 
+/// `profile: null` clears the setting; `fade_duration` (seconds) applies only
+/// when setting one.
 #[derive(Debug, Deserialize)]
-pub struct SignalProfileRequest {
-    pub profile: String,
+pub struct DjProfileRequest {
+    pub profile: Option<String>,
     pub fade_duration: Option<f32>,
 }
 
-pub async fn signal_profile(
+pub async fn set_dj_background_profile(
     State(bot_state): State<Data>,
     Path(guild_id): Path<String>,
-    AxumJson(request): AxumJson<SignalProfileRequest>,
+    AxumJson(request): AxumJson<DjProfileRequest>,
 ) -> Result<StatusCode, StatusCode> {
-    let guild_id_parsed: u64 = guild_id.parse().map_err(|_| StatusCode::BAD_REQUEST)?;
-    let guild_id = GuildId::new(guild_id_parsed);
+    set_dj_profile(
+        &bot_state,
+        &guild_id,
+        request,
+        None,
+        DJCommand::SetBackgroundProfile,
+    )
+    .await
+}
 
-    let fade_duration_ms = request.fade_duration.unwrap_or(2.0) * 1000.0;
+pub async fn set_dj_override_profile(
+    State(bot_state): State<Data>,
+    Path(guild_id): Path<String>,
+    AxumJson(request): AxumJson<DjProfileRequest>,
+) -> Result<StatusCode, StatusCode> {
+    set_dj_profile(
+        &bot_state,
+        &guild_id,
+        request,
+        Some(DEFAULT_PROFILE_FADE),
+        DJCommand::SetOverrideProfile,
+    )
+    .await
+}
 
-    if fade_duration_ms < 0.0 {
+async fn set_dj_profile(
+    bot_state: &Data,
+    guild_id: &str,
+    request: DjProfileRequest,
+    default_fade: Option<Duration>,
+    command: fn(Option<SignalProfilePlayback>) -> DJCommand,
+) -> Result<StatusCode, StatusCode> {
+    let guild_id = GuildId::new(guild_id.parse().map_err(|_| StatusCode::BAD_REQUEST)?);
+
+    if request.profile.is_none() && request.fade_duration.is_some() {
         return Err(StatusCode::BAD_REQUEST);
     }
-
-    let processors = bot_state.audio_processors.read().await;
-    let processor_arc = processors.get(&guild_id).cloned();
-    drop(processors);
-
-    let Some(processor_arc) = processor_arc else {
-        return Err(StatusCode::NOT_FOUND);
+    let fade = match request.fade_duration {
+        Some(seconds) => {
+            Some(Duration::try_from_secs_f32(seconds).map_err(|_| StatusCode::BAD_REQUEST)?)
+        }
+        None => default_fade,
     };
 
-    if request.profile == "bypass" {
-        let mut processor = processor_arc.write().await;
-        processor.set_bypass(true);
-        drop(processor);
-
-        let profile_state = crate::persistence::ProfileState {
-            profile_name: "bypass".to_string(),
-            bypass: true,
-        };
-        let _ = bot_state
-            .state_store
-            .save_profile_state(guild_id, &profile_state)
-            .await;
-    } else {
-        let Some(new_profile) = bot_state.profile_manager.get_profile(&request.profile) else {
-            return Err(StatusCode::NOT_FOUND);
-        };
-
-        let mut processor = processor_arc.write().await;
-        if fade_duration_ms > 0.0 {
-            processor.start_profile_transition(new_profile.clone(), fade_duration_ms);
-        } else {
-            processor.set_profile_immediate(new_profile.clone());
-        }
-        drop(processor);
-
-        let profile_state = crate::persistence::ProfileState {
-            profile_name: request.profile,
-            bypass: false,
-        };
-        let _ = bot_state
-            .state_store
-            .save_profile_state(guild_id, &profile_state)
-            .await;
+    if let Some(profile) = &request.profile
+        && bot_state.profile_manager.get_profile(profile).is_none()
+    {
+        return Err(StatusCode::NOT_FOUND);
     }
+
+    let playback = request.profile.map(|profile| SignalProfilePlayback {
+        name: profile,
+        fade_in_duration: fade,
+        fade_out_duration: fade,
+    });
+    send_dj_command(bot_state, guild_id, command(playback))
+        .await
+        .map_err(|_| StatusCode::CONFLICT)?;
 
     Ok(StatusCode::OK)
 }

@@ -112,11 +112,6 @@ impl AudioProcessor {
         self.transition = None;
     }
 
-    pub fn set_bypass(&mut self, bypass: bool) {
-        self.dsp_chain.set_bypass(bypass);
-        self.transition = None;
-    }
-
     pub fn current_profile_name(&self) -> &str {
         &self.current_profile.name
     }

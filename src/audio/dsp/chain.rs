@@ -29,8 +29,6 @@ pub struct RadioEffectChain {
     dropout_gen: DropoutGenerator,
 
     sample_rate: u32,
-
-    bypass: bool,
 }
 
 impl RadioEffectChain {
@@ -88,8 +86,6 @@ impl RadioEffectChain {
             ),
 
             sample_rate,
-
-            bypass: false,
         }
     }
 
@@ -148,20 +144,9 @@ impl RadioEffectChain {
         } else {
             self.bitcrusher = None;
         }
-
-        self.bypass = false;
-    }
-
-    pub fn set_bypass(&mut self, bypass: bool) {
-        self.bypass = bypass;
     }
 
     pub fn process_frame(&mut self, input: [f32; 2]) -> [f32; 2] {
-        // Bypass all processing if bypass mode is enabled
-        if self.bypass {
-            return input;
-        }
-
         let mut frame = input;
 
         // 1. Noise mixing - Add static/interference

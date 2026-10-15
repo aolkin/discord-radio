@@ -62,8 +62,12 @@ pub async fn run_web_server(
             post(routes::change_track_state),
         )
         .route(
-            "/api/guilds/{guild_id}/profile",
-            post(routes::signal_profile),
+            "/api/guilds/{guild_id}/dj/profile",
+            post(routes::set_dj_background_profile),
+        )
+        .route(
+            "/api/guilds/{guild_id}/dj/profile-override",
+            post(routes::set_dj_override_profile),
         )
         .route("/api/profiles", get(routes::get_profiles))
         .route("/api/audio-files", get(routes::get_audio_files))

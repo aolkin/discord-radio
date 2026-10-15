@@ -17,9 +17,7 @@ The Discord bot includes a built-in web portal for monitoring bot status and con
   - Adjust volume and loop settings
   - Select audio files from available content
 - **Signal profile management**
-  - Switch between audio processing profiles
-  - Configurable fade duration
-  - Bypass option for unprocessed audio
+  - Set or clear the DJ's background profile and profile override
 
 ## Configuration
 
@@ -87,12 +85,7 @@ Control audio tracks for any guild through the "Manage Tracks" button:
 
 ### Signal Profile Management
 
-Switch between different audio processing profiles:
-
-- Select from available DSP profiles
-- Configure fade duration for smooth transitions
-- Enable bypass mode for unprocessed audio passthrough
-- Changes are persisted across bot restarts
+The DJ plays the profile override if set, else the current segment's forced profile, else its background profile. The background profile is either one set by hand or a rotating pick from the DJ config; clearing a hand-set background profile returns the DJ to rotation. The DJ saves both settings with its state.
 
 ## Technology Stack
 
@@ -109,7 +102,8 @@ Switch between different audio processing profiles:
 - `POST /api/guilds/:guild_id/hex/play` - Play hex message via DJ
 - `POST /api/guilds/:guild_id/track/play` - Play audio track via DJ
 - `POST /api/guilds/:guild_id/tracks` - Manage track state (start, stop, update)
-- `POST /api/guilds/:guild_id/profile` - Change signal profile
+- `POST /api/guilds/:guild_id/dj/profile` - Set the DJ background profile with an optional `fade_duration` in seconds, used to fade in and out of it, or clear it (`{"profile": null}`)
+- `POST /api/guilds/:guild_id/dj/profile-override` - Set the DJ profile override with an optional `fade_duration` in seconds, used to fade in and out of it (default 2), or clear it (`{"profile": null}`)
 - `GET /api/profiles` - List available signal profiles
 - `GET /api/audio-files` - List available audio files in content directory
 - `GET /api/dj-config/overrides` - Get all DJ config overrides (hex messages, announcements, state weights)
