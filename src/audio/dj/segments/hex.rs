@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 use serenity::model::id::GuildId;
 use std::ops::Deref;
 use std::path::Path;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
@@ -39,7 +39,7 @@ pub struct HexSegment {
     progress: Arc<HexProgress>,
     announcement: Option<String>,
     #[serde(skip)]
-    run: std::sync::Mutex<Option<JoinHandle<()>>>,
+    run: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl Deref for HexSegment {

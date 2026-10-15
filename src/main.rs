@@ -14,7 +14,9 @@ mod web;
 use crate::state::{BotState, Data};
 use poise::serenity_prelude::{self as serenity, GatewayIntents};
 use songbird::SerenityInit;
+use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 
@@ -230,7 +232,7 @@ async fn main() -> Result<(), Error> {
 
     tracing::info!("Using content path: {}", content_path);
 
-    let state_store_path = std::path::PathBuf::from(
+    let state_store_path = PathBuf::from(
         std::env::var("STATE_STORE_PATH").unwrap_or_else(|_| "./bot-state".to_string()),
     );
     tracing::info!("Using state store path: {:?}", state_store_path);
@@ -275,9 +277,8 @@ async fn main() -> Result<(), Error> {
         tracing::info!("Object storage not configured (BUCKET_* env vars not set)");
     }
 
-    let file_cache_dir = std::path::PathBuf::from(
-        std::env::var("FILE_CACHE_DIR").unwrap_or_else(|_| "./cache".to_string()),
-    );
+    let file_cache_dir =
+        PathBuf::from(std::env::var("FILE_CACHE_DIR").unwrap_or_else(|_| "./cache".to_string()));
     tracing::info!("Using file cache dir: {:?}", file_cache_dir);
 
     // Startup is the only thing that deletes cached files, so this defaults
@@ -288,7 +289,7 @@ async fn main() -> Result<(), Error> {
         .and_then(|s| s.parse::<u64>().ok())
         .unwrap_or(30 * 24 * 60 * 60);
     let file_cache_ttl =
-        (file_cache_ttl_secs > 0).then(|| std::time::Duration::from_secs(file_cache_ttl_secs));
+        (file_cache_ttl_secs > 0).then(|| Duration::from_secs(file_cache_ttl_secs));
     tracing::info!("Using file cache ttl: {:?}", file_cache_ttl);
 
     let file_cache = Arc::new(

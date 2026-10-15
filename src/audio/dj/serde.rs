@@ -1,7 +1,7 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::time::SystemTime;
+use std::time::{Instant, SystemTime};
 
-pub fn ser_instant<S>(instant: &std::time::Instant, serializer: S) -> Result<S::Ok, S::Error>
+pub fn ser_instant<S>(instant: &Instant, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
@@ -12,7 +12,7 @@ where
     time.serialize(serializer)
 }
 
-pub fn deser_instant<'de, D>(deserializer: D) -> Result<std::time::Instant, D::Error>
+pub fn deser_instant<'de, D>(deserializer: D) -> Result<Instant, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -21,7 +21,7 @@ where
     // uptime (elapsed exceeds the monotonic clock) would otherwise fail the whole deserialize;
     // clamp both to "just started" instead.
     let elapsed = time.elapsed().unwrap_or_default();
-    Ok(std::time::Instant::now()
+    Ok(Instant::now()
         .checked_sub(elapsed)
-        .unwrap_or_else(std::time::Instant::now))
+        .unwrap_or_else(Instant::now))
 }

@@ -12,6 +12,8 @@ use serde::Serialize;
 use serenity::model::id::GuildId;
 use songbird::Call;
 use std::collections::HashMap;
+use std::fmt::{Debug, Formatter};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
@@ -31,7 +33,7 @@ pub struct BotState {
     pub voice_status_manager: VoiceChannelStatusManager,
     pub activity_manager: ActivityManager,
     pub shutdown_tx: tokio::sync::broadcast::Sender<String>,
-    pub logs_base_path: std::path::PathBuf,
+    pub logs_base_path: PathBuf,
     pub file_resolver: FileResolver,
 }
 
@@ -183,8 +185,8 @@ impl BotState {
     }
 }
 
-impl std::fmt::Debug for BotState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Debug for BotState {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("BotState")
             .field("content_path", &self.content_path)
             .field("state_store", &"<dyn StateStore>")

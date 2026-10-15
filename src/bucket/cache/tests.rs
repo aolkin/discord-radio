@@ -1,5 +1,7 @@
 use super::*;
+use std::fs::FileTimes;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::SystemTime;
 
 struct StubDownloader {
     calls: Arc<AtomicUsize>,
@@ -148,8 +150,7 @@ async fn new_deletes_a_file_unread_for_longer_than_the_ttl() {
     let fresh = dir.path().join("tracks/fresh.ogg");
     write_cached_file(&stale, b"stale");
     write_cached_file(&fresh, b"fresh");
-    let times = std::fs::FileTimes::new()
-        .set_accessed(std::time::SystemTime::now() - Duration::from_secs(3_600));
+    let times = FileTimes::new().set_accessed(SystemTime::now() - Duration::from_secs(3_600));
     std::fs::File::options()
         .write(true)
         .open(&stale)

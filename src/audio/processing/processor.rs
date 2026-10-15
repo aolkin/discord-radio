@@ -3,6 +3,7 @@ use crate::audio::dsp::chain::RadioEffectChain;
 use crate::audio::processing::mixer::{AudioSource, Mixer, TrackCommand, TrackHandle};
 use crate::audio::profiles::SignalProfile;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::sync::broadcast::Receiver;
 use tokio::sync::{RwLock, broadcast};
 
@@ -138,7 +139,7 @@ impl AudioProcessor {
     }
 
     pub fn process_next_chunk(&mut self) -> Vec<[f32; 2]> {
-        let start = std::time::Instant::now();
+        let start = Instant::now();
 
         let mut buffer = vec![[0.0, 0.0]; FRAME_SIZE];
 

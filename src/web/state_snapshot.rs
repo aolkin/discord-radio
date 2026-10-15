@@ -1,6 +1,7 @@
 use crate::state::Data;
 use serde::{Deserialize, Serialize};
 use serenity::model::id::GuildId;
+use std::time::SystemTime;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrackInfo {
@@ -8,7 +9,7 @@ pub struct TrackInfo {
     pub filename: String,
     pub volume: f32,
     pub loops: bool,
-    pub start_time: std::time::SystemTime,
+    pub start_time: SystemTime,
     pub duration_secs: Option<f64>,
 }
 

@@ -4,6 +4,7 @@ use crate::audio::tracks::{StartTrackArgs, get_or_create_track_manager};
 use crate::state::Data;
 use poise::serenity_prelude::Http;
 use std::sync::Arc;
+use std::time::Duration;
 
 pub async fn restore_voice_channels(
     ctx: &poise::serenity_prelude::Context,
@@ -89,8 +90,7 @@ async fn restore_multitrack_playback(
                             if track.loops && track_duration.as_secs() > 0 {
                                 let position_in_loop =
                                     elapsed.as_secs_f64() % track_duration.as_secs_f64();
-                                let seek_position =
-                                    std::time::Duration::from_secs_f64(position_in_loop);
+                                let seek_position = Duration::from_secs_f64(position_in_loop);
                                 tracing::info!(
                                     "Track '{}' was playing for {:.2}s, seeking to {:.2}s (duration: {:.2}s)",
                                     track.name,
