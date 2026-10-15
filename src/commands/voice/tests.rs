@@ -1,8 +1,9 @@
 use super::*;
 use crate::bucket::ObjectStore;
+use std::path::Path;
 use std::sync::Arc;
 
-async fn resolver(content_path: &std::path::Path) -> crate::bucket::FileResolver {
+async fn resolver(content_path: &Path) -> crate::bucket::FileResolver {
     let file_cache = Arc::new(
         ObjectStore::new(content_path.to_path_buf(), None, None)
             .await

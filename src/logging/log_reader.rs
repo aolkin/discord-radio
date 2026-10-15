@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, AsyncSeekExt, BufReader};
@@ -263,7 +264,7 @@ impl LogReader {
         let mut reader = BufReader::new(file);
 
         // Seek to the offset
-        reader.seek(std::io::SeekFrom::Start(offset)).await?;
+        reader.seek(SeekFrom::Start(offset)).await?;
 
         let mut line_positions = Vec::new();
         let mut position = offset;

@@ -1,7 +1,9 @@
+use std::path::Path;
+
 /// Helper function to save JSON data to a file atomically
 pub async fn save_json_to_file<T: serde::Serialize>(
     data: &T,
-    path: &std::path::Path,
+    path: &Path,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let temp_path = path.with_extension("json.tmp");
 

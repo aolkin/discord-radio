@@ -7,7 +7,7 @@ use crate::state::{BotState, Data};
 use serenity::model::id::GuildId;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 #[derive(Clone, Debug)]
 pub struct TrackSnapshot {
@@ -15,7 +15,7 @@ pub struct TrackSnapshot {
     pub filename: String,
     pub volume: f32,
     pub loops: bool,
-    pub start_time: std::time::SystemTime,
+    pub start_time: SystemTime,
     pub duration: Option<Duration>,
 }
 
@@ -27,7 +27,7 @@ pub struct TrackInfo {
     pub mixer_handle: TrackHandle,
     pub volume: f32,
     pub loops: bool,
-    pub start_time: std::time::SystemTime,
+    pub start_time: SystemTime,
 }
 
 #[derive(Clone, Debug)]
@@ -129,9 +129,9 @@ impl TrackManager {
         // If we're starting from a position other than the beginning, adjust start_time
         // backwards so that elapsed time calculations include the seek position
         let start_time = if let Some(pos) = args.start_position {
-            std::time::SystemTime::now() - pos
+            SystemTime::now() - pos
         } else {
-            std::time::SystemTime::now()
+            SystemTime::now()
         };
 
         let track = TrackInfo {

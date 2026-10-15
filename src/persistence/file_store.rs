@@ -6,26 +6,28 @@ use async_trait::async_trait;
 use serde::Serialize;
 use serenity::model::id::{ChannelId, GuildId};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::hash::Hash;
+use std::marker::PhantomData;
+use std::path::{Path, PathBuf};
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 
 struct PersistedMap<K, V> {
     base_path: PathBuf,
     filename: String,
-    _phantom: std::marker::PhantomData<(K, V)>,
+    _phantom: PhantomData<(K, V)>,
 }
 
 impl<K, V> PersistedMap<K, V>
 where
-    K: Eq + std::hash::Hash + serde::Serialize + serde::de::DeserializeOwned,
+    K: Eq + Hash + serde::Serialize + serde::de::DeserializeOwned,
     V: serde::de::DeserializeOwned,
 {
     fn new(base_path: PathBuf, filename: impl Into<String>) -> Self {
         Self {
             base_path,
             filename: filename.into(),
-            _phantom: std::marker::PhantomData,
+            _phantom: PhantomData,
         }
     }
 
@@ -124,7 +126,7 @@ impl FileStore {
 
 #[async_trait]
 impl StateStore for FileStore {
-    fn base_path(&self) -> &std::path::Path {
+    fn base_path(&self) -> &Path {
         &self.base_path
     }
 

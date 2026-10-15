@@ -2,6 +2,7 @@ use crate::audio::processing::processor::AudioProcessor;
 use songbird::input::RawAdapter;
 use std::io::{Read, Seek, SeekFrom};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 use symphonia::core::io::MediaSource;
 use tokio::sync::RwLock;
 
@@ -47,7 +48,7 @@ struct AudioChannelReader {
     processor: Arc<Mutex<Arc<RwLock<AudioProcessor>>>>,
     buffer: Vec<u8>,
     position: usize,
-    last_generation_time: Option<std::time::Instant>,
+    last_generation_time: Option<Instant>,
     total_frames_generated: u64,
 }
 
@@ -63,7 +64,7 @@ impl AudioChannelReader {
     }
 
     fn generate_audio_chunk(&mut self) {
-        let now = std::time::Instant::now();
+        let now = Instant::now();
 
         // Generate a fixed amount of audio each time (5 chunks = 100ms)
         // This matches Songbird's typical consumption pattern
@@ -98,7 +99,7 @@ impl AudioChannelReader {
         self.buffer.clear();
 
         // Lock once for all chunks to ensure consistency
-        let generation_start = std::time::Instant::now();
+        let generation_start = Instant::now();
         match processor_arc.try_write() {
             Ok(mut processor) => {
                 // Generate all chunks with the lock held

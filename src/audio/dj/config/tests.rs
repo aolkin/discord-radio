@@ -1,6 +1,7 @@
 use super::*;
 use crate::bucket::{FileResolver, ObjectStore};
 use crate::persistence::DjSettings;
+use std::path::Path;
 use std::sync::Arc;
 
 fn local_file_config() -> DJConfig {
@@ -45,7 +46,7 @@ fn local_file_config() -> DJConfig {
     }
 }
 
-async fn resolver(content_path: &std::path::Path) -> FileResolver {
+async fn resolver(content_path: &Path) -> FileResolver {
     let file_cache = Arc::new(
         ObjectStore::new(content_path.to_path_buf(), None, None)
             .await

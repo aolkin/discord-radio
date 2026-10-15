@@ -1,6 +1,7 @@
 use serenity::all::Http;
 use serenity::model::id::{ChannelId, GuildId};
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -88,8 +89,8 @@ impl ActivityType {
     }
 }
 
-impl std::fmt::Display for ActivityType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for ActivityType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             ActivityType::Listening => write!(f, "listening"),
             ActivityType::Playing => write!(f, "playing"),

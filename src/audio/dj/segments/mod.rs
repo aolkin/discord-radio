@@ -14,10 +14,10 @@ use crate::state::BotState;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serenity::model::id::GuildId;
-use std::borrow::ToOwned;
 use std::fmt::Debug;
 use std::ops::Deref;
-use std::time::Duration;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 pub struct SegmentCtx<'a> {
     pub guild_id: &'a GuildId,
@@ -163,7 +163,7 @@ impl<T: Deref<Target = CommonSegmentPlaybackConfig>> SegmentPlaybackConfig for T
 pub struct TimedSegment {
     playback_config: CommonSegmentPlaybackConfig,
     #[serde(serialize_with = "ser_instant", deserialize_with = "deser_instant")]
-    started_at: std::time::Instant,
+    started_at: Instant,
     duration: Duration,
 }
 
@@ -171,7 +171,7 @@ impl TimedSegment {
     pub fn new(playback_config: CommonSegmentPlaybackConfig, duration: Duration) -> Self {
         Self {
             playback_config,
-            started_at: std::time::Instant::now(),
+            started_at: Instant::now(),
             duration,
         }
     }
@@ -189,7 +189,7 @@ impl Deref for TimedSegment {
 }
 
 #[derive(Debug, Default)]
-pub struct TrackSlot(std::sync::Mutex<Option<TrackHandle>>);
+pub struct TrackSlot(Mutex<Option<TrackHandle>>);
 
 impl TrackSlot {
     pub fn set(&self, handle: TrackHandle) {

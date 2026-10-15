@@ -6,6 +6,7 @@ use crate::audio::tracks::get_or_create_track_manager;
 use crate::commands::utils;
 use crate::commands::utils::{Context, Error};
 use serenity::all::{ChannelId, ChannelType, GuildId};
+use std::path::{Path, PathBuf};
 
 /// Join a voice channel to broadcast audio
 #[poise::command(
@@ -235,7 +236,7 @@ pub async fn play_track(
     Ok(())
 }
 
-fn has_audio_extension(path: &std::path::Path) -> bool {
+fn has_audio_extension(path: &Path) -> bool {
     path.extension().is_some_and(|ext| {
         matches!(
             ext.to_string_lossy().to_lowercase().as_str(),
@@ -257,9 +258,9 @@ async fn autocomplete_audio_file(ctx: Context<'_>, partial: &'_ str) -> Vec<Stri
 
     // Build the full path to search
     let search_path = if dir_part.is_empty() {
-        std::path::PathBuf::from(content_dir)
+        PathBuf::from(content_dir)
     } else {
-        std::path::PathBuf::from(format!("{}/{}", content_dir, dir_part))
+        PathBuf::from(format!("{}/{}", content_dir, dir_part))
     };
 
     if let Ok(entries) = std::fs::read_dir(&search_path) {
@@ -288,7 +289,7 @@ async fn autocomplete_audio_file(ctx: Context<'_>, partial: &'_ str) -> Vec<Stri
     // are searched from the content root.
     let search_prefix = partial.strip_prefix("s3://").unwrap_or(partial);
     for key in ctx.data().file_resolver.list_remote(search_prefix).await {
-        if has_audio_extension(std::path::Path::new(&key)) {
+        if has_audio_extension(Path::new(&key)) {
             results.push(format!("s3://{}", key));
         }
     }
