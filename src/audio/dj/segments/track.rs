@@ -78,7 +78,9 @@ impl TrackSegment {
                 },
                 TrackCommand::AddTrigger {
                     at: play_duration,
-                    tx: end_tx,
+                    callback: Box::new(move || {
+                        let _ = end_tx.send(());
+                    }),
                 },
                 TrackCommand::Stop {
                     fade: FADE_TIME,

@@ -101,7 +101,9 @@ impl TrackManager {
                     fade: Duration::from_secs_f32(args.fade_time.max(0.0)),
                     at: None,
                 },
-                TrackCommand::AddStopTrigger(ended_tx),
+                TrackCommand::AddStopTrigger(Box::new(move |reason| {
+                    let _ = ended_tx.send(reason);
+                })),
             ],
         );
 

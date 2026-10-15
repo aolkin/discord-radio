@@ -1,4 +1,5 @@
 use super::*;
+use tokio::sync::oneshot;
 
 struct Constant;
 
@@ -25,7 +26,9 @@ fn mixer_with_track() -> (Mixer, TrackHandle, oneshot::Receiver<StopReason>) {
     let handle = mixer.add_track(
         Box::new(Constant),
         1.0,
-        vec![TrackCommand::AddStopTrigger(stop_tx)],
+        vec![TrackCommand::AddStopTrigger(Box::new(move |reason| {
+            let _ = stop_tx.send(reason);
+        }))],
     );
     (mixer, handle, ended)
 }
@@ -99,7 +102,12 @@ fn trigger_fires_at_its_frame_even_when_a_stop_lands_there() {
     let (mut mixer, handle, _) = mixer_with_track();
     let (tx, mut fired) = oneshot::channel();
     handle
-        .send(TrackCommand::AddTrigger { at: ms(100), tx })
+        .send(TrackCommand::AddTrigger {
+            at: ms(100),
+            callback: Box::new(move || {
+                let _ = tx.send(());
+            }),
+        })
         .unwrap();
     pull(&mut mixer, 100);
     assert!(fired.try_recv().is_err());
@@ -109,7 +117,12 @@ fn trigger_fires_at_its_frame_even_when_a_stop_lands_there() {
     let (mut mixer, handle, mut ended) = mixer_with_track();
     let (tx, mut fired) = oneshot::channel();
     handle
-        .send(TrackCommand::AddTrigger { at: ms(100), tx })
+        .send(TrackCommand::AddTrigger {
+            at: ms(100),
+            callback: Box::new(move || {
+                let _ = tx.send(());
+            }),
+        })
         .unwrap();
     handle
         .send(TrackCommand::Stop {

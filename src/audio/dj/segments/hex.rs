@@ -216,7 +216,9 @@ async fn run_hex_message(
                 let track = processor.write().await.add_track(
                     source,
                     volume,
-                    vec![TrackCommand::AddStopTrigger(ended_tx)],
+                    vec![TrackCommand::AddStopTrigger(Box::new(move |_| {
+                        let _ = ended_tx.send(());
+                    }))],
                 );
                 progress.current_track.set(track);
                 let _ = ended.await;
