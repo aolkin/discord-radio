@@ -38,7 +38,6 @@ impl<S: Segment + 'static> From<S> for SegmentContainer {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(transparent)]
 pub struct DJState {
     pub current: SegmentContainer,
 }
