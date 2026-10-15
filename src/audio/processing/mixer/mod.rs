@@ -27,6 +27,29 @@ pub enum StopReason {
 
 const COMMAND_QUEUE_SIZE: usize = 10;
 
+pub struct TrackCallback<T>(Box<dyn FnOnce(T) + Send + Sync>);
+
+impl<T> TrackCallback<T> {
+    pub fn new(future: impl FnOnce(T) + Send + Sync + 'static) -> Self {
+        TrackCallback(Box::new(future))
+    }
+
+    pub fn oneshot() -> (TrackCallback<T>, oneshot::Receiver<T>)
+    where
+        T: Send + 'static,
+    {
+        let (tx, rx) = oneshot::channel();
+        let callback = Self::new(move |t| {
+            let _ = tx.send(t);
+        });
+        (callback, rx)
+    }
+
+    fn trigger(self, arg: T) {
+        self.0(arg);
+    }
+}
+
 /// An edit to a track, sent with [`TrackHandle::send`]. The mixer applies
 /// edits at the start of its next chunk, in the order they were sent.
 pub enum TrackCommand {
@@ -50,15 +73,19 @@ pub enum TrackCommand {
         fade: Duration,
         at: Option<Duration>,
     },
-    /// The receiver of `tx` gets `()` once the track has played for `at` (see
-    /// [`Self::Stop`]), or an error if the track ends first.
+    /// Runs `callback` once the track has played for `at` (see [`Self::Stop`]).
+    /// It runs inside the mixer's render path while the processor lock is
+    /// held, so it must not block. It is dropped without running if the track
+    /// ends first.
     AddTrigger {
         at: Duration,
-        tx: oneshot::Sender<()>,
+        callback: TrackCallback<()>,
     },
-    /// The receiver gets the reason the track ends, or an error if the
-    /// track is lost without one.
-    AddStopTrigger(oneshot::Sender<StopReason>),
+    /// Runs the callback with the reason the track ends. It runs inside the
+    /// mixer's render path while the processor lock is held, so it must not
+    /// block. It is dropped without running if the track is lost without a
+    /// reason.
+    AddStopTrigger(TrackCallback<StopReason>),
 }
 
 /// A track added to the mixer.
@@ -101,7 +128,7 @@ pub trait AudioSource: Send + Sync {
 
 enum Keyframe {
     StartFade { target: f32, frames: u64 },
-    Trigger(oneshot::Sender<()>),
+    Trigger(TrackCallback<()>),
 }
 
 struct Stop {
@@ -140,7 +167,7 @@ pub struct MixerTrack {
     pub loops: bool,
     pub active: bool,
     commands: mpsc::Receiver<TrackCommand>,
-    stop_triggers: Vec<oneshot::Sender<StopReason>>,
+    stop_triggers: Vec<TrackCallback<StopReason>>,
 }
 
 impl MixerTrack {
@@ -185,10 +212,10 @@ impl MixerTrack {
             ),
             TrackCommand::SetLoops(loops) => self.loops = loops,
             TrackCommand::Stop { fade, at } => self.stop(frames(fade), at.map(frames)),
-            TrackCommand::AddTrigger { at, tx } => {
-                self.add_keyframe(frames(at), Keyframe::Trigger(tx))
+            TrackCommand::AddTrigger { at, callback } => {
+                self.add_keyframe(frames(at), Keyframe::Trigger(callback))
             }
-            TrackCommand::AddStopTrigger(tx) => self.stop_triggers.push(tx),
+            TrackCommand::AddStopTrigger(callback) => self.stop_triggers.push(callback),
         }
     }
 
@@ -218,8 +245,8 @@ impl MixerTrack {
 
     /// Only the first call has an effect.
     fn end(&mut self, reason: StopReason) {
-        for tx in self.stop_triggers.drain(..) {
-            let _ = tx.send(reason);
+        for callback in self.stop_triggers.drain(..) {
+            callback.trigger(reason);
         }
     }
 
@@ -252,8 +279,8 @@ impl MixerTrack {
                         });
                     }
                 }
-                Keyframe::Trigger(tx) => {
-                    let _ = tx.send(());
+                Keyframe::Trigger(callback) => {
+                    callback.trigger(());
                 }
             }
         }

@@ -1,6 +1,6 @@
 use crate::audio::codec::decoder::SymphoniaSource;
 use crate::audio::processing::mixer::{
-    AudioSource, StopReason, TrackCommand, TrackHandle, TrackId,
+    AudioSource, StopReason, TrackCallback, TrackCommand, TrackHandle, TrackId,
 };
 use crate::audio::processing::processor::ProcessorRef;
 use crate::state::{BotState, Data};
@@ -90,7 +90,7 @@ impl TrackManager {
             self.guild_id
         );
 
-        let (ended_tx, ended) = tokio::sync::oneshot::channel();
+        let (ended_tx, ended) = TrackCallback::oneshot();
         let mixer_handle = self.audio_processor.write().await.add_track(
             source,
             0.0,
