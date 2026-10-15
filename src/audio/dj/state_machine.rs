@@ -1,5 +1,8 @@
 use crate::audio::dj::config::DJConfig;
-use crate::audio::dj::manager::{DJCommand, DJStateType, HexMessageRequest, TrackRequest};
+use crate::audio::dj::manager::{
+    ADVANCE_RETRY_DELAY, DJCommand, DJStateType, HexMessageRequest, TrackRequest,
+};
+use crate::audio::dj::profile_machine::ProfileStateMachine;
 use crate::audio::dj::scheduler::{DJStateEntry, WeightedScheduler};
 use crate::audio::dj::segments::{HexSegment, Segment, SignalProfilePlayback, TrackSegment};
 use crate::audio::dj::segments::{NoiseSegment, SegmentCtx};
@@ -12,7 +15,7 @@ use serenity::model::id::{ChannelId, GuildId};
 use std::ops::Deref;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{RwLock, RwLockReadGuard};
+use tokio::sync::{RwLock, RwLockReadGuard, mpsc};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SegmentContainer {
@@ -68,20 +71,73 @@ pub struct DJStateMachine {
     http: Arc<Http>,
     hex_message_announcements: Vec<String>,
     bot_state: Data,
+    config_name: String,
+    profile_machine: ProfileStateMachine,
 }
 
 impl DJStateMachine {
-    /// Constructs the state machine around the guild's shared state cell.
-    pub fn new(
+    pub async fn new(
         config: DJConfig,
         guild_id: GuildId,
         announcement_channel: Option<ChannelId>,
         http: Arc<Http>,
-        state: Arc<RwLock<DJState>>,
+        restored_state: Option<DJState>,
         bot_state: Data,
     ) -> Self {
+        let config_name = config.name.clone();
+
+        tracing::info!(
+            "Starting DJ task for guild {} with config '{}'",
+            guild_id,
+            config_name
+        );
+
+        let signal_profiles = config.signal_profiles.clone();
         let hex_message_announcements =
             config.hex_message_announcements.clone().unwrap_or_default();
+
+        let initial_state = restored_state.unwrap_or_else(DJState::idle);
+
+        let (forced_profile, status_message) = {
+            let segment = &initial_state.segment;
+            let _ = segment
+                .restore(&SegmentCtx::new(&guild_id, bot_state))
+                .await
+                .inspect_err(|e| tracing::warn!("Failed to restore segment: {e:?}"));
+            (segment.signal_profile().name, segment.channel_status())
+        };
+
+        let state = Arc::new(RwLock::new(initial_state));
+        bot_state
+            .dj_states
+            .write()
+            .await
+            .insert(guild_id, state.clone());
+
+        let initial_profile_name = if let Some(profile_name) = forced_profile {
+            Some(profile_name)
+        } else if let Ok(profile_states) = bot_state.state_store.load_profile_states().await {
+            profile_states
+                .get(&guild_id)
+                .filter(|ps| !ps.bypass)
+                .map(|ps| ps.profile_name.clone())
+        } else {
+            None
+        };
+        let profile_machine =
+            ProfileStateMachine::new(signal_profiles, initial_profile_name.as_deref());
+
+        if let Some(status_msg) = status_message {
+            bot_state
+                .voice_status_manager
+                .push_status(guild_id, &status_msg, &http)
+                .await;
+            tracing::info!(
+                "Restored channel status '{}' in guild {}",
+                status_msg,
+                guild_id
+            );
+        }
 
         Self {
             state,
@@ -91,6 +147,115 @@ impl DJStateMachine {
             http,
             hex_message_announcements,
             bot_state,
+            config_name,
+            profile_machine,
+        }
+    }
+
+    pub async fn run(mut self, mut command_rx: mpsc::Receiver<DJCommand>) {
+        let guild_id = self.guild_id;
+        let bot_state = self.bot_state;
+
+        'dj: loop {
+            let forced_profile = self.current_state().await.forced_profile();
+            if let Some((profile_name, fade_secs, reason)) =
+                self.profile_machine.update(forced_profile)
+            {
+                self.apply_profile_transition(Some(&profile_name), fade_secs, reason)
+                    .await;
+            }
+            let profile_completed = self.profile_machine.ready_to_advance();
+            self.persist_state().await;
+
+            tokio::select! {
+                command = command_rx.recv() => {
+                    let command = command.unwrap_or(DJCommand::Stop);
+                    if self.handle_command(command).await {
+                        tracing::info!("DJ task stopped for guild {}", guild_id);
+                        break 'dj;
+                    }
+                }
+                _ = self.state_completed() => {
+                    if let Err(e) = self.force_advance(&bot_state, None).await {
+                        tracing::error!("Failed to advance to next state for guild {}: {}", guild_id, e);
+                        tokio::time::sleep(ADVANCE_RETRY_DELAY).await;
+                    }
+                }
+                _ = profile_completed => { }
+            };
+        }
+
+        // Clean up shared state
+        {
+            let mut dj_states = self.bot_state.dj_states.write().await;
+            dj_states.remove(&guild_id);
+        }
+
+        tracing::info!("DJ task terminated for guild {}", guild_id);
+    }
+
+    async fn apply_profile_transition(
+        &self,
+        profile_name: Option<&str>,
+        fade_secs: f32,
+        reason: &str,
+    ) {
+        if let Some(profile_name) = profile_name {
+            let processors = self.bot_state.audio_processors.read().await;
+            if let Some(processor_arc) = processors.get(&self.guild_id)
+                && let Some(new_profile) = self.bot_state.profile_manager.get_profile(profile_name)
+            {
+                let mut processor = processor_arc.write().await;
+                processor.start_profile_transition(new_profile.clone(), fade_secs * 1000.0);
+
+                tracing::info!(
+                    "DJ transitioning to profile '{}' over {:.1}s {} in guild {}",
+                    profile_name,
+                    fade_secs,
+                    reason,
+                    self.guild_id
+                );
+            }
+
+            // Persist the profile state for restoration on restart
+            let profile_state = crate::persistence::ProfileState {
+                profile_name: profile_name.to_string(),
+                bypass: false,
+            };
+            if let Err(e) = self
+                .bot_state
+                .state_store
+                .save_profile_state(self.guild_id, &profile_state)
+                .await
+            {
+                tracing::warn!(
+                    "Failed to save profile state for guild {}: {}",
+                    self.guild_id,
+                    e
+                );
+            }
+        }
+    }
+
+    async fn persist_state(&self) {
+        let current_state = self.current_state().await;
+        let persist_state = crate::persistence::DJStateSnapshot {
+            config_name: &self.config_name,
+            running: true,
+            announcement_channel_id: self.announcement_channel.map(|id| id.get()),
+            state_machine: &current_state,
+        };
+        if let Err(e) = self
+            .bot_state
+            .state_store
+            .save_dj_state(self.guild_id, &persist_state)
+            .await
+        {
+            tracing::warn!(
+                "Failed to persist DJ state for guild {}: {}",
+                self.guild_id,
+                e
+            );
         }
     }
 
@@ -104,10 +269,6 @@ impl DJStateMachine {
 
     pub async fn state_completed(&self) {
         self.current_state().await.segment.completed().await
-    }
-
-    pub fn announcement_channel(&self) -> Option<ChannelId> {
-        self.announcement_channel
     }
 
     pub fn set_announcement_channel(&mut self, channel: Option<ChannelId>) {

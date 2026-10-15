@@ -1,6 +1,4 @@
 use crate::audio::dj::config::DJConfig;
-use crate::audio::dj::profile_machine::ProfileStateMachine;
-use crate::audio::dj::segments::SegmentCtx;
 use crate::audio::dj::state_machine::{DJState, DJStateMachine};
 use crate::state::Data;
 use serde::Deserialize;
@@ -10,7 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
 
-const ADVANCE_RETRY_DELAY: Duration = Duration::from_millis(100);
+pub const ADVANCE_RETRY_DELAY: Duration = Duration::from_millis(100);
 
 #[derive(strum::IntoStaticStr)]
 pub enum DJCommand {
@@ -59,179 +57,6 @@ pub enum DJStateType {
     Track,
     HexMessage,
     Noise,
-}
-
-pub async fn dj_task(
-    guild_id: GuildId,
-    config: DJConfig,
-    bot_state: Data,
-    mut command_rx: mpsc::Receiver<DJCommand>,
-    announcement_channel: Option<ChannelId>,
-    http: Arc<Http>,
-    restored_state: Option<DJState>,
-) {
-    let config_name = config.name.clone();
-
-    tracing::info!(
-        "Starting DJ task for guild {} with config '{}'",
-        guild_id,
-        config_name
-    );
-
-    // Clone signal_profiles before moving config
-    let signal_profiles = config.signal_profiles.clone();
-
-    let initial_state = if let Some(state) = restored_state {
-        state
-    } else {
-        DJState::idle()
-    };
-
-    let (forced_profile, status_message) = {
-        let segment = &initial_state.segment;
-        let _ = segment
-            .restore(&SegmentCtx::new(&guild_id, bot_state))
-            .await
-            .inspect_err(|e| tracing::warn!("Failed to restore segment: {e:?}"));
-        (segment.signal_profile().name, segment.channel_status())
-    };
-
-    let dj_state = Arc::new(tokio::sync::RwLock::new(initial_state));
-    bot_state
-        .dj_states
-        .write()
-        .await
-        .insert(guild_id, dj_state.clone());
-
-    let mut state_machine = DJStateMachine::new(
-        config.clone(),
-        guild_id,
-        announcement_channel,
-        http.clone(),
-        dj_state,
-        bot_state,
-    );
-
-    let initial_profile_name = if let Some(profile_name) = forced_profile {
-        Some(profile_name)
-    } else if let Ok(profile_states) = bot_state.state_store.load_profile_states().await {
-        profile_states
-            .get(&guild_id)
-            .filter(|ps| !ps.bypass)
-            .map(|ps| ps.profile_name.clone())
-    } else {
-        None
-    };
-    let mut profile_machine =
-        ProfileStateMachine::new(signal_profiles, initial_profile_name.as_deref());
-
-    if let Some(status_msg) = status_message {
-        bot_state
-            .voice_status_manager
-            .push_status(guild_id, &status_msg, &http)
-            .await;
-        tracing::info!(
-            "Restored channel status '{}' in guild {}",
-            status_msg,
-            guild_id
-        );
-    }
-
-    'dj: loop {
-        let forced_profile = state_machine.current_state().await.forced_profile();
-        if let Some((profile_name, fade_secs, reason)) = profile_machine.update(forced_profile) {
-            apply_profile_transition(guild_id, Some(&profile_name), fade_secs, &bot_state, reason)
-                .await;
-        }
-        let profile_completed = profile_machine.ready_to_advance();
-        persist_state(guild_id, bot_state, &config_name, &mut state_machine).await;
-
-        tokio::select! {
-            command = command_rx.recv() => {
-                let command = command.unwrap_or(DJCommand::Stop);
-                if state_machine.handle_command(command).await {
-                    tracing::info!("DJ task stopped for guild {}", guild_id);
-                    break 'dj;
-                }
-            }
-            _ = state_machine.state_completed() => {
-                if let Err(e) = state_machine.force_advance(&bot_state, None).await {
-                    tracing::error!("Failed to advance to next state for guild {}: {}", guild_id, e);
-                    tokio::time::sleep(ADVANCE_RETRY_DELAY).await;
-                }
-            }
-            _ = profile_completed => { }
-        };
-    }
-
-    // Clean up shared state
-    {
-        let mut dj_states = bot_state.dj_states.write().await;
-        dj_states.remove(&guild_id);
-    }
-
-    tracing::info!("DJ task terminated for guild {}", guild_id);
-}
-
-async fn apply_profile_transition(
-    guild_id: GuildId,
-    profile_name: Option<&str>,
-    fade_secs: f32,
-    bot_state: &Data,
-    reason: &str,
-) {
-    if let Some(profile_name) = profile_name {
-        let processors = bot_state.audio_processors.read().await;
-        if let Some(processor_arc) = processors.get(&guild_id)
-            && let Some(new_profile) = bot_state.profile_manager.get_profile(profile_name)
-        {
-            let mut processor = processor_arc.write().await;
-            processor.start_profile_transition(new_profile.clone(), fade_secs * 1000.0);
-
-            tracing::info!(
-                "DJ transitioning to profile '{}' over {:.1}s {} in guild {}",
-                profile_name,
-                fade_secs,
-                reason,
-                guild_id
-            );
-        }
-
-        // Persist the profile state for restoration on restart
-        let profile_state = crate::persistence::ProfileState {
-            profile_name: profile_name.to_string(),
-            bypass: false,
-        };
-        if let Err(e) = bot_state
-            .state_store
-            .save_profile_state(guild_id, &profile_state)
-            .await
-        {
-            tracing::warn!("Failed to save profile state for guild {}: {}", guild_id, e);
-        }
-    }
-}
-
-async fn persist_state(
-    guild_id: GuildId,
-    bot_state: Data,
-    config_name: &String,
-    state_machine: &mut DJStateMachine,
-) {
-    let current_state = state_machine.current_state().await;
-    let persist_state = crate::persistence::DJStateSnapshot {
-        config_name,
-        running: true,
-        announcement_channel_id: state_machine.announcement_channel().map(|id| id.get()),
-        state_machine: &current_state,
-    };
-    if let Err(e) = bot_state
-        .state_store
-        .save_dj_state(guild_id, &persist_state)
-        .await
-    {
-        tracing::warn!("Failed to persist DJ state for guild {}: {}", guild_id, e);
-    }
 }
 
 pub struct DJManager {
@@ -295,15 +120,16 @@ impl DJManager {
         let guild_id = self.guild_id;
         let http_clone = http.clone();
         let handle = tokio::spawn(async move {
-            dj_task(
-                guild_id,
+            DJStateMachine::new(
                 config,
-                bot_state,
-                rx,
+                guild_id,
                 announcement_channel,
                 http_clone,
                 restored_state,
+                bot_state,
             )
+            .await
+            .run(rx)
             .await;
         });
 
