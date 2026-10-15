@@ -202,7 +202,7 @@ impl DJStateMachine {
 
     async fn enter_state(
         &self,
-        next_state: SegmentContainer,
+        segment: SegmentContainer,
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Record the previous state before transitioning
@@ -210,7 +210,6 @@ impl DJStateMachine {
 
         self.cleanup_current_state(bot_state).await;
 
-        let segment = &next_state;
         segment.enter(&self.segment_ctx()).await?;
 
         if let Some(channel) = self.announcement_channel
@@ -228,7 +227,7 @@ impl DJStateMachine {
         }
 
         let to_state = segment.state_name().to_string();
-        self.state.write().await.segment = next_state;
+        self.state.write().await.segment = segment;
         if let Some(metrics) = crate::metrics::get() {
             metrics.record_dj_state_transition(self.guild_id.get(), &from_state, &to_state);
         }
