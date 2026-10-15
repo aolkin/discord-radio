@@ -274,24 +274,20 @@ impl DJStateMachine {
                 Some((_, previous_source)) if source >= *previous_source => target.fade_in(),
                 Some((previous, _)) => previous.fade_out(),
             };
-            self.apply_profile_transition(&target.name, fade.as_secs_f32())
-                .await;
+            let processor_arc = self.bot_state.audio_processor(self.guild_id).await;
+            if let Some(new_profile) = self.bot_state.profile_manager.get_profile(&target.name) {
+                let mut processor = processor_arc.write().await;
+                processor
+                    .start_profile_transition(new_profile.clone(), fade.as_secs_f32() * 1000.0);
+
+                tracing::info!(
+                    "DJ transitioning to profile '{}' over {:.1}s in guild {}",
+                    target.name,
+                    fade.as_secs_f32(),
+                    self.guild_id
+                );
+            }
             self.applied_profile = Some((target, source));
-        }
-    }
-
-    async fn apply_profile_transition(&self, profile_name: &str, fade_secs: f32) {
-        let processor_arc = self.bot_state.audio_processor(self.guild_id).await;
-        if let Some(new_profile) = self.bot_state.profile_manager.get_profile(profile_name) {
-            let mut processor = processor_arc.write().await;
-            processor.start_profile_transition(new_profile.clone(), fade_secs * 1000.0);
-
-            tracing::info!(
-                "DJ transitioning to profile '{}' over {:.1}s in guild {}",
-                profile_name,
-                fade_secs,
-                self.guild_id
-            );
         }
     }
 
