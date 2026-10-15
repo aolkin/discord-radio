@@ -153,7 +153,7 @@ impl BotSnapshot {
 
 fn dj_state_to_info(state: &crate::audio::dj::state_machine::DJState) -> DJStateInfo {
     let display = state.segment.state_display();
-    let elapsed = display.elapsed.as_secs_f32();
+    let elapsed = state.segment.started_at.elapsed().as_secs_f32();
     let time = match display.total {
         Some(total) => format!("{elapsed:.1}s / {:.1}s", total.as_secs_f32()),
         None => format!("{elapsed:.1}s"),

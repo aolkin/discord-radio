@@ -138,12 +138,8 @@ impl Segment for TrackSegment {
         self.done.completed()
     }
 
-    fn elapsed(&self) -> Duration {
-        self.timer.started_at.elapsed()
-    }
-
     async fn restore(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
-        let elapsed = self.elapsed();
+        let elapsed = self.timer.started_at.elapsed();
         if self.timer.is_elapsed() {
             tracing::info!(
                 "DJ track '{}' has already finished (elapsed: {:.1}s, duration: {:.1}s), will advance to next state",
@@ -209,7 +205,6 @@ impl Segment for TrackSegment {
         StateDisplay {
             name: "PlayingTrack",
             subject: Some(self.filename.clone()),
-            elapsed: self.elapsed(),
             total: Some(self.timer.duration),
         }
     }

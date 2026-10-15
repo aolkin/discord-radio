@@ -94,7 +94,6 @@ pub trait SegmentPlaybackConfig {
 pub struct StateDisplay {
     pub name: &'static str,
     pub subject: Option<String>,
-    pub elapsed: Duration,
     pub total: Option<Duration>,
 }
 
@@ -102,7 +101,6 @@ pub struct StateDisplay {
 #[typetag::serde(tag = "type")]
 pub trait Segment: Send + Sync + Debug + SegmentPlaybackConfig {
     fn completed(&self) -> Completed;
-    fn elapsed(&self) -> Duration;
 
     async fn restore(&self, _ctx: &SegmentCtx) -> anyhow::Result<()> {
         Ok(())
