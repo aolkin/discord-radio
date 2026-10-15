@@ -68,16 +68,8 @@ impl ProfileStateMachine {
         }
     }
 
-    pub fn profile_name(&self) -> Option<String> {
-        self.forced.name.clone().or_else(|| {
-            self.current
-                .as_ref()
-                .and_then(|c| c.signal_profile.as_ref()?.name.clone())
-        })
-    }
-
     /// Never resolves while a forced profile is active.
-    pub fn completed(&self) -> Completed {
+    pub fn ready_to_advance(&self) -> Completed {
         match &self.current {
             Some(segment) => segment.completed(),
             None => Completed::when(std::future::pending()),

@@ -18,8 +18,6 @@ pub struct DJState {
     pub segment: Box<dyn Segment>,
     #[serde(serialize_with = "ser_instant", deserialize_with = "deser_instant")]
     pub started_at: std::time::Instant,
-    #[serde(default)]
-    pub profile_name: Option<String>,
 }
 
 impl<S: Segment + 'static> From<S> for DJState {
@@ -27,7 +25,6 @@ impl<S: Segment + 'static> From<S> for DJState {
         DJState {
             segment: Box::new(segment),
             started_at: std::time::Instant::now(),
-            profile_name: None,
         }
     }
 }
@@ -86,10 +83,6 @@ impl DJStateMachine {
 
     pub async fn state_completed(&self) {
         self.current_state().await.segment.completed().await
-    }
-
-    pub async fn set_profile_name(&self, profile_name: Option<String>) {
-        self.state.write().await.profile_name = profile_name;
     }
 
     pub fn announcement_channel(&self) -> Option<ChannelId> {

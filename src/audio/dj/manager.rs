@@ -87,7 +87,6 @@ pub async fn dj_task(
         DJState::idle()
     };
 
-    let restored_profile = initial_state.profile_name.clone();
     let (forced_profile, status_message) = {
         let segment = &initial_state.segment;
         let _ = segment
@@ -113,7 +112,16 @@ pub async fn dj_task(
         bot_state,
     );
 
-    let initial_profile_name = forced_profile.or(restored_profile);
+    let initial_profile_name = if let Some(profile_name) = forced_profile {
+        Some(profile_name)
+    } else if let Ok(profile_states) = bot_state.state_store.load_profile_states().await {
+        profile_states
+            .get(&guild_id)
+            .filter(|ps| !ps.bypass)
+            .map(|ps| ps.profile_name.clone())
+    } else {
+        None
+    };
     let mut profile_machine =
         ProfileStateMachine::new(signal_profiles, initial_profile_name.as_deref());
 
@@ -135,10 +143,7 @@ pub async fn dj_task(
             apply_profile_transition(guild_id, Some(&profile_name), fade_secs, &bot_state, reason)
                 .await;
         }
-        let profile_completed = profile_machine.completed();
-        state_machine
-            .set_profile_name(profile_machine.profile_name())
-            .await;
+        let profile_completed = profile_machine.ready_to_advance();
         persist_state(guild_id, bot_state, &config_name, &mut state_machine).await;
 
         tokio::select! {
