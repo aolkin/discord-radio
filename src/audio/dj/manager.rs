@@ -128,20 +128,10 @@ pub async fn dj_task(
             None
         };
 
-        let mut machine =
-            ProfileStateMachine::new(signal_profiles, initial_profile_name.as_deref());
-
-        // If the DJ state had a forced profile, set the machine to ForcedProfile state
-        if let Some(profile_name) = forced_profile_name {
-            machine.force_profile(profile_name.to_string());
-            tracing::info!(
-                "Restored forced profile '{}' for DJ in guild {}",
-                profile_name,
-                guild_id
-            );
-        }
-
-        Some(machine)
+        Some(ProfileStateMachine::new(
+            signal_profiles,
+            initial_profile_name.as_deref(),
+        ))
     } else {
         None
     };
