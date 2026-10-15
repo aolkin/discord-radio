@@ -1,8 +1,9 @@
 use super::{
-    CommonSegmentPlaybackConfig, Completed, CompletedSignal, Segment, SegmentCtx,
-    SegmentPlaybackConfig, StateDisplay, TrackSlot, completed_signal, signal_completed,
+    CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
+    TrackSlot,
 };
 use crate::audio::dj::config::{HexMessageDefaults, HexMessageEntry};
+use crate::audio::dj::segments::signals::{Completed, CompletedSignal};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
 use crate::audio::processing::mixer::{TrackCallback, TrackCommand};
 use crate::audio::processing::processor::AudioProcessor;

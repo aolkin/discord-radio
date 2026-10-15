@@ -1,6 +1,7 @@
 use crate::audio::dj::config::NoisePeriodEntry;
+use crate::audio::dj::segments::signals::Completed;
 use crate::audio::dj::segments::{
-    CommonSegmentPlaybackConfig, Completed, Segment, SegmentPlaybackConfig, SignalProfilePlayback,
+    CommonSegmentPlaybackConfig, Segment, SegmentPlaybackConfig, SignalProfilePlayback,
     StateDisplay, TimedSegment,
 };
 use async_trait::async_trait;

@@ -1,14 +1,17 @@
-use super::{completed_signal, signal_completed, CommonSegmentPlaybackConfig, Completed, CompletedSignal, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay, TimedSegment, TrackSlot};
+use super::{
+    CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
+    TimedSegment, TrackSlot,
+};
 use crate::audio::dj::config::TrackEntry;
+use crate::audio::dj::segments::signals::{Completed, CompletedSignal};
 use crate::audio::duration::DurationCache;
-use crate::audio::processing::mixer::{TrackCallback, TrackCommand};
+use crate::audio::processing::mixer::TrackCommand;
 use crate::audio::tracks::open_track_source;
 use async_trait::async_trait;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use std::time::Duration;
-use tokio::sync::{oneshot, watch};
 
 const FADE_TIME: Duration = Duration::from_secs(1);
 
@@ -62,7 +65,6 @@ impl TrackSegment {
     ) -> anyhow::Result<()> {
         let path = ctx.file_resolver().resolve(&self.filename).await?;
         let source = open_track_source(&path, start_position).map_err(|e| anyhow::anyhow!(e))?;
-        let (callback, end_trigger) = TrackCallback::oneshot();
         let track = ctx.audio_processor().await.write().await.add_track(
             source,
             0.0,
@@ -74,7 +76,7 @@ impl TrackSegment {
                 },
                 TrackCommand::AddTrigger {
                     at: play_duration,
-                    callback,
+                    callback: self.done.clone().into(),
                 },
                 TrackCommand::Stop {
                     fade: FADE_TIME,
@@ -83,11 +85,6 @@ impl TrackSegment {
             ],
         );
         self.track.set(track);
-        let done = self.done.clone();
-        tokio::spawn(async move {
-            let _ = end_trigger.await;
-            done.send_replace(true);
-        });
         Ok(())
     }
 
@@ -138,7 +135,7 @@ impl TrackSegment {
 #[typetag::serde]
 impl Segment for TrackSegment {
     fn completed(&self) -> Completed {
-        signal_completed(&self.done)
+        self.done.completed()
     }
 
     fn elapsed(&self) -> Duration {
@@ -154,7 +151,7 @@ impl Segment for TrackSegment {
                 elapsed.as_secs_f32(),
                 self.timer.duration.as_secs_f32()
             );
-            self.done.send_replace(true);
+            self.done.complete();
             return Ok(());
         }
         let position = self.start_position.unwrap_or_default() + elapsed;
@@ -166,7 +163,7 @@ impl Segment for TrackSegment {
             )
             .await
         {
-            self.done.send_replace(true);
+            self.done.complete();
             return Err(e);
         }
         tracing::info!(
@@ -191,7 +188,7 @@ impl Segment for TrackSegment {
     }
 
     async fn exit(&self, _ctx: &SegmentCtx) {
-        if !*self.done.borrow() {
+        if !self.done.is_completed() {
             self.track.stop(FADE_TIME);
         }
     }

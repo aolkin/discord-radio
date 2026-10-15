@@ -1,9 +1,7 @@
 use crate::audio::dj::config::DJConfig;
 use crate::audio::dj::manager::{DJCommand, DJStateType, HexMessageRequest, TrackRequest};
 use crate::audio::dj::scheduler::{DJStateEntry, WeightedScheduler};
-use crate::audio::dj::segments::{
-    Completed, HexSegment, Segment, SignalProfilePlayback, TrackSegment,
-};
+use crate::audio::dj::segments::{HexSegment, Segment, SignalProfilePlayback, TrackSegment};
 use crate::audio::dj::segments::{NoiseSegment, SegmentCtx};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
 use crate::state::Data;
@@ -83,8 +81,8 @@ impl DJStateMachine {
         self.state.read().await
     }
 
-    pub async fn completed(&self) -> Completed {
-        self.current_state().await.segment.completed()
+    pub async fn completed(&self) {
+        self.current_state().await.segment.completed().await
     }
 
     pub fn announcement_channel(&self) -> Option<ChannelId> {
