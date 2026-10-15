@@ -20,18 +20,12 @@ pub struct DJState {
     pub started_at: std::time::Instant,
 }
 
-impl<S: Segment + 'static> From<S> for DJState {
-    fn from(segment: S) -> Self {
-        DJState {
-            segment: Box::new(segment),
-            started_at: std::time::Instant::now(),
-        }
-    }
-}
-
 impl DJState {
     pub fn idle() -> Self {
-        NoiseSegment::idle(Duration::from_secs(1)).into()
+        Self {
+            segment: Box::new(NoiseSegment::idle(Duration::from_secs(1))),
+            started_at: std::time::Instant::now(),
+        }
     }
 
     pub fn forced_profile(&self) -> SignalProfilePlayback {
@@ -113,21 +107,18 @@ impl DJStateMachine {
         let Self { scheduler, .. } = self;
         let next_state_type = scheduler.next_state(state_type_filter);
         tracing::info!("DJ transitioning to state: {next_state_type}");
-        let next_state = match next_state_type {
+        let segment: Box<dyn Segment> = match next_state_type {
             DJStateEntry::Track(entry) => {
-                TrackSegment::from_entry(entry, &bot_state.duration_cache)
-                    .await
-                    .into()
+                Box::new(TrackSegment::from_entry(entry, &bot_state.duration_cache).await)
             }
-            DJStateEntry::HexMessage(entry) => {
-                HexSegment::from_entry(entry, &self.scheduler.config().hex_message_defaults, || {
-                    self.pick_random_announcement()
-                })
-                .into()
-            }
-            DJStateEntry::Noise(entry) => NoiseSegment::from(entry).into(),
+            DJStateEntry::HexMessage(entry) => Box::new(HexSegment::from_entry(
+                entry,
+                &self.scheduler.config().hex_message_defaults,
+                || self.pick_random_announcement(),
+            )),
+            DJStateEntry::Noise(entry) => Box::new(NoiseSegment::from(entry)),
         };
-        self.enter_state(next_state, bot_state).await
+        self.enter_state(segment, bot_state).await
     }
 
     pub async fn force_hex_message(
@@ -144,15 +135,14 @@ impl DJStateMachine {
             .loops
             .unwrap_or_else(|| rand::rng().random_range(defaults.loop_min..=defaults.loop_max))
             as usize;
-        let next_state = HexSegment::new(
+        let segment = HexSegment::new(
             request.message,
             request.volume.unwrap_or(1.0),
             loops,
             self.pick_random_announcement(),
             defaults.signal_profile.clone(),
-        )
-        .into();
-        self.enter_state(next_state, bot_state).await
+        );
+        self.enter_state(Box::new(segment), bot_state).await
     }
 
     pub async fn force_track(
@@ -173,21 +163,20 @@ impl DJStateMachine {
                 .await
                 .unwrap_or(Duration::from_secs(60)),
         };
-        let next_state = TrackSegment::new(
+        let segment = TrackSegment::new(
             request.filename,
             request.volume.unwrap_or(1.0),
             start_position,
             duration,
             None,
             None,
-        )
-        .into();
-        self.enter_state(next_state, bot_state).await
+        );
+        self.enter_state(Box::new(segment), bot_state).await
     }
 
     async fn enter_state(
         &self,
-        next_state: DJState,
+        segment: Box<dyn Segment>,
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Record the previous state before transitioning
@@ -195,7 +184,6 @@ impl DJStateMachine {
 
         self.cleanup_current_state(bot_state).await;
 
-        let segment = &next_state.segment;
         segment.enter(&self.segment_ctx()).await?;
 
         if let Some(channel) = self.announcement_channel
@@ -212,8 +200,12 @@ impl DJStateMachine {
                 .await;
         }
 
-        let to_state = self.get_state_name(&next_state);
-        *self.state.write().await = next_state;
+        let to_state = segment.state_name().to_string();
+        {
+            let mut state = self.state.write().await;
+            state.segment = segment;
+            state.started_at = std::time::Instant::now();
+        }
         if let Some(metrics) = crate::metrics::get() {
             metrics.record_dj_state_transition(self.guild_id.get(), &from_state, &to_state);
         }
