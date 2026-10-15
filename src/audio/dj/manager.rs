@@ -1,6 +1,6 @@
 use crate::audio::dj::config::DJConfig;
 use crate::audio::dj::profile_machine::ProfileStateMachine;
-use crate::audio::dj::segments::{SegmentCtx, SignalProfilePlayback};
+use crate::audio::dj::segments::SegmentCtx;
 use crate::audio::dj::state_machine::{DJState, DJStateMachine};
 use crate::state::Data;
 use serde::Deserialize;
@@ -158,48 +158,6 @@ pub async fn dj_task(
         );
     }
 
-    // Helper function to apply profile transition
-    async fn apply_profile_transition(
-        guild_id: GuildId,
-        profile_name: Option<&str>,
-        fade_secs: f32,
-        bot_state: &Data,
-        reason: &str,
-    ) {
-        if let Some(profile_name) = profile_name {
-            let processors = bot_state.audio_processors.read().await;
-            if let Some(processor_arc) = processors.get(&guild_id)
-                && let Some(new_profile) = bot_state.profile_manager.get_profile(profile_name)
-            {
-                let mut processor = processor_arc.write().await;
-                processor.start_profile_transition(new_profile.clone(), fade_secs * 1000.0);
-
-                tracing::info!(
-                    "DJ transitioning to profile '{}' over {:.1}s {} in guild {}",
-                    profile_name,
-                    fade_secs,
-                    reason,
-                    guild_id
-                );
-            }
-
-            // Persist the profile state for restoration on restart
-            let profile_state = crate::persistence::ProfileState {
-                profile_name: profile_name.to_string(),
-                bypass: false,
-            };
-            if let Err(e) = bot_state
-                .state_store
-                .save_profile_state(guild_id, &profile_state)
-                .await
-            {
-                tracing::warn!("Failed to save profile state for guild {}: {}", guild_id, e);
-            }
-        }
-    }
-
-    let mut current_forced_profile = SignalProfilePlayback::default();
-
     'dj: loop {
         sleep(Duration::from_millis(DJ_TICK_INTERVAL_MS)).await;
 
@@ -220,41 +178,9 @@ pub async fn dj_task(
         // Persist DJ state periodically (including state machine state)
         persist_state(guild_id, bot_state, &config_name, &mut state_machine).await;
 
-        let new_forced_profile = state_machine.current_state().await.forced_profile();
-
-        // Handle profile forcing and transitions
         if let Some(ref mut pm) = profile_machine {
-            // Determine which profile to transition to, if any
-            let profile_transition = if new_forced_profile.name != current_forced_profile.name {
-                if let Some(ref profile) = new_forced_profile.name {
-                    // Force the new profile
-                    pm.force_profile(profile.clone());
-                    Some((
-                        profile.clone(),
-                        new_forced_profile.fade_in().as_secs_f32(),
-                        "(forced)",
-                    ))
-                } else if current_forced_profile.name.is_some() {
-                    // Release the forced profile and transition to next
-                    pm.release_forced_profile()
-                        .map(|(profile_name, _fade_secs)| {
-                            (
-                                profile_name,
-                                current_forced_profile.fade_out().as_secs_f32(),
-                                "after releasing forced profile",
-                            )
-                        })
-                } else {
-                    None
-                }
-            } else {
-                // No forced profile change, advance normally
-                pm.advance()
-                    .map(|(profile_name, fade_secs)| (profile_name, fade_secs, ""))
-            };
-
-            // Apply the profile transition if we have one
-            if let Some((profile_name, fade_secs, reason)) = profile_transition {
+            let forced_profile = state_machine.current_state().await.forced_profile();
+            if let Some((profile_name, fade_secs, reason)) = pm.update(forced_profile) {
                 apply_profile_transition(
                     guild_id,
                     Some(&profile_name),
@@ -263,11 +189,6 @@ pub async fn dj_task(
                     reason,
                 )
                 .await;
-            }
-
-            // Update the forced profile tracking
-            if new_forced_profile.name != current_forced_profile.name {
-                current_forced_profile = new_forced_profile;
             }
         }
     }
@@ -279,6 +200,45 @@ pub async fn dj_task(
     }
 
     tracing::info!("DJ task terminated for guild {}", guild_id);
+}
+
+async fn apply_profile_transition(
+    guild_id: GuildId,
+    profile_name: Option<&str>,
+    fade_secs: f32,
+    bot_state: &Data,
+    reason: &str,
+) {
+    if let Some(profile_name) = profile_name {
+        let processors = bot_state.audio_processors.read().await;
+        if let Some(processor_arc) = processors.get(&guild_id)
+            && let Some(new_profile) = bot_state.profile_manager.get_profile(profile_name)
+        {
+            let mut processor = processor_arc.write().await;
+            processor.start_profile_transition(new_profile.clone(), fade_secs * 1000.0);
+
+            tracing::info!(
+                "DJ transitioning to profile '{}' over {:.1}s {} in guild {}",
+                profile_name,
+                fade_secs,
+                reason,
+                guild_id
+            );
+        }
+
+        // Persist the profile state for restoration on restart
+        let profile_state = crate::persistence::ProfileState {
+            profile_name: profile_name.to_string(),
+            bypass: false,
+        };
+        if let Err(e) = bot_state
+            .state_store
+            .save_profile_state(guild_id, &profile_state)
+            .await
+        {
+            tracing::warn!("Failed to save profile state for guild {}: {}", guild_id, e);
+        }
+    }
 }
 
 async fn persist_state(
