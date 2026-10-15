@@ -81,8 +81,7 @@ impl HexSegment {
 
     async fn start_run(&self, ctx: &SegmentCtx<'_>) {
         let processor = ctx.audio_processor().await;
-        let signal = self.done.clone();
-        let run = run_hex_message(
+        let handle = tokio::spawn(run_hex_message(
             self.message.clone(),
             self.volume,
             self.target_loops,
@@ -90,11 +89,8 @@ impl HexSegment {
             processor,
             ctx.file_resolver().clone(),
             *ctx.guild_id,
-        );
-        let handle = tokio::spawn(async move {
-            let _signal = signal;
-            run.await;
-        });
+            self.done.clone(),
+        ));
         *self.run.lock().unwrap() = Some(handle);
     }
 
@@ -202,6 +198,7 @@ async fn run_hex_message(
     processor: Arc<RwLock<AudioProcessor>>,
     file_resolver: FileResolver,
     guild_id: GuildId,
+    done: CompletedSignal,
 ) {
     let hex_chars = message_to_hex_sequence(&message);
     while !hex_chars.is_empty() && progress.loops.load(Ordering::Relaxed) < target_loops {
@@ -250,6 +247,7 @@ async fn run_hex_message(
         };
         tokio::time::sleep(delay).await;
     }
+    done.complete();
 }
 
 fn message_to_hex_sequence(message: &str) -> Vec<char> {
