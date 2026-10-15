@@ -141,38 +141,24 @@ pub async fn dj_task(
 
     let mut tick = interval(Duration::from_millis(DJ_TICK_INTERVAL_MS));
     tick.set_missed_tick_behavior(MissedTickBehavior::Delay);
-    let mut advance_failed = false;
-
-    let mut completed = state_machine.completed().await;
 
     'dj: loop {
-        let mut ticked = false;
-        let command = tokio::select! {
-            command = command_rx.recv() => Some(command.unwrap_or(DJCommand::Stop)),
-            _ = &mut completed, if !advance_failed => {
-                if let Err(e) = state_machine.force_advance(&bot_state, None).await {
-                    tracing::error!("DJ state machine error in guild {}: {}", guild_id, e);
-                    advance_failed = true;
+        tokio::select! {
+            command = command_rx.recv() => {
+                let command = command.unwrap_or(DJCommand::Stop);
+                if state_machine.handle_command(command).await {
+                    tracing::info!("DJ task stopped for guild {}", guild_id);
+                    break 'dj;
                 }
-                None
             }
-            _ = tick.tick() => {
-                advance_failed = false;
-                ticked = true;
-                None
+            _ = state_machine.completed() => {
+                if let Err(e) = state_machine.force_advance(&bot_state, None).await {
+                    tracing::error!("Failed to advance to next state for guild {}: {}", guild_id, e);
+                    tokio::time::sleep(Duration::from_millis(DJ_TICK_INTERVAL_MS)).await;
+                }
             }
+            _ = tick.tick() => { }
         };
-
-        if let Some(cmd) = command
-            && state_machine.handle_command(cmd).await
-        {
-            tracing::info!("DJ task stopped for guild {}", guild_id);
-            break 'dj;
-        }
-
-        if !ticked {
-            completed = state_machine.completed().await;
-        }
 
         // Persist DJ state periodically (including state machine state)
         persist_state(guild_id, bot_state, &config_name, &mut state_machine).await;
