@@ -8,7 +8,7 @@ use serenity::all::Http;
 use serenity::model::id::{ChannelId, GuildId};
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use tokio::time::{Duration, sleep};
+use tokio::time::{Duration, MissedTickBehavior, interval};
 
 const DJ_TICK_INTERVAL_MS: u64 = 100;
 
@@ -139,21 +139,39 @@ pub async fn dj_task(
         );
     }
 
-    'dj: loop {
-        sleep(Duration::from_millis(DJ_TICK_INTERVAL_MS)).await;
+    let mut tick = interval(Duration::from_millis(DJ_TICK_INTERVAL_MS));
+    tick.set_missed_tick_behavior(MissedTickBehavior::Delay);
+    let mut advance_failed = false;
 
-        // Process any pending commands
-        while let Ok(cmd) = command_rx.try_recv() {
-            if state_machine.handle_command(cmd).await {
-                tracing::info!("DJ task stopped for guild {}", guild_id);
-                break 'dj;
+    let mut completed = state_machine.completed().await;
+
+    'dj: loop {
+        let mut ticked = false;
+        let command = tokio::select! {
+            command = command_rx.recv() => Some(command.unwrap_or(DJCommand::Stop)),
+            _ = &mut completed, if !advance_failed => {
+                if let Err(e) = state_machine.force_advance(&bot_state, None).await {
+                    tracing::error!("DJ state machine error in guild {}: {}", guild_id, e);
+                    advance_failed = true;
+                }
+                None
             }
+            _ = tick.tick() => {
+                advance_failed = false;
+                ticked = true;
+                None
+            }
+        };
+
+        if let Some(cmd) = command
+            && state_machine.handle_command(cmd).await
+        {
+            tracing::info!("DJ task stopped for guild {}", guild_id);
+            break 'dj;
         }
 
-        if state_machine.is_complete().await
-            && let Err(e) = state_machine.force_advance(&bot_state, None).await
-        {
-            tracing::error!("DJ state machine error in guild {}: {}", guild_id, e);
+        if !ticked {
+            completed = state_machine.completed().await;
         }
 
         // Persist DJ state periodically (including state machine state)

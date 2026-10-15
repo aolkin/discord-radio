@@ -12,12 +12,29 @@ use crate::audio::processing::processor::ProcessorRef;
 use crate::bucket::FileResolver;
 use crate::state::BotState;
 use async_trait::async_trait;
+use futures_util::future::BoxFuture;
 use serde::{Deserialize, Serialize};
 use serenity::model::id::GuildId;
 use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
+use tokio::sync::watch;
+
+/// Owns its state, so waiting on it holds no lock on the segment.
+pub type Completed = BoxFuture<'static, ()>;
+
+pub fn completed_signal() -> watch::Sender<bool> {
+    watch::channel(false).0
+}
+
+pub fn signal_completed(signal: &watch::Sender<bool>) -> Completed {
+    let mut rx = signal.subscribe();
+    Box::pin(async move {
+        // An Err means the segment dropped its sender, so it is finished.
+        let _ = rx.wait_for(|done| *done).await;
+    })
+}
 
 pub struct SegmentCtx<'a> {
     pub guild_id: &'a GuildId,
@@ -99,7 +116,7 @@ pub struct StateDisplay {
 #[async_trait]
 #[typetag::serde(tag = "type")]
 pub trait Segment: Send + Sync + Debug + SegmentPlaybackConfig {
-    async fn is_complete(&self) -> bool;
+    fn completed(&self) -> Completed;
     fn elapsed(&self) -> Duration;
 
     async fn restore(&self, _ctx: &SegmentCtx) -> anyhow::Result<()> {
@@ -178,6 +195,12 @@ impl TimedSegment {
 
     pub fn is_elapsed(&self) -> bool {
         self.started_at.elapsed() >= self.duration
+    }
+
+    pub fn completed(&self) -> Completed {
+        Box::pin(tokio::time::sleep_until(tokio::time::Instant::from_std(
+            self.started_at + self.duration,
+        )))
     }
 }
 

@@ -1,6 +1,6 @@
 use super::{
-    CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
-    TrackSlot,
+    CommonSegmentPlaybackConfig, Completed, Segment, SegmentCtx, SegmentPlaybackConfig,
+    StateDisplay, TrackSlot, completed_signal, signal_completed,
 };
 use crate::audio::dj::config::{HexMessageDefaults, HexMessageEntry};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
@@ -17,7 +17,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, watch};
 use tokio::task::JoinHandle;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -40,6 +40,16 @@ pub struct HexSegment {
     announcement: Option<String>,
     #[serde(skip)]
     run: Mutex<Option<JoinHandle<()>>>,
+    #[serde(skip, default = "completed_signal")]
+    done: watch::Sender<bool>,
+}
+
+struct SignalOnDrop(watch::Sender<bool>);
+
+impl Drop for SignalOnDrop {
+    fn drop(&mut self) {
+        self.0.send_replace(true);
+    }
 }
 
 impl Deref for HexSegment {
@@ -72,12 +82,14 @@ impl HexSegment {
             announcement,
             progress: Default::default(),
             run: Default::default(),
+            done: completed_signal(),
         }
     }
 
     async fn start_run(&self, ctx: &SegmentCtx<'_>) {
         let processor = ctx.audio_processor().await;
-        let handle = tokio::spawn(run_hex_message(
+        let signal = SignalOnDrop(self.done.clone());
+        let run = run_hex_message(
             self.message.clone(),
             self.volume,
             self.target_loops,
@@ -85,7 +97,11 @@ impl HexSegment {
             processor,
             ctx.file_resolver().clone(),
             *ctx.guild_id,
-        ));
+        );
+        let handle = tokio::spawn(async move {
+            let _signal = signal;
+            run.await;
+        });
         *self.run.lock().unwrap() = Some(handle);
     }
 
@@ -109,12 +125,8 @@ impl HexSegment {
 #[async_trait]
 #[typetag::serde]
 impl Segment for HexSegment {
-    async fn is_complete(&self) -> bool {
-        self.run
-            .lock()
-            .unwrap()
-            .as_ref()
-            .is_none_or(|handle| handle.is_finished())
+    fn completed(&self) -> Completed {
+        signal_completed(&self.done)
     }
 
     fn elapsed(&self) -> Duration {

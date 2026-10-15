@@ -1,6 +1,6 @@
 use crate::audio::dj::config::NoisePeriodEntry;
 use crate::audio::dj::segments::{
-    CommonSegmentPlaybackConfig, Segment, SegmentPlaybackConfig, SignalProfilePlayback,
+    CommonSegmentPlaybackConfig, Completed, Segment, SegmentPlaybackConfig, SignalProfilePlayback,
     StateDisplay, TimedSegment,
 };
 use async_trait::async_trait;
@@ -40,8 +40,8 @@ impl Deref for NoiseSegment {
 #[async_trait]
 #[typetag::serde]
 impl Segment for NoiseSegment {
-    async fn is_complete(&self) -> bool {
-        self.0.is_elapsed()
+    fn completed(&self) -> Completed {
+        self.0.completed()
     }
 
     fn elapsed(&self) -> Duration {

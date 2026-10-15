@@ -1,6 +1,6 @@
 use super::{
-    CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
-    TimedSegment, TrackSlot,
+    CommonSegmentPlaybackConfig, Completed, Segment, SegmentCtx, SegmentPlaybackConfig,
+    StateDisplay, TimedSegment, TrackSlot, completed_signal, signal_completed,
 };
 use crate::audio::dj::config::TrackEntry;
 use crate::audio::duration::DurationCache;
@@ -10,9 +10,8 @@ use async_trait::async_trait;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
-use std::sync::Mutex;
 use std::time::Duration;
-use tokio::sync::oneshot::{self, error::TryRecvError};
+use tokio::sync::{oneshot, watch};
 
 const FADE_TIME: Duration = Duration::from_secs(1);
 
@@ -24,8 +23,8 @@ pub struct TrackSegment {
     start_position: Option<Duration>,
     #[serde(skip)]
     track: TrackSlot,
-    #[serde(skip)]
-    end_trigger: Mutex<Option<oneshot::Receiver<()>>>,
+    #[serde(skip, default = "completed_signal")]
+    done: watch::Sender<bool>,
 }
 
 impl Deref for TrackSegment {
@@ -54,7 +53,7 @@ impl TrackSegment {
             volume,
             start_position,
             track: Default::default(),
-            end_trigger: Default::default(),
+            done: completed_signal(),
         }
     }
 
@@ -87,7 +86,11 @@ impl TrackSegment {
             ],
         );
         self.track.set(track);
-        *self.end_trigger.lock().unwrap() = Some(end_trigger);
+        let done = self.done.clone();
+        tokio::spawn(async move {
+            let _ = end_trigger.await;
+            done.send_replace(true);
+        });
         Ok(())
     }
 
@@ -137,12 +140,8 @@ impl TrackSegment {
 #[async_trait]
 #[typetag::serde]
 impl Segment for TrackSegment {
-    async fn is_complete(&self) -> bool {
-        self.end_trigger
-            .lock()
-            .unwrap()
-            .as_mut()
-            .is_none_or(|rx| !matches!(rx.try_recv(), Err(TryRecvError::Empty)))
+    fn completed(&self) -> Completed {
+        signal_completed(&self.done)
     }
 
     fn elapsed(&self) -> Duration {
@@ -158,15 +157,21 @@ impl Segment for TrackSegment {
                 elapsed.as_secs_f32(),
                 self.timer.duration.as_secs_f32()
             );
+            self.done.send_replace(true);
             return Ok(());
         }
         let position = self.start_position.unwrap_or_default() + elapsed;
-        self.start_at(
-            ctx,
-            Some(position),
-            self.timer.duration.saturating_sub(elapsed),
-        )
-        .await?;
+        if let Err(e) = self
+            .start_at(
+                ctx,
+                Some(position),
+                self.timer.duration.saturating_sub(elapsed),
+            )
+            .await
+        {
+            self.done.send_replace(true);
+            return Err(e);
+        }
         tracing::info!(
             "Restored DJ track '{}' at {:.1}s into the segment in guild {}",
             self.filename,
@@ -189,7 +194,7 @@ impl Segment for TrackSegment {
     }
 
     async fn exit(&self, _ctx: &SegmentCtx) {
-        if !self.is_complete().await {
+        if !*self.done.borrow() {
             self.track.stop(FADE_TIME);
         }
     }
