@@ -9,29 +9,44 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serenity::all::Http;
 use serenity::model::id::{ChannelId, GuildId};
+use std::ops::Deref;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{RwLock, RwLockReadGuard};
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct DJState {
+pub struct SegmentContainer {
     pub segment: Box<dyn Segment>,
     #[serde(serialize_with = "ser_instant", deserialize_with = "deser_instant")]
     pub started_at: std::time::Instant,
 }
 
-impl<S: Segment + 'static> From<S> for DJState {
+impl Deref for SegmentContainer {
+    type Target = dyn Segment;
+    fn deref(&self) -> &Self::Target {
+        &*self.segment
+    }
+}
+
+impl<S: Segment + 'static> From<S> for SegmentContainer {
     fn from(segment: S) -> Self {
-        DJState {
+        SegmentContainer {
             segment: Box::new(segment),
             started_at: std::time::Instant::now(),
         }
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DJState {
+    pub segment: SegmentContainer,
+}
+
 impl DJState {
     pub fn idle() -> Self {
-        NoiseSegment::idle(Duration::from_secs(1)).into()
+        Self {
+            segment: NoiseSegment::idle(Duration::from_secs(1)).into(),
+        }
     }
 
     pub fn forced_profile(&self) -> SignalProfilePlayback {
@@ -187,15 +202,14 @@ impl DJStateMachine {
 
     async fn enter_state(
         &self,
-        next_state: DJState,
+        segment: SegmentContainer,
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Record the previous state before transitioning
-        let from_state = self.get_state_name(&*self.current_state().await);
+        let from_state = self.current_state().await.segment.state_name().to_string();
 
         self.cleanup_current_state(bot_state).await;
 
-        let segment = &next_state.segment;
         segment.enter(&self.segment_ctx()).await?;
 
         if let Some(channel) = self.announcement_channel
@@ -212,8 +226,8 @@ impl DJStateMachine {
                 .await;
         }
 
-        let to_state = self.get_state_name(&next_state);
-        *self.state.write().await = next_state;
+        let to_state = segment.state_name().to_string();
+        self.state.write().await.segment = segment;
         if let Some(metrics) = crate::metrics::get() {
             metrics.record_dj_state_transition(self.guild_id.get(), &from_state, &to_state);
         }
@@ -231,7 +245,7 @@ impl DJStateMachine {
                 self.guild_id.get(),
                 segment.state_name(),
                 segment.signal_profile().name.as_deref(),
-                current.started_at.elapsed().as_secs_f64(),
+                current.segment.started_at.elapsed().as_secs_f64(),
             );
         }
         segment.exit(&self.segment_ctx()).await;
@@ -292,7 +306,7 @@ impl DJStateMachine {
 
     async fn log_state_transition(&self, bot_state: &Data) -> bool {
         let state = self.state.read().await;
-        let event_type = self.get_state_name(&state);
+        let event_type = state.segment.state_name().to_string();
         let details = state.segment.loggable_properties();
         // Drop the read guard before awaiting the log write below so it isn't held
         // across unrelated file I/O.
@@ -301,9 +315,5 @@ impl DJStateMachine {
         bot_state
             .log_dj_activity(self.guild_id.get(), event_type, details)
             .await
-    }
-
-    fn get_state_name(&self, state: &DJState) -> String {
-        state.segment.state_name().to_string()
     }
 }
