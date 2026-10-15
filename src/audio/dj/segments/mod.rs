@@ -15,7 +15,7 @@ use crate::state::BotState;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serenity::model::id::GuildId;
-use signals::Completed;
+pub use signals::Completed;
 use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::Mutex;

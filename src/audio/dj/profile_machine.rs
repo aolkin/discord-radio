@@ -80,7 +80,7 @@ impl ProfileStateMachine {
     pub fn completed(&self) -> Completed {
         match &self.current {
             Some(segment) => segment.completed(),
-            None => Box::pin(std::future::pending()),
+            None => Completed::when(std::future::pending()),
         }
     }
 
