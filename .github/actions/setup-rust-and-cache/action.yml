@@ -6,10 +6,6 @@ inputs:
     description: "Additional Rust components to install (e.g., 'rustfmt, clippy')"
     required: false
     default: ""
-  cache-key-suffix:
-    description: "Suffix to add to the cache key (e.g., 'release')"
-    required: false
-    default: ""
 
 runs:
   using: "composite"
@@ -18,23 +14,10 @@ runs:
       shell: bash
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake libopus-dev pkg-config
+        sudo apt-get install -y libopus-dev pkg-config
 
     - name: Setup Rust
       uses: actions-rust-lang/setup-rust-toolchain@v1
       with:
         toolchain: stable
         components: ${{ inputs.components }}
-
-    - name: Cache Cargo dependencies
-      uses: actions/cache@v6
-      with:
-        path: |
-          ~/.cargo/bin/
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          target/
-        key: ${{ runner.os }}-cargo-${{ inputs.cache-key-suffix && format('{0}-', inputs.cache-key-suffix) || '' }}${{ hashFiles('Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-cargo-${{ inputs.cache-key-suffix && format('{0}-', inputs.cache-key-suffix) || '' }}

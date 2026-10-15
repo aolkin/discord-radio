@@ -20,8 +20,6 @@ jobs:
         uses: ./.github/actions/setup-rust-and-cache
         with:
           components: rustfmt, clippy
-          cache-key-suffix: check
-
       - name: Check formatting
         uses: actions-rust-lang/rustfmt@v1
 
