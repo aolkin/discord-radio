@@ -128,7 +128,7 @@ impl DJStateMachine {
         let Self { scheduler, .. } = self;
         let next_state_type = scheduler.next_state(state_type_filter);
         tracing::info!("DJ transitioning to state: {next_state_type}");
-        let next: SegmentContainer = match next_state_type {
+        let next_state = match next_state_type {
             DJStateEntry::Track(entry) => {
                 TrackSegment::from_entry(entry, &bot_state.duration_cache)
                     .await
@@ -142,7 +142,7 @@ impl DJStateMachine {
             }
             DJStateEntry::Noise(entry) => NoiseSegment::from(entry).into(),
         };
-        self.enter_state(next, bot_state).await
+        self.enter_state(next_state, bot_state).await
     }
 
     pub async fn force_hex_message(
@@ -159,7 +159,7 @@ impl DJStateMachine {
             .loops
             .unwrap_or_else(|| rand::rng().random_range(defaults.loop_min..=defaults.loop_max))
             as usize;
-        let next: SegmentContainer = HexSegment::new(
+        let next_state = HexSegment::new(
             request.message,
             request.volume.unwrap_or(1.0),
             loops,
@@ -167,7 +167,7 @@ impl DJStateMachine {
             defaults.signal_profile.clone(),
         )
         .into();
-        self.enter_state(next, bot_state).await
+        self.enter_state(next_state, bot_state).await
     }
 
     pub async fn force_track(
@@ -188,7 +188,7 @@ impl DJStateMachine {
                 .await
                 .unwrap_or(Duration::from_secs(60)),
         };
-        let next: SegmentContainer = TrackSegment::new(
+        let next_state = TrackSegment::new(
             request.filename,
             request.volume.unwrap_or(1.0),
             start_position,
@@ -197,12 +197,12 @@ impl DJStateMachine {
             None,
         )
         .into();
-        self.enter_state(next, bot_state).await
+        self.enter_state(next_state, bot_state).await
     }
 
     async fn enter_state(
         &self,
-        next: SegmentContainer,
+        next_state: SegmentContainer,
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Record the previous state before transitioning
@@ -210,24 +210,25 @@ impl DJStateMachine {
 
         self.cleanup_current_state(bot_state).await;
 
-        next.enter(&self.segment_ctx()).await?;
+        let segment = &next_state;
+        segment.enter(&self.segment_ctx()).await?;
 
         if let Some(channel) = self.announcement_channel
-            && let Some(announcement) = next.announcement()
+            && let Some(announcement) = segment.announcement()
             && let Err(e) = channel.say(&self.http, announcement).await
         {
             tracing::warn!("Failed to send DJ announcement: {}", e);
         }
 
-        if let Some(status) = next.channel_status() {
+        if let Some(status) = segment.channel_status() {
             bot_state
                 .voice_status_manager
                 .push_status(self.guild_id, &status, &self.http)
                 .await;
         }
 
-        let to_state = next.state_name().to_string();
-        self.state.write().await.segment = next;
+        let to_state = segment.state_name().to_string();
+        self.state.write().await.segment = next_state;
         if let Some(metrics) = crate::metrics::get() {
             metrics.record_dj_state_transition(self.guild_id.get(), &from_state, &to_state);
         }
@@ -239,16 +240,17 @@ impl DJStateMachine {
 
     async fn cleanup_current_state(&self, bot_state: &Data) {
         let current = self.state.read().await;
+        let segment = &current.segment;
         if let Some(metrics) = crate::metrics::get() {
             metrics.record_dj_state_duration(
                 self.guild_id.get(),
-                current.segment.state_name(),
-                current.segment.signal_profile().name.as_deref(),
+                segment.state_name(),
+                segment.signal_profile().name.as_deref(),
                 current.segment.started_at.elapsed().as_secs_f64(),
             );
         }
-        current.segment.exit(&self.segment_ctx()).await;
-        if let Some(status) = current.segment.channel_status() {
+        segment.exit(&self.segment_ctx()).await;
+        if let Some(status) = segment.channel_status() {
             bot_state
                 .voice_status_manager
                 .remove_status(self.guild_id, &status, &self.http)
