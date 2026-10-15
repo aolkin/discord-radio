@@ -32,7 +32,21 @@ fn profile_segment(entry: &SignalProfileEntry, hold_starts_after: Duration) -> T
 }
 
 impl ProfileStateMachine {
-    pub fn new(profiles: Vec<SignalProfileEntry>, initial_profile_name: Option<&str>) -> Self {
+    /// Builds the machine for a config, falling back to a single `clear`
+    /// profile when the config lists none.
+    pub fn for_config(
+        mut profiles: Vec<SignalProfileEntry>,
+        initial_profile_name: Option<&str>,
+    ) -> Self {
+        if profiles.is_empty() {
+            profiles.push(SignalProfileEntry {
+                profile_name: "clear".to_string(),
+                weight: 1,
+                fade_duration_seconds: 3.0,
+                min_time_seconds: 60.0,
+                max_time_seconds: 120.0,
+            });
+        }
         // Find matching profile by name, or default to first profile
         let initial_index = if let Some(name) = initial_profile_name {
             profiles
