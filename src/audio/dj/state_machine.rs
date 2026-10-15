@@ -82,12 +82,6 @@ impl DJStateMachine {
         self.current_state().await.segment.is_complete().await
     }
 
-    pub fn update_config(&mut self, config: DJConfig) {
-        self.hex_message_announcements =
-            config.hex_message_announcements.clone().unwrap_or_default();
-        self.scheduler.update_config(config);
-    }
-
     pub fn announcement_channel(&self) -> Option<ChannelId> {
         self.announcement_channel
     }

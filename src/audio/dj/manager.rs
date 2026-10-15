@@ -16,7 +16,6 @@ pub enum DJCommand {
     ForceAdvance(Option<DJStateType>),
     ForceHexMessage(HexMessageRequest),
     ForceTrack(TrackRequest),
-    ReloadConfig,
     Stop,
     SetAnnouncementChannel(Option<ChannelId>),
 }
@@ -240,49 +239,6 @@ pub async fn dj_task(
                         guild_id
                     );
                     state_machine.set_announcement_channel(new_channel);
-                }
-                DJCommand::ReloadConfig => {
-                    tracing::info!("Reloading DJ config with overrides for guild {}", guild_id);
-                    // Load the base config
-                    let config_path = format!("dj_configs/{}.json", config_name);
-                    match DJConfig::load_from_file(&config_path) {
-                        Ok(base_config) => {
-                            let settings = bot_state.dj_settings.get(guild_id).await;
-                            let mut config = base_config.with_overrides(&settings);
-                            if let Err(e) = config
-                                .apply_dj_settings(&settings, &bot_state.file_resolver)
-                                .await
-                            {
-                                tracing::warn!(
-                                    "Failed to reload DJ content for guild {guild_id}: {e:#}"
-                                );
-                            }
-                            profile_machine = if config.signal_profiles.is_empty() {
-                                None
-                            } else {
-                                let mut machine = ProfileStateMachine::new(
-                                    config.signal_profiles.clone(),
-                                    current_forced_profile.name.as_deref(),
-                                );
-                                if let Some(profile_name) = &current_forced_profile.name {
-                                    machine.force_profile(profile_name.clone());
-                                }
-                                Some(machine)
-                            };
-                            state_machine.update_config(config);
-                            tracing::info!(
-                                "DJ config reloaded successfully for guild {}",
-                                guild_id
-                            );
-                        }
-                        Err(e) => {
-                            tracing::error!(
-                                "Failed to reload DJ config for guild {}: {}",
-                                guild_id,
-                                e
-                            );
-                        }
-                    }
                 }
             }
         }
@@ -531,24 +487,4 @@ pub async fn send_dj_command(
 
     let mgr = manager.lock().await;
     mgr.send(command).await
-}
-
-pub async fn trigger_reload(bot_state: &Data, guild_id: GuildId) {
-    let dj_managers = bot_state.dj_managers.read().await;
-    let Some(manager_arc) = dj_managers.get(&guild_id) else {
-        return;
-    };
-    let manager_arc = manager_arc.clone();
-    drop(dj_managers);
-
-    let manager = manager_arc.lock().await;
-    if manager.command_tx.is_some()
-        && let Err(e) = manager.send(DJCommand::ReloadConfig).await
-    {
-        tracing::warn!(
-            "Failed to send reload command to DJ in guild {}: {}",
-            guild_id,
-            e
-        );
-    }
 }

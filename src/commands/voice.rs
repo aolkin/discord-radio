@@ -1,6 +1,6 @@
 use crate::audio::connection::setup_voice_connection;
 use crate::audio::dj::config::DJConfig;
-use crate::audio::dj::manager::{DJCommand, DJStateType, send_dj_command, trigger_reload};
+use crate::audio::dj::manager::{DJCommand, DJStateType, send_dj_command};
 use crate::audio::processing::processor::ProcessorRef;
 use crate::audio::tracks::get_or_create_track_manager;
 use crate::commands::utils;
@@ -993,8 +993,6 @@ async fn set_dj_content(
             Ok(())
         })
         .await?;
-
-    trigger_reload(ctx.data(), guild_id).await;
 
     ctx.say(message).await?;
 

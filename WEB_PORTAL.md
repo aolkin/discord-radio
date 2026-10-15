@@ -69,9 +69,8 @@ Customize DJ behavior by overriding configuration values from the web portal:
   - View default weights from the configuration file
   - Set custom weights for Track, Hex Message, and Noise states
   - Enable/disable the override to switch between custom and default weights
-  - Changes trigger automatic config reload for all running DJs
 
-**Note**: All override changes are persisted to storage and take effect immediately.
+**Note**: All override changes are persisted to storage and take effect the next time the DJ starts.
 
 ### Audio Track Management
 
