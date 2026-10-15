@@ -9,27 +9,49 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serenity::all::Http;
 use serenity::model::id::{ChannelId, GuildId};
+use std::ops::Deref;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{RwLock, RwLockReadGuard};
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct DJState {
+pub struct SegmentContainer {
     pub segment: Box<dyn Segment>,
     #[serde(serialize_with = "ser_instant", deserialize_with = "deser_instant")]
     pub started_at: std::time::Instant,
 }
 
+impl Deref for SegmentContainer {
+    type Target = dyn Segment;
+    fn deref(&self) -> &Self::Target {
+        &*self.segment
+    }
+}
+
+impl<S: Segment + 'static> From<S> for SegmentContainer {
+    fn from(segment: S) -> Self {
+        SegmentContainer {
+            segment: Box::new(segment),
+            started_at: std::time::Instant::now(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct DJState {
+    pub current: SegmentContainer,
+}
+
 impl DJState {
     pub fn idle() -> Self {
         Self {
-            segment: Box::new(NoiseSegment::idle(Duration::from_secs(1))),
-            started_at: std::time::Instant::now(),
+            current: NoiseSegment::idle(Duration::from_secs(1)).into(),
         }
     }
 
     pub fn forced_profile(&self) -> SignalProfilePlayback {
-        self.segment.signal_profile()
+        self.current.signal_profile()
     }
 }
 
@@ -76,7 +98,7 @@ impl DJStateMachine {
     }
 
     pub async fn state_completed(&self) {
-        self.current_state().await.segment.completed().await
+        self.current_state().await.current.completed().await
     }
 
     pub fn announcement_channel(&self) -> Option<ChannelId> {
@@ -107,18 +129,21 @@ impl DJStateMachine {
         let Self { scheduler, .. } = self;
         let next_state_type = scheduler.next_state(state_type_filter);
         tracing::info!("DJ transitioning to state: {next_state_type}");
-        let segment: Box<dyn Segment> = match next_state_type {
+        let next: SegmentContainer = match next_state_type {
             DJStateEntry::Track(entry) => {
-                Box::new(TrackSegment::from_entry(entry, &bot_state.duration_cache).await)
+                TrackSegment::from_entry(entry, &bot_state.duration_cache)
+                    .await
+                    .into()
             }
-            DJStateEntry::HexMessage(entry) => Box::new(HexSegment::from_entry(
-                entry,
-                &self.scheduler.config().hex_message_defaults,
-                || self.pick_random_announcement(),
-            )),
-            DJStateEntry::Noise(entry) => Box::new(NoiseSegment::from(entry)),
+            DJStateEntry::HexMessage(entry) => {
+                HexSegment::from_entry(entry, &self.scheduler.config().hex_message_defaults, || {
+                    self.pick_random_announcement()
+                })
+                .into()
+            }
+            DJStateEntry::Noise(entry) => NoiseSegment::from(entry).into(),
         };
-        self.enter_state(segment, bot_state).await
+        self.enter_state(next, bot_state).await
     }
 
     pub async fn force_hex_message(
@@ -135,14 +160,15 @@ impl DJStateMachine {
             .loops
             .unwrap_or_else(|| rand::rng().random_range(defaults.loop_min..=defaults.loop_max))
             as usize;
-        let segment = HexSegment::new(
+        let next: SegmentContainer = HexSegment::new(
             request.message,
             request.volume.unwrap_or(1.0),
             loops,
             self.pick_random_announcement(),
             defaults.signal_profile.clone(),
-        );
-        self.enter_state(Box::new(segment), bot_state).await
+        )
+        .into();
+        self.enter_state(next, bot_state).await
     }
 
     pub async fn force_track(
@@ -163,20 +189,21 @@ impl DJStateMachine {
                 .await
                 .unwrap_or(Duration::from_secs(60)),
         };
-        let segment = TrackSegment::new(
+        let next: SegmentContainer = TrackSegment::new(
             request.filename,
             request.volume.unwrap_or(1.0),
             start_position,
             duration,
             None,
             None,
-        );
-        self.enter_state(Box::new(segment), bot_state).await
+        )
+        .into();
+        self.enter_state(next, bot_state).await
     }
 
     async fn enter_state(
         &self,
-        segment: Box<dyn Segment>,
+        next: SegmentContainer,
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Record the previous state before transitioning
@@ -184,6 +211,7 @@ impl DJStateMachine {
 
         self.cleanup_current_state(bot_state).await;
 
+        let segment = &*next;
         segment.enter(&self.segment_ctx()).await?;
 
         if let Some(channel) = self.announcement_channel
@@ -200,12 +228,8 @@ impl DJStateMachine {
                 .await;
         }
 
-        let to_state = segment.state_name().to_string();
-        {
-            let mut state = self.state.write().await;
-            state.segment = segment;
-            state.started_at = std::time::Instant::now();
-        }
+        let to_state = next.state_name().to_string();
+        self.state.write().await.current = next;
         if let Some(metrics) = crate::metrics::get() {
             metrics.record_dj_state_transition(self.guild_id.get(), &from_state, &to_state);
         }
@@ -217,13 +241,13 @@ impl DJStateMachine {
 
     async fn cleanup_current_state(&self, bot_state: &Data) {
         let current = self.state.read().await;
-        let segment = &current.segment;
+        let segment = &*current.current;
         if let Some(metrics) = crate::metrics::get() {
             metrics.record_dj_state_duration(
                 self.guild_id.get(),
                 segment.state_name(),
                 segment.signal_profile().name.as_deref(),
-                current.started_at.elapsed().as_secs_f64(),
+                current.current.started_at.elapsed().as_secs_f64(),
             );
         }
         segment.exit(&self.segment_ctx()).await;
@@ -285,7 +309,7 @@ impl DJStateMachine {
     async fn log_state_transition(&self, bot_state: &Data) -> bool {
         let state = self.state.read().await;
         let event_type = self.get_state_name(&state);
-        let details = state.segment.loggable_properties();
+        let details = state.current.loggable_properties();
         // Drop the read guard before awaiting the log write below so it isn't held
         // across unrelated file I/O.
         drop(state);
@@ -296,6 +320,6 @@ impl DJStateMachine {
     }
 
     fn get_state_name(&self, state: &DJState) -> String {
-        state.segment.state_name().to_string()
+        state.current.state_name().to_string()
     }
 }
