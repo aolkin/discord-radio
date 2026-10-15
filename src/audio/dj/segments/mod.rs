@@ -43,9 +43,9 @@ impl<'a> SegmentCtx<'a> {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignalProfilePlayback {
-    pub name: Option<String>,
+    pub name: String,
     pub fade_in_duration: Option<Duration>,
     pub fade_out_duration: Option<Duration>,
 }
@@ -65,8 +65,9 @@ impl SignalProfilePlayback {
 impl From<String> for SignalProfilePlayback {
     fn from(name: String) -> Self {
         Self {
-            name: Some(name),
-            ..Default::default()
+            name,
+            fade_in_duration: None,
+            fade_out_duration: None,
         }
     }
 }
@@ -82,8 +83,8 @@ where
 }
 
 pub trait SegmentPlaybackConfig {
-    fn signal_profile(&self) -> SignalProfilePlayback {
-        Default::default()
+    fn signal_profile(&self) -> Option<SignalProfilePlayback> {
+        None
     }
 
     fn channel_status(&self) -> Option<String> {
@@ -150,8 +151,8 @@ impl From<CommonSegmentPlaybackConfig> for BasicSegmentPlaybackConfig {
 }
 
 impl<T: Deref<Target = CommonSegmentPlaybackConfig>> SegmentPlaybackConfig for T {
-    fn signal_profile(&self) -> SignalProfilePlayback {
-        self.deref().signal_profile.to_owned().unwrap_or_default()
+    fn signal_profile(&self) -> Option<SignalProfilePlayback> {
+        self.deref().signal_profile.to_owned()
     }
 
     fn channel_status(&self) -> Option<String> {

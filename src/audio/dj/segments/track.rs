@@ -193,7 +193,7 @@ impl Segment for TrackSegment {
         serde_json::json!({
             "filename": self.filename,
             "duration_secs": self.timer.duration.as_secs_f32(),
-            "forced_profile": self.signal_profile().name,
+            "forced_profile": self.signal_profile().map(|profile| profile.name),
         })
     }
 

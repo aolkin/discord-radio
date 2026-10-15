@@ -11,13 +11,13 @@ pub struct ProfileStateMachine {
     current: Option<TimedSegment>,
     profiles: Vec<SignalProfileEntry>,
     selector: WeightedSelector,
-    forced: SignalProfilePlayback,
+    forced: Option<SignalProfilePlayback>,
 }
 
 fn profile_segment(entry: &SignalProfileEntry, hold_starts_after: Duration) -> TimedSegment {
     let duration_secs = rand::rng().random_range(entry.min_time_seconds..entry.max_time_seconds);
     let profile = SignalProfilePlayback {
-        name: Some(entry.profile_name.clone()),
+        name: entry.profile_name.clone(),
         fade_in_duration: Some(Duration::from_secs_f32(entry.fade_duration_seconds)),
         fade_out_duration: None,
     };
@@ -64,7 +64,7 @@ impl ProfileStateMachine {
             current,
             profiles,
             selector,
-            forced: SignalProfilePlayback::default(),
+            forced: None,
         }
     }
 
@@ -79,8 +79,13 @@ impl ProfileStateMachine {
     /// Follows the segment's forced profile and returns the transition
     /// (name, fade seconds, reason) it calls for, advancing normally while the
     /// forced profile is unchanged.
-    pub fn update(&mut self, forced: SignalProfilePlayback) -> Option<(String, f32, &'static str)> {
-        if forced.name == self.forced.name {
+    pub fn update(
+        &mut self,
+        forced: Option<SignalProfilePlayback>,
+    ) -> Option<(String, f32, &'static str)> {
+        let name =
+            |profile: &Option<SignalProfilePlayback>| profile.as_ref().map(|p| p.name.clone());
+        if name(&forced) == name(&self.forced) {
             if self.current.as_ref().is_some_and(TimedSegment::is_elapsed) {
                 return self
                     .next_profile()
@@ -89,17 +94,23 @@ impl ProfileStateMachine {
             return None;
         }
         let previous = std::mem::replace(&mut self.forced, forced);
-        if let Some(profile) = self.forced.name.clone() {
-            self.current = None;
-            Some((profile, self.forced.fade_in().as_secs_f32(), "(forced)"))
-        } else {
-            self.next_profile().map(|(profile_name, _)| {
+        match (&self.forced, previous) {
+            (Some(profile), _) => {
+                self.current = None;
+                Some((
+                    profile.name.clone(),
+                    profile.fade_in().as_secs_f32(),
+                    "(forced)",
+                ))
+            }
+            (None, Some(previous)) => self.next_profile().map(|(profile_name, _)| {
                 (
                     profile_name,
                     previous.fade_out().as_secs_f32(),
                     "after releasing forced profile",
                 )
-            })
+            }),
+            (None, None) => None,
         }
     }
 

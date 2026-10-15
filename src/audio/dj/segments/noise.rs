@@ -17,9 +17,9 @@ impl NoiseSegment {
     pub fn new(noise_profile: String, duration: Duration) -> Self {
         let playback_config = CommonSegmentPlaybackConfig {
             signal_profile: Some(SignalProfilePlayback {
-                name: Some(noise_profile),
+                name: noise_profile,
                 fade_in_duration: Some(duration.div_f32(2.0)),
-                ..Default::default()
+                fade_out_duration: None,
             }),
             channel_status: None,
         };
@@ -47,7 +47,7 @@ impl Segment for NoiseSegment {
 
     fn loggable_properties(&self) -> serde_json::Value {
         serde_json::json!({
-            "noise_profile": self.signal_profile().name,
+            "noise_profile": self.signal_profile().map(|profile| profile.name),
             "duration_secs": self.0.duration.as_secs_f32(),
         })
     }
@@ -57,7 +57,7 @@ impl Segment for NoiseSegment {
     }
 
     fn state_display(&self) -> StateDisplay {
-        let subject = self.signal_profile().name;
+        let subject = self.signal_profile().map(|profile| profile.name);
         StateDisplay {
             name: if subject.is_some() {
                 "PlayingNoise"
