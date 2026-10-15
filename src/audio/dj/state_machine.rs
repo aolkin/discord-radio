@@ -58,7 +58,7 @@ impl DJState {
         }
     }
 
-    pub fn forced_profile(&self) -> SignalProfilePlayback {
+    pub fn forced_profile(&self) -> Option<SignalProfilePlayback> {
         self.segment.signal_profile()
     }
 }
@@ -104,7 +104,10 @@ impl DJStateMachine {
                 .restore(&SegmentCtx::new(&guild_id, bot_state))
                 .await
                 .inspect_err(|e| tracing::warn!("Failed to restore segment: {e:?}"));
-            (segment.signal_profile().name, segment.channel_status())
+            (
+                segment.signal_profile().map(|profile| profile.name),
+                segment.channel_status(),
+            )
         };
 
         let state = Arc::new(RwLock::new(initial_state));
@@ -411,7 +414,7 @@ impl DJStateMachine {
             metrics.record_dj_state_duration(
                 self.guild_id.get(),
                 segment.state_name(),
-                segment.signal_profile().name.as_deref(),
+                segment.signal_profile().as_ref().map(|p| p.name.as_str()),
                 current.segment.started_at.elapsed().as_secs_f64(),
             );
         }
