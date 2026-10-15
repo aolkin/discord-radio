@@ -206,7 +206,7 @@ impl DJStateMachine {
         bot_state: &Data,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Record the previous state before transitioning
-        let from_state = self.get_state_name(&*self.current_state().await);
+        let from_state = self.current_state().await.segment.state_name().to_string();
 
         self.cleanup_current_state(bot_state).await;
 
@@ -307,7 +307,7 @@ impl DJStateMachine {
 
     async fn log_state_transition(&self, bot_state: &Data) -> bool {
         let state = self.state.read().await;
-        let event_type = self.get_state_name(&state);
+        let event_type = state.segment.state_name().to_string();
         let details = state.segment.loggable_properties();
         // Drop the read guard before awaiting the log write below so it isn't held
         // across unrelated file I/O.
@@ -316,9 +316,5 @@ impl DJStateMachine {
         bot_state
             .log_dj_activity(self.guild_id.get(), event_type, details)
             .await
-    }
-
-    fn get_state_name(&self, state: &DJState) -> String {
-        state.segment.state_name().to_string()
     }
 }
