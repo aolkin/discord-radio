@@ -22,13 +22,11 @@ fn ms(n: u64) -> Duration {
 
 fn mixer_with_track() -> (Mixer, TrackHandle, oneshot::Receiver<StopReason>) {
     let mut mixer = Mixer::new(1000);
-    let (stop_tx, ended) = oneshot::channel();
+    let (callback, ended) = TrackCallback::oneshot();
     let handle = mixer.add_track(
         Box::new(Constant),
         1.0,
-        vec![TrackCommand::AddStopTrigger(Box::new(move |reason| {
-            let _ = stop_tx.send(reason);
-        }))],
+        vec![TrackCommand::AddStopTrigger(callback)],
     );
     (mixer, handle, ended)
 }
@@ -100,13 +98,11 @@ fn stop_fades_then_removes_the_track() {
 #[test]
 fn trigger_fires_at_its_frame_even_when_a_stop_lands_there() {
     let (mut mixer, handle, _) = mixer_with_track();
-    let (tx, mut fired) = oneshot::channel();
+    let (callback, mut fired) = TrackCallback::oneshot();
     handle
         .send(TrackCommand::AddTrigger {
             at: ms(100),
-            callback: Box::new(move || {
-                let _ = tx.send(());
-            }),
+            callback,
         })
         .unwrap();
     pull(&mut mixer, 100);
@@ -115,13 +111,11 @@ fn trigger_fires_at_its_frame_even_when_a_stop_lands_there() {
     assert!(fired.try_recv().is_ok());
 
     let (mut mixer, handle, mut ended) = mixer_with_track();
-    let (tx, mut fired) = oneshot::channel();
+    let (callback, mut fired) = TrackCallback::oneshot();
     handle
         .send(TrackCommand::AddTrigger {
             at: ms(100),
-            callback: Box::new(move || {
-                let _ = tx.send(());
-            }),
+            callback,
         })
         .unwrap();
     handle

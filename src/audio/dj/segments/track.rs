@@ -4,7 +4,7 @@ use super::{
 };
 use crate::audio::dj::config::TrackEntry;
 use crate::audio::duration::DurationCache;
-use crate::audio::processing::mixer::TrackCommand;
+use crate::audio::processing::mixer::{TrackCallback, TrackCommand};
 use crate::audio::tracks::open_track_source;
 use async_trait::async_trait;
 use rand::Rng;
@@ -66,7 +66,7 @@ impl TrackSegment {
     ) -> anyhow::Result<()> {
         let path = ctx.file_resolver().resolve(&self.filename).await?;
         let source = open_track_source(&path, start_position).map_err(|e| anyhow::anyhow!(e))?;
-        let (end_tx, end_trigger) = oneshot::channel();
+        let (callback, end_trigger) = TrackCallback::oneshot();
         let track = ctx.audio_processor().await.write().await.add_track(
             source,
             0.0,
@@ -78,9 +78,7 @@ impl TrackSegment {
                 },
                 TrackCommand::AddTrigger {
                     at: play_duration,
-                    callback: Box::new(move || {
-                        let _ = end_tx.send(());
-                    }),
+                    callback,
                 },
                 TrackCommand::Stop {
                     fade: FADE_TIME,

@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 
 use crate::audio::helpers::perceptual_level_to_amplitude;
 
@@ -26,6 +26,29 @@ pub enum StopReason {
 }
 
 const COMMAND_QUEUE_SIZE: usize = 10;
+
+pub struct TrackCallback<T>(Box<dyn FnOnce(T) + Send + Sync>);
+
+impl<T> TrackCallback<T> {
+    pub fn new(future: impl FnOnce(T) + Send + Sync + 'static) -> Self {
+        TrackCallback(Box::new(future))
+    }
+
+    pub fn oneshot() -> (TrackCallback<T>, oneshot::Receiver<T>)
+    where
+        T: Send + 'static,
+    {
+        let (tx, rx) = oneshot::channel();
+        let callback = Self::new(move |t| {
+            let _ = tx.send(t);
+        });
+        (callback, rx)
+    }
+
+    fn trigger(self, arg: T) {
+        self.0(arg);
+    }
+}
 
 /// An edit to a track, sent with [`TrackHandle::send`]. The mixer applies
 /// edits at the start of its next chunk, in the order they were sent.
@@ -56,13 +79,13 @@ pub enum TrackCommand {
     /// ends first.
     AddTrigger {
         at: Duration,
-        callback: Box<dyn FnOnce() + Send + Sync>,
+        callback: TrackCallback<()>,
     },
     /// Runs the callback with the reason the track ends. It runs inside the
     /// mixer's render path while the processor lock is held, so it must not
     /// block. It is dropped without running if the track is lost without a
     /// reason.
-    AddStopTrigger(Box<dyn FnOnce(StopReason) + Send + Sync>),
+    AddStopTrigger(TrackCallback<StopReason>),
 }
 
 /// A track added to the mixer.
@@ -105,7 +128,7 @@ pub trait AudioSource: Send + Sync {
 
 enum Keyframe {
     StartFade { target: f32, frames: u64 },
-    Trigger(Box<dyn FnOnce() + Send + Sync>),
+    Trigger(TrackCallback<()>),
 }
 
 struct Stop {
@@ -144,7 +167,7 @@ pub struct MixerTrack {
     pub loops: bool,
     pub active: bool,
     commands: mpsc::Receiver<TrackCommand>,
-    stop_triggers: Vec<Box<dyn FnOnce(StopReason) + Send + Sync>>,
+    stop_triggers: Vec<TrackCallback<StopReason>>,
 }
 
 impl MixerTrack {
@@ -223,7 +246,7 @@ impl MixerTrack {
     /// Only the first call has an effect.
     fn end(&mut self, reason: StopReason) {
         for callback in self.stop_triggers.drain(..) {
-            callback(reason);
+            callback.trigger(reason);
         }
     }
 
@@ -257,7 +280,7 @@ impl MixerTrack {
                     }
                 }
                 Keyframe::Trigger(callback) => {
-                    callback();
+                    callback.trigger(());
                 }
             }
         }

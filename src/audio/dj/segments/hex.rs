@@ -4,7 +4,7 @@ use super::{
 };
 use crate::audio::dj::config::{HexMessageDefaults, HexMessageEntry};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
-use crate::audio::processing::mixer::TrackCommand;
+use crate::audio::processing::mixer::{TrackCallback, TrackCommand};
 use crate::audio::processing::processor::AudioProcessor;
 use crate::audio::tracks::open_track_source;
 use crate::bucket::FileResolver;
@@ -212,13 +212,11 @@ async fn run_hex_message(
                         continue;
                     }
                 };
-                let (ended_tx, ended) = tokio::sync::oneshot::channel();
+                let (ended_tx, ended) = TrackCallback::oneshot();
                 let track = processor.write().await.add_track(
                     source,
                     volume,
-                    vec![TrackCommand::AddStopTrigger(Box::new(move |_| {
-                        let _ = ended_tx.send(());
-                    }))],
+                    vec![TrackCommand::AddStopTrigger(ended_tx)],
                 );
                 progress.current_track.set(track);
                 let _ = ended.await;
