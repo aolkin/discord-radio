@@ -39,7 +39,7 @@ The portal uses WebSockets for live status updates, automatically reconnecting i
 
 ### DJ Management
 
-When a guild has DJ enabled, you can control it directly from the web portal:
+When the bot is in a guild's voice channel, you can control that guild's DJ directly from the web portal:
 
 - **Advance DJ State**: Force the DJ to advance to the next state, with optional filtering:
   - Track - Force to play a track

@@ -1,6 +1,5 @@
 use crate::audio::connection::setup_voice_connection;
-use crate::audio::dj::config::DJConfig;
-use crate::audio::dj::manager::{DJCommand, DJStateType, send_dj_command};
+use crate::audio::dj::manager::{DJCommand, DJStateType, send_dj_command, start_dj, stop_dj};
 use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
 use crate::audio::processing::processor::ProcessorRef;
@@ -96,6 +95,7 @@ pub async fn leave_voice_channel(ctx: Context<'_>) -> Result<(), Error> {
                 .await?;
         } else {
             let _ = ctx.data().state_store.remove_voice_channel(guild_id).await;
+            stop_dj(ctx.data(), guild_id).await;
             ctx.say("Left voice channel").await?;
         }
     } else {
@@ -143,26 +143,22 @@ pub async fn play_message(
         volume,
         loops,
     };
-    let content = match send_dj_command(ctx.data(), guild_id, DJCommand::ForceHexMessage(request))
-        .await
-    {
-        Ok(()) => {
-            let loops_text = match loops {
-                Some(n) => format!("{n} loops"),
-                None => "DJ default loop count".to_string(),
-            };
-            format!(
-                "DJ is now playing message: \"{}\" ({}, volume {})",
-                message,
-                loops_text,
-                volume.unwrap_or(1.0)
-            )
-        }
-        Err(e) => format!(
-            "Failed to use DJ for message playback: {}\nNote: The DJ must be running to play messages.",
-            e
-        ),
-    };
+    let content =
+        match send_dj_command(ctx.data(), guild_id, DJCommand::ForceHexMessage(request)).await {
+            Ok(()) => {
+                let loops_text = match loops {
+                    Some(n) => format!("{n} loops"),
+                    None => "DJ default loop count".to_string(),
+                };
+                format!(
+                    "DJ is now playing message: \"{}\" ({}, volume {})",
+                    message,
+                    loops_text,
+                    volume.unwrap_or(1.0)
+                )
+            }
+            Err(e) => format!("Failed to use DJ for message playback: {}", e),
+        };
     reply
         .edit(
             ctx,
@@ -229,10 +225,7 @@ pub async fn play_track(
             filename,
             volume.unwrap_or(1.0)
         ),
-        Err(e) => format!(
-            "Failed to use DJ for track playback: {}\nNote: The DJ must be running to play tracks.",
-            e
-        ),
+        Err(e) => format!("Failed to use DJ for track playback: {}", e),
     };
     ctx.say(content).await?;
 
@@ -485,7 +478,11 @@ async fn join_voice_channel_helper(
 
     let handle_lock = manager.join(guild_id, channel_id).await?;
     tracing::info!("Joined voice channel");
-    Ok(setup_voice_connection(handle_lock.clone(), guild_id, ctx.data()).await)
+    let processor = setup_voice_connection(handle_lock.clone(), guild_id, ctx.data()).await;
+    start_dj(ctx.data(), guild_id, ctx.serenity_context().http.clone())
+        .await
+        .map_err(|e| e.context("Failed to start DJ"))?;
+    Ok(processor)
 }
 
 async fn autocomplete_profile(ctx: Context<'_>, partial: &'_ str) -> Vec<String> {
@@ -646,7 +643,7 @@ pub async fn dj_channel_status(
 pub async fn manage_dj(
     ctx: Context<'_>,
     #[description = "DJ configuration name"] config: String,
-    #[description = "Action: start, stop, or configure"] action: String,
+    #[description = "Action: configure"] action: String,
     #[description = "Text channel for announcements (optional)"] announcement_channel: Option<
         ChannelId,
     >,
@@ -669,103 +666,13 @@ pub async fn manage_dj(
     let action_lower = action.to_lowercase();
 
     match action_lower.as_str() {
-        "start" => {
-            let settings = ctx.data().dj_settings.get(guild_id).await;
-
-            let config_path = format!("dj_configs/{}.json", config);
-            let mut dj_config = match DJConfig::load_from_file(&config_path) {
-                Ok(cfg) => cfg.with_overrides(&settings),
-                Err(e) => {
-                    ctx.say(format!("Failed to load DJ config '{}': {}", config, e))
-                        .await?;
-                    return Ok(());
-                }
-            };
-
-            if let Err(e) = dj_config
-                .apply_dj_settings(&settings, &ctx.data().file_resolver)
-                .await
-            {
-                ctx.say(format!("Failed to load DJ content: {e:#}")).await?;
-                return Ok(());
-            }
-
-            let manager = ctx.data().dj_manager(guild_id).await;
-
-            let mut mgr = manager.lock().await;
-            if mgr.is_running() {
-                ctx.say(
-                    "DJ is already running! Stop it first before starting a new configuration.",
-                )
-                .await?;
-                return Ok(());
-            }
-
-            if let Err(e) = mgr
-                .start(
-                    dj_config,
-                    ctx.data(),
-                    ctx.serenity_context().http.clone(),
-                    announcement_channel,
-                    None,
-                )
-                .await
-            {
-                ctx.say(format!("Failed to start DJ: {}", e)).await?;
-                return Ok(());
-            }
-
-            let msg = if let Some(ch_id) = announcement_channel {
-                format!(
-                    "DJ started with configuration '{}' (announcements in <#{}>)",
-                    config, ch_id
-                )
-            } else {
-                format!("DJ started with configuration '{}'", config)
-            };
-
-            ctx.say(msg).await?;
-        }
-        "stop" => {
-            let dj_managers = ctx.data().dj_managers.read().await;
-            let manager = match dj_managers.get(&guild_id) {
-                Some(mgr) => mgr.clone(),
-                None => {
-                    ctx.say("DJ is not running").await?;
-                    return Ok(());
-                }
-            };
-            drop(dj_managers);
-
-            let mut mgr = manager.lock().await;
-            if !mgr.is_running() {
-                ctx.say("DJ is not running").await?;
-                return Ok(());
-            }
-
-            mgr.stop(ctx.data()).await;
-            ctx.say("DJ stopped").await?;
-        }
         "configure" => {
-            let dj_managers = ctx.data().dj_managers.read().await;
-            let manager = match dj_managers.get(&guild_id) {
-                Some(mgr) => mgr.clone(),
-                None => {
-                    ctx.say("DJ is not running").await?;
-                    return Ok(());
-                }
-            };
-            drop(dj_managers);
-
-            let mgr = manager.lock().await;
-            if !mgr.is_running() {
-                ctx.say("DJ is not running").await?;
-                return Ok(());
-            }
-
-            if let Err(e) = mgr
-                .send(DJCommand::SetAnnouncementChannel(announcement_channel))
-                .await
+            if let Err(e) = send_dj_command(
+                ctx.data(),
+                guild_id,
+                DJCommand::SetAnnouncementChannel(announcement_channel),
+            )
+            .await
             {
                 ctx.say(format!("Failed to configure DJ: {}", e)).await?;
                 return Ok(());
@@ -780,8 +687,7 @@ pub async fn manage_dj(
             ctx.say(msg).await?;
         }
         _ => {
-            ctx.say("Invalid action. Use 'start', 'stop', or 'configure'")
-                .await?;
+            ctx.say("Invalid action. Use 'configure'").await?;
         }
     }
 
@@ -807,13 +713,6 @@ pub async fn get_dj_state(ctx: Context<'_>) -> Result<(), Error> {
     );
 
     ctx.defer_ephemeral().await?;
-
-    let dj_managers = ctx.data().dj_managers.read().await;
-    if !dj_managers.contains_key(&guild_id) {
-        ctx.say("DJ is not running").await?;
-        return Ok(());
-    }
-    drop(dj_managers);
 
     let dj_states = ctx.data().dj_states.read().await;
     let state_arc = match dj_states.get(&guild_id) {
@@ -873,23 +772,6 @@ pub async fn advance_dj_state(
     );
 
     ctx.defer_ephemeral().await?;
-
-    let dj_managers = ctx.data().dj_managers.read().await;
-    let manager = match dj_managers.get(&guild_id) {
-        Some(mgr) => mgr.clone(),
-        None => {
-            ctx.say("DJ is not running").await?;
-            return Ok(());
-        }
-    };
-    drop(dj_managers);
-
-    let mgr = manager.lock().await;
-    if !mgr.is_running() {
-        ctx.say("DJ is not running").await?;
-        return Ok(());
-    }
-    drop(mgr);
 
     // Parse state type filter
     let state_type_filter = if let Some(type_str) = state_type {
