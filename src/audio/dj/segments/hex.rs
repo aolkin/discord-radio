@@ -4,7 +4,6 @@ use super::{
 };
 use crate::audio::dj::config::{HexMessageDefaults, HexMessageEntry};
 use crate::audio::dj::segments::signals::{Completed, CompletedSignal};
-use crate::audio::dj::serde::{deser_instant, ser_instant};
 use crate::audio::processing::mixer::{TrackCallback, TrackCommand};
 use crate::audio::processing::processor::AudioProcessor;
 use crate::audio::tracks::open_track_source;
@@ -16,7 +15,7 @@ use std::ops::Deref;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 
@@ -31,8 +30,6 @@ struct HexProgress {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct HexSegment {
     playback_config: CommonSegmentPlaybackConfig,
-    #[serde(serialize_with = "ser_instant", deserialize_with = "deser_instant")]
-    started_at: Instant,
     message: String,
     volume: f32,
     target_loops: usize,
@@ -67,7 +64,6 @@ impl HexSegment {
         };
         Self {
             playback_config,
-            started_at: Instant::now(),
             message,
             volume,
             target_loops,
@@ -114,10 +110,6 @@ impl HexSegment {
 impl Segment for HexSegment {
     fn completed(&self) -> Completed {
         self.done.completed()
-    }
-
-    fn elapsed(&self) -> Duration {
-        self.started_at.elapsed()
     }
 
     async fn restore(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
@@ -182,7 +174,6 @@ impl Segment for HexSegment {
                 "{} (loop {current_loop}/{}, char {current_char}/{hex_len})",
                 self.message, self.target_loops
             )),
-            elapsed: self.elapsed(),
             total: None,
         }
     }

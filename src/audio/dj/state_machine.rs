@@ -24,6 +24,12 @@ pub struct SegmentContainer {
     pub started_at: std::time::Instant,
 }
 
+impl SegmentContainer {
+    pub fn elapsed(&self) -> Duration {
+        self.started_at.elapsed()
+    }
+}
+
 impl Deref for SegmentContainer {
     type Target = dyn Segment;
     fn deref(&self) -> &Self::Target {

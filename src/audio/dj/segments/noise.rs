@@ -45,10 +45,6 @@ impl Segment for NoiseSegment {
         self.0.completed()
     }
 
-    fn elapsed(&self) -> Duration {
-        self.0.started_at.elapsed()
-    }
-
     fn loggable_properties(&self) -> serde_json::Value {
         serde_json::json!({
             "noise_profile": self.signal_profile().name,
@@ -69,7 +65,6 @@ impl Segment for NoiseSegment {
                 "Idle"
             },
             subject,
-            elapsed: self.0.started_at.elapsed(),
             total: Some(self.0.duration),
         }
     }
