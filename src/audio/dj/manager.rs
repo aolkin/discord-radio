@@ -125,7 +125,7 @@ pub async fn dj_task(
     };
 
     let mut profile_machine =
-        ProfileStateMachine::for_config(signal_profiles, initial_profile_name.as_deref());
+        ProfileStateMachine::new(signal_profiles, initial_profile_name.as_deref());
 
     if let Some(status_msg) = status_message {
         bot_state

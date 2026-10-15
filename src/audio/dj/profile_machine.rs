@@ -32,12 +32,8 @@ fn profile_segment(entry: &SignalProfileEntry, hold_starts_after: Duration) -> T
 }
 
 impl ProfileStateMachine {
-    /// Builds the machine for a config, falling back to a single `clear`
-    /// profile when the config lists none.
-    pub fn for_config(
-        mut profiles: Vec<SignalProfileEntry>,
-        initial_profile_name: Option<&str>,
-    ) -> Self {
+    /// Falls back to a single `clear` profile when the list is empty.
+    pub fn new(mut profiles: Vec<SignalProfileEntry>, initial_profile_name: Option<&str>) -> Self {
         if profiles.is_empty() {
             profiles.push(SignalProfileEntry {
                 profile_name: "clear".to_string(),
