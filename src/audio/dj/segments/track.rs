@@ -1,7 +1,4 @@
-use super::{
-    CommonSegmentPlaybackConfig, Completed, Segment, SegmentCtx, SegmentPlaybackConfig,
-    StateDisplay, TimedSegment, TrackSlot, completed_signal, signal_completed,
-};
+use super::{completed_signal, signal_completed, CommonSegmentPlaybackConfig, Completed, CompletedSignal, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay, TimedSegment, TrackSlot};
 use crate::audio::dj::config::TrackEntry;
 use crate::audio::duration::DurationCache;
 use crate::audio::processing::mixer::{TrackCallback, TrackCommand};
@@ -23,8 +20,8 @@ pub struct TrackSegment {
     start_position: Option<Duration>,
     #[serde(skip)]
     track: TrackSlot,
-    #[serde(skip, default = "completed_signal")]
-    done: watch::Sender<bool>,
+    #[serde(skip)]
+    done: CompletedSignal,
 }
 
 impl Deref for TrackSegment {
@@ -53,7 +50,7 @@ impl TrackSegment {
             volume,
             start_position,
             track: Default::default(),
-            done: completed_signal(),
+            done: Default::default(),
         }
     }
 

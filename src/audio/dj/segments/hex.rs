@@ -1,6 +1,6 @@
 use super::{
-    CommonSegmentPlaybackConfig, Completed, Segment, SegmentCtx, SegmentPlaybackConfig,
-    StateDisplay, TrackSlot, completed_signal, signal_completed,
+    CommonSegmentPlaybackConfig, Completed, CompletedSignal, Segment, SegmentCtx,
+    SegmentPlaybackConfig, StateDisplay, TrackSlot, completed_signal, signal_completed,
 };
 use crate::audio::dj::config::{HexMessageDefaults, HexMessageEntry};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
@@ -40,8 +40,8 @@ pub struct HexSegment {
     announcement: Option<String>,
     #[serde(skip)]
     run: Mutex<Option<JoinHandle<()>>>,
-    #[serde(skip, default = "completed_signal")]
-    done: watch::Sender<bool>,
+    #[serde(skip)]
+    done: CompletedSignal,
 }
 
 struct SignalOnDrop(watch::Sender<bool>);
@@ -82,7 +82,7 @@ impl HexSegment {
             announcement,
             progress: Default::default(),
             run: Default::default(),
-            done: completed_signal(),
+            done: Default::default(),
         }
     }
 

@@ -21,20 +21,59 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tokio::sync::watch;
 
-/// Owns its state, so waiting on it holds no lock on the segment.
-pub type Completed = BoxFuture<'static, ()>;
+pub struct Completed(BoxFuture<'static, ()>);
+
+impl Deref for Completed {
+    type Target = BoxFuture<'static, ()>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl From<BoxFuture<'static, ()>> for Completed {
+    fn from(future: BoxFuture<'static, ()>) -> Self {
+        Self(future)
+    }
+}
+
+impl Completed {
+    pub fn at(instant: Instant) -> Self {
+        Box::pin(tokio::time::sleep_until(tokio::time::Instant::from_std(
+            instant,
+        )))
+        .into()
+    }
+
+    pub fn when(future: impl Future<Output = ()>) -> Self {
+        Box::pin(future).into()
+    }
+}
+
+#[derive(Debug)]
+struct CompletedSignal(watch::Sender<bool>);
+
+impl Default for CompletedSignal {
+    fn default() -> Self {
+        Self(watch::channel(false).0)
+    }
+}
+
+impl CompletedSignal {
+    pub fn completed(&self) -> Completed {
+        let mut rx = self.0.subscribe();
+        Completed::when(async move {
+            // An Err means the segment dropped its sender, so it is finished.
+            let _ = rx.wait_for(|done| *done).await;
+        })
+    }
+}
 
 pub fn completed_signal() -> watch::Sender<bool> {
     watch::channel(false).0
 }
 
-pub fn signal_completed(signal: &watch::Sender<bool>) -> Completed {
-    let mut rx = signal.subscribe();
-    Box::pin(async move {
-        // An Err means the segment dropped its sender, so it is finished.
-        let _ = rx.wait_for(|done| *done).await;
-    })
-}
+pub fn signal_completed(signal: &watch::Sender<bool>) -> Completed {}
 
 pub struct SegmentCtx<'a> {
     pub guild_id: &'a GuildId,
@@ -198,9 +237,7 @@ impl TimedSegment {
     }
 
     pub fn completed(&self) -> Completed {
-        Box::pin(tokio::time::sleep_until(tokio::time::Instant::from_std(
-            self.started_at + self.duration,
-        )))
+        Completed::at(self.started_at + self.duration)
     }
 }
 
