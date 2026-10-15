@@ -81,7 +81,7 @@ impl DJStateMachine {
         self.state.read().await
     }
 
-    pub async fn completed(&self) {
+    pub async fn state_completed(&self) {
         self.current_state().await.segment.completed().await
     }
 

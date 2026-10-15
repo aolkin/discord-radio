@@ -12,7 +12,6 @@ use crate::bucket::FileResolver;
 use async_trait::async_trait;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use serenity::model::id::GuildId;
 use std::ops::Deref;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};

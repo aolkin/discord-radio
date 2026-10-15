@@ -151,7 +151,7 @@ pub async fn dj_task(
                     break 'dj;
                 }
             }
-            _ = state_machine.completed() => {
+            _ = state_machine.state_completed() => {
                 if let Err(e) = state_machine.force_advance(&bot_state, None).await {
                     tracing::error!("Failed to advance to next state for guild {}: {}", guild_id, e);
                     tokio::time::sleep(Duration::from_millis(DJ_TICK_INTERVAL_MS)).await;
