@@ -113,28 +113,19 @@ pub async fn dj_task(
     );
 
     // Initialize profile state machine
-    let mut profile_machine = if !signal_profiles.is_empty() {
-        let forced_profile_name = forced_profile.as_deref();
-
-        // If no forced profile, try to restore the last active profile from ProfileState
-        let initial_profile_name = if let Some(profile_name) = forced_profile_name {
-            Some(profile_name.to_string())
-        } else if let Ok(profile_states) = bot_state.state_store.load_profile_states().await {
-            profile_states
-                .get(&guild_id)
-                .filter(|ps| !ps.bypass)
-                .map(|ps| ps.profile_name.clone())
-        } else {
-            None
-        };
-
-        Some(ProfileStateMachine::new(
-            signal_profiles,
-            initial_profile_name.as_deref(),
-        ))
+    let initial_profile_name = if let Some(profile_name) = forced_profile {
+        Some(profile_name)
+    } else if let Ok(profile_states) = bot_state.state_store.load_profile_states().await {
+        profile_states
+            .get(&guild_id)
+            .filter(|ps| !ps.bypass)
+            .map(|ps| ps.profile_name.clone())
     } else {
         None
     };
+
+    let mut profile_machine =
+        ProfileStateMachine::new(signal_profiles, initial_profile_name.as_deref());
 
     if let Some(status_msg) = status_message {
         bot_state
@@ -168,18 +159,10 @@ pub async fn dj_task(
         // Persist DJ state periodically (including state machine state)
         persist_state(guild_id, bot_state, &config_name, &mut state_machine).await;
 
-        if let Some(ref mut pm) = profile_machine {
-            let forced_profile = state_machine.current_state().await.forced_profile();
-            if let Some((profile_name, fade_secs, reason)) = pm.update(forced_profile) {
-                apply_profile_transition(
-                    guild_id,
-                    Some(&profile_name),
-                    fade_secs,
-                    &bot_state,
-                    reason,
-                )
+        let forced_profile = state_machine.current_state().await.forced_profile();
+        if let Some((profile_name, fade_secs, reason)) = profile_machine.update(forced_profile) {
+            apply_profile_transition(guild_id, Some(&profile_name), fade_secs, &bot_state, reason)
                 .await;
-            }
         }
     }
 
