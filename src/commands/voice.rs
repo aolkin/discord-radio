@@ -830,7 +830,7 @@ pub async fn get_dj_state(ctx: Context<'_>) -> Result<(), Error> {
     };
 
     let display = state.segment.state_display();
-    let elapsed = display.elapsed.as_secs();
+    let elapsed = state.segment.elapsed().as_secs();
     let time = match display.total {
         Some(total) => format!("{elapsed}/{}s", total.as_secs()),
         None => format!("{elapsed}s elapsed"),
