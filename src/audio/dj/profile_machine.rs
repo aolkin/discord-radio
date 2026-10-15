@@ -11,6 +11,7 @@ pub struct ProfileStateMachine {
     current: Option<TimedSegment>,
     profiles: Vec<SignalProfileEntry>,
     selector: WeightedSelector,
+    forced: SignalProfilePlayback,
 }
 
 fn profile_segment(entry: &SignalProfileEntry, hold_starts_after: Duration) -> TimedSegment {
@@ -51,26 +52,35 @@ impl ProfileStateMachine {
             current,
             profiles,
             selector,
+            forced: SignalProfilePlayback::default(),
         }
     }
 
-    pub fn advance(&mut self) -> Option<(String, f32)> {
-        if self.current.as_ref().is_some_and(TimedSegment::is_elapsed) {
-            return self.next_profile();
+    /// Follows the segment's forced profile and returns the transition
+    /// (name, fade seconds, reason) it calls for, advancing normally while the
+    /// forced profile is unchanged.
+    pub fn update(&mut self, forced: SignalProfilePlayback) -> Option<(String, f32, &'static str)> {
+        if forced.name == self.forced.name {
+            if self.current.as_ref().is_some_and(TimedSegment::is_elapsed) {
+                return self
+                    .next_profile()
+                    .map(|(profile_name, fade_secs)| (profile_name, fade_secs, ""));
+            }
+            return None;
         }
-        None
-    }
-
-    pub fn force_profile(&mut self, _profile_name: String) {
-        self.current = None;
-    }
-
-    pub fn release_forced_profile(&mut self) -> Option<(String, f32)> {
-        if self.current.is_none() {
-            // Always transition to next random profile
-            return self.next_profile();
+        let previous = std::mem::replace(&mut self.forced, forced);
+        if let Some(profile) = self.forced.name.clone() {
+            self.current = None;
+            Some((profile, self.forced.fade_in().as_secs_f32(), "(forced)"))
+        } else {
+            self.next_profile().map(|(profile_name, _)| {
+                (
+                    profile_name,
+                    previous.fade_out().as_secs_f32(),
+                    "after releasing forced profile",
+                )
+            })
         }
-        None
     }
 
     fn next_profile(&mut self) -> Option<(String, f32)> {
