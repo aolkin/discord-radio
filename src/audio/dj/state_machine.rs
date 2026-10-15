@@ -1,5 +1,5 @@
 use crate::audio::dj::config::DJConfig;
-use crate::audio::dj::manager::{DJStateType, HexMessageRequest, TrackRequest};
+use crate::audio::dj::manager::{DJCommand, DJStateType, HexMessageRequest, TrackRequest};
 use crate::audio::dj::scheduler::{DJStateEntry, WeightedScheduler};
 use crate::audio::dj::segments::{HexSegment, Segment, SignalProfilePlayback, TrackSegment};
 use crate::audio::dj::segments::{NoiseSegment, SegmentCtx};
@@ -11,7 +11,6 @@ use serenity::model::id::{ChannelId, GuildId};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{RwLock, RwLockReadGuard};
-use tracing::info;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DJState {
@@ -109,7 +108,7 @@ impl DJStateMachine {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let Self { scheduler, .. } = self;
         let next_state_type = scheduler.next_state(state_type_filter);
-        info!("DJ transitioning to state: {next_state_type}");
+        tracing::info!("DJ transitioning to state: {next_state_type}");
         let next_state = match next_state_type {
             DJStateEntry::Track(entry) => {
                 TrackSegment::from_entry(entry, &bot_state.duration_cache)
@@ -132,7 +131,7 @@ impl DJStateMachine {
         bot_state: &Data,
         request: HexMessageRequest,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        info!(
+        tracing::info!(
             "DJ force transitioning to hex message with custom text: {}",
             request.message
         );
@@ -157,7 +156,7 @@ impl DJStateMachine {
         bot_state: &Data,
         request: TrackRequest,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        info!("DJ force transitioning to track: {}", request.filename);
+        tracing::info!("DJ force transitioning to track: {}", request.filename);
         let start_position = request
             .start_position
             .map(Duration::try_from_secs_f32)
@@ -238,6 +237,43 @@ impl DJStateMachine {
                 .remove_status(self.guild_id, &status, &self.http)
                 .await;
         }
+    }
+
+    /// Handle the command and return true if the DJ should be stopped
+    pub async fn handle_command(&mut self, command: DJCommand) -> bool {
+        let bot_state = self.bot_state;
+        let cmd_name: &'static str = (&command).into();
+        let result = match command {
+            DJCommand::ForceAdvance(state_type_filter) => {
+                tracing::info!("Processing force advance for DJ in guild {}", self.guild_id);
+                self.force_advance(&bot_state, state_type_filter).await
+            }
+            DJCommand::ForceHexMessage(request) => {
+                self.force_hex_message(&bot_state, request).await
+            }
+            DJCommand::ForceTrack(request) => self.force_track(&bot_state, request).await,
+            DJCommand::Stop => {
+                tracing::info!("Processing stop command for DJ in guild {}", self.guild_id);
+                self.stop(&bot_state).await;
+                return true;
+            }
+            DJCommand::SetAnnouncementChannel(new_channel) => {
+                tracing::info!(
+                    "Setting DJ announcement channel to {:?} in guild {}",
+                    new_channel,
+                    self.guild_id
+                );
+                self.set_announcement_channel(new_channel);
+                Ok(())
+            }
+        };
+        if let Err(e) = result {
+            tracing::error!(
+                "DJ command {cmd_name} failed in guild {}: {e}",
+                self.guild_id
+            );
+        }
+        false
     }
 
     fn pick_random_announcement(&self) -> Option<String> {
