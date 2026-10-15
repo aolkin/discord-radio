@@ -15,7 +15,6 @@ use crate::state::{BotState, Data};
 use poise::serenity_prelude::{self as serenity, GatewayIntents};
 use songbird::SerenityInit;
 use std::sync::Arc;
-use tracing::info;
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 
@@ -213,7 +212,7 @@ async fn main() -> Result<(), Error> {
         println!("radio-bot-{} ({})", run_number, commit_hash);
         return Ok(());
     } else {
-        info!("Starting radio-bot-{} ({})", run_number, commit_hash);
+        tracing::info!("Starting radio-bot-{} ({})", run_number, commit_hash);
     }
 
     let discord_token =
@@ -342,7 +341,7 @@ async fn main() -> Result<(), Error> {
                     .iter()
                     .map(|cmd| cmd.name.as_str())
                     .collect();
-                info!(
+                tracing::info!(
                     "Registered {} commands globally: {}",
                     framework.options().commands.len(),
                     command_names.join(", ")

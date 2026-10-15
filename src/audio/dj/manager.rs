@@ -12,6 +12,7 @@ use tokio::time::{Duration, sleep};
 
 const DJ_TICK_INTERVAL_MS: u64 = 100;
 
+#[derive(strum::IntoStaticStr)]
 pub enum DJCommand {
     ForceAdvance(Option<DJStateType>),
     ForceHexMessage(HexMessageRequest),
@@ -204,42 +205,9 @@ pub async fn dj_task(
 
         // Process any pending commands
         while let Ok(cmd) = command_rx.try_recv() {
-            match cmd {
-                DJCommand::ForceAdvance(state_type_filter) => {
-                    tracing::info!("Processing force advance for DJ in guild {}", guild_id);
-                    if let Err(e) = state_machine
-                        .force_advance(&bot_state, state_type_filter)
-                        .await
-                    {
-                        tracing::error!("DJ failed to force advance: {}", e);
-                    }
-                }
-                DJCommand::ForceHexMessage(request) => {
-                    tracing::info!("Processing force hex message for DJ in guild {}", guild_id);
-                    if let Err(e) = state_machine.force_hex_message(&bot_state, request).await {
-                        tracing::error!("DJ failed to force hex message: {}", e);
-                    }
-                }
-                DJCommand::ForceTrack(request) => {
-                    tracing::info!("Processing force track for DJ in guild {}", guild_id);
-                    if let Err(e) = state_machine.force_track(&bot_state, request).await {
-                        tracing::error!("DJ failed to force track: {}", e);
-                    }
-                }
-                DJCommand::Stop => {
-                    tracing::info!("Processing stop command for DJ in guild {}", guild_id);
-                    state_machine.stop(&bot_state).await;
-                    tracing::info!("DJ task stopped for guild {}", guild_id);
-                    break 'dj;
-                }
-                DJCommand::SetAnnouncementChannel(new_channel) => {
-                    tracing::info!(
-                        "Setting DJ announcement channel to {:?} in guild {}",
-                        new_channel,
-                        guild_id
-                    );
-                    state_machine.set_announcement_channel(new_channel);
-                }
+            if state_machine.handle_command(cmd).await {
+                tracing::info!("DJ task stopped for guild {}", guild_id);
+                break 'dj;
             }
         }
 
@@ -250,21 +218,7 @@ pub async fn dj_task(
         }
 
         // Persist DJ state periodically (including state machine state)
-        let current_state = state_machine.current_state().await;
-        let persist_state = crate::persistence::DJStateSnapshot {
-            config_name: &config_name,
-            running: true,
-            announcement_channel_id: state_machine.announcement_channel().map(|id| id.get()),
-            state_machine: &current_state,
-        };
-        if let Err(e) = bot_state
-            .state_store
-            .save_dj_state(guild_id, &persist_state)
-            .await
-        {
-            tracing::warn!("Failed to persist DJ state for guild {}: {}", guild_id, e);
-        }
-        drop(current_state);
+        persist_state(guild_id, bot_state, &config_name, &mut state_machine).await;
 
         let new_forced_profile = state_machine.current_state().await.forced_profile();
 
@@ -325,6 +279,28 @@ pub async fn dj_task(
     }
 
     tracing::info!("DJ task terminated for guild {}", guild_id);
+}
+
+async fn persist_state(
+    guild_id: GuildId,
+    bot_state: Data,
+    config_name: &String,
+    state_machine: &mut DJStateMachine,
+) {
+    let current_state = state_machine.current_state().await;
+    let persist_state = crate::persistence::DJStateSnapshot {
+        config_name,
+        running: true,
+        announcement_channel_id: state_machine.announcement_channel().map(|id| id.get()),
+        state_machine: &current_state,
+    };
+    if let Err(e) = bot_state
+        .state_store
+        .save_dj_state(guild_id, &persist_state)
+        .await
+    {
+        tracing::warn!("Failed to persist DJ state for guild {}: {}", guild_id, e);
+    }
 }
 
 pub struct DJManager {
@@ -478,13 +454,7 @@ pub async fn send_dj_command(
     guild_id: GuildId,
     command: DJCommand,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let dj_managers = bot_state.dj_managers.read().await;
-    let manager = dj_managers
-        .get(&guild_id)
-        .ok_or("DJ manager not found")?
-        .clone();
-    drop(dj_managers);
-
+    let manager = bot_state.dj_manager(guild_id).await;
     let mgr = manager.lock().await;
     mgr.send(command).await
 }

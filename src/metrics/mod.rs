@@ -9,7 +9,6 @@ use opentelemetry_sdk::{
 };
 use std::sync::OnceLock;
 use std::time::Duration;
-use tracing::info;
 
 /// Metrics collector for the Discord bot
 #[derive(Clone)]
@@ -124,7 +123,7 @@ pub fn init_metrics(
     metrics_url: String,
     api_key: String,
 ) -> Result<(SdkMeterProvider, &'static BotMetrics), Box<dyn std::error::Error + Send + Sync>> {
-    info!("Initializing metrics with OTLP HTTP exporter");
+    tracing::info!("Initializing metrics with OTLP HTTP exporter");
 
     // Create OTLP exporter
     let exporter = MetricExporter::builder()
@@ -144,7 +143,7 @@ pub fn init_metrics(
         .and_then(|v| v.parse::<u64>().ok())
         .unwrap_or(60);
 
-    info!(
+    tracing::info!(
         "Metrics collection interval: {} seconds",
         metrics_interval_secs
     );
@@ -166,7 +165,7 @@ pub fn init_metrics(
     let meter = provider.meter("radio-bot");
     let metrics = METRICS.get_or_init(|| BotMetrics::new(meter));
 
-    info!("Metrics initialized successfully");
+    tracing::info!("Metrics initialized successfully");
     Ok((provider, metrics))
 }
 
