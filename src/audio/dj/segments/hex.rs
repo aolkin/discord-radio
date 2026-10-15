@@ -88,7 +88,6 @@ impl HexSegment {
             self.progress.clone(),
             processor,
             ctx.file_resolver().clone(),
-            *ctx.guild_id,
             self.done.clone(),
         ));
         *self.run.lock().unwrap() = Some(handle);
@@ -197,7 +196,6 @@ async fn run_hex_message(
     progress: Arc<HexProgress>,
     processor: Arc<RwLock<AudioProcessor>>,
     file_resolver: FileResolver,
-    guild_id: GuildId,
     done: CompletedSignal,
 ) {
     let hex_chars = message_to_hex_sequence(&message);
@@ -232,9 +230,7 @@ async fn run_hex_message(
         } else {
             progress.position.store(0, Ordering::Relaxed);
             let loops = progress.loops.fetch_add(1, Ordering::Relaxed) + 1;
-            tracing::info!(
-                "Hex message '{message}' completed loop {loops}/{target_loops} in guild {guild_id}"
-            );
+            tracing::info!("Hex message '{message}' completed loop {loops}/{target_loops}");
             if loops >= target_loops {
                 break;
             }
