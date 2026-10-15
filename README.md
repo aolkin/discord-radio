@@ -96,7 +96,8 @@ See [WEB_PORTAL.md](WEB_PORTAL.md) for more details.
 - `/play_track` - Have the DJ play an audio track now (requires a running DJ)
 - `/change_track_state` - Start or stop an audio track with fade transition
 - `/get_current_tracks` - Display all currently playing audio tracks
-- `/signal_profile` - Change the audio signal processing profile
+- `/dj_profile` - Set the DJ's background signal profile with an optional fade used to fade in and out of it, or clear it to return to rotation
+- `/dj_profile_override` - Set the DJ's signal profile override with an optional fade used to fade in and out of it (0 switches instantly), or clear it
 - `/manage_dj` - Manage the radio DJ for automated playback
 - `/get_dj_state` - Get the current state of the DJ
 - `/advance_dj_state` - Force the DJ to advance to the next state (for testing)

@@ -1,12 +1,15 @@
 use crate::audio::connection::setup_voice_connection;
 use crate::audio::dj::config::DJConfig;
 use crate::audio::dj::manager::{DJCommand, DJStateType, send_dj_command};
+use crate::audio::dj::segments::SignalProfilePlayback;
+use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
 use crate::audio::processing::processor::ProcessorRef;
 use crate::audio::tracks::get_or_create_track_manager;
 use crate::commands::utils;
 use crate::commands::utils::{Context, Error};
 use serenity::all::{ChannelId, ChannelType, GuildId};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 /// Join a voice channel to broadcast audio
 #[poise::command(
@@ -486,135 +489,119 @@ async fn join_voice_channel_helper(
 }
 
 async fn autocomplete_profile(ctx: Context<'_>, partial: &'_ str) -> Vec<String> {
-    let mut profiles = Vec::new();
-
-    // Add special "bypass" profile
-    if "bypass".starts_with(partial) {
-        profiles.push("bypass".to_string());
-    }
-
-    profiles.extend(
-        ctx.data()
-            .profile_manager
-            .list_profiles()
-            .into_iter()
-            .filter(|name| name.starts_with(partial)),
-    );
-
+    let mut profiles: Vec<String> = ctx
+        .data()
+        .profile_manager
+        .list_profiles()
+        .into_iter()
+        .filter(|name| name.starts_with(partial))
+        .collect();
     profiles.sort();
     profiles
 }
 
-/// Change the audio signal processing profile
+async fn set_dj_profile(
+    ctx: Context<'_>,
+    profile: Option<String>,
+    fade_duration: Option<f32>,
+    default_fade: Option<Duration>,
+    label: &str,
+    command: fn(Option<SignalProfilePlayback>) -> DJCommand,
+) -> Result<(), Error> {
+    ctx.defer_ephemeral().await?;
+
+    let guild_id = ctx
+        .guild_id()
+        .ok_or("This command can only be used in a server")?;
+
+    if profile.is_none() && fade_duration.is_some() {
+        ctx.say(format!("Fade duration only applies when setting a {label}"))
+            .await?;
+        return Ok(());
+    }
+    let fade = match fade_duration.map(Duration::try_from_secs_f32) {
+        Some(Ok(fade)) => Some(fade),
+        Some(Err(_)) => {
+            ctx.say("Fade duration must be a non-negative number of seconds")
+                .await?;
+            return Ok(());
+        }
+        None => default_fade,
+    };
+
+    if let Some(profile) = &profile
+        && ctx.data().profile_manager.get_profile(profile).is_none()
+    {
+        ctx.say(format!("Profile '{profile}' not found")).await?;
+        return Ok(());
+    }
+
+    let message = match &profile {
+        Some(profile) => format!("DJ {label} set to '{profile}'"),
+        None => format!("DJ {label} cleared"),
+    };
+    let playback = profile.map(|profile| SignalProfilePlayback {
+        name: profile,
+        fade_in_duration: fade,
+        fade_out_duration: fade,
+    });
+    if let Err(e) = send_dj_command(ctx.data(), guild_id, command(playback)).await {
+        ctx.say(format!("Failed to update DJ {label}: {e}")).await?;
+        return Ok(());
+    }
+    ctx.say(message).await?;
+
+    Ok(())
+}
+
+/// Set or clear the DJ's background signal profile, which replaces rotation
 #[poise::command(
     slash_command,
     guild_only,
     default_member_permissions = "ADMINISTRATOR"
 )]
-pub async fn signal_profile(
+pub async fn dj_profile(
     ctx: Context<'_>,
-    #[description = "Profile name"]
+    #[description = "Profile name (omit to return to rotation)"]
     #[autocomplete = "autocomplete_profile"]
-    profile: String,
-    #[description = "Fade duration in seconds (default: 2.0)"] fade_duration: Option<f32>,
+    profile: Option<String>,
+    #[description = "Fade duration in seconds when setting"] fade_duration: Option<f32>,
 ) -> Result<(), Error> {
-    let guild_id = ctx
-        .guild_id()
-        .ok_or("This command can only be used in a server")?;
-    let user_id = ctx.author().id;
-
-    tracing::info!(
-        "User {} executed signal_profile with profile '{}' and fade_duration {:?} in guild {}",
-        user_id,
+    set_dj_profile(
+        ctx,
         profile,
         fade_duration,
-        guild_id
-    );
+        None,
+        "background profile",
+        DJCommand::SetBackgroundProfile,
+    )
+    .await
+}
 
-    ctx.defer_ephemeral().await?;
-
-    let fade_duration_ms = fade_duration.unwrap_or(2.0) * 1000.0;
-
-    if fade_duration_ms < 0.0 {
-        ctx.say("Fade duration must be non-negative").await?;
-        return Ok(());
-    }
-
-    let processors = ctx.data().audio_processors.read().await;
-    let processor_arc = processors.get(&guild_id).cloned();
-    drop(processors);
-
-    if let Some(processor_arc) = processor_arc {
-        // Handle special "bypass" profile
-        if profile == "bypass" {
-            let mut processor = processor_arc.write().await;
-            processor.set_bypass(true);
-            drop(processor);
-
-            // Persist bypass state
-            let profile_state = crate::persistence::ProfileState {
-                profile_name: "bypass".to_string(),
-                bypass: true,
-            };
-            if let Err(e) = ctx
-                .data()
-                .state_store
-                .save_profile_state(guild_id, &profile_state)
-                .await
-            {
-                tracing::warn!("Failed to save profile state: {}", e);
-            }
-
-            ctx.say("DSP bypass enabled - audio will pass through unprocessed")
-                .await?;
-            return Ok(());
-        }
-
-        // Load regular profile from ProfileManager
-        if let Some(new_profile) = ctx.data().profile_manager.get_profile(&profile) {
-            let mut processor = processor_arc.write().await;
-
-            if fade_duration_ms > 0.0 {
-                processor.start_profile_transition(new_profile.clone(), fade_duration_ms);
-            } else {
-                processor.set_profile_immediate(new_profile.clone());
-            }
-
-            drop(processor);
-
-            // Persist profile state
-            let profile_state = crate::persistence::ProfileState {
-                profile_name: profile.clone(),
-                bypass: false,
-            };
-            if let Err(e) = ctx
-                .data()
-                .state_store
-                .save_profile_state(guild_id, &profile_state)
-                .await
-            {
-                tracing::warn!("Failed to save profile state: {}", e);
-            }
-
-            ctx.say(format!(
-                "Switched to signal profile '{}' with {}s fade",
-                profile,
-                fade_duration_ms / 1000.0
-            ))
-            .await?;
-        } else {
-            ctx.say(format!("Profile '{}' could not be loaded", profile))
-                .await?;
-        }
-    } else {
-        ctx.say(
-            "Audio processor not initialized for this guild.\n\
-                Note: Full DSP integration requires refactoring the track system.",
-        )
-        .await?;
-    }
-
-    Ok(())
+/// Set or clear the DJ's signal profile override, which beats every other profile
+#[poise::command(
+    slash_command,
+    guild_only,
+    default_member_permissions = "ADMINISTRATOR"
+)]
+pub async fn dj_profile_override(
+    ctx: Context<'_>,
+    #[description = "Profile name (omit to clear)"]
+    #[autocomplete = "autocomplete_profile"]
+    profile: Option<String>,
+    #[description = "Fade duration in seconds when setting (default: 2.0)"] fade_duration: Option<
+        f32,
+    >,
+) -> Result<(), Error> {
+    set_dj_profile(
+        ctx,
+        profile,
+        fade_duration,
+        Some(DEFAULT_PROFILE_FADE),
+        "profile override",
+        DJCommand::SetOverrideProfile,
+    )
+    .await
 }
 
 /// Manage the radio DJ for automated playback
@@ -809,25 +796,9 @@ pub async fn get_dj_state(ctx: Context<'_>) -> Result<(), Error> {
     let state = state_arc.read().await;
 
     // Get current signal profile information
-    let profile_info = {
-        let profile_states = ctx.data().state_store.load_profile_states().await.ok();
-        if let Some(states) = profile_states
-            && let Some(profile_state) = states.get(&guild_id)
-            && !profile_state.bypass
-        {
-            let forced_indicator = if state.forced_profile().is_some() {
-                " (forced)"
-            } else {
-                ""
-            };
-            format!(
-                "\nSignal Profile: **{}**{}",
-                profile_state.profile_name, forced_indicator
-            )
-        } else {
-            String::new()
-        }
-    };
+    let profile = state.effective_profile().name;
+    let source = state.profile_source();
+    let profile_info = format!("\nSignal Profile: **{profile}** ({source})");
 
     let display = state.segment.state_display();
     let elapsed = state.segment.elapsed().as_secs();

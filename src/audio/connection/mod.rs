@@ -47,36 +47,6 @@ pub async fn setup_voice_connection(
     let adapter = ProcessedAudioAdapter::new(processor.clone());
     adapter.start(handle_lock.clone()).await;
 
-    // Restore saved profile state if available
-    if let Ok(profile_states) = bot_state.state_store.load_profile_states().await
-        && let Some(profile_state) = profile_states.get(&guild_id)
-    {
-        let mut proc = processor.write().await;
-
-        if profile_state.bypass {
-            proc.set_bypass(true);
-            tracing::info!("Restored bypass state for guild {}", guild_id);
-        } else {
-            // Load the saved profile from ProfileManager
-            if let Some(saved_profile) = bot_state
-                .profile_manager
-                .get_profile(&profile_state.profile_name)
-            {
-                proc.set_profile_immediate(saved_profile.clone());
-                tracing::info!(
-                    "Restored profile '{}' for guild {}",
-                    profile_state.profile_name,
-                    guild_id
-                );
-            } else {
-                tracing::warn!(
-                    "Saved profile '{}' not found, using default",
-                    profile_state.profile_name
-                );
-            }
-        }
-    }
-
     tracing::info!("Initialized audio DSP processor for guild {}", guild_id);
 
     processor
