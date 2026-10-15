@@ -88,7 +88,7 @@ pub async fn dj_task(
     };
 
     let (forced_profile, status_message) = {
-        let segment = &initial_state.current;
+        let segment = &initial_state.segment;
         let _ = segment
             .restore(&SegmentCtx::new(&guild_id, bot_state))
             .await

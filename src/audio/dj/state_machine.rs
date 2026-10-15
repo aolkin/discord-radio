@@ -39,18 +39,18 @@ impl<S: Segment + 'static> From<S> for SegmentContainer {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DJState {
-    pub current: SegmentContainer,
+    pub segment: SegmentContainer,
 }
 
 impl DJState {
     pub fn idle() -> Self {
         Self {
-            current: NoiseSegment::idle(Duration::from_secs(1)).into(),
+            segment: NoiseSegment::idle(Duration::from_secs(1)).into(),
         }
     }
 
     pub fn forced_profile(&self) -> SignalProfilePlayback {
-        self.current.signal_profile()
+        self.segment.signal_profile()
     }
 }
 
@@ -97,7 +97,7 @@ impl DJStateMachine {
     }
 
     pub async fn state_completed(&self) {
-        self.current_state().await.current.completed().await
+        self.current_state().await.segment.completed().await
     }
 
     pub fn announcement_channel(&self) -> Option<ChannelId> {
@@ -210,17 +210,16 @@ impl DJStateMachine {
 
         self.cleanup_current_state(bot_state).await;
 
-        let segment = &*next;
-        segment.enter(&self.segment_ctx()).await?;
+        next.enter(&self.segment_ctx()).await?;
 
         if let Some(channel) = self.announcement_channel
-            && let Some(announcement) = segment.announcement()
+            && let Some(announcement) = next.announcement()
             && let Err(e) = channel.say(&self.http, announcement).await
         {
             tracing::warn!("Failed to send DJ announcement: {}", e);
         }
 
-        if let Some(status) = segment.channel_status() {
+        if let Some(status) = next.channel_status() {
             bot_state
                 .voice_status_manager
                 .push_status(self.guild_id, &status, &self.http)
@@ -228,7 +227,7 @@ impl DJStateMachine {
         }
 
         let to_state = next.state_name().to_string();
-        self.state.write().await.current = next;
+        self.state.write().await.segment = next;
         if let Some(metrics) = crate::metrics::get() {
             metrics.record_dj_state_transition(self.guild_id.get(), &from_state, &to_state);
         }
@@ -240,17 +239,16 @@ impl DJStateMachine {
 
     async fn cleanup_current_state(&self, bot_state: &Data) {
         let current = self.state.read().await;
-        let segment = &*current.current;
         if let Some(metrics) = crate::metrics::get() {
             metrics.record_dj_state_duration(
                 self.guild_id.get(),
-                segment.state_name(),
-                segment.signal_profile().name.as_deref(),
-                current.current.started_at.elapsed().as_secs_f64(),
+                current.segment.state_name(),
+                current.segment.signal_profile().name.as_deref(),
+                current.segment.started_at.elapsed().as_secs_f64(),
             );
         }
-        segment.exit(&self.segment_ctx()).await;
-        if let Some(status) = segment.channel_status() {
+        current.segment.exit(&self.segment_ctx()).await;
+        if let Some(status) = current.segment.channel_status() {
             bot_state
                 .voice_status_manager
                 .remove_status(self.guild_id, &status, &self.http)
@@ -308,7 +306,7 @@ impl DJStateMachine {
     async fn log_state_transition(&self, bot_state: &Data) -> bool {
         let state = self.state.read().await;
         let event_type = self.get_state_name(&state);
-        let details = state.current.loggable_properties();
+        let details = state.segment.loggable_properties();
         // Drop the read guard before awaiting the log write below so it isn't held
         // across unrelated file I/O.
         drop(state);
@@ -319,6 +317,6 @@ impl DJStateMachine {
     }
 
     fn get_state_name(&self, state: &DJState) -> String {
-        state.current.state_name().to_string()
+        state.segment.state_name().to_string()
     }
 }
