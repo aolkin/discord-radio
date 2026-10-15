@@ -70,8 +70,6 @@ pub struct DJStateMachine {
 }
 
 impl DJStateMachine {
-    /// Restores the segment, registers the guild's shared state cell and
-    /// builds the profile machine.
     pub async fn new(
         config: DJConfig,
         guild_id: GuildId,
