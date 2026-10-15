@@ -7,10 +7,10 @@ use serde::Deserialize;
 use serenity::all::Http;
 use serenity::model::id::{ChannelId, GuildId};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::mpsc;
-use tokio::time::{Duration, MissedTickBehavior, interval};
 
-const DJ_TICK_INTERVAL_MS: u64 = 100;
+const ADVANCE_RETRY_DELAY: Duration = Duration::from_millis(100);
 
 #[derive(strum::IntoStaticStr)]
 pub enum DJCommand {
@@ -112,7 +112,6 @@ pub async fn dj_task(
         bot_state,
     );
 
-    // Initialize profile state machine
     let initial_profile_name = if let Some(profile_name) = forced_profile {
         Some(profile_name)
     } else if let Ok(profile_states) = bot_state.state_store.load_profile_states().await {
@@ -123,7 +122,6 @@ pub async fn dj_task(
     } else {
         None
     };
-
     let mut profile_machine =
         ProfileStateMachine::new(signal_profiles, initial_profile_name.as_deref());
 
@@ -139,10 +137,15 @@ pub async fn dj_task(
         );
     }
 
-    let mut tick = interval(Duration::from_millis(DJ_TICK_INTERVAL_MS));
-    tick.set_missed_tick_behavior(MissedTickBehavior::Delay);
-
     'dj: loop {
+        let forced_profile = state_machine.current_state().await.forced_profile();
+        if let Some((profile_name, fade_secs, reason)) = profile_machine.update(forced_profile) {
+            apply_profile_transition(guild_id, Some(&profile_name), fade_secs, &bot_state, reason)
+                .await;
+        }
+        let profile_completed = profile_machine.ready_to_advance();
+        persist_state(guild_id, bot_state, &config_name, &mut state_machine).await;
+
         tokio::select! {
             command = command_rx.recv() => {
                 let command = command.unwrap_or(DJCommand::Stop);
@@ -154,20 +157,11 @@ pub async fn dj_task(
             _ = state_machine.state_completed() => {
                 if let Err(e) = state_machine.force_advance(&bot_state, None).await {
                     tracing::error!("Failed to advance to next state for guild {}: {}", guild_id, e);
-                    tokio::time::sleep(Duration::from_millis(DJ_TICK_INTERVAL_MS)).await;
+                    tokio::time::sleep(ADVANCE_RETRY_DELAY).await;
                 }
             }
-            _ = tick.tick() => { }
+            _ = profile_completed => { }
         };
-
-        // Persist DJ state periodically (including state machine state)
-        persist_state(guild_id, bot_state, &config_name, &mut state_machine).await;
-
-        let forced_profile = state_machine.current_state().await.forced_profile();
-        if let Some((profile_name, fade_secs, reason)) = profile_machine.update(forced_profile) {
-            apply_profile_transition(guild_id, Some(&profile_name), fade_secs, &bot_state, reason)
-                .await;
-        }
     }
 
     // Clean up shared state
