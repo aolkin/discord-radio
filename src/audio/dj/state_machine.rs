@@ -88,6 +88,10 @@ impl DJStateMachine {
         self.scheduler.update_config(config);
     }
 
+    pub fn announcement_channel(&self) -> Option<ChannelId> {
+        self.announcement_channel
+    }
+
     pub fn set_announcement_channel(&mut self, channel: Option<ChannelId>) {
         self.announcement_channel = channel;
     }

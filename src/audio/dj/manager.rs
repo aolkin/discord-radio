@@ -66,7 +66,7 @@ pub async fn dj_task(
     config: DJConfig,
     bot_state: Data,
     mut command_rx: mpsc::Receiver<DJCommand>,
-    mut announcement_channel: Option<ChannelId>,
+    announcement_channel: Option<ChannelId>,
     http: Arc<Http>,
     restored_state: Option<DJState>,
 ) {
@@ -239,7 +239,6 @@ pub async fn dj_task(
                         new_channel,
                         guild_id
                     );
-                    announcement_channel = new_channel;
                     state_machine.set_announcement_channel(new_channel);
                 }
                 DJCommand::ReloadConfig => {
@@ -299,7 +298,7 @@ pub async fn dj_task(
         let persist_state = crate::persistence::DJStateSnapshot {
             config_name: &config_name,
             running: true,
-            announcement_channel_id: announcement_channel.map(|id| id.get()),
+            announcement_channel_id: state_machine.announcement_channel().map(|id| id.get()),
             state_machine: &current_state,
         };
         if let Err(e) = bot_state
