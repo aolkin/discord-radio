@@ -3,6 +3,7 @@ use crate::audio::dj::manager::{DJCommand, DJStateType, HexMessageRequest, Track
 use crate::audio::dj::scheduler::{DJStateEntry, WeightedScheduler};
 use crate::audio::dj::segments::{HexSegment, Segment, SignalProfilePlayback, TrackSegment};
 use crate::audio::dj::segments::{NoiseSegment, SegmentCtx};
+use crate::audio::dj::serde::{deser_instant, ser_instant};
 use crate::state::Data;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -15,12 +16,15 @@ use tokio::sync::{RwLock, RwLockReadGuard};
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DJState {
     pub segment: Box<dyn Segment>,
+    #[serde(serialize_with = "ser_instant", deserialize_with = "deser_instant")]
+    pub started_at: std::time::Instant,
 }
 
 impl<S: Segment + 'static> From<S> for DJState {
     fn from(segment: S) -> Self {
         DJState {
             segment: Box::new(segment),
+            started_at: std::time::Instant::now(),
         }
     }
 }
@@ -77,8 +81,8 @@ impl DJStateMachine {
         self.state.read().await
     }
 
-    pub async fn is_complete(&self) -> bool {
-        self.current_state().await.segment.is_complete().await
+    pub async fn state_completed(&self) {
+        self.current_state().await.segment.completed().await
     }
 
     pub fn announcement_channel(&self) -> Option<ChannelId> {
@@ -227,7 +231,7 @@ impl DJStateMachine {
                 self.guild_id.get(),
                 segment.state_name(),
                 segment.signal_profile().name.as_deref(),
-                segment.elapsed().as_secs_f64(),
+                current.started_at.elapsed().as_secs_f64(),
             );
         }
         segment.exit(&self.segment_ctx()).await;

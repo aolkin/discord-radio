@@ -3,6 +3,7 @@ use super::{
     TrackSlot,
 };
 use crate::audio::dj::config::{HexMessageDefaults, HexMessageEntry};
+use crate::audio::dj::segments::signals::{Completed, CompletedSignal};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
 use crate::audio::processing::mixer::{TrackCallback, TrackCommand};
 use crate::audio::processing::processor::AudioProcessor;
@@ -11,7 +12,6 @@ use crate::bucket::FileResolver;
 use async_trait::async_trait;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use serenity::model::id::GuildId;
 use std::ops::Deref;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -40,6 +40,8 @@ pub struct HexSegment {
     announcement: Option<String>,
     #[serde(skip)]
     run: Mutex<Option<JoinHandle<()>>>,
+    #[serde(skip)]
+    done: CompletedSignal,
 }
 
 impl Deref for HexSegment {
@@ -72,6 +74,7 @@ impl HexSegment {
             announcement,
             progress: Default::default(),
             run: Default::default(),
+            done: Default::default(),
         }
     }
 
@@ -84,7 +87,7 @@ impl HexSegment {
             self.progress.clone(),
             processor,
             ctx.file_resolver().clone(),
-            *ctx.guild_id,
+            self.done.clone(),
         ));
         *self.run.lock().unwrap() = Some(handle);
     }
@@ -109,12 +112,8 @@ impl HexSegment {
 #[async_trait]
 #[typetag::serde]
 impl Segment for HexSegment {
-    async fn is_complete(&self) -> bool {
-        self.run
-            .lock()
-            .unwrap()
-            .as_ref()
-            .is_none_or(|handle| handle.is_finished())
+    fn completed(&self) -> Completed {
+        self.done.completed()
     }
 
     fn elapsed(&self) -> Duration {
@@ -196,7 +195,7 @@ async fn run_hex_message(
     progress: Arc<HexProgress>,
     processor: Arc<RwLock<AudioProcessor>>,
     file_resolver: FileResolver,
-    guild_id: GuildId,
+    done: CompletedSignal,
 ) {
     let hex_chars = message_to_hex_sequence(&message);
     while !hex_chars.is_empty() && progress.loops.load(Ordering::Relaxed) < target_loops {
@@ -230,9 +229,7 @@ async fn run_hex_message(
         } else {
             progress.position.store(0, Ordering::Relaxed);
             let loops = progress.loops.fetch_add(1, Ordering::Relaxed) + 1;
-            tracing::info!(
-                "Hex message '{message}' completed loop {loops}/{target_loops} in guild {guild_id}"
-            );
+            tracing::info!("Hex message '{message}' completed loop {loops}/{target_loops}");
             if loops >= target_loops {
                 break;
             }
@@ -245,6 +242,7 @@ async fn run_hex_message(
         };
         tokio::time::sleep(delay).await;
     }
+    done.complete();
 }
 
 fn message_to_hex_sequence(message: &str) -> Vec<char> {

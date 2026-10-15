@@ -3,16 +3,15 @@ use super::{
     TimedSegment, TrackSlot,
 };
 use crate::audio::dj::config::TrackEntry;
+use crate::audio::dj::segments::signals::{Completed, CompletedSignal};
 use crate::audio::duration::DurationCache;
-use crate::audio::processing::mixer::{TrackCallback, TrackCommand};
+use crate::audio::processing::mixer::TrackCommand;
 use crate::audio::tracks::open_track_source;
 use async_trait::async_trait;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
-use std::sync::Mutex;
 use std::time::Duration;
-use tokio::sync::oneshot::{self, error::TryRecvError};
 
 const FADE_TIME: Duration = Duration::from_secs(1);
 
@@ -25,7 +24,7 @@ pub struct TrackSegment {
     #[serde(skip)]
     track: TrackSlot,
     #[serde(skip)]
-    end_trigger: Mutex<Option<oneshot::Receiver<()>>>,
+    done: CompletedSignal,
 }
 
 impl Deref for TrackSegment {
@@ -54,7 +53,7 @@ impl TrackSegment {
             volume,
             start_position,
             track: Default::default(),
-            end_trigger: Default::default(),
+            done: Default::default(),
         }
     }
 
@@ -66,7 +65,6 @@ impl TrackSegment {
     ) -> anyhow::Result<()> {
         let path = ctx.file_resolver().resolve(&self.filename).await?;
         let source = open_track_source(&path, start_position).map_err(|e| anyhow::anyhow!(e))?;
-        let (callback, end_trigger) = TrackCallback::oneshot();
         let track = ctx.audio_processor().await.write().await.add_track(
             source,
             0.0,
@@ -78,7 +76,7 @@ impl TrackSegment {
                 },
                 TrackCommand::AddTrigger {
                     at: play_duration,
-                    callback,
+                    callback: self.done.clone().into(),
                 },
                 TrackCommand::Stop {
                     fade: FADE_TIME,
@@ -87,7 +85,6 @@ impl TrackSegment {
             ],
         );
         self.track.set(track);
-        *self.end_trigger.lock().unwrap() = Some(end_trigger);
         Ok(())
     }
 
@@ -137,12 +134,8 @@ impl TrackSegment {
 #[async_trait]
 #[typetag::serde]
 impl Segment for TrackSegment {
-    async fn is_complete(&self) -> bool {
-        self.end_trigger
-            .lock()
-            .unwrap()
-            .as_mut()
-            .is_none_or(|rx| !matches!(rx.try_recv(), Err(TryRecvError::Empty)))
+    fn completed(&self) -> Completed {
+        self.done.completed()
     }
 
     fn elapsed(&self) -> Duration {
@@ -158,15 +151,21 @@ impl Segment for TrackSegment {
                 elapsed.as_secs_f32(),
                 self.timer.duration.as_secs_f32()
             );
+            self.done.complete();
             return Ok(());
         }
         let position = self.start_position.unwrap_or_default() + elapsed;
-        self.start_at(
-            ctx,
-            Some(position),
-            self.timer.duration.saturating_sub(elapsed),
-        )
-        .await?;
+        if let Err(e) = self
+            .start_at(
+                ctx,
+                Some(position),
+                self.timer.duration.saturating_sub(elapsed),
+            )
+            .await
+        {
+            self.done.complete();
+            return Err(e);
+        }
         tracing::info!(
             "Restored DJ track '{}' at {:.1}s into the segment in guild {}",
             self.filename,
@@ -189,7 +188,7 @@ impl Segment for TrackSegment {
     }
 
     async fn exit(&self, _ctx: &SegmentCtx) {
-        if !self.is_complete().await {
+        if !self.done.is_completed() {
             self.track.stop(FADE_TIME);
         }
     }

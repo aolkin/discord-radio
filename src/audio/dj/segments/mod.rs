@@ -1,5 +1,6 @@
 mod hex;
 mod noise;
+mod signals;
 mod track;
 
 pub use hex::HexSegment;
@@ -14,6 +15,7 @@ use crate::state::BotState;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serenity::model::id::GuildId;
+use signals::Completed;
 use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::Mutex;
@@ -99,7 +101,7 @@ pub struct StateDisplay {
 #[async_trait]
 #[typetag::serde(tag = "type")]
 pub trait Segment: Send + Sync + Debug + SegmentPlaybackConfig {
-    async fn is_complete(&self) -> bool;
+    fn completed(&self) -> Completed;
     fn elapsed(&self) -> Duration;
 
     async fn restore(&self, _ctx: &SegmentCtx) -> anyhow::Result<()> {
@@ -178,6 +180,10 @@ impl TimedSegment {
 
     pub fn is_elapsed(&self) -> bool {
         self.started_at.elapsed() >= self.duration
+    }
+
+    pub fn completed(&self) -> Completed {
+        Completed::at(self.started_at + self.duration)
     }
 }
 

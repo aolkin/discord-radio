@@ -8,7 +8,7 @@ use serenity::all::Http;
 use serenity::model::id::{ChannelId, GuildId};
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use tokio::time::{Duration, sleep};
+use tokio::time::{Duration, MissedTickBehavior, interval};
 
 const DJ_TICK_INTERVAL_MS: u64 = 100;
 
@@ -139,22 +139,26 @@ pub async fn dj_task(
         );
     }
 
+    let mut tick = interval(Duration::from_millis(DJ_TICK_INTERVAL_MS));
+    tick.set_missed_tick_behavior(MissedTickBehavior::Delay);
+
     'dj: loop {
-        sleep(Duration::from_millis(DJ_TICK_INTERVAL_MS)).await;
-
-        // Process any pending commands
-        while let Ok(cmd) = command_rx.try_recv() {
-            if state_machine.handle_command(cmd).await {
-                tracing::info!("DJ task stopped for guild {}", guild_id);
-                break 'dj;
+        tokio::select! {
+            command = command_rx.recv() => {
+                let command = command.unwrap_or(DJCommand::Stop);
+                if state_machine.handle_command(command).await {
+                    tracing::info!("DJ task stopped for guild {}", guild_id);
+                    break 'dj;
+                }
             }
-        }
-
-        if state_machine.is_complete().await
-            && let Err(e) = state_machine.force_advance(&bot_state, None).await
-        {
-            tracing::error!("DJ state machine error in guild {}: {}", guild_id, e);
-        }
+            _ = state_machine.state_completed() => {
+                if let Err(e) = state_machine.force_advance(&bot_state, None).await {
+                    tracing::error!("Failed to advance to next state for guild {}: {}", guild_id, e);
+                    tokio::time::sleep(Duration::from_millis(DJ_TICK_INTERVAL_MS)).await;
+                }
+            }
+            _ = tick.tick() => { }
+        };
 
         // Persist DJ state periodically (including state machine state)
         persist_state(guild_id, bot_state, &config_name, &mut state_machine).await;
