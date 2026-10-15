@@ -1,4 +1,5 @@
 mod audio;
+mod bot_profile;
 mod bucket;
 mod commands;
 mod handlers;

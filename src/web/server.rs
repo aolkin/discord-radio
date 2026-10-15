@@ -73,6 +73,10 @@ pub async fn run_web_server(
             "/api/guilds/{guild_id}/dj/channel-status",
             post(routes::set_dj_channel_status),
         )
+        .route(
+            "/api/guilds/{guild_id}/bot-profile",
+            get(routes::get_bot_profile).put(routes::set_bot_profile),
+        )
         .route("/api/profiles", get(routes::get_profiles))
         .route("/api/audio-files", get(routes::get_audio_files))
         .route("/api/activity/set", post(routes::set_bot_activity))

@@ -2360,6 +2360,7 @@ dependencies = [
  "async-trait",
  "atomic_float",
  "axum 0.8.9",
+ "base64 0.22.1",
  "biquad",
  "chrono",
  "dotenvy",

@@ -4,6 +4,7 @@ use crate::audio::duration::DurationCache;
 use crate::audio::processing::processor::{AudioProcessor, ProcessorRef};
 use crate::audio::profiles::ProfileManager;
 use crate::audio::tracks::TrackManager;
+use crate::bot_profile::BotProfileManager;
 use crate::bucket::{FileResolver, ObjectStore};
 use crate::logging::{JsonLogger, guild_logs_dir};
 use crate::persistence::{DjSettingsStore, StateStore};
@@ -35,6 +36,7 @@ pub struct BotState {
     pub shutdown_tx: tokio::sync::broadcast::Sender<String>,
     pub logs_base_path: PathBuf,
     pub file_resolver: FileResolver,
+    pub bot_profiles: BotProfileManager,
 }
 
 impl BotState {
@@ -63,6 +65,10 @@ impl BotState {
         let logs_base_path = state_store.base_path().to_path_buf();
 
         let file_resolver = FileResolver::new(content_path.clone(), file_cache.clone());
+        let bot_profiles = BotProfileManager::new(
+            state_store.base_path().join("bot_profiles.json"),
+            file_resolver.clone(),
+        );
 
         Self {
             voice_connections: voice_connections.clone(),
@@ -79,6 +85,7 @@ impl BotState {
             shutdown_tx,
             logs_base_path,
             file_resolver,
+            bot_profiles,
         }
     }
 

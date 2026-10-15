@@ -2,6 +2,7 @@ use crate::audio::dj::manager::{DJCommand, DJStateType, TrackRequest, send_dj_co
 use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
 use crate::bucket::ObjectStoreError;
+use crate::persistence::BotProfile;
 use crate::state::Data;
 use crate::web::state_snapshot::BotSnapshot;
 use axum::Json as AxumJson;
@@ -843,6 +844,36 @@ pub async fn send_channel_message(
             );
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
+
+    Ok(StatusCode::OK)
+}
+
+pub async fn get_bot_profile(
+    State(bot_state): State<Data>,
+    Path(guild_id): Path<String>,
+) -> Result<AxumJson<BotProfile>, StatusCode> {
+    let guild_id = parse_guild_id(&guild_id)?;
+    Ok(AxumJson(bot_state.bot_profiles.applied(guild_id).await))
+}
+
+pub async fn set_bot_profile(
+    State(bot_state): State<Data>,
+    Path(guild_id): Path<String>,
+    AxumJson(profile): AxumJson<BotProfile>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    let guild_id = parse_guild_id(&guild_id).map_err(|status| (status, String::new()))?;
+    let Some(ctx) = bot_state.activity_manager.get_context().await else {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Bot is not connected to Discord".to_string(),
+        ));
+    };
+
+    bot_state
+        .bot_profiles
+        .edit(ctx.http.clone(), guild_id, |current| *current = profile)
+        .await
+        .map_err(|e| (StatusCode::BAD_GATEWAY, format!("{e:#}")))?;
 
     Ok(StatusCode::OK)
 }

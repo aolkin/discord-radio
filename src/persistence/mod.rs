@@ -1,13 +1,16 @@
-mod dj;
 mod file_store;
+mod guild_map;
 mod types;
 mod utils;
 
-pub use dj::DjSettingsStore;
 pub use file_store::FileStore;
+pub use guild_map::GuildMapStore;
 pub use types::{
-    ActivityState, DJState, DjSettings, MultiTrackPlaybackState, RegisteredChannel, TrackState,
+    ActivityState, BotProfile, DJState, DjSettings, MultiTrackPlaybackState, RegisteredChannel,
+    TrackState,
 };
+
+pub type DjSettingsStore = GuildMapStore<DjSettings>;
 
 pub(crate) use crate::persistence::types::DJStateSnapshot;
 use async_trait::async_trait;
