@@ -40,10 +40,6 @@ impl WeightedScheduler {
         }
     }
 
-    pub fn update_config(&mut self, config: DJConfig) {
-        self.config = config;
-    }
-
     pub fn next_state(&mut self, filter: Option<DJStateType>) -> DJStateEntry {
         match filter.unwrap_or_else(|| self.choose_state_type()) {
             DJStateType::Track => {
