@@ -196,6 +196,41 @@ pub async fn start_dj(bot_state: Data, guild_id: GuildId) -> anyhow::Result<()> 
     Ok(())
 }
 
+/// Stops the guild's running DJ and starts a new one with the named config,
+/// keeping the announcement channel. The new DJ begins idle.
+pub async fn restart_dj_with_config(
+    bot_state: Data,
+    guild_id: GuildId,
+    config_name: String,
+) -> anyhow::Result<()> {
+    let config = load_dj_config(&bot_state, guild_id, Some(&config_name)).await?;
+
+    let mut dj_managers = bot_state.dj_managers.write().await;
+    let Some(manager) = dj_managers.remove(&guild_id) else {
+        anyhow::bail!("Not in a voice channel");
+    };
+
+    let announcement_channel_id = bot_state
+        .state_store
+        .load_dj_states()
+        .await
+        .context("loading saved DJ state")?
+        .remove(&guild_id)
+        .and_then(|saved| saved.announcement_channel_id);
+
+    manager.lock().await.stop(&bot_state).await;
+
+    let saved = crate::persistence::DJState {
+        config_name: Some(config_name),
+        announcement_channel_id,
+        state_machine: None,
+    };
+    tracing::info!("Restarting DJ for guild {}", guild_id);
+    let manager = DJManager::start(guild_id, config, Some(saved), bot_state).await;
+    dj_managers.insert(guild_id, Arc::new(Mutex::new(manager)));
+    Ok(())
+}
+
 pub async fn stop_dj(bot_state: Data, guild_id: GuildId) {
     let manager = bot_state.dj_managers.write().await.remove(&guild_id);
     if let Some(manager) = manager {
