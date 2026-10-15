@@ -18,7 +18,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use tokio::sync::{RwLock, watch};
+use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -43,14 +43,6 @@ pub struct HexSegment {
     run: Mutex<Option<JoinHandle<()>>>,
     #[serde(skip)]
     done: CompletedSignal,
-}
-
-struct SignalOnDrop(watch::Sender<bool>);
-
-impl Drop for SignalOnDrop {
-    fn drop(&mut self) {
-        self.0.send_replace(true);
-    }
 }
 
 impl Deref for HexSegment {
@@ -89,7 +81,7 @@ impl HexSegment {
 
     async fn start_run(&self, ctx: &SegmentCtx<'_>) {
         let processor = ctx.audio_processor().await;
-        let signal = SignalOnDrop(self.done.clone());
+        let signal = self.done.clone();
         let run = run_hex_message(
             self.message.clone(),
             self.volume,
@@ -127,7 +119,7 @@ impl HexSegment {
 #[typetag::serde]
 impl Segment for HexSegment {
     fn completed(&self) -> Completed {
-        signal_completed(&self.done)
+        self.done.completed()
     }
 
     fn elapsed(&self) -> Duration {

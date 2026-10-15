@@ -31,14 +31,13 @@ impl From<BoxFuture<'static, ()>> for Completed {
 
 impl Completed {
     pub fn at(instant: Instant) -> Self {
-        Box::pin(tokio::time::sleep_until(tokio::time::Instant::from_std(
-            instant,
+        Self(Box::pin(tokio::time::sleep_until(
+            tokio::time::Instant::from_std(instant),
         )))
-        .into()
     }
 
-    pub fn when(future: impl Future<Output = ()>) -> Self {
-        Box::pin(future).into()
+    pub fn when(future: impl Future<Output = ()> + Send + 'static) -> Self {
+        Self(Box::pin(future))
     }
 }
 
@@ -59,13 +58,18 @@ impl CompletedSignal {
     pub fn completed(&self) -> Completed {
         let mut rx = self.0.subscribe();
         Completed::when(async move {
-            // An Err means the segment dropped its sender, so it is finished.
             let _ = rx.wait_for(|done| *done).await;
         })
     }
 
     pub fn complete(&self) {
         self.0.send_replace(true);
+    }
+}
+
+impl Drop for CompletedSignal {
+    fn drop(&mut self) {
+        self.complete();
     }
 }
 
