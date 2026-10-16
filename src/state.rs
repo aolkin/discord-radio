@@ -4,13 +4,12 @@ use crate::audio::duration::DurationCache;
 use crate::audio::processing::processor::{AudioProcessor, ProcessorRef};
 use crate::audio::profiles::ProfileManager;
 use crate::audio::tracks::TrackManager;
-use crate::bot_profile::BotProfileManager;
 use crate::bucket::{FileResolver, ObjectStore};
 use crate::logging::{JsonLogger, guild_logs_dir};
 use crate::persistence::{DjSettingsStore, StateStore};
 use crate::voice_status::ActivityManager;
 use serde::Serialize;
-use serenity::all::ChannelId;
+use serenity::all::{ChannelId, Http, HttpBuilder};
 use serenity::model::id::GuildId;
 use songbird::Call;
 use std::collections::HashMap;
@@ -36,7 +35,9 @@ pub struct BotState {
     pub shutdown_tx: tokio::sync::broadcast::Sender<String>,
     pub logs_base_path: PathBuf,
     pub file_resolver: FileResolver,
-    pub bot_profiles: BotProfileManager,
+    /// Discord client for web routes; its ratelimiter is off so a ratelimited
+    /// request fails with 429 instead of waiting.
+    pub web_http: Arc<Http>,
 }
 
 impl BotState {
@@ -46,6 +47,7 @@ impl BotState {
         dj_settings: DjSettingsStore,
         shutdown_tx: tokio::sync::broadcast::Sender<String>,
         file_cache: Arc<ObjectStore>,
+        discord_token: &str,
     ) -> Self {
         let profiles_dir = "audio_profiles";
         let mut profile_manager = ProfileManager::new(profiles_dir);
@@ -65,7 +67,11 @@ impl BotState {
         let logs_base_path = state_store.base_path().to_path_buf();
 
         let file_resolver = FileResolver::new(content_path.clone(), file_cache.clone());
-        let bot_profiles = BotProfileManager::new(file_resolver.clone());
+        let web_http = Arc::new(
+            HttpBuilder::new(discord_token)
+                .ratelimiter_disabled(true)
+                .build(),
+        );
 
         Self {
             voice_connections: voice_connections.clone(),
@@ -82,7 +88,7 @@ impl BotState {
             shutdown_tx,
             logs_base_path,
             file_resolver,
-            bot_profiles,
+            web_http,
         }
     }
 

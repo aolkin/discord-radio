@@ -805,13 +805,6 @@ pub async fn send_channel_message(
             StatusCode::FORBIDDEN
         })?;
 
-    // Get serenity HTTP client from activity manager context
-    let ctx = bot_state.activity_manager.get_context().await;
-    let Some(ctx) = ctx else {
-        tracing::error!("Bot context not available for sending messages");
-        return Err(StatusCode::SERVICE_UNAVAILABLE);
-    };
-
     let mut create_message = serenity::all::CreateMessage::new();
 
     if let Some(msg) = request.message {
@@ -833,7 +826,7 @@ pub async fn send_channel_message(
     }
 
     channel_id
-        .send_message(&ctx.http, create_message)
+        .send_message(&bot_state.web_http, create_message)
         .await
         .map_err(|e| {
             tracing::error!(
@@ -861,11 +854,11 @@ pub async fn get_bot_profile(
     };
 
     let bot_user_id = ctx.cache.current_user().id;
-    let member = ctx
-        .http
+    let member = bot_state
+        .web_http
         .get_member(guild_id, bot_user_id)
         .await
-        .map_err(|e| (StatusCode::BAD_GATEWAY, format!("{e:#}")))?;
+        .map_err(discord_error)?;
 
     Ok(AxumJson(serde_json::json!({
         "nick": member.nick,
@@ -886,18 +879,28 @@ pub async fn set_bot_profile(
             "Provide at least one of nick, avatar, banner".to_string(),
         ));
     }
-    let Some(ctx) = bot_state.activity_manager.get_context().await else {
-        return Err((
-            StatusCode::SERVICE_UNAVAILABLE,
-            "Bot is not connected to Discord".to_string(),
-        ));
-    };
+    let body = edit
+        .into_body(&bot_state.file_resolver)
+        .await
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("{e:#}")))?;
 
     bot_state
-        .bot_profiles
-        .edit(ctx.http.clone(), guild_id, edit)
+        .web_http
+        .edit_member_me(guild_id, &body, None)
         .await
-        .map_err(|e| (StatusCode::BAD_GATEWAY, format!("{e:#}")))?;
+        .map_err(discord_error)?;
 
     Ok(StatusCode::OK)
+}
+
+fn discord_error(e: serenity::Error) -> (StatusCode, String) {
+    if let serenity::Error::Http(http_error) = &e
+        && http_error.status_code() == Some(StatusCode::TOO_MANY_REQUESTS)
+    {
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            "Discord is rate limiting this request; wait a bit and retry".to_string(),
+        );
+    }
+    (StatusCode::BAD_GATEWAY, format!("{e:#}"))
 }

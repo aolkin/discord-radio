@@ -106,7 +106,7 @@ The DJ plays the profile override if set, else the current segment's forced prof
 - `POST /api/guilds/:guild_id/dj/profile-override` - Set the DJ profile override with an optional `fade_duration` in seconds, used to fade in and out of it (default 2), or clear it (`{"profile": null}`)
 - `POST /api/guilds/:guild_id/dj/channel-status` - Turn the DJ's management of the voice channel status on or off (`{"enabled": false}`); turning it off leaves the current status as it is
 - `GET /api/guilds/:guild_id/bot-profile` - Get the bot's current per-guild profile from Discord (`{"nick", "avatar_url", "banner_url"}`)
-- `PUT /api/guilds/:guild_id/bot-profile` - Set the bot's per-guild profile on Discord. Body fields `nick`, `avatar`, `banner` are each optional; omitted fields are left unchanged, and at least one is required. `avatar` and `banner` are file references resolved like track filenames. Edits within 2 seconds are sent as one request
+- `PUT /api/guilds/:guild_id/bot-profile` - Set the bot's per-guild profile on Discord. Body fields `nick`, `avatar`, `banner` are each optional; omitted fields are left unchanged, and at least one is required. `avatar` and `banner` are file references resolved like track filenames. Returns 429 when Discord rate limits the request
 - `GET /api/profiles` - List available signal profiles
 - `GET /api/audio-files` - List available audio files in content directory
 - `GET /api/dj-config/overrides` - Get all DJ config overrides (hex messages, announcements, state weights)

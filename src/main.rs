@@ -305,6 +305,7 @@ async fn main() -> Result<(), Error> {
         dj_settings_store,
         shutdown_tx,
         file_cache,
+        &discord_token,
     )));
 
     // Start gauge update task if metrics are configured
