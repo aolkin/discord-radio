@@ -300,6 +300,7 @@ async fn main() -> anyhow::Result<()> {
             .ratelimiter_disabled(true)
             .build(),
     );
+    let http = Arc::new(serenity::HttpBuilder::new(&discord_token).build());
     let bot_user_id = anyhow::Context::context(
         web_http.get_current_user().await,
         "Failed to fetch the bot user from Discord",
@@ -313,6 +314,7 @@ async fn main() -> anyhow::Result<()> {
         shutdown_tx,
         file_cache,
         web_http,
+        http,
         bot_user_id,
     )));
 

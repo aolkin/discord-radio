@@ -159,7 +159,10 @@ pub async fn speak(
         create_message = create_message.embed(embed);
     }
 
-    if let Err(e) = channel_id.send_message(ctx.http(), create_message).await {
+    if let Err(e) = channel_id
+        .send_message(&ctx.data().http, create_message)
+        .await
+    {
         ctx.say(format!("Failed to send message: {}", e)).await?;
         return Ok(());
     }

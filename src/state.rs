@@ -38,10 +38,13 @@ pub struct BotState {
     /// Discord client for web routes; its ratelimiter is off so a ratelimited
     /// request fails with 429 instead of waiting.
     pub web_http: Arc<Http>,
+    /// Discord client with the default ratelimiter.
+    pub http: Arc<Http>,
     pub bot_user_id: UserId,
 }
 
 impl BotState {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         content_path: String,
         state_store: Arc<dyn StateStore>,
@@ -49,6 +52,7 @@ impl BotState {
         shutdown_tx: tokio::sync::broadcast::Sender<String>,
         file_cache: Arc<ObjectStore>,
         web_http: Arc<Http>,
+        http: Arc<Http>,
         bot_user_id: UserId,
     ) -> Self {
         let profiles_dir = "audio_profiles";
@@ -86,6 +90,7 @@ impl BotState {
             logs_base_path,
             file_resolver,
             web_http,
+            http,
             bot_user_id,
         }
     }

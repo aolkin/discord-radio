@@ -529,7 +529,7 @@ async fn join_voice_channel_helper(
     let handle_lock = manager.join(guild_id, channel_id).await?;
     tracing::info!("Joined voice channel");
     let processor = setup_voice_connection(handle_lock.clone(), guild_id, ctx.data()).await;
-    start_dj(ctx.data(), guild_id, ctx.serenity_context().http.clone())
+    start_dj(ctx.data(), guild_id)
         .await
         .map_err(|e| e.context("Failed to start DJ"))?;
     Ok(processor)
