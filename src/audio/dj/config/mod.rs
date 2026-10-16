@@ -2,7 +2,7 @@ use crate::audio::dj::weighted_choice::Weighted;
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
 pub struct DJConfig {
     pub name: String,
     #[serde(default)]

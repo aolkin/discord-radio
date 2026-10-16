@@ -100,20 +100,6 @@ impl BotState {
             .clone()
     }
 
-    pub async fn dj_manager(&self, guild_id: GuildId) -> Arc<Mutex<DJManager>> {
-        let managers = self.dj_managers.read().await;
-        if let Some(manager) = managers.get(&guild_id) {
-            return manager.clone();
-        }
-        drop(managers);
-
-        let mut managers = self.dj_managers.write().await;
-        managers
-            .entry(guild_id)
-            .or_insert_with(|| Arc::new(Mutex::new(DJManager::new(guild_id))))
-            .clone()
-    }
-
     /// Get the current voice channel ID for a guild
     pub async fn get_voice_channel_id(&self, guild_id: GuildId) -> Option<ChannelId> {
         let voice_connections = self.voice_connections.read().await;

@@ -42,18 +42,9 @@ pub async fn advance_dj_state(
     let guild_id_parsed: u64 = guild_id.parse().map_err(|_| StatusCode::BAD_REQUEST)?;
     let guild_id = GuildId::new(guild_id_parsed);
 
-    let dj_managers = bot_state.dj_managers.read().await;
-    let manager = match dj_managers.get(&guild_id) {
-        Some(mgr) => mgr.clone(),
-        None => return Err(StatusCode::NOT_FOUND),
-    };
-    drop(dj_managers);
-
-    let mgr = manager.lock().await;
-    if !mgr.is_running() {
-        return Err(StatusCode::CONFLICT);
+    if !bot_state.dj_managers.read().await.contains_key(&guild_id) {
+        return Err(StatusCode::NOT_FOUND);
     }
-    drop(mgr);
 
     let state_type_filter = if let Some(type_str) = request.state_type {
         match type_str.to_lowercase().as_str() {

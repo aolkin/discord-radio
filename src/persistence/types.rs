@@ -43,8 +43,7 @@ pub struct DjSettings {
 
 #[derive(Deserialize, Debug)]
 pub struct DJState {
-    pub config_name: String,
-    pub running: bool,
+    pub config_name: Option<String>,
     #[serde(default)]
     pub announcement_channel_id: Option<u64>,
     #[serde(default)]
@@ -53,8 +52,7 @@ pub struct DJState {
 
 #[derive(Serialize, Debug)]
 pub struct DJStateSnapshot<'a> {
-    pub config_name: &'a str,
-    pub running: bool,
+    pub config_name: Option<&'a str>,
     pub announcement_channel_id: Option<u64>,
     pub state_machine: &'a crate::audio::dj::state_machine::DJState,
 }

@@ -153,7 +153,7 @@ pub struct DJStateMachine {
     http: Arc<Http>,
     hex_message_announcements: Vec<String>,
     bot_state: Data,
-    config_name: String,
+    config_name: Option<String>,
     applied_profile: Option<(SignalProfilePlayback, ProfileSource)>,
     /// An empty status is how Discord clears it.
     applied_channel_status: Option<String>,
@@ -163,15 +163,21 @@ impl DJStateMachine {
     pub async fn new(
         config: DJConfig,
         guild_id: GuildId,
-        announcement_channel: Option<ChannelId>,
         http: Arc<Http>,
-        restored_state: Option<DJState>,
+        saved: Option<crate::persistence::DJState>,
         bot_state: Data,
     ) -> Self {
-        let config_name = config.name.clone();
+        let (config_name, announcement_channel, restored_state) = match saved {
+            Some(saved) => (
+                saved.config_name,
+                saved.announcement_channel_id.map(ChannelId::new),
+                saved.state_machine,
+            ),
+            None => (None, None, None),
+        };
 
         tracing::info!(
-            "Starting DJ task for guild {} with config '{}'",
+            "Starting DJ task for guild {} with config {:?}",
             guild_id,
             config_name
         );
@@ -345,8 +351,7 @@ impl DJStateMachine {
     async fn persist_state(&self) {
         let current_state = self.current_state().await;
         let persist_state = crate::persistence::DJStateSnapshot {
-            config_name: &self.config_name,
-            running: true,
+            config_name: self.config_name.as_deref(),
             announcement_channel_id: self.announcement_channel.map(|id| id.get()),
             state_machine: &current_state,
         };

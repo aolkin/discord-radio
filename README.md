@@ -92,14 +92,14 @@ See [WEB_PORTAL.md](WEB_PORTAL.md) for more details.
 ### Voice Commands
 - `/join_voice_channel` - Join a voice channel to broadcast audio
 - `/leave_voice_channel` - Leave the current voice channel
-- `/play_message` - Have the DJ play a text message as hex audio (requires a running DJ)
-- `/play_track` - Have the DJ play an audio track now (requires a running DJ)
+- `/play_message` - Have the DJ play a text message as hex audio
+- `/play_track` - Have the DJ play an audio track now
 - `/change_track_state` - Start or stop an audio track with fade transition
 - `/get_current_tracks` - Display all currently playing audio tracks
 - `/dj_profile` - Set the DJ's background signal profile with an optional fade used to fade in and out of it, or clear it to return to rotation
 - `/dj_profile_override` - Set the DJ's signal profile override with an optional fade used to fade in and out of it (0 switches instantly), or clear it
 - `/dj_channel_status` - Turn the DJ's management of the voice channel status on or off; turning it off leaves the current status as it is
-- `/manage_dj` - Manage the radio DJ for automated playback
+- `/manage_dj` - Configure the radio DJ (it runs whenever the bot is in a voice channel)
 - `/get_dj_state` - Get the current state of the DJ
 - `/advance_dj_state` - Force the DJ to advance to the next state (for testing)
 
