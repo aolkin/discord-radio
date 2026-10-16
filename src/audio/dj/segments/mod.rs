@@ -7,7 +7,6 @@ pub use hex::HexSegment;
 pub use noise::NoiseSegment;
 pub use track::TrackSegment;
 
-use crate::audio::dj::serde::{deser_instant, ser_instant};
 use crate::audio::processing::mixer::{TrackCommand, TrackHandle};
 use crate::audio::processing::processor::ProcessorRef;
 use crate::bucket::FileResolver;
@@ -19,7 +18,7 @@ pub use signals::Completed;
 use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 pub struct SegmentCtx<'a> {
     pub guild_id: &'a GuildId,
@@ -157,35 +156,6 @@ impl<T: Deref<Target = CommonSegmentPlaybackConfig>> SegmentPlaybackConfig for T
 
     fn channel_status(&self) -> Option<String> {
         self.deref().channel_status.to_owned()
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct TimedSegment {
-    playback_config: CommonSegmentPlaybackConfig,
-    #[serde(serialize_with = "ser_instant", deserialize_with = "deser_instant")]
-    started_at: Instant,
-    duration: Duration,
-}
-
-impl TimedSegment {
-    pub fn new(playback_config: CommonSegmentPlaybackConfig, duration: Duration) -> Self {
-        Self {
-            playback_config,
-            started_at: Instant::now(),
-            duration,
-        }
-    }
-
-    pub fn completed(&self) -> Completed {
-        Completed::at(self.started_at + self.duration)
-    }
-}
-
-impl Deref for TimedSegment {
-    type Target = CommonSegmentPlaybackConfig;
-    fn deref(&self) -> &Self::Target {
-        &self.playback_config
     }
 }
 
