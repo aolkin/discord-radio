@@ -13,15 +13,14 @@ mod voice_status;
 mod web;
 
 use crate::state::{BotState, Data};
+use anyhow::Context;
 use poise::serenity_prelude::{self as serenity, GatewayIntents};
 use songbird::SerenityInit;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-type Error = Box<dyn std::error::Error + Send + Sync>;
-
-async fn on_error(error: poise::FrameworkError<'_, Data, Error>) {
+async fn on_error(error: poise::FrameworkError<'_, Data, anyhow::Error>) {
     match error {
         poise::FrameworkError::Command { error, ctx, .. } => {
             tracing::error!("Error in command '{}': {:?}", ctx.command().name, error);
@@ -182,7 +181,7 @@ impl serenity::EventHandler for Handler {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Error> {
+async fn main() -> anyhow::Result<()> {
     // Set up panic handler to crash the whole process on any thread panic
     // This ensures the OS can restart the bot instead of running in a broken state
     let default_panic = std::panic::take_hook();
@@ -296,7 +295,7 @@ async fn main() -> Result<(), Error> {
     let file_cache = Arc::new(
         bucket::ObjectStore::new(file_cache_dir.clone(), bucket, file_cache_ttl)
             .await
-            .map_err(|e| format!("Failed to create file cache at {file_cache_dir:?}: {e}"))?,
+            .with_context(|| format!("Failed to create file cache at {file_cache_dir:?}"))?,
     );
 
     let web_http = Arc::new(
