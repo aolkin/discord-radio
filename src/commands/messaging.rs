@@ -160,7 +160,7 @@ pub async fn speak(
     }
 
     if let Err(e) = channel_id
-        .send_message(&*crate::state::HTTP, create_message)
+        .send_message(crate::state::http(), create_message)
         .await
     {
         ctx.say(format!("Failed to send message: {}", e)).await?;

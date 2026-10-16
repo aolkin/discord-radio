@@ -19,18 +19,24 @@ use std::sync::{Arc, LazyLock};
 use tokio::sync::{Mutex, RwLock};
 
 /// Discord client with the default ratelimiter.
-pub static HTTP: LazyLock<Arc<Http>> =
-    LazyLock::new(|| Arc::new(serenity::all::HttpBuilder::new(discord_token()).build()));
+static HTTP: LazyLock<Http> =
+    LazyLock::new(|| serenity::all::HttpBuilder::new(discord_token()).build());
 
 /// Discord client for web routes; its ratelimiter is off so a ratelimited
 /// request fails with 429 instead of waiting.
-pub static WEB_HTTP: LazyLock<Arc<Http>> = LazyLock::new(|| {
-    Arc::new(
-        serenity::all::HttpBuilder::new(discord_token())
-            .ratelimiter_disabled(true)
-            .build(),
-    )
+static WEB_HTTP: LazyLock<Http> = LazyLock::new(|| {
+    serenity::all::HttpBuilder::new(discord_token())
+        .ratelimiter_disabled(true)
+        .build()
 });
+
+pub fn http() -> &'static Http {
+    &HTTP
+}
+
+pub fn web_http() -> &'static Http {
+    &WEB_HTTP
+}
 
 fn discord_token() -> String {
     std::env::var("DISCORD_TOKEN").expect("Expected DISCORD_TOKEN in the environment")

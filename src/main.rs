@@ -219,8 +219,8 @@ async fn main() -> anyhow::Result<()> {
 
     let discord_token =
         std::env::var("DISCORD_TOKEN").expect("Expected DISCORD_TOKEN in the environment");
-    std::sync::LazyLock::force(&state::HTTP);
-    std::sync::LazyLock::force(&state::WEB_HTTP);
+    state::http();
+    state::web_http();
 
     let web_port = std::env::var("WEB_PORT")
         .ok()
@@ -298,7 +298,7 @@ async fn main() -> anyhow::Result<()> {
     );
 
     let bot_user_id = anyhow::Context::context(
-        state::WEB_HTTP.get_current_user().await,
+        state::web_http().get_current_user().await,
         "Failed to fetch the bot user from Discord",
     )?
     .id;
