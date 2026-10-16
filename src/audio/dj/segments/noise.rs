@@ -2,23 +2,31 @@ use crate::audio::dj::config::NoisePeriodEntry;
 use crate::audio::dj::segments::signals::Completed;
 use crate::audio::dj::segments::{
     CommonSegmentPlaybackConfig, Segment, SegmentPlaybackConfig, SignalProfilePlayback,
-    StateDisplay, TimedSegment,
+    StateDisplay,
 };
+use crate::audio::dj::serde::{deser_instant, ser_instant};
 use async_trait::async_trait;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
-use std::time::Duration;
 
+use std::time::{Duration, Instant};
 #[derive(Debug, Serialize, Deserialize)]
 pub enum NoiseSegment {
-    Timed(TimedSegment),
-    Infinite(CommonSegmentPlaybackConfig),
+    Timed {
+        config: CommonSegmentPlaybackConfig,
+        #[serde(serialize_with = "ser_instant", deserialize_with = "deser_instant")]
+        started_at: Instant,
+        duration: Duration,
+    },
+    Infinite {
+        config: CommonSegmentPlaybackConfig,
+    },
 }
 
 impl NoiseSegment {
     pub fn new(noise_profile: String, duration: Option<Duration>) -> Self {
-        let playback_config = CommonSegmentPlaybackConfig {
+        let config = CommonSegmentPlaybackConfig {
             signal_profile: Some(SignalProfilePlayback {
                 name: noise_profile,
                 fade_in_duration: duration.map(|duration| duration.div_f32(2.0)),
@@ -27,23 +35,33 @@ impl NoiseSegment {
             channel_status: None,
         };
         match duration {
-            Some(duration) => Self::Timed(TimedSegment::new(playback_config, duration)),
-            None => Self::Infinite(playback_config),
+            Some(duration) => Self::Timed {
+                config,
+                started_at: Instant::now(),
+                duration,
+            },
+            None => Self::Infinite { config },
         }
     }
 
     pub fn quiet(duration: Duration) -> Self {
-        Self::Timed(TimedSegment::new(Default::default(), duration))
+        Self::Timed {
+            config: Default::default(),
+            started_at: Instant::now(),
+            duration,
+        }
     }
 
     pub fn idle() -> Self {
-        Self::Infinite(Default::default())
+        Self::Infinite {
+            config: Default::default(),
+        }
     }
 
     fn duration(&self) -> Option<Duration> {
         match self {
-            NoiseSegment::Timed(timer) => Some(timer.duration),
-            NoiseSegment::Infinite(_) => None,
+            NoiseSegment::Timed { duration, .. } => Some(*duration),
+            NoiseSegment::Infinite { .. } => None,
         }
     }
 }
@@ -52,8 +70,7 @@ impl Deref for NoiseSegment {
     type Target = CommonSegmentPlaybackConfig;
     fn deref(&self) -> &Self::Target {
         match self {
-            NoiseSegment::Timed(timer) => timer,
-            NoiseSegment::Infinite(config) => config,
+            NoiseSegment::Timed { config, .. } | NoiseSegment::Infinite { config } => config,
         }
     }
 }
@@ -63,8 +80,12 @@ impl Deref for NoiseSegment {
 impl Segment for NoiseSegment {
     fn completed(&self) -> Completed {
         match self {
-            NoiseSegment::Timed(timer) => timer.completed(),
-            NoiseSegment::Infinite(_) => Completed::never(),
+            NoiseSegment::Timed {
+                started_at,
+                duration,
+                ..
+            } => Completed::at(*started_at + *duration),
+            NoiseSegment::Infinite { .. } => Completed::never(),
         }
     }
 
