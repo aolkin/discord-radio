@@ -164,6 +164,7 @@ impl DJStateMachine {
         config: DJConfig,
         guild_id: GuildId,
         saved: Option<crate::persistence::DJState>,
+        state: Arc<RwLock<DJState>>,
         bot_state: Data,
     ) -> Self {
         let (config_name, announcement_channel, restored_state) = match saved {
@@ -192,12 +193,7 @@ impl DJStateMachine {
             .await
             .inspect_err(|e| tracing::warn!("Failed to restore segment: {e:?}"));
 
-        let state = Arc::new(RwLock::new(initial_state));
-        bot_state
-            .dj_states
-            .write()
-            .await
-            .insert(guild_id, state.clone());
+        *state.write().await = initial_state;
 
         Self {
             state,
@@ -238,12 +234,6 @@ impl DJStateMachine {
                 }
                 _ = rotation_due => self.rotate_profile().await,
             }
-        }
-
-        // Clean up shared state
-        {
-            let mut dj_states = self.bot_state.dj_states.write().await;
-            dj_states.remove(&guild_id);
         }
 
         tracing::info!("DJ task terminated for guild {}", guild_id);

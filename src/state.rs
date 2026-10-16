@@ -30,9 +30,7 @@ pub struct BotState {
     pub audio_processors: RwLock<HashMap<GuildId, Arc<RwLock<AudioProcessor>>>>,
     pub profile_manager: ProfileManager,
     pub dj_managers: RwLock<HashMap<GuildId, Arc<Mutex<DJManager>>>>,
-    pub dj_states: RwLock<HashMap<GuildId, Arc<RwLock<DJState>>>>,
     pub activity_manager: ActivityManager,
-    pub shutdown_tx: tokio::sync::broadcast::Sender<String>,
     pub logs_base_path: PathBuf,
     pub file_resolver: FileResolver,
     pub bot_user_id: UserId,
@@ -43,7 +41,6 @@ impl BotState {
         content_path: String,
         state_store: Arc<dyn StateStore>,
         dj_settings: DjSettingsStore,
-        shutdown_tx: tokio::sync::broadcast::Sender<String>,
         file_cache: Arc<ObjectStore>,
         bot_user_id: UserId,
     ) -> Self {
@@ -76,9 +73,7 @@ impl BotState {
             audio_processors: RwLock::new(HashMap::new()),
             profile_manager,
             dj_managers: RwLock::new(HashMap::new()),
-            dj_states: RwLock::new(HashMap::new()),
             activity_manager: ActivityManager::new(state_store),
-            shutdown_tx,
             logs_base_path,
             file_resolver,
             bot_user_id,
@@ -101,6 +96,12 @@ impl BotState {
                 Arc::new(RwLock::new(AudioProcessor::new(initial_profile)))
             })
             .clone()
+    }
+
+    pub async fn dj_state(&self, guild_id: GuildId) -> Option<Arc<RwLock<DJState>>> {
+        let manager = self.dj_managers.read().await.get(&guild_id)?.clone();
+        let state = manager.lock().await.state.clone();
+        Some(state)
     }
 
     /// Get the current voice channel ID for a guild

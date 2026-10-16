@@ -1,13 +1,13 @@
 use crate::audio::dj::config::DJConfig;
 use crate::audio::dj::segments::SignalProfilePlayback;
-use crate::audio::dj::state_machine::DJStateMachine;
+use crate::audio::dj::state_machine::{DJState, DJStateMachine};
 use crate::state::Data;
 use anyhow::{Context, bail};
 use serde::Deserialize;
 use serenity::model::id::{ChannelId, GuildId};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{Mutex, mpsc};
+use tokio::sync::{Mutex, RwLock, mpsc};
 use tokio::task::JoinHandle;
 
 pub const ADVANCE_RETRY_DELAY: Duration = Duration::from_millis(100);
@@ -84,6 +84,7 @@ pub enum DJStateType {
 }
 
 pub struct DJManager {
+    pub state: Arc<RwLock<DJState>>,
     task_handle: JoinHandle<()>,
     command_tx: mpsc::Sender<DJCommand>,
     guild_id: GuildId,
@@ -101,14 +102,17 @@ impl DJManager {
         bot_state: Data,
     ) -> Self {
         let (command_tx, command_rx) = mpsc::channel(10);
+        let state = Arc::new(RwLock::new(DJState::default()));
+        let task_state = state.clone();
         let task_handle = tokio::spawn(async move {
-            DJStateMachine::new(config, guild_id, saved, bot_state)
+            DJStateMachine::new(config, guild_id, saved, task_state, bot_state)
                 .await
                 .run(command_rx)
                 .await;
         });
 
         Self {
+            state,
             task_handle,
             command_tx,
             guild_id,

@@ -3,31 +3,12 @@ use anyhow::Context;
 use tokio::signal;
 
 pub async fn setup_shutdown_handler(data: Data) {
-    let mut shutdown_rx = data.shutdown_tx.subscribe();
-
     tokio::spawn(async move {
-        let (clean_shutdown, shutdown_reason) = tokio::select! {
-            result = wait_for_shutdown_signal() => {
-                if let Err(e) = result {
-                    tracing::error!("Error waiting for shutdown signal: {e:#}");
-                }
-                (true, "OS signal (SIGTERM/SIGINT/Ctrl+C)".to_string())
-            }
-            reason = shutdown_rx.recv() => {
-                match reason {
-                    Ok(r) => {
-                        tracing::info!("Emergency shutdown requested: {}", r);
-                        (false, r)
-                    }
-                    Err(e) => {
-                        tracing::error!("Error receiving shutdown signal: {}", e);
-                        (false, "Emergency shutdown (channel error)".to_string())
-                    }
-                }
-            }
-        };
+        if let Err(e) = wait_for_shutdown_signal().await {
+            tracing::error!("Error waiting for shutdown signal: {e:#}");
+        }
 
-        tracing::info!("Shutdown triggered by: {}", shutdown_reason);
+        tracing::info!("Shutdown triggered by OS signal (SIGTERM/SIGINT/Ctrl+C)");
         tracing::info!("Cleaning up...");
 
         // Clear voice connections (they will be cleaned up automatically)
@@ -38,8 +19,7 @@ pub async fn setup_shutdown_handler(data: Data) {
         );
 
         tracing::info!("Cleanup completed");
-        let exit_code = if clean_shutdown { 0 } else { 1 };
-        std::process::exit(exit_code);
+        std::process::exit(0);
     });
 }
 
