@@ -7,8 +7,9 @@ use crate::audio::tracks::TrackManager;
 use crate::bucket::{FileResolver, ObjectStore};
 use crate::logging::{JsonLogger, guild_logs_dir};
 use crate::persistence::{DjSettingsStore, StateStore};
-use crate::voice_status::{ActivityManager, VoiceChannelStatusManager};
+use crate::voice_status::ActivityManager;
 use serde::Serialize;
+use serenity::all::ChannelId;
 use serenity::model::id::GuildId;
 use songbird::Call;
 use std::collections::HashMap;
@@ -30,7 +31,6 @@ pub struct BotState {
     pub profile_manager: ProfileManager,
     pub dj_managers: RwLock<HashMap<GuildId, Arc<Mutex<DJManager>>>>,
     pub dj_states: RwLock<HashMap<GuildId, Arc<RwLock<DJState>>>>,
-    pub voice_status_manager: VoiceChannelStatusManager,
     pub activity_manager: ActivityManager,
     pub shutdown_tx: tokio::sync::broadcast::Sender<String>,
     pub logs_base_path: PathBuf,
@@ -75,7 +75,6 @@ impl BotState {
             profile_manager,
             dj_managers: RwLock::new(HashMap::new()),
             dj_states: RwLock::new(HashMap::new()),
-            voice_status_manager: VoiceChannelStatusManager::new(voice_connections),
             activity_manager: ActivityManager::new(state_store),
             shutdown_tx,
             logs_base_path,
@@ -113,6 +112,17 @@ impl BotState {
             .entry(guild_id)
             .or_insert_with(|| Arc::new(Mutex::new(DJManager::new(guild_id))))
             .clone()
+    }
+
+    /// Get the current voice channel ID for a guild
+    pub async fn get_voice_channel_id(&self, guild_id: GuildId) -> Option<ChannelId> {
+        let voice_connections = self.voice_connections.read().await;
+        if let Some(call_lock) = voice_connections.get(&guild_id) {
+            let call = call_lock.lock().await;
+            call.current_channel().map(|id| ChannelId::new(id.0.get()))
+        } else {
+            None
+        }
     }
 
     /// Log a member activity event

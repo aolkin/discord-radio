@@ -286,6 +286,28 @@ async fn set_dj_profile(
     Ok(StatusCode::OK)
 }
 
+#[derive(Debug, Deserialize)]
+pub struct DjChannelStatusRequest {
+    pub enabled: bool,
+}
+
+pub async fn set_dj_channel_status(
+    State(bot_state): State<Data>,
+    Path(guild_id): Path<String>,
+    AxumJson(request): AxumJson<DjChannelStatusRequest>,
+) -> Result<StatusCode, StatusCode> {
+    let guild_id = parse_guild_id(&guild_id)?;
+    bot_state
+        .dj_settings
+        .update(guild_id, |settings| {
+            settings.channel_status_disabled = !request.enabled;
+            Ok(())
+        })
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(StatusCode::OK)
+}
+
 #[derive(Debug, Serialize)]
 pub struct ProfilesResponse {
     pub profiles: Vec<String>,

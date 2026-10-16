@@ -604,6 +604,39 @@ pub async fn dj_profile_override(
     .await
 }
 
+/// Turn the DJ's management of the voice channel status on or off
+#[poise::command(
+    slash_command,
+    guild_only,
+    default_member_permissions = "ADMINISTRATOR"
+)]
+pub async fn dj_channel_status(
+    ctx: Context<'_>,
+    #[description = "Whether the DJ sets the voice channel status"] enabled: bool,
+) -> Result<(), Error> {
+    ctx.defer_ephemeral().await?;
+
+    let guild_id = ctx
+        .guild_id()
+        .ok_or("This command can only be used in a server")?;
+
+    ctx.data()
+        .dj_settings
+        .update(guild_id, |settings| {
+            settings.channel_status_disabled = !enabled;
+            Ok(())
+        })
+        .await?;
+    let message = if enabled {
+        "DJ channel status management enabled"
+    } else {
+        "DJ channel status management disabled; the current status stays as it is"
+    };
+    ctx.say(message).await?;
+
+    Ok(())
+}
+
 /// Manage the radio DJ for automated playback
 #[poise::command(
     slash_command,
@@ -710,8 +743,7 @@ pub async fn manage_dj(
                 return Ok(());
             }
 
-            mgr.stop(ctx.data(), ctx.serenity_context().http.clone())
-                .await;
+            mgr.stop(ctx.data()).await;
             ctx.say("DJ stopped").await?;
         }
         "configure" => {

@@ -19,27 +19,6 @@ fn test_status_stack_basic_operations() {
 }
 
 #[test]
-fn test_status_stack_remove_str() {
-    let mut stack = StatusStack::<String>::new();
-
-    stack.push("First".to_string());
-    stack.push("Second".to_string());
-    stack.push("Third".to_string());
-
-    // Remove from middle
-    assert!(stack.remove_str("Second"));
-    assert_eq!(stack.current(), Some(&"Third".to_string()));
-
-    // Remove non-existent
-    assert!(!stack.remove_str("NonExistent"));
-    assert_eq!(stack.current(), Some(&"Third".to_string()));
-
-    // Remove top
-    assert!(stack.remove_str("Third"));
-    assert_eq!(stack.current(), Some(&"First".to_string()));
-}
-
-#[test]
 fn test_status_stack_clear() {
     let mut stack = StatusStack::<String>::new();
 
@@ -51,16 +30,6 @@ fn test_status_stack_clear() {
 
     stack.clear();
     assert!(stack.current().is_none());
-}
-
-#[test]
-fn test_status_stack_current_str() {
-    let mut stack = StatusStack::<String>::new();
-
-    assert!(stack.current_str().is_none());
-
-    stack.push("Test Status".to_string());
-    assert_eq!(stack.current_str(), Some("Test Status"));
 }
 
 #[test]

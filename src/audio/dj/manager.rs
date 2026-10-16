@@ -66,7 +66,6 @@ pub struct DJManager {
     task_handle: Option<tokio::task::JoinHandle<()>>,
     pub(crate) command_tx: Option<mpsc::Sender<DJCommand>>,
     guild_id: GuildId,
-    status_message: Option<String>,
 }
 
 impl DJManager {
@@ -75,7 +74,6 @@ impl DJManager {
             task_handle: None,
             command_tx: None,
             guild_id,
-            status_message: None,
         }
     }
 
@@ -103,30 +101,14 @@ impl DJManager {
             return Err("DJ is already running".into());
         }
 
-        // Set voice channel status if configured using the status stack
-        if let Some(status) = &config.channel_status {
-            bot_state
-                .voice_status_manager
-                .push_status(self.guild_id, status, &http)
-                .await;
-            tracing::info!(
-                "Pushed DJ voice channel status '{}' for guild {}",
-                status,
-                self.guild_id
-            );
-            // Store the status message so we can remove it later
-            self.status_message = Some(status.clone());
-        }
-
         let (tx, rx) = mpsc::channel(10);
         let guild_id = self.guild_id;
-        let http_clone = http.clone();
         let handle = tokio::spawn(async move {
             DJStateMachine::new(
                 config,
                 guild_id,
                 announcement_channel,
-                http_clone,
+                http,
                 restored_state,
                 bot_state,
             )
@@ -141,7 +123,7 @@ impl DJManager {
         Ok(())
     }
 
-    pub async fn stop(&mut self, bot_state: &Data, http: Arc<Http>) {
+    pub async fn stop(&mut self, bot_state: &Data) {
         if let Some(handle) = self.task_handle.take() {
             // Send graceful stop command
             if let Err(e) = self.send(DJCommand::Stop).await {
@@ -162,19 +144,6 @@ impl DJManager {
                     tracing::warn!("DJ shutdown timeout for guild {}, task may have hung", self.guild_id);
                 }
             }
-
-            // Remove the DJ's voice channel status from the stack
-            if let Some(status_msg) = &self.status_message {
-                bot_state
-                    .voice_status_manager
-                    .remove_status(self.guild_id, status_msg, &http)
-                    .await;
-                tracing::info!(
-                    "Removed DJ voice channel status for guild {}",
-                    self.guild_id
-                );
-            }
-            self.status_message = None;
 
             // Remove DJ state from persistence
             if let Err(e) = bot_state.state_store.remove_dj_state(self.guild_id).await {

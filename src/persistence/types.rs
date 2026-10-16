@@ -37,6 +37,8 @@ pub struct DjSettings {
     pub hex_message_announcement_overrides: DJConfigOverrideCategory<String>,
     #[serde(default)]
     pub state_weight_overrides: DJConfigOverrideSingle<StateWeights>,
+    #[serde(default)]
+    pub channel_status_disabled: bool,
 }
 
 #[derive(Deserialize, Debug)]

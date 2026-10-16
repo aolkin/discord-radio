@@ -625,6 +625,14 @@
                         </button>
                     </div>
 
+                    <div class="section">
+                        <div class="section-title">Voice Channel Status</div>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" :checked="guild.channel_status_enabled" @change="setChannelStatusEnabled(guild.guild_id, $event.target.checked)">
+                            <span x-text="guild.channel_status_enabled ? 'Managed by the DJ' : 'Not managed (left as it is)'"></span>
+                        </label>
+                    </div>
+
                     <!-- Activity Logs-->
                     <div class="section">
                         <div class="section-title">Activity Logs</div>
@@ -1837,6 +1845,22 @@
                         };
                     } finally {
                         this.profileSaving = false;
+                    }
+                },
+
+                async setChannelStatusEnabled(guildId, enabled) {
+                    try {
+                        const response = await fetch(`/api/guilds/${guildId}/dj/channel-status`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ enabled }),
+                        });
+                        if (!response.ok) {
+                            throw new Error('Failed to change channel status setting');
+                        }
+                    } catch (error) {
+                        console.error('Error changing channel status setting:', error);
+                        alert('Failed to change the voice channel status setting. Please try again.');
                     }
                 },
 
