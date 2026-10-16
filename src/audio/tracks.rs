@@ -350,7 +350,7 @@ pub async fn get_or_create_track_manager(
 /// Load default profile, using fallback if not found
 pub fn load_default_profile(bot_state: &BotState) -> crate::audio::profiles::SignalProfile {
     // Try to get the "clear" profile
-    if let Some(profile) = bot_state.profile_manager.get_profile("clear").cloned() {
+    if let Some(profile) = bot_state.profile_manager.get_profile("clear") {
         return profile;
     }
 

@@ -1,9 +1,10 @@
-use crate::bucket::ObjectStore;
+use crate::bucket::{ObjectStore, ObjectStoreError};
 use anyhow::Context;
 use futures_util::{StreamExt, stream};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::{Arc, PoisonError, RwLock, RwLockReadGuard};
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct SignalProfile {
@@ -77,15 +78,24 @@ impl SignalProfile {
 
 const REMOTE_PREFIX: &str = "profiles/";
 
+#[derive(Debug, thiserror::Error)]
+pub enum SaveProfileError {
+    #[error("profile names may only contain letters, digits, '-' and '_'")]
+    InvalidName,
+    #[error(transparent)]
+    Storage(#[from] ObjectStoreError),
+}
+
 pub struct ProfileManager {
-    profiles: HashMap<String, SignalProfile>,
+    profiles: RwLock<HashMap<String, SignalProfile>>,
+    store: Arc<ObjectStore>,
 }
 
 impl ProfileManager {
     /// Loads every profile in `profiles_dir` and under `profiles/` in object
     /// storage. A profile in object storage replaces a local profile of the
     /// same name.
-    pub async fn from_storage(profiles_dir: &Path, store: &ObjectStore) -> Self {
+    pub async fn from_storage(profiles_dir: &Path, store: Arc<ObjectStore>) -> Self {
         let mut profiles = HashMap::new();
 
         let local_paths = match std::fs::read_dir(profiles_dir) {
@@ -137,14 +147,49 @@ impl ProfileManager {
             tracing::info!("Loaded {} signal profiles", profiles.len());
         }
 
-        Self { profiles }
+        Self {
+            profiles: RwLock::new(profiles),
+            store,
+        }
     }
 
-    pub fn get_profile(&self, name: &str) -> Option<&SignalProfile> {
-        self.profiles.get(name)
+    pub fn get_profile(&self, name: &str) -> Option<SignalProfile> {
+        self.read().get(name).cloned()
     }
 
     pub fn list_profiles(&self) -> Vec<String> {
-        self.profiles.keys().cloned().collect()
+        self.read().keys().cloned().collect()
+    }
+
+    /// Writes `profile` to object storage under its name, replacing any
+    /// profile of the same name.
+    pub async fn save(&self, profile: SignalProfile) -> Result<(), SaveProfileError> {
+        let name_is_valid = !profile.name.is_empty()
+            && profile
+                .name
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+        if !name_is_valid {
+            return Err(SaveProfileError::InvalidName);
+        }
+
+        let bytes = serde_json::to_vec_pretty(&profile).expect("a SignalProfile always serializes");
+        self.store
+            .upload(
+                &format!("{REMOTE_PREFIX}{}.json", profile.name),
+                &bytes,
+                "application/json",
+            )
+            .await?;
+
+        self.profiles
+            .write()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(profile.name.clone(), profile);
+        Ok(())
+    }
+
+    fn read(&self) -> RwLockReadGuard<'_, HashMap<String, SignalProfile>> {
+        self.profiles.read().unwrap_or_else(PoisonError::into_inner)
     }
 }

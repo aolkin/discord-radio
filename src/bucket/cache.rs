@@ -33,7 +33,7 @@ pub enum ObjectStoreError {
     NotConfigured,
     #[error("object not found")]
     NotFound,
-    #[error("remote download failed: {0:#}")]
+    #[error("object storage request failed: {0:#}")]
     Remote(Arc<anyhow::Error>),
     #[error("local cache i/o failed: {0}")]
     Local(Arc<std::io::Error>),
@@ -53,6 +53,8 @@ pub(crate) trait ObjectDownloader: Send + Sync {
     async fn download(&self, key: &str) -> anyhow::Result<Vec<u8>>;
 
     async fn list_keys(&self, prefix: &str) -> anyhow::Result<Vec<String>>;
+
+    async fn upload(&self, key: &str, bytes: &[u8], content_type: &str) -> anyhow::Result<()>;
 }
 
 #[async_trait]
@@ -109,6 +111,19 @@ impl ObjectDownloader for s3::Bucket {
         }
 
         Ok(keys)
+    }
+
+    async fn upload(&self, key: &str, bytes: &[u8], content_type: &str) -> anyhow::Result<()> {
+        let response = self
+            .put_object_with_content_type(key, bytes, content_type)
+            .await
+            .with_context(|| format!("uploading {key}"))?;
+
+        let status = response.status_code();
+        if !(200..300).contains(&status) {
+            bail!("unexpected status {status} uploading {key}");
+        }
+        Ok(())
     }
 }
 
@@ -252,6 +267,27 @@ impl ObjectStore {
                 ObjectStoreError::Remote(Arc::new(e))
             }
         })
+    }
+
+    /// Writes `bytes` to `key` in object storage, replacing any object already
+    /// there, and forgets any cached copy of it.
+    pub async fn upload(
+        &self,
+        key: &str,
+        bytes: &[u8],
+        content_type: &str,
+    ) -> Result<(), ObjectStoreError> {
+        let downloader = self
+            .downloader
+            .as_ref()
+            .ok_or(ObjectStoreError::NotConfigured)?;
+        downloader
+            .upload(key, bytes, content_type)
+            .await
+            .map_err(|e| ObjectStoreError::Remote(Arc::new(e)))?;
+        self.invalidate(key).await;
+        self.remote_listings.invalidate_all();
+        Ok(())
     }
 
     /// Forgets `key`, so the next `ensure_cached` re-downloads it.

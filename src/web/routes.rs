@@ -1,6 +1,7 @@
 use crate::audio::dj::manager::{DJCommand, DJStateType, IdleRequest, TrackRequest};
 use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
+use crate::audio::profiles::{SaveProfileError, SignalProfile};
 use crate::bot_profile::ProfileEdit;
 use crate::bucket::ObjectStoreError;
 use crate::state::Data;
@@ -322,6 +323,41 @@ pub struct ProfilesResponse {
 pub async fn get_profiles(State(bot_state): State<Data>) -> AxumJson<ProfilesResponse> {
     let profiles = bot_state.profile_manager.list_profiles();
     AxumJson(ProfilesResponse { profiles })
+}
+
+pub async fn get_profile(
+    State(bot_state): State<Data>,
+    Path(name): Path<String>,
+) -> Result<AxumJson<SignalProfile>, StatusCode> {
+    bot_state
+        .profile_manager
+        .get_profile(&name)
+        .map(AxumJson)
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
+pub async fn put_profile(
+    State(bot_state): State<Data>,
+    Path(name): Path<String>,
+    AxumJson(profile): AxumJson<SignalProfile>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    if profile.name != name {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("Body name {:?} does not match {name:?}", profile.name),
+        ));
+    }
+    bot_state.profile_manager.save(profile).await.map_err(|e| {
+        let status = match e {
+            SaveProfileError::InvalidName => StatusCode::BAD_REQUEST,
+            SaveProfileError::Storage(ObjectStoreError::NotConfigured) => {
+                StatusCode::SERVICE_UNAVAILABLE
+            }
+            SaveProfileError::Storage(_) => StatusCode::BAD_GATEWAY,
+        };
+        (status, format!("{e:#}"))
+    })?;
+    Ok(StatusCode::OK)
 }
 
 #[derive(Debug, Serialize)]

@@ -50,6 +50,10 @@ impl ObjectDownloader for StubDownloader {
             .cloned()
             .collect())
     }
+
+    async fn upload(&self, _key: &str, _bytes: &[u8], _content_type: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
 
 struct FailingDownloader;
@@ -63,6 +67,10 @@ impl ObjectDownloader for FailingDownloader {
     async fn list_keys(&self, _prefix: &str) -> anyhow::Result<Vec<String>> {
         Err(anyhow::anyhow!("listing failed"))
     }
+
+    async fn upload(&self, key: &str, _bytes: &[u8], _content_type: &str) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!("upload failed: {key}"))
+    }
 }
 
 struct NotFoundDownloader;
@@ -75,6 +83,10 @@ impl ObjectDownloader for NotFoundDownloader {
 
     async fn list_keys(&self, _prefix: &str) -> anyhow::Result<Vec<String>> {
         Ok(Vec::new())
+    }
+
+    async fn upload(&self, _key: &str, _bytes: &[u8], _content_type: &str) -> anyhow::Result<()> {
+        Ok(())
     }
 }
 
