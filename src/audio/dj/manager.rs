@@ -20,7 +20,6 @@ pub enum DJCommand {
     SetAnnouncementChannel(Option<ChannelId>),
     SetBackgroundProfile(Option<SignalProfilePlayback>),
     SetOverrideProfile(Option<SignalProfilePlayback>),
-    SetChannelStatusEnabled(bool),
 }
 
 /// A hex message for the DJ to play. `volume` and `loops` replace the DJ's
@@ -170,30 +169,4 @@ pub async fn send_dj_command(
     let manager = bot_state.dj_manager(guild_id).await;
     let mgr = manager.lock().await;
     mgr.send(command).await
-}
-
-/// Save whether the DJ manages the guild's voice channel status, and apply it
-/// to the running DJ.
-pub async fn set_channel_status_enabled(
-    bot_state: &Data,
-    guild_id: GuildId,
-    enabled: bool,
-) -> anyhow::Result<()> {
-    bot_state
-        .dj_settings
-        .update(guild_id, |settings| {
-            settings.channel_status_disabled = !enabled;
-            Ok(())
-        })
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to save channel status setting: {e}"))?;
-
-    let manager = bot_state.dj_manager(guild_id).await;
-    let mgr = manager.lock().await;
-    if mgr.is_running() {
-        mgr.send(DJCommand::SetChannelStatusEnabled(enabled))
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to notify the DJ: {e}"))?;
-    }
-    Ok(())
 }

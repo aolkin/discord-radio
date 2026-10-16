@@ -1,8 +1,6 @@
 use crate::audio::connection::setup_voice_connection;
 use crate::audio::dj::config::DJConfig;
-use crate::audio::dj::manager::{
-    DJCommand, DJStateType, send_dj_command, set_channel_status_enabled,
-};
+use crate::audio::dj::manager::{DJCommand, DJStateType, send_dj_command};
 use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
 use crate::audio::processing::processor::ProcessorRef;
@@ -622,11 +620,13 @@ pub async fn dj_channel_status(
         .guild_id()
         .ok_or("This command can only be used in a server")?;
 
-    if let Err(e) = set_channel_status_enabled(ctx.data(), guild_id, enabled).await {
-        ctx.say(format!("Failed to update DJ channel status setting: {e:#}"))
-            .await?;
-        return Ok(());
-    }
+    ctx.data()
+        .dj_settings
+        .update(guild_id, |settings| {
+            settings.channel_status_disabled = !enabled;
+            Ok(())
+        })
+        .await?;
     let message = if enabled {
         "DJ channel status management enabled"
     } else {

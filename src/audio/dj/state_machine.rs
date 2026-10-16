@@ -9,7 +9,6 @@ use crate::audio::dj::segments::{
 use crate::audio::dj::segments::{NoiseSegment, SegmentCtx};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
 use crate::state::Data;
-use anyhow::Context;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serenity::all::Http;
@@ -25,7 +24,7 @@ pub const DEFAULT_PROFILE_FADE: Duration = Duration::from_secs(2);
 pub struct SegmentContainer {
     pub segment: Box<dyn Segment>,
     #[serde(serialize_with = "ser_instant", deserialize_with = "deser_instant")]
-    pub started_at: std::time::Instant,
+    pub started_at: Instant,
 }
 
 impl SegmentContainer {
@@ -45,7 +44,7 @@ impl<S: Segment + 'static> From<S> for SegmentContainer {
     fn from(segment: S) -> Self {
         SegmentContainer {
             segment: Box::new(segment),
-            started_at: std::time::Instant::now(),
+            started_at: Instant::now(),
         }
     }
 }
@@ -156,9 +155,8 @@ pub struct DJStateMachine {
     bot_state: Data,
     config_name: String,
     applied_profile: Option<(SignalProfilePlayback, ProfileSource)>,
-    channel_status_enabled: bool,
-    /// `None` until a status reaches Discord, and again after the setting changes.
-    applied_channel_status: Option<Option<String>>,
+    /// An empty status is how Discord clears it.
+    applied_channel_status: Option<String>,
 }
 
 impl DJStateMachine {
@@ -196,12 +194,6 @@ impl DJStateMachine {
             .await
             .insert(guild_id, state.clone());
 
-        let channel_status_enabled = !bot_state
-            .dj_settings
-            .get(guild_id)
-            .await
-            .channel_status_disabled;
-
         Self {
             state,
             scheduler: WeightedScheduler::new(config),
@@ -212,7 +204,6 @@ impl DJStateMachine {
             bot_state,
             config_name,
             applied_profile: None,
-            channel_status_enabled,
             applied_channel_status: None,
         }
     }
@@ -242,7 +233,7 @@ impl DJStateMachine {
                     }
                 }
                 _ = rotation_due => self.rotate_profile().await,
-            };
+            }
         }
 
         // Clean up shared state
@@ -298,8 +289,18 @@ impl DJStateMachine {
         }
     }
 
+    async fn channel_status_enabled(&self) -> bool {
+        !self
+            .bot_state
+            .dj_settings
+            .get(self.guild_id)
+            .await
+            .channel_status_disabled
+    }
+
     async fn update_channel_status(&mut self) {
-        if !self.channel_status_enabled {
+        if !self.channel_status_enabled().await {
+            self.applied_channel_status = None;
             return;
         }
         let config_status = self.scheduler.config().channel_status.as_deref();
@@ -307,11 +308,12 @@ impl DJStateMachine {
             .state
             .read()
             .await
-            .effective_channel_status(config_status);
+            .effective_channel_status(config_status)
+            .unwrap_or_default();
         self.apply_channel_status(target).await;
     }
 
-    async fn apply_channel_status(&mut self, target: Option<String>) {
+    async fn apply_channel_status(&mut self, target: String) {
         if self.applied_channel_status.as_ref() == Some(&target) {
             return;
         }
@@ -319,20 +321,19 @@ impl DJStateMachine {
             return;
         };
 
-        let status = target.unwrap_or_default();
         match channel_id
             .edit(
                 &self.http,
-                serenity::builder::EditChannel::new().status(&status),
+                serenity::builder::EditChannel::new().status(&target),
             )
             .await
         {
             Ok(_) => {
                 tracing::debug!(
-                    "Set voice channel status to {status:?} in guild {}",
+                    "Set voice channel status to {target:?} in guild {}",
                     self.guild_id
                 );
-                self.applied_channel_status = Some(status)
+                self.applied_channel_status = Some(target)
             }
             Err(e) => tracing::warn!(
                 "Failed to set voice channel status in guild {}: {e:#}",
@@ -381,8 +382,8 @@ impl DJStateMachine {
 
     pub async fn stop(&mut self, bot_state: &Data) {
         self.cleanup_current_state().await;
-        if self.channel_status_enabled {
-            self.apply_channel_status(None).await;
+        if self.channel_status_enabled().await {
+            self.apply_channel_status(String::new()).await;
         }
 
         bot_state
@@ -558,11 +559,6 @@ impl DJStateMachine {
             }
             DJCommand::SetOverrideProfile(profile_override) => {
                 self.state.write().await.override_profile = profile_override;
-                Ok(())
-            }
-            DJCommand::SetChannelStatusEnabled(enabled) => {
-                self.channel_status_enabled = enabled;
-                self.applied_channel_status = None;
                 Ok(())
             }
         };

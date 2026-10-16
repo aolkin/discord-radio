@@ -1,6 +1,4 @@
-use crate::audio::dj::manager::{
-    DJCommand, DJStateType, TrackRequest, send_dj_command, set_channel_status_enabled,
-};
+use crate::audio::dj::manager::{DJCommand, DJStateType, TrackRequest, send_dj_command};
 use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
 use crate::bucket::ObjectStoreError;
@@ -299,12 +297,14 @@ pub async fn set_dj_channel_status(
     AxumJson(request): AxumJson<DjChannelStatusRequest>,
 ) -> Result<StatusCode, StatusCode> {
     let guild_id = parse_guild_id(&guild_id)?;
-    set_channel_status_enabled(&bot_state, guild_id, request.enabled)
+    bot_state
+        .dj_settings
+        .update(guild_id, |settings| {
+            settings.channel_status_disabled = !request.enabled;
+            Ok(())
+        })
         .await
-        .map_err(|e| {
-            tracing::warn!("Failed to set DJ channel status setting for guild {guild_id}: {e:#}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(StatusCode::OK)
 }
 
