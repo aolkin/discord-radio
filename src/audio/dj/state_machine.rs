@@ -63,7 +63,7 @@ pub enum BackgroundProfile {
 impl BackgroundProfile {
     pub fn completed(&self) -> Completed {
         match self {
-            Self::Manual(_) => Completed::when(std::future::pending()),
+            Self::Manual(_) => Completed::never(),
             Self::Rotating {
                 started_at,
                 duration,
@@ -101,16 +101,18 @@ pub struct DJState {
     pub override_channel_status: Option<String>,
 }
 
-impl DJState {
-    pub fn idle() -> Self {
+impl Default for DJState {
+    fn default() -> Self {
         Self {
-            segment: NoiseSegment::idle(Duration::from_secs(1)).into(),
+            segment: NoiseSegment::quiet(Duration::from_secs(1)).into(),
             background_profile: BackgroundProfile::default(),
             override_profile: None,
             override_channel_status: None,
         }
     }
+}
 
+impl DJState {
     pub fn effective_channel_status(&self, config_status: Option<&str>) -> Option<String> {
         self.override_channel_status
             .clone()
@@ -185,7 +187,7 @@ impl DJStateMachine {
         let hex_message_announcements =
             config.hex_message_announcements.clone().unwrap_or_default();
 
-        let initial_state = restored_state.unwrap_or_else(DJState::idle);
+        let initial_state = restored_state.unwrap_or_default();
 
         let _ = initial_state
             .segment

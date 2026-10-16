@@ -140,7 +140,7 @@ impl Segment for TrackSegment {
 
     async fn restore(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
         let elapsed = self.timer.started_at.elapsed();
-        if self.timer.is_elapsed() {
+        if elapsed >= self.timer.duration {
             tracing::info!(
                 "DJ track '{}' has already finished (elapsed: {:.1}s, duration: {:.1}s), will advance to next state",
                 self.filename,

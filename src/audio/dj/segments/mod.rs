@@ -177,10 +177,6 @@ impl TimedSegment {
         }
     }
 
-    pub fn is_elapsed(&self) -> bool {
-        self.started_at.elapsed() >= self.duration
-    }
-
     pub fn completed(&self) -> Completed {
         Completed::at(self.started_at + self.duration)
     }
