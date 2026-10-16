@@ -8,6 +8,7 @@ use serenity::model::id::{ChannelId, GuildId};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex, mpsc};
+use tokio::task::JoinHandle;
 
 pub const ADVANCE_RETRY_DELAY: Duration = Duration::from_millis(100);
 
@@ -63,7 +64,7 @@ pub enum DJStateType {
 }
 
 pub struct DJManager {
-    task_handle: tokio::task::JoinHandle<()>,
+    task_handle: JoinHandle<()>,
     command_tx: mpsc::Sender<DJCommand>,
     guild_id: GuildId,
 }
@@ -73,8 +74,7 @@ impl DJManager {
         &self,
         command: DJCommand,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.command_tx.send(command).await?;
-        Ok(())
+        Ok(self.command_tx.send(command).await?)
     }
 
     pub async fn start(
@@ -161,13 +161,12 @@ pub async fn start_dj(bot_state: Data, guild_id: GuildId, http: Arc<Http>) -> an
         .remove(&guild_id);
 
     let config_name = saved.as_ref().and_then(|s| s.config_name.as_deref());
-    let config = match load_dj_config(&bot_state, guild_id, config_name).await {
-        Ok(config) => config,
-        Err(e) => {
+    let config = load_dj_config(&bot_state, guild_id, config_name)
+        .await
+        .unwrap_or_else(|e| {
             tracing::warn!("Starting DJ with an empty config in guild {guild_id}: {e:#}");
             DJConfig::default()
-        }
-    };
+        });
 
     tracing::info!("Starting DJ for guild {}", guild_id);
     let manager = DJManager::start(guild_id, config, saved, bot_state, http).await;
