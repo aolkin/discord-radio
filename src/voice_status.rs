@@ -1,5 +1,5 @@
 use std::fmt::{Display, Formatter};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use tokio::sync::RwLock;
 
 /// Activity type enum that supports equality comparison
@@ -69,29 +69,33 @@ pub type ActivityStack = Vec<ActivityEntry>;
 /// Manager for bot activity stack (global, not per-guild)
 /// The activity is global for the entire bot.
 pub struct ActivityManager {
-    stack: Arc<RwLock<ActivityStack>>,
-    ctx: Arc<RwLock<Option<serenity::all::Context>>>,
+    stack: RwLock<ActivityStack>,
+    ctx: OnceLock<serenity::all::Context>,
     state_store: Arc<dyn crate::persistence::StateStore>,
 }
 
 impl ActivityManager {
     pub fn new(state_store: Arc<dyn crate::persistence::StateStore>) -> Self {
         Self {
-            stack: Arc::new(RwLock::new(ActivityStack::new())),
-            ctx: Arc::new(RwLock::new(None)),
+            stack: RwLock::new(ActivityStack::new()),
+            ctx: OnceLock::new(),
             state_store,
         }
     }
 
-    /// Set the serenity context for this manager
+    /// Set the serenity context on the first call and apply the current activity to it.
+    /// Later calls are ignored.
     pub async fn set_context(&self, ctx: serenity::all::Context) {
-        let mut context = self.ctx.write().await;
-        *context = Some(ctx);
+        if self.ctx.set(ctx).is_err() {
+            return;
+        }
+        let current = self.current().await;
+        self.update_activity(current.as_ref());
     }
 
     /// Update the bot's activity to the current top of the stack
-    async fn update_activity(&self, current: Option<&ActivityEntry>) {
-        if let Some(ctx) = self.ctx.read().await.as_ref() {
+    fn update_activity(&self, current: Option<&ActivityEntry>) {
+        if let Some(ctx) = self.ctx.get() {
             let activity_data = current.map(|entry| entry.into());
             ctx.set_activity(activity_data);
             tracing::debug!("Updated bot activity");
@@ -106,7 +110,7 @@ impl ActivityManager {
         stack.push(entry.clone());
         drop(stack);
 
-        self.update_activity(Some(&entry)).await;
+        self.update_activity(Some(&entry));
         self.persist_current_activity().await;
         tracing::debug!("Set bot activity and cleared stack");
     }
@@ -118,7 +122,7 @@ impl ActivityManager {
         stack.push(entry.clone());
         drop(stack);
 
-        self.update_activity(Some(&entry)).await;
+        self.update_activity(Some(&entry));
         self.persist_current_activity().await;
         tracing::debug!("Pushed new bot activity");
     }
@@ -133,7 +137,7 @@ impl ActivityManager {
             let last = stack.last().cloned();
             drop(stack);
 
-            self.update_activity(last.as_ref()).await;
+            self.update_activity(last.as_ref());
             self.persist_current_activity().await;
             tracing::debug!("Removed bot activity from stack");
             true
@@ -179,7 +183,7 @@ impl ActivityManager {
             stack.push(entry.clone());
             drop(stack);
 
-            self.update_activity(Some(&entry)).await;
+            self.update_activity(Some(&entry));
             tracing::info!("Restored activity state from disk");
         } else {
             tracing::info!("No saved activity state found");
