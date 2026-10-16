@@ -1,5 +1,6 @@
 use crate::bucket::ObjectStore;
 use anyhow::Context;
+use futures_util::{StreamExt, stream};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
@@ -87,46 +88,36 @@ impl ProfileManager {
     pub async fn load(profiles_dir: &Path, store: &ObjectStore) -> Self {
         let mut profiles = HashMap::new();
 
-        let entries = match std::fs::read_dir(profiles_dir) {
-            Ok(entries) => entries.flatten().collect(),
-            Err(e) => {
+        let local = std::fs::read_dir(profiles_dir)
+            .inspect_err(|e| {
                 tracing::warn!(
                     "Failed to read signal profiles from {}: {e}",
                     profiles_dir.display()
-                );
-                Vec::new()
-            }
-        };
-        for path in entries.into_iter().map(|entry| entry.path()) {
-            if path.extension().and_then(|s| s.to_str()) != Some("json") {
-                continue;
-            }
-            match load_local(&path) {
-                Ok(profile) => {
-                    tracing::info!(
-                        "Loaded signal profile {} from {}",
-                        profile.name,
-                        path.display()
-                    );
-                    profiles.insert(profile.name.clone(), profile);
-                }
-                Err(e) => tracing::warn!(
-                    "Failed to load signal profile from {}: {e:#}",
-                    path.display()
-                ),
-            }
-        }
+                )
+            })
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|entry| entry.path())
+            .filter(|path| path.extension().and_then(|s| s.to_str()) == Some("json"))
+            .map(|path| (path.display().to_string(), load_local(&path)));
 
-        for key in store.list_remote(REMOTE_PREFIX).await {
-            if !key.ends_with(".json") {
-                continue;
-            }
-            match fetch_remote(store, &key).await {
+        let remote: Vec<_> = stream::iter(store.list_remote(REMOTE_PREFIX).await)
+            .filter(|key| std::future::ready(key.ends_with(".json")))
+            .then(|key| async {
+                let profile = fetch_remote(store, &key).await;
+                (key, profile)
+            })
+            .collect()
+            .await;
+
+        for (source, result) in local.chain(remote) {
+            match result {
                 Ok(profile) => {
-                    tracing::info!("Loaded signal profile {} from {key}", profile.name);
+                    tracing::info!("Loaded signal profile {} from {source}", profile.name);
                     profiles.insert(profile.name.clone(), profile);
                 }
-                Err(e) => tracing::warn!("Failed to load signal profile from {key}: {e:#}"),
+                Err(e) => tracing::warn!("Failed to load signal profile from {source}: {e:#}"),
             }
         }
 
