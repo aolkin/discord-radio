@@ -406,7 +406,7 @@ impl DJStateMachine {
         &mut self,
         bot_state: &Data,
         state_type_filter: Option<DJStateType>,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ) -> anyhow::Result<()> {
         let Self { scheduler, .. } = self;
         let next_state_type = scheduler.next_state(state_type_filter);
         tracing::info!("DJ transitioning to state: {next_state_type}");
@@ -431,7 +431,7 @@ impl DJStateMachine {
         &self,
         bot_state: &Data,
         request: HexMessageRequest,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ) -> anyhow::Result<()> {
         tracing::info!(
             "DJ force transitioning to hex message with custom text: {}",
             request.message
@@ -452,11 +452,7 @@ impl DJStateMachine {
         self.enter_state(next_state, bot_state).await
     }
 
-    pub async fn force_track(
-        &self,
-        bot_state: &Data,
-        request: TrackRequest,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn force_track(&self, bot_state: &Data, request: TrackRequest) -> anyhow::Result<()> {
         tracing::info!("DJ force transitioning to track: {}", request.filename);
         let start_position = request
             .start_position
@@ -482,11 +478,7 @@ impl DJStateMachine {
         self.enter_state(next_state, bot_state).await
     }
 
-    pub async fn force_idle(
-        &self,
-        bot_state: &Data,
-        request: IdleRequest,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn force_idle(&self, bot_state: &Data, request: IdleRequest) -> anyhow::Result<()> {
         tracing::info!(
             "DJ force transitioning to idle with noise profile {:?} for {:?}s",
             request.noise_profile,
@@ -504,11 +496,7 @@ impl DJStateMachine {
         self.enter_state(next_state.into(), bot_state).await
     }
 
-    async fn enter_state(
-        &self,
-        segment: SegmentContainer,
-        bot_state: &Data,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn enter_state(&self, segment: SegmentContainer, bot_state: &Data) -> anyhow::Result<()> {
         // Record the previous state before transitioning
         let from_state = self.current_state().await.segment.state_name().to_string();
 

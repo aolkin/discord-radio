@@ -2,6 +2,7 @@ use crate::audio::dj::config::DJConfig;
 use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::DJStateMachine;
 use crate::state::Data;
+use anyhow::{Context, bail};
 use serde::Deserialize;
 use serenity::all::Http;
 use serenity::model::id::{ChannelId, GuildId};
@@ -42,7 +43,7 @@ pub struct TrackRequest {
 }
 
 impl TrackRequest {
-    pub fn validate(&self) -> Result<(), String> {
+    pub fn validate(&self) -> anyhow::Result<()> {
         for (name, value) in [
             ("start_position", self.start_position),
             ("duration", self.duration),
@@ -50,7 +51,7 @@ impl TrackRequest {
             if let Some(seconds) = value
                 && !(seconds.is_finite() && seconds >= 0.0)
             {
-                return Err(format!("{name} must be a non-negative number of seconds"));
+                bail!("{name} must be a non-negative number of seconds");
             }
         }
         Ok(())
@@ -66,11 +67,11 @@ pub struct IdleRequest {
 }
 
 impl IdleRequest {
-    pub fn validate(&self) -> Result<(), String> {
+    pub fn validate(&self) -> anyhow::Result<()> {
         if let Some(seconds) = self.duration
             && !(seconds.is_finite() && seconds >= 0.0)
         {
-            return Err("duration must be a non-negative number of seconds".to_string());
+            bail!("duration must be a non-negative number of seconds");
         }
         Ok(())
     }
@@ -90,10 +91,7 @@ pub struct DJManager {
 }
 
 impl DJManager {
-    pub async fn send(
-        &self,
-        command: DJCommand,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn send(&self, command: DJCommand) -> anyhow::Result<()> {
         Ok(self.command_tx.send(command).await?)
     }
 
@@ -156,7 +154,7 @@ pub async fn load_dj_config(
 ) -> anyhow::Result<DJConfig> {
     let base = match config_name {
         Some(name) => DJConfig::load_from_file(&format!("dj_configs/{name}.json"))
-            .map_err(|e| anyhow::anyhow!("loading DJ config '{name}': {e}"))?,
+            .with_context(|| format!("loading DJ config '{name}'"))?,
         None => DJConfig::default(),
     };
     let settings = bot_state.dj_settings.get(guild_id).await;
@@ -179,7 +177,7 @@ pub async fn start_dj(bot_state: Data, guild_id: GuildId, http: Arc<Http>) -> an
         .state_store
         .load_dj_states()
         .await
-        .map_err(|e| anyhow::anyhow!("loading saved DJ state: {e}"))?
+        .context("loading saved DJ state")?
         .remove(&guild_id);
 
     let config_name = saved.as_ref().and_then(|s| s.config_name.as_deref());
@@ -207,13 +205,13 @@ pub async fn send_dj_command(
     bot_state: &Data,
     guild_id: GuildId,
     command: DJCommand,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+) -> anyhow::Result<()> {
     let manager = bot_state
         .dj_managers
         .read()
         .await
         .get(&guild_id)
-        .ok_or("Not in a voice channel")?
+        .context("Not in a voice channel")?
         .clone();
     manager.lock().await.send(command).await
 }

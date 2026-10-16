@@ -1,4 +1,5 @@
 use crate::audio::processing::mixer::AudioSource;
+use anyhow::{Context, bail};
 use std::path::Path;
 use std::time::Duration;
 use symphonia::core::audio::SampleBuffer;
@@ -21,12 +22,9 @@ pub struct SymphoniaSource {
 }
 
 impl SymphoniaSource {
-    pub fn from_file(
-        path: impl AsRef<Path>,
-        required_sample_rate: u32,
-    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    pub fn from_file(path: impl AsRef<Path>, required_sample_rate: u32) -> anyhow::Result<Self> {
         let path_str = path.as_ref().to_string_lossy().to_string();
-        let file = std::fs::File::open(&path)?;
+        let file = std::fs::File::open(&path).with_context(|| format!("opening {path_str}"))?;
         let mss = MediaSourceStream::new(Box::new(file), Default::default());
 
         let mut hint = Hint::new();
@@ -43,7 +41,7 @@ impl SymphoniaSource {
         let format = probed.format;
         let track = format
             .default_track()
-            .ok_or("No default audio track found")?;
+            .context("No default audio track found")?;
 
         let track_id = track.id;
         let decoder_opts = DecoderOptions::default();
@@ -52,15 +50,13 @@ impl SymphoniaSource {
         let sample_rate = track
             .codec_params
             .sample_rate
-            .ok_or("Audio file has no sample rate")?;
+            .context("Audio file has no sample rate")?;
 
         // Validate sample rate matches required rate
         if sample_rate != required_sample_rate {
-            return Err(format!(
-                "Audio file has sample rate {}Hz, but {}Hz is required. Please resample the file first.",
-                sample_rate,
-                required_sample_rate
-            ).into());
+            bail!(
+                "Audio file has sample rate {sample_rate}Hz, but {required_sample_rate}Hz is required. Please resample the file first."
+            );
         }
 
         let channels = track
@@ -174,7 +170,7 @@ impl AudioSource for SymphoniaSource {
         self.get_next_source_frame()
     }
 
-    fn seek(&mut self, position: Duration) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    fn seek(&mut self, position: Duration) -> anyhow::Result<()> {
         let total_seconds = position.as_secs_f64();
         let seconds = position.as_secs();
         let frac = total_seconds - seconds as f64;

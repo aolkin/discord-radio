@@ -7,7 +7,7 @@ impl AudioSource for Constant {
     fn next_frame(&mut self) -> Option<[f32; 2]> {
         Some([1.0, 1.0])
     }
-    fn seek(&mut self, _: Duration) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    fn seek(&mut self, _: Duration) -> anyhow::Result<()> {
         Ok(())
     }
     fn duration(&self) -> Option<Duration> {

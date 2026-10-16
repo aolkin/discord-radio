@@ -195,9 +195,10 @@ impl Default for PlaybackSettings {
 }
 
 impl DJConfig {
-    pub fn load_from_file(path: &str) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        let content = std::fs::read_to_string(path)?;
-        let config: DJConfig = serde_json::from_str(&content)?;
+    pub fn load_from_file(path: &str) -> anyhow::Result<Self> {
+        let content = std::fs::read_to_string(path).with_context(|| format!("reading {path}"))?;
+        let config: DJConfig =
+            serde_json::from_str(&content).with_context(|| format!("parsing {path}"))?;
         Ok(config)
     }
 

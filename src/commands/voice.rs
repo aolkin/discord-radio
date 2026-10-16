@@ -208,7 +208,7 @@ pub async fn play_track(
         duration,
     };
     if let Err(e) = request.validate() {
-        ctx.say(e).await?;
+        ctx.say(e.to_string()).await?;
         return Ok(());
     }
 
@@ -265,7 +265,7 @@ pub async fn dj_idle(
         duration,
     };
     if let Err(e) = request.validate() {
-        ctx.say(e).await?;
+        ctx.say(e.to_string()).await?;
         return Ok(());
     }
 
@@ -924,7 +924,7 @@ async fn set_dj_content(
     if let Some(uri) = &uri
         && let Err(e) = validate_content_uri(&ctx.data().file_resolver, uri).await
     {
-        ctx.say(e).await?;
+        ctx.say(e.to_string()).await?;
         return Ok(());
     }
 
