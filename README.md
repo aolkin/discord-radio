@@ -94,6 +94,7 @@ See [WEB_PORTAL.md](WEB_PORTAL.md) for more details.
 - `/leave_voice_channel` - Leave the current voice channel
 - `/play_message` - Have the DJ play a text message as hex audio
 - `/play_track` - Have the DJ play an audio track now
+- `/dj_idle` - Have the DJ go idle now, optionally playing a noise profile, for a number of seconds or until the DJ is advanced
 - `/change_track_state` - Start or stop an audio track with fade transition
 - `/get_current_tracks` - Display all currently playing audio tracks
 - `/dj_profile` - Set the DJ's background signal profile with an optional fade used to fade in and out of it, or clear it to return to rotation

@@ -1,6 +1,6 @@
 use crate::audio::dj::config::DJConfig;
 use crate::audio::dj::manager::{
-    ADVANCE_RETRY_DELAY, DJCommand, DJStateType, HexMessageRequest, TrackRequest,
+    ADVANCE_RETRY_DELAY, DJCommand, DJStateType, HexMessageRequest, IdleRequest, TrackRequest,
 };
 use crate::audio::dj::scheduler::{DJStateEntry, WeightedScheduler};
 use crate::audio::dj::segments::{
@@ -482,6 +482,28 @@ impl DJStateMachine {
         self.enter_state(next_state, bot_state).await
     }
 
+    pub async fn force_idle(
+        &self,
+        bot_state: &Data,
+        request: IdleRequest,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        tracing::info!(
+            "DJ force transitioning to idle with noise profile {:?} for {:?}s",
+            request.noise_profile,
+            request.duration
+        );
+        let duration = request
+            .duration
+            .map(Duration::try_from_secs_f32)
+            .transpose()?;
+        let next_state = match (request.noise_profile, duration) {
+            (Some(noise_profile), duration) => NoiseSegment::new(noise_profile, duration),
+            (None, Some(duration)) => NoiseSegment::quiet(duration),
+            (None, None) => NoiseSegment::idle(),
+        };
+        self.enter_state(next_state.into(), bot_state).await
+    }
+
     async fn enter_state(
         &self,
         segment: SegmentContainer,
@@ -539,6 +561,7 @@ impl DJStateMachine {
                 self.force_hex_message(&bot_state, request).await
             }
             DJCommand::ForceTrack(request) => self.force_track(&bot_state, request).await,
+            DJCommand::ForceIdle(request) => self.force_idle(&bot_state, request).await,
             DJCommand::Stop => {
                 tracing::info!("Processing stop command for DJ in guild {}", self.guild_id);
                 self.stop(&bot_state).await;

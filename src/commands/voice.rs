@@ -232,6 +232,69 @@ pub async fn play_track(
     Ok(())
 }
 
+/// Have the DJ go idle now, optionally playing a noise profile
+#[poise::command(
+    slash_command,
+    guild_only,
+    default_member_permissions = "ADMINISTRATOR"
+)]
+pub async fn dj_idle(
+    ctx: Context<'_>,
+    #[description = "Noise profile to play (default: none)"]
+    #[autocomplete = "autocomplete_profile"]
+    noise_profile: Option<String>,
+    #[description = "Seconds to stay idle (default: until the DJ is advanced)"] duration: Option<
+        f32,
+    >,
+) -> Result<(), Error> {
+    let guild_id = ctx
+        .guild_id()
+        .ok_or("This command can only be used in a server")?;
+
+    tracing::info!(
+        "User {} executed dj_idle with noise profile {:?} in guild {}",
+        ctx.author().id,
+        noise_profile,
+        guild_id
+    );
+
+    ctx.defer_ephemeral().await?;
+
+    let request = crate::audio::dj::manager::IdleRequest {
+        noise_profile: noise_profile.clone(),
+        duration,
+    };
+    if let Err(e) = request.validate() {
+        ctx.say(e).await?;
+        return Ok(());
+    }
+
+    if let Some(profile) = &noise_profile
+        && ctx.data().profile_manager.get_profile(profile).is_none()
+    {
+        ctx.say(format!("Profile '{profile}' not found")).await?;
+        return Ok(());
+    }
+
+    let content = match send_dj_command(ctx.data(), guild_id, DJCommand::ForceIdle(request)).await {
+        Ok(()) => {
+            let what = match &noise_profile {
+                Some(profile) => format!("playing noise profile '{profile}'"),
+                None => "idle".to_string(),
+            };
+            let until = match duration {
+                Some(seconds) => format!("for {seconds}s"),
+                None => "until advanced".to_string(),
+            };
+            format!("DJ is now {what} {until}")
+        }
+        Err(e) => format!("Failed to make the DJ idle: {e}"),
+    };
+    ctx.say(content).await?;
+
+    Ok(())
+}
+
 fn has_audio_extension(path: &Path) -> bool {
     path.extension().is_some_and(|ext| {
         matches!(
