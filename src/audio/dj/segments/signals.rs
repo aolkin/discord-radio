@@ -39,6 +39,10 @@ impl Completed {
     pub fn when(future: impl Future<Output = ()> + Send + 'static) -> Self {
         Self(Box::pin(future))
     }
+
+    pub fn never() -> Self {
+        Self(Box::pin(std::future::pending()))
+    }
 }
 
 #[derive(Debug, Clone)]

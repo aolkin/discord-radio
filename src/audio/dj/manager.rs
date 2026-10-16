@@ -17,6 +17,7 @@ pub enum DJCommand {
     ForceAdvance(Option<DJStateType>),
     ForceHexMessage(HexMessageRequest),
     ForceTrack(TrackRequest),
+    ForceIdle(IdleRequest),
     Stop,
     SetAnnouncementChannel(Option<ChannelId>),
     SetBackgroundProfile(Option<SignalProfilePlayback>),
@@ -51,6 +52,25 @@ impl TrackRequest {
             {
                 return Err(format!("{name} must be a non-negative number of seconds"));
             }
+        }
+        Ok(())
+    }
+}
+
+/// An idle segment for the DJ to enter, forcing `noise_profile` when set.
+/// `duration` is in seconds; without it the segment never ends on its own.
+#[derive(Debug, Deserialize)]
+pub struct IdleRequest {
+    pub noise_profile: Option<String>,
+    pub duration: Option<f32>,
+}
+
+impl IdleRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        if let Some(seconds) = self.duration
+            && !(seconds.is_finite() && seconds >= 0.0)
+        {
+            return Err("duration must be a non-negative number of seconds".to_string());
         }
         Ok(())
     }

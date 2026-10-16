@@ -1,4 +1,6 @@
-use crate::audio::dj::manager::{DJCommand, DJStateType, TrackRequest, send_dj_command};
+use crate::audio::dj::manager::{
+    DJCommand, DJStateType, IdleRequest, TrackRequest, send_dj_command,
+};
 use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
 use crate::bot_profile::ProfileEdit;
@@ -114,6 +116,28 @@ pub async fn play_track(
         })?;
 
     send_dj_command(&bot_state, guild_id, DJCommand::ForceTrack(request))
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(StatusCode::OK)
+}
+
+pub async fn force_dj_idle(
+    State(bot_state): State<Data>,
+    Path(guild_id): Path<String>,
+    AxumJson(request): AxumJson<IdleRequest>,
+) -> Result<StatusCode, StatusCode> {
+    let guild_id = parse_guild_id(&guild_id)?;
+
+    request.validate().map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    if let Some(profile) = &request.noise_profile
+        && bot_state.profile_manager.get_profile(profile).is_none()
+    {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    send_dj_command(&bot_state, guild_id, DJCommand::ForceIdle(request))
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
