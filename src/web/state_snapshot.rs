@@ -101,8 +101,7 @@ impl BotSnapshot {
             drop(track_managers);
 
             // Get DJ state
-            let dj_state = bot_state.dj_state(guild_id).await;
-            if let Some(state_arc) = &dj_state {
+            if let Some(state_arc) = bot_state.dj_state(guild_id).await {
                 let state = state_arc.read().await;
                 guild_state.dj_state = Some(dj_state_to_info(&state));
             }
@@ -113,7 +112,7 @@ impl BotSnapshot {
                 let processor = processor_arc.read().await;
                 let profile_name = processor.current_profile_name().to_string();
 
-                let source = if let Some(state_arc) = &dj_state {
+                let source = if let Some(state_arc) = bot_state.dj_state(guild_id).await {
                     let state = state_arc.read().await;
                     Some(state.profile_source().to_string())
                 } else {
