@@ -1,4 +1,5 @@
 mod audio;
+mod bot_profile;
 mod bucket;
 mod commands;
 mod handlers;
@@ -298,12 +299,25 @@ async fn main() -> Result<(), Error> {
             .map_err(|e| format!("Failed to create file cache at {file_cache_dir:?}: {e}"))?,
     );
 
+    let web_http = Arc::new(
+        serenity::HttpBuilder::new(&discord_token)
+            .ratelimiter_disabled(true)
+            .build(),
+    );
+    let bot_user_id = anyhow::Context::context(
+        web_http.get_current_user().await,
+        "Failed to fetch the bot user from Discord",
+    )?
+    .id;
+
     let data: Data = Box::leak(Box::new(BotState::new(
         content_path,
         state_store,
         dj_settings_store,
         shutdown_tx,
         file_cache,
+        web_http,
+        bot_user_id,
     )));
 
     // Start gauge update task if metrics are configured

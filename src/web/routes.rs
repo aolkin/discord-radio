@@ -3,6 +3,7 @@ use crate::audio::dj::manager::{
 };
 use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
+use crate::bot_profile::ProfileEdit;
 use crate::bucket::ObjectStoreError;
 use crate::state::Data;
 use crate::web::state_snapshot::BotSnapshot;
@@ -828,13 +829,6 @@ pub async fn send_channel_message(
             StatusCode::FORBIDDEN
         })?;
 
-    // Get serenity HTTP client from activity manager context
-    let ctx = bot_state.activity_manager.get_context().await;
-    let Some(ctx) = ctx else {
-        tracing::error!("Bot context not available for sending messages");
-        return Err(StatusCode::SERVICE_UNAVAILABLE);
-    };
-
     let mut create_message = serenity::all::CreateMessage::new();
 
     if let Some(msg) = request.message {
@@ -856,7 +850,7 @@ pub async fn send_channel_message(
     }
 
     channel_id
-        .send_message(&ctx.http, create_message)
+        .send_message(&bot_state.web_http, create_message)
         .await
         .map_err(|e| {
             tracing::error!(
@@ -869,4 +863,60 @@ pub async fn send_channel_message(
         })?;
 
     Ok(StatusCode::OK)
+}
+
+pub async fn get_bot_profile(
+    State(bot_state): State<Data>,
+    Path(guild_id): Path<String>,
+) -> Result<AxumJson<serde_json::Value>, (StatusCode, String)> {
+    let guild_id = parse_guild_id(&guild_id).map_err(|status| (status, String::new()))?;
+    let member = bot_state
+        .web_http
+        .get_member(guild_id, bot_state.bot_user_id)
+        .await
+        .map_err(discord_error)?;
+
+    Ok(AxumJson(serde_json::json!({
+        "nick": member.nick,
+        "avatar_url": member.avatar_url(),
+        "banner_url": member.banner_url(),
+    })))
+}
+
+pub async fn set_bot_profile(
+    State(bot_state): State<Data>,
+    Path(guild_id): Path<String>,
+    AxumJson(edit): AxumJson<ProfileEdit>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    let guild_id = parse_guild_id(&guild_id).map_err(|status| (status, String::new()))?;
+    if edit.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Provide at least one of nick, avatar, banner".to_string(),
+        ));
+    }
+    let body = edit
+        .into_body(&bot_state.file_resolver)
+        .await
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("{e:#}")))?;
+
+    bot_state
+        .web_http
+        .edit_member_me(guild_id, &body, None)
+        .await
+        .map_err(discord_error)?;
+
+    Ok(StatusCode::OK)
+}
+
+fn discord_error(e: serenity::Error) -> (StatusCode, String) {
+    if let serenity::Error::Http(http_error) = &e
+        && http_error.status_code() == Some(StatusCode::TOO_MANY_REQUESTS)
+    {
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            "Discord is rate limiting this request; wait a bit and retry".to_string(),
+        );
+    }
+    (StatusCode::BAD_GATEWAY, format!("{e:#}"))
 }
