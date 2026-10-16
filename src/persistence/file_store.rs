@@ -1,6 +1,6 @@
-use super::{DJState, MultiTrackPlaybackState, RegisteredChannel, Result, StateStore};
+use super::{DJState, MultiTrackPlaybackState, RegisteredChannel, StateStore};
 use crate::persistence::types::DJStateSnapshot;
-use anyhow::Context;
+use anyhow::{Context, Result};
 use async_trait::async_trait;
 use serde::Serialize;
 use serenity::model::id::{ChannelId, GuildId};

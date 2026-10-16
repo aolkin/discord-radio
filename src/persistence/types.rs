@@ -66,7 +66,7 @@ pub struct DJConfigOverrideCategory<T> {
 
 impl<T> DJConfigOverrideCategory<T> {
     /// Replace the item at `index`, or append when `index` is `None`.
-    pub fn set(&mut self, index: Option<usize>, item: T) -> super::Result<()> {
+    pub fn set(&mut self, index: Option<usize>, item: T) -> anyhow::Result<()> {
         match index {
             Some(index) => {
                 let len = self.items.len();
@@ -81,7 +81,7 @@ impl<T> DJConfigOverrideCategory<T> {
         Ok(())
     }
 
-    pub fn remove(&mut self, index: usize) -> super::Result<()> {
+    pub fn remove(&mut self, index: usize) -> anyhow::Result<()> {
         let len = self.items.len();
         if index >= len {
             bail!("index {index} out of bounds for {len} items");
