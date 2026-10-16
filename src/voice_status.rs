@@ -2,49 +2,6 @@ use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-/// A generic stack for managing status messages.
-/// Components can push messages onto the stack and remove them when done.
-/// The top of the stack is always the active status displayed.
-#[derive(Clone, Debug)]
-pub struct StatusStack<T> {
-    stack: Vec<T>,
-}
-
-impl<T> StatusStack<T> {
-    pub fn new() -> Self {
-        Self { stack: Vec::new() }
-    }
-
-    /// Push a new item onto the stack
-    pub fn push(&mut self, item: T) {
-        self.stack.push(item);
-    }
-
-    /// Clear the entire stack
-    pub fn clear(&mut self) {
-        self.stack.clear();
-    }
-
-    /// Get the current active item (top of stack)
-    pub fn current(&self) -> Option<&T> {
-        self.stack.last()
-    }
-}
-
-impl<T: PartialEq> StatusStack<T> {
-    /// Remove a specific item from the stack (removes the last occurrence)
-    /// Returns true if the item was found and removed
-    #[allow(dead_code)]
-    pub fn remove(&mut self, item: &T) -> bool {
-        if let Some(pos) = self.stack.iter().rposition(|m| m == item) {
-            self.stack.remove(pos);
-            true
-        } else {
-            false
-        }
-    }
-}
-
 /// Activity type enum that supports equality comparison
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ActivityType {
@@ -107,7 +64,7 @@ impl From<&ActivityEntry> for serenity::all::ActivityData {
 }
 
 /// Type alias for activity stack
-pub type ActivityStack = StatusStack<ActivityEntry>;
+pub type ActivityStack = Vec<ActivityEntry>;
 
 /// Manager for bot activity stack (global, not per-guild)
 /// The activity is global for the entire bot.
@@ -133,13 +90,9 @@ impl ActivityManager {
     }
 
     /// Update the bot's activity to the current top of the stack
-    async fn update_activity(&self) {
-        let stack = self.stack.read().await;
-        let current = stack.current().cloned();
-        drop(stack);
-
+    async fn update_activity(&self, current: Option<&ActivityEntry>) {
         if let Some(ctx) = self.ctx.read().await.as_ref() {
-            let activity_data = current.as_ref().map(|entry| entry.into());
+            let activity_data = current.map(|entry| entry.into());
             ctx.set_activity(activity_data);
             tracing::debug!("Updated bot activity");
         }
@@ -150,10 +103,10 @@ impl ActivityManager {
         let entry = ActivityEntry::new(activity_type, status);
         let mut stack = self.stack.write().await;
         stack.clear();
-        stack.push(entry);
+        stack.push(entry.clone());
         drop(stack);
 
-        self.update_activity().await;
+        self.update_activity(Some(&entry)).await;
         self.persist_current_activity().await;
         tracing::debug!("Set bot activity and cleared stack");
     }
@@ -162,10 +115,10 @@ impl ActivityManager {
     pub async fn push_activity(&self, activity_type: ActivityType, status: String) {
         let entry = ActivityEntry::new(activity_type, status);
         let mut stack = self.stack.write().await;
-        stack.push(entry);
+        stack.push(entry.clone());
         drop(stack);
 
-        self.update_activity().await;
+        self.update_activity(Some(&entry)).await;
         self.persist_current_activity().await;
         tracing::debug!("Pushed new bot activity");
     }
@@ -175,21 +128,24 @@ impl ActivityManager {
     pub async fn remove_activity(&self, activity_type: ActivityType, status: &str) -> bool {
         let entry = ActivityEntry::new(activity_type, status.to_string());
         let mut stack = self.stack.write().await;
-        let was_removed = stack.remove(&entry);
-        drop(stack);
+        if let Some(pos) = stack.iter().rposition(|m| m == &entry) {
+            stack.remove(pos);
+            let last = stack.last().cloned();
+            drop(stack);
 
-        if was_removed {
-            self.update_activity().await;
+            self.update_activity(last.as_ref()).await;
             self.persist_current_activity().await;
             tracing::debug!("Removed bot activity from stack");
+            true
+        } else {
+            false
         }
-        was_removed
     }
 
     /// Persist the current top of the stack to disk (or that there is none)
     async fn persist_current_activity(&self) {
         let stack = self.stack.read().await;
-        let current = stack.current().cloned();
+        let current = stack.last().cloned();
         drop(stack);
 
         let activity_state = current.map(|entry| crate::persistence::ActivityState {
@@ -209,7 +165,7 @@ impl ActivityManager {
     /// Get the current active activity (top of stack)
     pub async fn current(&self) -> Option<ActivityEntry> {
         let stack = self.stack.read().await;
-        stack.current().cloned()
+        stack.last().cloned()
     }
 
     /// Get the serenity context
@@ -225,10 +181,10 @@ impl ActivityManager {
 
             let mut stack = self.stack.write().await;
             stack.clear();
-            stack.push(entry);
+            stack.push(entry.clone());
             drop(stack);
 
-            self.update_activity().await;
+            self.update_activity(Some(&entry)).await;
             tracing::info!("Restored activity state from disk");
         } else {
             tracing::info!("No saved activity state found");
@@ -236,6 +192,3 @@ impl ActivityManager {
         Ok(())
     }
 }
-
-#[cfg(test)]
-mod tests;
