@@ -1,4 +1,4 @@
-use crate::commands::utils::{Context, Error, require_guild};
+use crate::commands::utils::{Context, require_guild};
 use poise::serenity_prelude as serenity;
 
 /// Register a channel for sending messages from the web portal
@@ -10,7 +10,7 @@ use poise::serenity_prelude as serenity;
 pub async fn register_channel(
     ctx: Context<'_>,
     #[description = "Channel to register"] channel: serenity::Channel,
-) -> Result<(), Error> {
+) -> anyhow::Result<()> {
     let user_id = ctx.author().id;
     let guild_id = require_guild(ctx)?;
 
@@ -76,7 +76,7 @@ pub async fn set_status(
     #[description = "Activity type (listening, playing, streaming, or custom)"]
     #[rename = "type"]
     activity_type: Option<String>,
-) -> Result<(), Error> {
+) -> anyhow::Result<()> {
     let user_id = ctx.author().id;
     let guild_id = require_guild(ctx)?;
 
@@ -129,7 +129,7 @@ pub async fn speak(
     #[description = "Message to send"] message: Option<String>,
     #[description = "Title for embed"] title: Option<String>,
     #[description = "Description for embed"] description: Option<String>,
-) -> Result<(), Error> {
+) -> anyhow::Result<()> {
     let user_id = ctx.author().id;
     let guild_id = require_guild(ctx)?;
 

@@ -20,9 +20,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-type Error = anyhow::Error;
-
-async fn on_error(error: poise::FrameworkError<'_, Data, Error>) {
+async fn on_error(error: poise::FrameworkError<'_, Data, anyhow::Error>) {
     match error {
         poise::FrameworkError::Command { error, ctx, .. } => {
             tracing::error!("Error in command '{}': {:?}", ctx.command().name, error);
@@ -183,7 +181,7 @@ impl serenity::EventHandler for Handler {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Error> {
+async fn main() -> anyhow::Result<()> {
     // Set up panic handler to crash the whole process on any thread panic
     // This ensures the OS can restart the bot instead of running in a broken state
     let default_panic = std::panic::take_hook();
