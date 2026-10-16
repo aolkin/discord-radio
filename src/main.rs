@@ -318,6 +318,7 @@ async fn main() -> Result<(), Error> {
                 commands::voice::leave_voice_channel(),
                 commands::voice::play_message(),
                 commands::voice::play_track(),
+                commands::voice::dj_idle(),
                 commands::voice::change_track_state(),
                 commands::voice::get_current_tracks(),
                 commands::voice::dj_profile(),

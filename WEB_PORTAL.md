@@ -99,6 +99,7 @@ The DJ plays the profile override if set, else the current segment's forced prof
 - `GET /api/status` - JSON snapshot of bot state (includes version and commit hash)
 - `GET /api/health` - Health check endpoint
 - `POST /api/guilds/:guild_id/dj/advance` - Advance DJ state (optionally to specific state type)
+- `POST /api/guilds/:guild_id/dj/idle` - Make the DJ go idle now, optionally playing a `noise_profile`, for `duration` seconds or, without one, until the DJ is advanced
 - `POST /api/guilds/:guild_id/hex/play` - Play hex message via DJ
 - `POST /api/guilds/:guild_id/track/play` - Play audio track via DJ
 - `POST /api/guilds/:guild_id/tracks` - Manage track state (start, stop, update)

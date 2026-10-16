@@ -36,7 +36,6 @@ impl NoiseSegment {
         Self::Timed(TimedSegment::new(Default::default(), duration))
     }
 
-    #[allow(dead_code)]
     pub fn idle() -> Self {
         Self::Infinite(Default::default())
     }
