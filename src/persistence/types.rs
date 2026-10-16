@@ -1,4 +1,5 @@
 use crate::audio::dj::config::{HexMessageEntry, StateWeights};
+use anyhow::{Context, bail};
 use serde::{Deserialize, Serialize};
 use serenity::model::id::{ChannelId, GuildId};
 use std::time::SystemTime;
@@ -68,9 +69,11 @@ impl<T> DJConfigOverrideCategory<T> {
     pub fn set(&mut self, index: Option<usize>, item: T) -> super::Result<()> {
         match index {
             Some(index) => {
-                let slot = self.items.get_mut(index).ok_or_else(
-                    || -> Box<dyn std::error::Error + Send + Sync> { "Index out of bounds".into() },
-                )?;
+                let len = self.items.len();
+                let slot = self
+                    .items
+                    .get_mut(index)
+                    .with_context(|| format!("index {index} out of bounds for {len} items"))?;
                 *slot = item;
             }
             None => self.items.push(item),
@@ -79,8 +82,9 @@ impl<T> DJConfigOverrideCategory<T> {
     }
 
     pub fn remove(&mut self, index: usize) -> super::Result<()> {
-        if index >= self.items.len() {
-            return Err("Index out of bounds".into());
+        let len = self.items.len();
+        if index >= len {
+            bail!("index {index} out of bounds for {len} items");
         }
         self.items.remove(index);
         Ok(())

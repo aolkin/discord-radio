@@ -1,5 +1,6 @@
 use super::{DJState, MultiTrackPlaybackState, RegisteredChannel, Result, StateStore};
 use crate::persistence::types::DJStateSnapshot;
+use anyhow::Context;
 use async_trait::async_trait;
 use serde::Serialize;
 use serenity::model::id::{ChannelId, GuildId};
@@ -59,8 +60,11 @@ where
             return Ok(HashMap::new());
         }
 
-        let content = fs::read_to_string(&file_path).await?;
-        let data = serde_json::from_str(&content)?;
+        let content = fs::read_to_string(&file_path)
+            .await
+            .with_context(|| format!("reading {file_path:?}"))?;
+        let data =
+            serde_json::from_str(&content).with_context(|| format!("parsing {file_path:?}"))?;
 
         Ok(data)
     }
@@ -187,8 +191,11 @@ impl StateStore for FileStore {
             return Ok(Vec::new());
         }
 
-        let content = fs::read_to_string(&file_path).await?;
-        let channels = serde_json::from_str(&content)?;
+        let content = fs::read_to_string(&file_path)
+            .await
+            .with_context(|| format!("reading {file_path:?}"))?;
+        let channels =
+            serde_json::from_str(&content).with_context(|| format!("parsing {file_path:?}"))?;
 
         Ok(channels)
     }
@@ -216,8 +223,11 @@ impl StateStore for FileStore {
             return Ok(None);
         }
 
-        let content = fs::read_to_string(&file_path).await?;
-        let state: Option<super::ActivityState> = serde_json::from_str(&content)?;
+        let content = fs::read_to_string(&file_path)
+            .await
+            .with_context(|| format!("reading {file_path:?}"))?;
+        let state: Option<super::ActivityState> =
+            serde_json::from_str(&content).with_context(|| format!("parsing {file_path:?}"))?;
 
         Ok(state)
     }

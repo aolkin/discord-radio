@@ -15,7 +15,7 @@ use serenity::model::id::{ChannelId, GuildId};
 use std::collections::HashMap;
 use std::path::Path;
 
-pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+pub type Result<T> = anyhow::Result<T>;
 
 #[async_trait]
 pub trait StateStore: Send + Sync {
