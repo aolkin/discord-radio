@@ -9,7 +9,7 @@ use crate::logging::{JsonLogger, guild_logs_dir};
 use crate::persistence::{DjSettingsStore, StateStore};
 use crate::voice_status::ActivityManager;
 use serde::Serialize;
-use serenity::all::{ChannelId, Http, HttpBuilder};
+use serenity::all::{ChannelId, Http, UserId};
 use serenity::model::id::GuildId;
 use songbird::Call;
 use std::collections::HashMap;
@@ -38,6 +38,7 @@ pub struct BotState {
     /// Discord client for web routes; its ratelimiter is off so a ratelimited
     /// request fails with 429 instead of waiting.
     pub web_http: Arc<Http>,
+    pub bot_user_id: UserId,
 }
 
 impl BotState {
@@ -47,7 +48,8 @@ impl BotState {
         dj_settings: DjSettingsStore,
         shutdown_tx: tokio::sync::broadcast::Sender<String>,
         file_cache: Arc<ObjectStore>,
-        discord_token: &str,
+        web_http: Arc<Http>,
+        bot_user_id: UserId,
     ) -> Self {
         let profiles_dir = "audio_profiles";
         let mut profile_manager = ProfileManager::new(profiles_dir);
@@ -67,11 +69,6 @@ impl BotState {
         let logs_base_path = state_store.base_path().to_path_buf();
 
         let file_resolver = FileResolver::new(content_path.clone(), file_cache.clone());
-        let web_http = Arc::new(
-            HttpBuilder::new(discord_token)
-                .ratelimiter_disabled(true)
-                .build(),
-        );
 
         Self {
             voice_connections: voice_connections.clone(),
@@ -89,6 +86,7 @@ impl BotState {
             logs_base_path,
             file_resolver,
             web_http,
+            bot_user_id,
         }
     }
 

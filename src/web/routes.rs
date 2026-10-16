@@ -846,17 +846,9 @@ pub async fn get_bot_profile(
     Path(guild_id): Path<String>,
 ) -> Result<AxumJson<serde_json::Value>, (StatusCode, String)> {
     let guild_id = parse_guild_id(&guild_id).map_err(|status| (status, String::new()))?;
-    let Some(ctx) = bot_state.activity_manager.get_context().await else {
-        return Err((
-            StatusCode::SERVICE_UNAVAILABLE,
-            "Bot is not connected to Discord".to_string(),
-        ));
-    };
-
-    let bot_user_id = ctx.cache.current_user().id;
     let member = bot_state
         .web_http
-        .get_member(guild_id, bot_user_id)
+        .get_member(guild_id, bot_state.bot_user_id)
         .await
         .map_err(discord_error)?;
 
