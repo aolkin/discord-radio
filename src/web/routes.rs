@@ -613,7 +613,7 @@ pub async fn toggle_override_category(
                     &mut settings.hex_message_announcement_overrides.enabled
                 }
                 "state_weights" => &mut settings.state_weight_overrides.enabled,
-                _ => return Err("Unknown category".into()),
+                _ => anyhow::bail!("Unknown category {:?}", request.category),
             };
             *enabled = request.enabled;
             Ok(())

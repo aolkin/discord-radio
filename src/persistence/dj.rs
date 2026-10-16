@@ -32,9 +32,9 @@ impl DjSettingsStore {
             .unwrap_or_default()
     }
 
-    pub async fn update<F>(&self, guild_id: GuildId, f: F) -> super::Result<()>
+    pub async fn update<F>(&self, guild_id: GuildId, f: F) -> anyhow::Result<()>
     where
-        F: FnOnce(&mut DjSettings) -> super::Result<()>,
+        F: FnOnce(&mut DjSettings) -> anyhow::Result<()>,
     {
         let mut map = self.settings.write().await;
         // Mutate a clone so a failed `f` leaves the map (and file) untouched.

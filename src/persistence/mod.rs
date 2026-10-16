@@ -10,12 +10,11 @@ pub use types::{
 };
 
 pub(crate) use crate::persistence::types::DJStateSnapshot;
+use anyhow::Result;
 use async_trait::async_trait;
 use serenity::model::id::{ChannelId, GuildId};
 use std::collections::HashMap;
 use std::path::Path;
-
-pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 #[async_trait]
 pub trait StateStore: Send + Sync {
