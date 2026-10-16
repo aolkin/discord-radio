@@ -312,13 +312,16 @@ async fn main() -> anyhow::Result<()> {
     )?
     .id;
 
-    let data: Data = Box::leak(Box::new(BotState::new(
-        content_path,
-        state_store,
-        dj_settings_store,
-        file_cache,
-        bot_user_id,
-    )));
+    let data: Data = Box::leak(Box::new(
+        BotState::new(
+            content_path,
+            state_store,
+            dj_settings_store,
+            file_cache,
+            bot_user_id,
+        )
+        .await,
+    ));
 
     // Start gauge update task if metrics are configured
     if let Some(bot_metrics) = metrics::get() {
