@@ -1,9 +1,10 @@
 use super::{
     CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
-    TimedSegment, TrackSlot,
+    TrackSlot,
 };
 use crate::audio::dj::config::TrackEntry;
 use crate::audio::dj::segments::signals::{Completed, CompletedSignal};
+use crate::audio::dj::serde::{deser_instant, ser_instant};
 use crate::audio::duration::DurationCache;
 use crate::audio::processing::mixer::TrackCommand;
 use crate::audio::tracks::open_track_source;
@@ -11,13 +12,16 @@ use async_trait::async_trait;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 const FADE_TIME: Duration = Duration::from_secs(1);
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TrackSegment {
-    timer: TimedSegment,
+    config: CommonSegmentPlaybackConfig,
+    #[serde(serialize_with = "ser_instant", deserialize_with = "deser_instant")]
+    started_at: Instant,
+    duration: Duration,
     filename: String,
     volume: f32,
     start_position: Option<Duration>,
@@ -30,7 +34,7 @@ pub struct TrackSegment {
 impl Deref for TrackSegment {
     type Target = CommonSegmentPlaybackConfig;
     fn deref(&self) -> &Self::Target {
-        &self.timer
+        &self.config
     }
 }
 
@@ -43,12 +47,14 @@ impl TrackSegment {
         signal_profile: Option<String>,
         channel_status: Option<&str>,
     ) -> Self {
-        let playback_config = CommonSegmentPlaybackConfig {
+        let config = CommonSegmentPlaybackConfig {
             signal_profile: signal_profile.map(Into::into),
             channel_status: channel_status.map(with_status_emoji),
         };
         Self {
-            timer: TimedSegment::new(playback_config, duration),
+            config,
+            started_at: Instant::now(),
+            duration,
             filename,
             volume,
             start_position,
@@ -139,24 +145,20 @@ impl Segment for TrackSegment {
     }
 
     async fn restore(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
-        let elapsed = self.timer.started_at.elapsed();
-        if elapsed >= self.timer.duration {
+        let elapsed = self.started_at.elapsed();
+        if elapsed >= self.duration {
             tracing::info!(
                 "DJ track '{}' has already finished (elapsed: {:.1}s, duration: {:.1}s), will advance to next state",
                 self.filename,
                 elapsed.as_secs_f32(),
-                self.timer.duration.as_secs_f32()
+                self.duration.as_secs_f32()
             );
             self.done.complete();
             return Ok(());
         }
         let position = self.start_position.unwrap_or_default() + elapsed;
         if let Err(e) = self
-            .start_at(
-                ctx,
-                Some(position),
-                self.timer.duration.saturating_sub(elapsed),
-            )
+            .start_at(ctx, Some(position), self.duration.saturating_sub(elapsed))
             .await
         {
             self.done.complete();
@@ -172,12 +174,12 @@ impl Segment for TrackSegment {
     }
 
     async fn enter(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
-        self.start_at(ctx, self.start_position, self.timer.duration)
+        self.start_at(ctx, self.start_position, self.duration)
             .await?;
         tracing::info!(
             "DJ starting track '{}' (duration: {:.1}s) in guild {}",
             self.filename,
-            self.timer.duration.as_secs_f32(),
+            self.duration.as_secs_f32(),
             ctx.guild_id
         );
         Ok(())
@@ -192,7 +194,7 @@ impl Segment for TrackSegment {
     fn loggable_properties(&self) -> serde_json::Value {
         serde_json::json!({
             "filename": self.filename,
-            "duration_secs": self.timer.duration.as_secs_f32(),
+            "duration_secs": self.duration.as_secs_f32(),
             "forced_profile": self.signal_profile().map(|profile| profile.name),
         })
     }
@@ -205,7 +207,7 @@ impl Segment for TrackSegment {
         StateDisplay {
             name: "PlayingTrack",
             subject: Some(self.filename.clone()),
-            total: Some(self.timer.duration),
+            total: Some(self.duration),
         }
     }
 }
