@@ -14,19 +14,19 @@ use std::time::{Duration, Instant};
 #[derive(Debug, Serialize, Deserialize)]
 pub enum NoiseSegment {
     Timed {
-        playback_config: CommonSegmentPlaybackConfig,
+        config: CommonSegmentPlaybackConfig,
         #[serde(serialize_with = "ser_instant", deserialize_with = "deser_instant")]
         started_at: Instant,
         duration: Duration,
     },
     Infinite {
-        playback_config: CommonSegmentPlaybackConfig,
+        config: CommonSegmentPlaybackConfig,
     },
 }
 
 impl NoiseSegment {
     pub fn new(noise_profile: String, duration: Option<Duration>) -> Self {
-        let playback_config = CommonSegmentPlaybackConfig {
+        let config = CommonSegmentPlaybackConfig {
             signal_profile: Some(SignalProfilePlayback {
                 name: noise_profile,
                 fade_in_duration: duration.map(|duration| duration.div_f32(2.0)),
@@ -36,17 +36,17 @@ impl NoiseSegment {
         };
         match duration {
             Some(duration) => Self::Timed {
-                playback_config,
+                config,
                 started_at: Instant::now(),
                 duration,
             },
-            None => Self::Infinite { playback_config },
+            None => Self::Infinite { config },
         }
     }
 
     pub fn quiet(duration: Duration) -> Self {
         Self::Timed {
-            playback_config: Default::default(),
+            config: Default::default(),
             started_at: Instant::now(),
             duration,
         }
@@ -54,7 +54,7 @@ impl NoiseSegment {
 
     pub fn idle() -> Self {
         Self::Infinite {
-            playback_config: Default::default(),
+            config: Default::default(),
         }
     }
 
@@ -70,10 +70,7 @@ impl Deref for NoiseSegment {
     type Target = CommonSegmentPlaybackConfig;
     fn deref(&self) -> &Self::Target {
         match self {
-            NoiseSegment::Timed {
-                playback_config, ..
-            }
-            | NoiseSegment::Infinite { playback_config } => playback_config,
+            NoiseSegment::Timed { config, .. } | NoiseSegment::Infinite { config } => config,
         }
     }
 }
