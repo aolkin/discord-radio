@@ -219,6 +219,8 @@ async fn main() -> anyhow::Result<()> {
 
     let discord_token =
         std::env::var("DISCORD_TOKEN").expect("Expected DISCORD_TOKEN in the environment");
+    std::sync::LazyLock::force(&state::HTTP);
+    std::sync::LazyLock::force(&state::WEB_HTTP);
 
     let web_port = std::env::var("WEB_PORT")
         .ok()
@@ -295,14 +297,8 @@ async fn main() -> anyhow::Result<()> {
             .with_context(|| format!("Failed to create file cache at {file_cache_dir:?}"))?,
     );
 
-    let web_http = Arc::new(
-        serenity::HttpBuilder::new(&discord_token)
-            .ratelimiter_disabled(true)
-            .build(),
-    );
-    let http = Arc::new(serenity::HttpBuilder::new(&discord_token).build());
     let bot_user_id = anyhow::Context::context(
-        web_http.get_current_user().await,
+        state::WEB_HTTP.get_current_user().await,
         "Failed to fetch the bot user from Discord",
     )?
     .id;
@@ -313,8 +309,6 @@ async fn main() -> anyhow::Result<()> {
         dj_settings_store,
         shutdown_tx,
         file_cache,
-        web_http,
-        http,
         bot_user_id,
     )));
 

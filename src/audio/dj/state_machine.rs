@@ -327,7 +327,7 @@ impl DJStateMachine {
 
         match channel_id
             .edit(
-                &self.bot_state.http,
+                &*crate::state::HTTP,
                 serenity::builder::EditChannel::new().status(&target),
             )
             .await
@@ -502,7 +502,7 @@ impl DJStateMachine {
 
         if let Some(channel) = self.announcement_channel
             && let Some(announcement) = segment.announcement()
-            && let Err(e) = channel.say(&self.bot_state.http, announcement).await
+            && let Err(e) = channel.say(&*crate::state::HTTP, announcement).await
         {
             tracing::warn!("Failed to send DJ announcement: {}", e);
         }

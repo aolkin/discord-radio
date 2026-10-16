@@ -15,8 +15,26 @@ use songbird::Call;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use tokio::sync::{Mutex, RwLock};
+
+/// Discord client with the default ratelimiter.
+pub static HTTP: LazyLock<Arc<Http>> =
+    LazyLock::new(|| Arc::new(serenity::all::HttpBuilder::new(discord_token()).build()));
+
+/// Discord client for web routes; its ratelimiter is off so a ratelimited
+/// request fails with 429 instead of waiting.
+pub static WEB_HTTP: LazyLock<Arc<Http>> = LazyLock::new(|| {
+    Arc::new(
+        serenity::all::HttpBuilder::new(discord_token())
+            .ratelimiter_disabled(true)
+            .build(),
+    )
+});
+
+fn discord_token() -> String {
+    std::env::var("DISCORD_TOKEN").expect("Expected DISCORD_TOKEN in the environment")
+}
 
 pub type Data = &'static BotState;
 
@@ -35,24 +53,16 @@ pub struct BotState {
     pub shutdown_tx: tokio::sync::broadcast::Sender<String>,
     pub logs_base_path: PathBuf,
     pub file_resolver: FileResolver,
-    /// Discord client for web routes; its ratelimiter is off so a ratelimited
-    /// request fails with 429 instead of waiting.
-    pub web_http: Arc<Http>,
-    /// Discord client with the default ratelimiter.
-    pub http: Arc<Http>,
     pub bot_user_id: UserId,
 }
 
 impl BotState {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         content_path: String,
         state_store: Arc<dyn StateStore>,
         dj_settings: DjSettingsStore,
         shutdown_tx: tokio::sync::broadcast::Sender<String>,
         file_cache: Arc<ObjectStore>,
-        web_http: Arc<Http>,
-        http: Arc<Http>,
         bot_user_id: UserId,
     ) -> Self {
         let profiles_dir = "audio_profiles";
@@ -89,8 +99,6 @@ impl BotState {
             shutdown_tx,
             logs_base_path,
             file_resolver,
-            web_http,
-            http,
             bot_user_id,
         }
     }
