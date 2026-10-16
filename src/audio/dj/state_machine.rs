@@ -11,7 +11,6 @@ use crate::audio::dj::serde::{deser_instant, ser_instant};
 use crate::state::Data;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use serenity::all::Http;
 use serenity::model::id::{ChannelId, GuildId};
 use std::ops::Deref;
 use std::sync::Arc;
@@ -152,7 +151,6 @@ pub struct DJStateMachine {
     scheduler: WeightedScheduler,
     guild_id: GuildId,
     announcement_channel: Option<ChannelId>,
-    http: Arc<Http>,
     hex_message_announcements: Vec<String>,
     bot_state: Data,
     config_name: Option<String>,
@@ -165,7 +163,6 @@ impl DJStateMachine {
     pub async fn new(
         config: DJConfig,
         guild_id: GuildId,
-        http: Arc<Http>,
         saved: Option<crate::persistence::DJState>,
         bot_state: Data,
     ) -> Self {
@@ -207,7 +204,6 @@ impl DJStateMachine {
             scheduler: WeightedScheduler::new(config),
             guild_id,
             announcement_channel,
-            http,
             hex_message_announcements,
             bot_state,
             config_name,
@@ -331,7 +327,7 @@ impl DJStateMachine {
 
         match channel_id
             .edit(
-                &self.http,
+                crate::http(),
                 serenity::builder::EditChannel::new().status(&target),
             )
             .await
@@ -506,7 +502,7 @@ impl DJStateMachine {
 
         if let Some(channel) = self.announcement_channel
             && let Some(announcement) = segment.announcement()
-            && let Err(e) = channel.say(&self.http, announcement).await
+            && let Err(e) = channel.say(crate::http(), announcement).await
         {
             tracing::warn!("Failed to send DJ announcement: {}", e);
         }

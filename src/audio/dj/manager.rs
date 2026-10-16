@@ -4,7 +4,6 @@ use crate::audio::dj::state_machine::DJStateMachine;
 use crate::state::Data;
 use anyhow::{Context, bail};
 use serde::Deserialize;
-use serenity::all::Http;
 use serenity::model::id::{ChannelId, GuildId};
 use std::sync::Arc;
 use std::time::Duration;
@@ -100,11 +99,10 @@ impl DJManager {
         config: DJConfig,
         saved: Option<crate::persistence::DJState>,
         bot_state: Data,
-        http: Arc<Http>,
     ) -> Self {
         let (command_tx, command_rx) = mpsc::channel(10);
         let task_handle = tokio::spawn(async move {
-            DJStateMachine::new(config, guild_id, http, saved, bot_state)
+            DJStateMachine::new(config, guild_id, saved, bot_state)
                 .await
                 .run(command_rx)
                 .await;
@@ -167,7 +165,7 @@ pub async fn load_dj_config(
 
 /// Starts the guild's DJ if it is not running, resuming its saved state when
 /// there is one.
-pub async fn start_dj(bot_state: Data, guild_id: GuildId, http: Arc<Http>) -> anyhow::Result<()> {
+pub async fn start_dj(bot_state: Data, guild_id: GuildId) -> anyhow::Result<()> {
     let mut dj_managers = bot_state.dj_managers.write().await;
     if dj_managers.contains_key(&guild_id) {
         return Ok(());
@@ -189,7 +187,7 @@ pub async fn start_dj(bot_state: Data, guild_id: GuildId, http: Arc<Http>) -> an
         });
 
     tracing::info!("Starting DJ for guild {}", guild_id);
-    let manager = DJManager::start(guild_id, config, saved, bot_state, http).await;
+    let manager = DJManager::start(guild_id, config, saved, bot_state).await;
     dj_managers.insert(guild_id, Arc::new(Mutex::new(manager)));
     Ok(())
 }

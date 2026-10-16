@@ -37,7 +37,7 @@ pub async fn restore_voice_channels(
                 );
 
                 setup_voice_connection(handle_lock.clone(), guild_id, bot_state).await;
-                if let Err(e) = start_dj(bot_state, guild_id, ctx.http.clone()).await {
+                if let Err(e) = start_dj(bot_state, guild_id).await {
                     tracing::error!("Failed to start DJ for guild {}: {e:#}", guild_id);
                 }
             }
