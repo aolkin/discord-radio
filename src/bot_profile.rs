@@ -1,15 +1,14 @@
 use crate::bucket::FileResolver;
-use crate::persistence::{BotProfile, GuildMapStore};
 use anyhow::{Context, anyhow, bail};
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
+use serde::Deserialize;
 use serde_json::{Map, Value};
 use serenity::all::Http;
 use serenity::model::id::GuildId;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::mem;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
@@ -21,16 +20,35 @@ const EDIT_DEBOUNCE: Duration = Duration::from_secs(2);
 
 pub type ApplyResult = Result<(), Arc<anyhow::Error>>;
 
+/// Fields left as `None` are not sent. `avatar` and `banner` are file references
+/// resolved like track filenames.
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct ProfileEdit {
+    pub nick: Option<String>,
+    pub avatar: Option<String>,
+    pub banner: Option<String>,
+}
+
+impl ProfileEdit {
+    pub fn is_empty(&self) -> bool {
+        self.nick.is_none() && self.avatar.is_none() && self.banner.is_none()
+    }
+
+    fn merge(&mut self, later: ProfileEdit) {
+        self.nick = later.nick.or(self.nick.take());
+        self.avatar = later.avatar.or(self.avatar.take());
+        self.banner = later.banner.or(self.banner.take());
+    }
+}
+
 struct PendingEdit {
-    desired: BotProfile,
+    edit: ProfileEdit,
     generation: u64,
     waiters: Vec<oneshot::Sender<ApplyResult>>,
 }
 
-/// Keeps the last profile Discord accepted for each guild and sends edits to
-/// Discord's modify-current-member route.
+/// Sends edits to Discord's modify-current-member route.
 pub struct BotProfileManager {
-    applied: GuildMapStore<BotProfile>,
     pending: Mutex<HashMap<GuildId, PendingEdit>>,
     next_generation: AtomicU64,
     apply_lock: Mutex<()>,
@@ -38,9 +56,8 @@ pub struct BotProfileManager {
 }
 
 impl BotProfileManager {
-    pub fn new(path: PathBuf, file_resolver: FileResolver) -> Self {
+    pub fn new(file_resolver: FileResolver) -> Self {
         Self {
-            applied: GuildMapStore::new(path),
             pending: Mutex::new(HashMap::new()),
             next_generation: AtomicU64::new(0),
             apply_lock: Mutex::new(()),
@@ -48,32 +65,33 @@ impl BotProfileManager {
         }
     }
 
-    pub async fn applied(&self, guild_id: GuildId) -> BotProfile {
-        self.applied.get(guild_id).await
-    }
-
-    /// Applies `edit` on top of any not-yet-sent edits for the guild, then waits
-    /// for the debounced request to Discord and returns its result.
+    /// Merges `edit` into any not-yet-sent edit for the guild (later values win
+    /// per field), then waits for the debounced request to Discord and returns
+    /// its result.
     pub async fn edit(
         &'static self,
         http: Arc<Http>,
         guild_id: GuildId,
-        edit: impl FnOnce(&mut BotProfile) + Send,
+        edit: ProfileEdit,
     ) -> ApplyResult {
         let (tx, rx) = oneshot::channel();
         let mut pending = self.pending.lock().await;
         let generation = self.next_generation.fetch_add(1, Ordering::Relaxed);
-        let entry = match pending.entry(guild_id) {
-            Entry::Occupied(entry) => entry.into_mut(),
-            Entry::Vacant(entry) => entry.insert(PendingEdit {
-                desired: self.applied.get(guild_id).await,
-                generation,
-                waiters: Vec::new(),
-            }),
-        };
-        edit(&mut entry.desired);
-        entry.generation = generation;
-        entry.waiters.push(tx);
+        match pending.entry(guild_id) {
+            Entry::Occupied(entry) => {
+                let entry = entry.into_mut();
+                entry.edit.merge(edit);
+                entry.generation = generation;
+                entry.waiters.push(tx);
+            }
+            Entry::Vacant(entry) => {
+                entry.insert(PendingEdit {
+                    edit,
+                    generation,
+                    waiters: vec![tx],
+                });
+            }
+        }
         drop(pending);
 
         tokio::spawn(async move {
@@ -90,7 +108,7 @@ impl BotProfileManager {
 
     async fn flush(&self, http: &Http, guild_id: GuildId, generation: u64) {
         let _apply = self.apply_lock.lock().await;
-        let (desired, waiters) = {
+        let (edit, waiters) = {
             let mut pending = self.pending.lock().await;
             let Some(entry) = pending.get_mut(&guild_id) else {
                 return;
@@ -98,10 +116,10 @@ impl BotProfileManager {
             if entry.generation != generation {
                 return;
             }
-            (entry.desired.clone(), mem::take(&mut entry.waiters))
+            (entry.edit.clone(), mem::take(&mut entry.waiters))
         };
 
-        let result = self.apply(http, guild_id, desired).await.map_err(Arc::new);
+        let result = self.apply(http, guild_id, edit).await.map_err(Arc::new);
         if let Err(e) = &result {
             tracing::warn!("Failed to apply bot profile in guild {guild_id}: {e:#}");
         }
@@ -120,45 +138,25 @@ impl BotProfileManager {
         }
     }
 
-    async fn apply(
-        &self,
-        http: &Http,
-        guild_id: GuildId,
-        desired: BotProfile,
-    ) -> anyhow::Result<()> {
-        let applied = self.applied.get(guild_id).await;
+    async fn apply(&self, http: &Http, guild_id: GuildId, edit: ProfileEdit) -> anyhow::Result<()> {
         let mut body = Map::new();
-        if desired.nick != applied.nick {
-            body.insert("nick".into(), desired.nick.clone().into());
+        if let Some(nick) = edit.nick {
+            body.insert("nick".into(), nick.into());
         }
-        if desired.avatar != applied.avatar {
-            let avatar = self.image_data(desired.avatar.as_deref()).await?;
-            body.insert("avatar".into(), avatar);
+        if let Some(avatar) = edit.avatar {
+            body.insert("avatar".into(), self.image_data(&avatar).await?);
         }
-        if desired.banner != applied.banner {
-            let banner = self.image_data(desired.banner.as_deref()).await?;
-            body.insert("banner".into(), banner);
-        }
-        if body.is_empty() {
-            return Ok(());
+        if let Some(banner) = edit.banner {
+            body.insert("banner".into(), self.image_data(&banner).await?);
         }
 
         http.edit_member_me(guild_id, &body, None)
             .await
             .context("Failed to send the profile edit to Discord")?;
-        self.applied
-            .update(guild_id, |profile| {
-                *profile = desired;
-                Ok(())
-            })
-            .await
-            .map_err(|e| anyhow!(e).context("Failed to save the applied profile"))
+        Ok(())
     }
 
-    async fn image_data(&self, file: Option<&str>) -> anyhow::Result<Value> {
-        let Some(file) = file else {
-            return Ok(Value::Null);
-        };
+    async fn image_data(&self, file: &str) -> anyhow::Result<Value> {
         let bytes = self
             .file_resolver
             .resolve_contents(file)

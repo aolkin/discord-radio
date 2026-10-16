@@ -23,15 +23,6 @@ pub struct MultiTrackPlaybackState {
     pub tracks: Vec<TrackState>,
 }
 
-/// The bot's per-guild member profile. `None` leaves that field at the bot's global
-/// default. `avatar` and `banner` are file references resolved like track filenames.
-#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
-pub struct BotProfile {
-    pub nick: Option<String>,
-    pub avatar: Option<String>,
-    pub banner: Option<String>,
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct DjSettings {
     #[serde(default)]

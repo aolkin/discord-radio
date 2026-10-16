@@ -1,8 +1,8 @@
 use crate::audio::dj::manager::{DJCommand, DJStateType, TrackRequest, send_dj_command};
 use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
+use crate::bot_profile::ProfileEdit;
 use crate::bucket::ObjectStoreError;
-use crate::persistence::BotProfile;
 use crate::state::Data;
 use crate::web::state_snapshot::BotSnapshot;
 use axum::Json as AxumJson;
@@ -851,17 +851,41 @@ pub async fn send_channel_message(
 pub async fn get_bot_profile(
     State(bot_state): State<Data>,
     Path(guild_id): Path<String>,
-) -> Result<AxumJson<BotProfile>, StatusCode> {
-    let guild_id = parse_guild_id(&guild_id)?;
-    Ok(AxumJson(bot_state.bot_profiles.applied(guild_id).await))
+) -> Result<AxumJson<serde_json::Value>, (StatusCode, String)> {
+    let guild_id = parse_guild_id(&guild_id).map_err(|status| (status, String::new()))?;
+    let Some(ctx) = bot_state.activity_manager.get_context().await else {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Bot is not connected to Discord".to_string(),
+        ));
+    };
+
+    let bot_user_id = ctx.cache.current_user().id;
+    let member = ctx
+        .http
+        .get_member(guild_id, bot_user_id)
+        .await
+        .map_err(|e| (StatusCode::BAD_GATEWAY, format!("{e:#}")))?;
+
+    Ok(AxumJson(serde_json::json!({
+        "nick": member.nick,
+        "avatar_url": member.avatar_url(),
+        "banner_url": member.banner_url(),
+    })))
 }
 
 pub async fn set_bot_profile(
     State(bot_state): State<Data>,
     Path(guild_id): Path<String>,
-    AxumJson(profile): AxumJson<BotProfile>,
+    AxumJson(edit): AxumJson<ProfileEdit>,
 ) -> Result<StatusCode, (StatusCode, String)> {
     let guild_id = parse_guild_id(&guild_id).map_err(|status| (status, String::new()))?;
+    if edit.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Provide at least one of nick, avatar, banner".to_string(),
+        ));
+    }
     let Some(ctx) = bot_state.activity_manager.get_context().await else {
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,
@@ -871,7 +895,7 @@ pub async fn set_bot_profile(
 
     bot_state
         .bot_profiles
-        .edit(ctx.http.clone(), guild_id, |current| *current = profile)
+        .edit(ctx.http.clone(), guild_id, edit)
         .await
         .map_err(|e| (StatusCode::BAD_GATEWAY, format!("{e:#}")))?;
 

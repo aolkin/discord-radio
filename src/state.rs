@@ -65,10 +65,7 @@ impl BotState {
         let logs_base_path = state_store.base_path().to_path_buf();
 
         let file_resolver = FileResolver::new(content_path.clone(), file_cache.clone());
-        let bot_profiles = BotProfileManager::new(
-            state_store.base_path().join("bot_profiles.json"),
-            file_resolver.clone(),
-        );
+        let bot_profiles = BotProfileManager::new(file_resolver.clone());
 
         Self {
             voice_connections: voice_connections.clone(),
