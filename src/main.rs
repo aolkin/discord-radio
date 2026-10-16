@@ -17,8 +17,20 @@ use anyhow::Context;
 use poise::serenity_prelude::{self as serenity, GatewayIntents};
 use songbird::SerenityInit;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use std::time::Duration;
+
+/// Discord client with the default ratelimiter.
+static HTTP: LazyLock<serenity::Http> =
+    LazyLock::new(|| serenity::HttpBuilder::new(discord_token()).build());
+
+pub fn http() -> &'static serenity::Http {
+    &HTTP
+}
+
+pub fn discord_token() -> String {
+    std::env::var("DISCORD_TOKEN").expect("Expected DISCORD_TOKEN in the environment")
+}
 
 async fn on_error(error: poise::FrameworkError<'_, Data, anyhow::Error>) {
     match error {
@@ -217,10 +229,9 @@ async fn main() -> anyhow::Result<()> {
         tracing::info!("Starting radio-bot-{} ({})", run_number, commit_hash);
     }
 
-    let discord_token =
-        std::env::var("DISCORD_TOKEN").expect("Expected DISCORD_TOKEN in the environment");
-    state::http();
-    state::web_http();
+    let discord_token = discord_token();
+    http();
+    web::http();
 
     let web_port = std::env::var("WEB_PORT")
         .ok()
@@ -298,7 +309,7 @@ async fn main() -> anyhow::Result<()> {
     );
 
     let bot_user_id = anyhow::Context::context(
-        state::web_http().get_current_user().await,
+        web::http().get_current_user().await,
         "Failed to fetch the bot user from Discord",
     )?
     .id;

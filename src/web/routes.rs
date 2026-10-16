@@ -850,7 +850,7 @@ pub async fn send_channel_message(
     }
 
     channel_id
-        .send_message(crate::state::web_http(), create_message)
+        .send_message(super::http(), create_message)
         .await
         .map_err(|e| {
             tracing::error!(
@@ -870,7 +870,7 @@ pub async fn get_bot_profile(
     Path(guild_id): Path<String>,
 ) -> Result<AxumJson<serde_json::Value>, (StatusCode, String)> {
     let guild_id = parse_guild_id(&guild_id).map_err(|status| (status, String::new()))?;
-    let member = crate::state::web_http()
+    let member = super::http()
         .get_member(guild_id, bot_state.bot_user_id)
         .await
         .map_err(discord_error)?;
@@ -899,7 +899,7 @@ pub async fn set_bot_profile(
         .await
         .map_err(|e| (StatusCode::BAD_REQUEST, format!("{e:#}")))?;
 
-    crate::state::web_http()
+    super::http()
         .edit_member_me(guild_id, &body, None)
         .await
         .map_err(discord_error)?;

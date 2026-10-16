@@ -9,38 +9,14 @@ use crate::logging::{JsonLogger, guild_logs_dir};
 use crate::persistence::{DjSettingsStore, StateStore};
 use crate::voice_status::ActivityManager;
 use serde::Serialize;
-use serenity::all::{ChannelId, Http, UserId};
+use serenity::all::{ChannelId, UserId};
 use serenity::model::id::GuildId;
 use songbird::Call;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::path::PathBuf;
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
-
-/// Discord client with the default ratelimiter.
-static HTTP: LazyLock<Http> =
-    LazyLock::new(|| serenity::all::HttpBuilder::new(discord_token()).build());
-
-/// Discord client for web routes; its ratelimiter is off so a ratelimited
-/// request fails with 429 instead of waiting.
-static WEB_HTTP: LazyLock<Http> = LazyLock::new(|| {
-    serenity::all::HttpBuilder::new(discord_token())
-        .ratelimiter_disabled(true)
-        .build()
-});
-
-pub fn http() -> &'static Http {
-    &HTTP
-}
-
-pub fn web_http() -> &'static Http {
-    &WEB_HTTP
-}
-
-fn discord_token() -> String {
-    std::env::var("DISCORD_TOKEN").expect("Expected DISCORD_TOKEN in the environment")
-}
 
 pub type Data = &'static BotState;
 
