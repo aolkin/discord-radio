@@ -4,6 +4,7 @@ use crate::audio::processing::mixer::{
 };
 use crate::audio::processing::processor::ProcessorRef;
 use crate::state::{BotState, Data};
+use anyhow::{Context, bail};
 use serenity::model::id::GuildId;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -57,10 +58,7 @@ impl TrackManager {
         }
     }
 
-    pub async fn start_track(
-        &mut self,
-        args: StartTrackArgs,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn start_track(&mut self, args: StartTrackArgs) -> anyhow::Result<()> {
         let resolved_filename = self.bot_state.file_resolver.resolve(&args.filename).await?;
         let source = open_track_source(&resolved_filename, args.start_position)?;
         if self.tracks.contains_key(&args.name) {
@@ -159,11 +157,11 @@ impl TrackManager {
         name: &str,
         volume: f32,
         fade_time: f32,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ) -> anyhow::Result<()> {
         let track_info = self
             .tracks
             .get_mut(name)
-            .ok_or_else(|| format!("Track '{}' not found", name))?;
+            .with_context(|| format!("Track '{name}' not found"))?;
 
         tracing::info!(
             "Updating track '{}' volume from {} to {} (fade: {}s) in guild {}",
@@ -184,9 +182,9 @@ impl TrackManager {
         if !track_info
             .mixer_handle
             .send(set_volume)
-            .map_err(|e| format!("Track '{name}': {e:#}"))?
+            .with_context(|| format!("Track '{name}'"))?
         {
-            return Err(format!("Track '{}' has ended", name).into());
+            bail!("Track '{name}' has ended");
         }
 
         self.persist_state().await;
@@ -194,15 +192,11 @@ impl TrackManager {
         Ok(())
     }
 
-    pub async fn update_track_loops(
-        &mut self,
-        name: &str,
-        loops: bool,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn update_track_loops(&mut self, name: &str, loops: bool) -> anyhow::Result<()> {
         let track_info = self
             .tracks
             .get_mut(name)
-            .ok_or_else(|| format!("Track '{}' not found", name))?;
+            .with_context(|| format!("Track '{name}' not found"))?;
 
         if track_info.loops == loops {
             return Ok(());
@@ -222,9 +216,9 @@ impl TrackManager {
         if !track_info
             .mixer_handle
             .send(set_loops)
-            .map_err(|e| format!("Track '{name}': {e:#}"))?
+            .with_context(|| format!("Track '{name}'"))?
         {
-            return Err(format!("Track '{}' has ended", name).into());
+            bail!("Track '{name}' has ended");
         }
 
         self.persist_state().await;
@@ -244,15 +238,11 @@ impl TrackManager {
         }
     }
 
-    pub async fn stop_track(
-        &mut self,
-        name: &str,
-        fade_time: f32,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn stop_track(&mut self, name: &str, fade_time: f32) -> anyhow::Result<()> {
         let track_info = self
             .tracks
             .get(name)
-            .ok_or_else(|| format!("Track '{}' not found", name))?;
+            .with_context(|| format!("Track '{name}' not found"))?;
 
         tracing::info!(
             "Stopping track '{}' (fade: {}s) in guild {}",
@@ -268,9 +258,9 @@ impl TrackManager {
         if !track_info
             .mixer_handle
             .send(stop)
-            .map_err(|e| format!("Track '{name}': {e:#}"))?
+            .with_context(|| format!("Track '{name}'"))?
         {
-            return Err(format!("Track '{}' has ended", name).into());
+            bail!("Track '{name}' has ended");
         }
 
         self.tracks.remove(name);
@@ -328,7 +318,7 @@ impl TrackManager {
 pub fn open_track_source(
     path: &str,
     start_position: Option<Duration>,
-) -> Result<Box<dyn AudioSource>, Box<dyn std::error::Error + Send + Sync>> {
+) -> anyhow::Result<Box<dyn AudioSource>> {
     let mut source = SymphoniaSource::from_file(path, 48000)?;
     if let Some(pos) = start_position {
         source.seek(pos)?;

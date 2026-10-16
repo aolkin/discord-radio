@@ -1,3 +1,4 @@
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -85,9 +86,10 @@ impl ProfileManager {
         }
     }
 
-    pub fn load_all(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub fn load_all(&mut self) -> anyhow::Result<()> {
         if !self.profiles_dir.exists() {
-            std::fs::create_dir_all(&self.profiles_dir)?;
+            std::fs::create_dir_all(&self.profiles_dir)
+                .with_context(|| format!("creating {}", self.profiles_dir.display()))?;
             tracing::warn!(
                 "Audio profiles directory created at: {}",
                 self.profiles_dir.display()
@@ -95,7 +97,9 @@ impl ProfileManager {
             return Ok(());
         }
 
-        for entry in std::fs::read_dir(&self.profiles_dir)? {
+        for entry in std::fs::read_dir(&self.profiles_dir)
+            .with_context(|| format!("reading {}", self.profiles_dir.display()))?
+        {
             let entry = entry?;
             let path = entry.path();
 
@@ -106,7 +110,7 @@ impl ProfileManager {
                         self.profiles.insert(profile.name.clone(), profile);
                     }
                     Err(e) => {
-                        tracing::warn!("Failed to load profile from {}: {}", path.display(), e);
+                        tracing::warn!("Failed to load profile from {}: {e:#}", path.display());
                     }
                 }
             }
@@ -119,12 +123,9 @@ impl ProfileManager {
         Ok(())
     }
 
-    fn load_profile(
-        &self,
-        path: &Path,
-    ) -> Result<SignalProfile, Box<dyn std::error::Error + Send + Sync>> {
-        let content = std::fs::read_to_string(path)?;
-        let profile: SignalProfile = serde_json::from_str(&content)?;
+    fn load_profile(&self, path: &Path) -> anyhow::Result<SignalProfile> {
+        let content = std::fs::read_to_string(path).context("reading file")?;
+        let profile: SignalProfile = serde_json::from_str(&content).context("parsing JSON")?;
         Ok(profile)
     }
 

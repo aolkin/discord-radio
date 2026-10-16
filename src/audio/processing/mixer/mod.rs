@@ -120,7 +120,7 @@ impl TrackHandle {
 
 pub trait AudioSource: Send + Sync {
     fn next_frame(&mut self) -> Option<[f32; 2]>;
-    fn seek(&mut self, position: Duration) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    fn seek(&mut self, position: Duration) -> anyhow::Result<()>;
     #[allow(dead_code)]
     fn duration(&self) -> Option<Duration>;
     fn reset(&mut self);
