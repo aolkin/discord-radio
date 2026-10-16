@@ -18,7 +18,7 @@ const FADE_TIME: Duration = Duration::from_secs(1);
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TrackSegment {
-    playback_config: CommonSegmentPlaybackConfig,
+    config: CommonSegmentPlaybackConfig,
     #[serde(serialize_with = "ser_instant", deserialize_with = "deser_instant")]
     started_at: Instant,
     duration: Duration,
@@ -34,7 +34,7 @@ pub struct TrackSegment {
 impl Deref for TrackSegment {
     type Target = CommonSegmentPlaybackConfig;
     fn deref(&self) -> &Self::Target {
-        &self.playback_config
+        &self.config
     }
 }
 
@@ -47,12 +47,12 @@ impl TrackSegment {
         signal_profile: Option<String>,
         channel_status: Option<&str>,
     ) -> Self {
-        let playback_config = CommonSegmentPlaybackConfig {
+        let config = CommonSegmentPlaybackConfig {
             signal_profile: signal_profile.map(Into::into),
             channel_status: channel_status.map(with_status_emoji),
         };
         Self {
-            playback_config,
+            config,
             started_at: Instant::now(),
             duration,
             filename,
