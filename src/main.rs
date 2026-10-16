@@ -13,13 +13,14 @@ mod voice_status;
 mod web;
 
 use crate::state::{BotState, Data};
+use anyhow::Context;
 use poise::serenity_prelude::{self as serenity, GatewayIntents};
 use songbird::SerenityInit;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-type Error = Box<dyn std::error::Error + Send + Sync>;
+type Error = anyhow::Error;
 
 async fn on_error(error: poise::FrameworkError<'_, Data, Error>) {
     match error {
@@ -296,7 +297,7 @@ async fn main() -> Result<(), Error> {
     let file_cache = Arc::new(
         bucket::ObjectStore::new(file_cache_dir.clone(), bucket, file_cache_ttl)
             .await
-            .map_err(|e| format!("Failed to create file cache at {file_cache_dir:?}: {e}"))?,
+            .with_context(|| format!("Failed to create file cache at {file_cache_dir:?}"))?,
     );
 
     let web_http = Arc::new(

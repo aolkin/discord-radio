@@ -5,7 +5,8 @@ use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
 use crate::audio::processing::processor::ProcessorRef;
 use crate::audio::tracks::get_or_create_track_manager;
 use crate::commands::utils;
-use crate::commands::utils::{Context, Error};
+use crate::commands::utils::{Context, Error, require_guild};
+use anyhow::{Context as _, bail};
 use serenity::all::{ChannelId, ChannelType, GuildId};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -20,9 +21,7 @@ pub async fn join_voice_channel(
     ctx: Context<'_>,
     #[description = "Voice channel to join and broadcast audio"] channel: ChannelId,
 ) -> Result<(), Error> {
-    let guild_id = ctx
-        .guild_id()
-        .ok_or("This command can only be used in a server")?;
+    let guild_id = require_guild(ctx)?;
     let user_id = ctx.author().id;
 
     tracing::info!(
@@ -71,9 +70,7 @@ pub async fn join_voice_channel(
     default_member_permissions = "ADMINISTRATOR"
 )]
 pub async fn leave_voice_channel(ctx: Context<'_>) -> Result<(), Error> {
-    let guild_id = ctx
-        .guild_id()
-        .ok_or("This command can only be used in a server")?;
+    let guild_id = require_guild(ctx)?;
     let user_id = ctx.author().id;
 
     tracing::info!(
@@ -118,9 +115,7 @@ pub async fn play_message(
     volume: Option<f32>,
     #[description = "Times to loop the message (default from DJ config)"] loops: Option<u32>,
 ) -> Result<(), Error> {
-    let guild_id = ctx
-        .guild_id()
-        .ok_or("This command can only be used in a server")?;
+    let guild_id = require_guild(ctx)?;
     let user_id = ctx.author().id;
 
     tracing::info!(
@@ -187,9 +182,7 @@ pub async fn play_track(
     #[description = "Start position in seconds (default 0)"] start_position: Option<f32>,
     #[description = "Seconds to play (default: track length)"] duration: Option<f32>,
 ) -> Result<(), Error> {
-    let guild_id = ctx
-        .guild_id()
-        .ok_or("This command can only be used in a server")?;
+    let guild_id = require_guild(ctx)?;
     let user_id = ctx.author().id;
 
     tracing::info!(
@@ -208,7 +201,7 @@ pub async fn play_track(
         duration,
     };
     if let Err(e) = request.validate() {
-        ctx.say(e.to_string()).await?;
+        ctx.say(format!("{e:#}")).await?;
         return Ok(());
     }
 
@@ -247,9 +240,7 @@ pub async fn dj_idle(
         f32,
     >,
 ) -> Result<(), Error> {
-    let guild_id = ctx
-        .guild_id()
-        .ok_or("This command can only be used in a server")?;
+    let guild_id = require_guild(ctx)?;
 
     tracing::info!(
         "User {} executed dj_idle with noise profile {:?} in guild {}",
@@ -265,7 +256,7 @@ pub async fn dj_idle(
         duration,
     };
     if let Err(e) = request.validate() {
-        ctx.say(e.to_string()).await?;
+        ctx.say(format!("{e:#}")).await?;
         return Ok(());
     }
 
@@ -375,9 +366,7 @@ pub async fn change_track_state(
     #[description = "Loop track"] loops: Option<bool>,
     #[description = "Fade time in seconds (default 1.0)"] fade_time: Option<f32>,
 ) -> Result<(), Error> {
-    let guild_id = ctx
-        .guild_id()
-        .ok_or("This command can only be used in a server")?;
+    let guild_id = require_guild(ctx)?;
 
     ctx.defer_ephemeral().await?;
 
@@ -487,9 +476,7 @@ pub async fn change_track_state(
     default_member_permissions = "ADMINISTRATOR"
 )]
 pub async fn get_current_tracks(ctx: Context<'_>) -> Result<(), Error> {
-    let guild_id = ctx
-        .guild_id()
-        .ok_or("This command can only be used in a server")?;
+    let guild_id = require_guild(ctx)?;
 
     let track_managers = ctx.data().track_managers.read().await;
 
@@ -570,9 +557,7 @@ async fn set_dj_profile(
 ) -> Result<(), Error> {
     ctx.defer_ephemeral().await?;
 
-    let guild_id = ctx
-        .guild_id()
-        .ok_or("This command can only be used in a server")?;
+    let guild_id = require_guild(ctx)?;
 
     if profile.is_none() && fade_duration.is_some() {
         ctx.say(format!("Fade duration only applies when setting a {label}"))
@@ -676,9 +661,7 @@ pub async fn dj_channel_status(
 ) -> Result<(), Error> {
     ctx.defer_ephemeral().await?;
 
-    let guild_id = ctx
-        .guild_id()
-        .ok_or("This command can only be used in a server")?;
+    let guild_id = require_guild(ctx)?;
 
     ctx.data()
         .dj_settings
@@ -711,9 +694,7 @@ pub async fn manage_dj(
         ChannelId,
     >,
 ) -> Result<(), Error> {
-    let guild_id = ctx
-        .guild_id()
-        .ok_or("This command can only be used in a server")?;
+    let guild_id = require_guild(ctx)?;
     let user_id = ctx.author().id;
 
     tracing::info!(
@@ -764,9 +745,7 @@ pub async fn manage_dj(
     default_member_permissions = "ADMINISTRATOR"
 )]
 pub async fn get_dj_state(ctx: Context<'_>) -> Result<(), Error> {
-    let guild_id = ctx
-        .guild_id()
-        .ok_or("This command can only be used in a server")?;
+    let guild_id = require_guild(ctx)?;
     let user_id = ctx.author().id;
 
     tracing::info!(
@@ -823,9 +802,7 @@ pub async fn advance_dj_state(
         String,
     >,
 ) -> Result<(), Error> {
-    let guild_id = ctx
-        .guild_id()
-        .ok_or("This command can only be used in a server")?;
+    let guild_id = require_guild(ctx)?;
     let user_id = ctx.author().id;
 
     tracing::info!(
@@ -895,15 +872,15 @@ async fn autocomplete_content_file(ctx: Context<'_>, partial: &'_ str) -> Vec<St
 async fn validate_content_uri(
     resolver: &crate::bucket::FileResolver,
     uri: &str,
-) -> Result<(), String> {
+) -> Result<(), Error> {
     let path = resolver
         .resolve(uri)
         .await
-        .map_err(|e| format!("Could not resolve `{uri}`: {e}"))?;
+        .with_context(|| format!("Could not resolve `{uri}`"))?;
     match tokio::fs::metadata(&path).await {
         Ok(meta) if meta.is_file() => Ok(()),
-        Ok(_) => Err(format!("`{uri}` does not point to a file")),
-        Err(e) => Err(format!("`{uri}` is not a readable file: {e}")),
+        Ok(_) => bail!("`{uri}` does not point to a file"),
+        Err(e) => Err(e).with_context(|| format!("`{uri}` is not a readable file")),
     }
 }
 
@@ -915,16 +892,14 @@ async fn set_dj_content(
 ) -> Result<(), Error> {
     ctx.defer_ephemeral().await?;
 
-    let guild_id = ctx
-        .guild_id()
-        .ok_or("This command can only be used in a server")?;
+    let guild_id = require_guild(ctx)?;
 
     let uri = uri.filter(|u| !u.trim().is_empty());
 
     if let Some(uri) = &uri
         && let Err(e) = validate_content_uri(&ctx.data().file_resolver, uri).await
     {
-        ctx.say(e.to_string()).await?;
+        ctx.say(format!("{e:#}")).await?;
         return Ok(());
     }
 

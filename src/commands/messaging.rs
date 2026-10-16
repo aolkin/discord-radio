@@ -1,4 +1,4 @@
-use crate::commands::utils::{Context, Error};
+use crate::commands::utils::{Context, Error, require_guild};
 use poise::serenity_prelude as serenity;
 
 /// Register a channel for sending messages from the web portal
@@ -12,9 +12,7 @@ pub async fn register_channel(
     #[description = "Channel to register"] channel: serenity::Channel,
 ) -> Result<(), Error> {
     let user_id = ctx.author().id;
-    let guild_id = ctx
-        .guild_id()
-        .ok_or("This command can only be used in a server")?;
+    let guild_id = require_guild(ctx)?;
 
     tracing::info!(
         "User {} executed register_channel in guild {}",
@@ -80,9 +78,7 @@ pub async fn set_status(
     activity_type: Option<String>,
 ) -> Result<(), Error> {
     let user_id = ctx.author().id;
-    let guild_id = ctx
-        .guild_id()
-        .ok_or("This command can only be used in a server")?;
+    let guild_id = require_guild(ctx)?;
 
     tracing::info!(
         "User {} executed set_status in guild {} with type {:?}",
@@ -135,9 +131,7 @@ pub async fn speak(
     #[description = "Description for embed"] description: Option<String>,
 ) -> Result<(), Error> {
     let user_id = ctx.author().id;
-    let guild_id = ctx
-        .guild_id()
-        .ok_or("This command can only be used in a server")?;
+    let guild_id = require_guild(ctx)?;
 
     tracing::info!("User {} executed speak in guild {}", user_id, guild_id);
 
