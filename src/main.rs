@@ -255,8 +255,6 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Loaded DJ settings");
     let state_store = Arc::new(persistence::FileStore::new(state_store_path));
 
-    let (shutdown_tx, _shutdown_rx) = tokio::sync::broadcast::channel(16);
-
     // Initialize metrics if configured
     let _metrics_provider = if let (Ok(metrics_url), Ok(api_key)) = (
         std::env::var("GRAFANA_METRICS_URL"),
@@ -318,7 +316,6 @@ async fn main() -> anyhow::Result<()> {
         content_path,
         state_store,
         dj_settings_store,
-        shutdown_tx,
         file_cache,
         bot_user_id,
     )));

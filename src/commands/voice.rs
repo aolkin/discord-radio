@@ -757,15 +757,10 @@ pub async fn get_dj_state(ctx: Context<'_>) -> anyhow::Result<()> {
 
     ctx.defer_ephemeral().await?;
 
-    let dj_states = ctx.data().dj_states.read().await;
-    let state_arc = match dj_states.get(&guild_id) {
-        Some(arc) => arc.clone(),
-        None => {
-            ctx.say("DJ state not available").await?;
-            return Ok(());
-        }
+    let Some(state_arc) = ctx.data().dj_state(guild_id).await else {
+        ctx.say("DJ state not available").await?;
+        return Ok(());
     };
-    drop(dj_states);
 
     let state = state_arc.read().await;
 
