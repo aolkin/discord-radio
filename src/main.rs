@@ -309,7 +309,7 @@ async fn main() -> anyhow::Result<()> {
     );
 
     let bot_user_id = anyhow::Context::context(
-        web::http().get_current_user().await,
+        http().get_current_user().await,
         "Failed to fetch the bot user from Discord",
     )?
     .id;
