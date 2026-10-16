@@ -582,7 +582,7 @@ impl DJStateMachine {
         };
         if let Err(e) = result {
             tracing::error!(
-                "DJ command {cmd_name} failed in guild {}: {e}",
+                "DJ command {cmd_name} failed in guild {}: {e:#}",
                 self.guild_id
             );
         }

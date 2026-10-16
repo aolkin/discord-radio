@@ -2,6 +2,7 @@
 // tests yet.
 #![allow(dead_code)]
 
+use anyhow::{Context, bail};
 use async_trait::async_trait;
 use std::error::Error;
 use std::path::{Path, PathBuf};
@@ -50,22 +51,25 @@ struct ObjectNotFound;
 /// credentials.
 #[async_trait]
 pub(crate) trait ObjectDownloader: Send + Sync {
-    async fn download(&self, key: &str) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>>;
+    async fn download(&self, key: &str) -> anyhow::Result<Vec<u8>>;
 
-    async fn list_keys(&self, prefix: &str) -> Result<Vec<String>, Box<dyn Error + Send + Sync>>;
+    async fn list_keys(&self, prefix: &str) -> anyhow::Result<Vec<String>>;
 }
 
 #[async_trait]
 impl ObjectDownloader for s3::Bucket {
-    async fn download(&self, key: &str) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
-        let response = self.get_object(key).await?;
+    async fn download(&self, key: &str) -> anyhow::Result<Vec<u8>> {
+        let response = self
+            .get_object(key)
+            .await
+            .with_context(|| format!("fetching {key}"))?;
 
         let status = response.status_code();
         if status == 404 {
-            return Err(Box::new(ObjectNotFound));
+            return Err(ObjectNotFound.into());
         }
         if !(200..300).contains(&status) {
-            return Err(format!("unexpected status {status} fetching {key}").into());
+            bail!("unexpected status {status} fetching {key}");
         }
 
         Ok(response.bytes().to_vec())
@@ -77,7 +81,7 @@ impl ObjectDownloader for s3::Bucket {
     // time instead, the way S3's `delimiter` parameter (passed to
     // `list_page`) groups keys under a separator into "common prefixes"
     // (folders) distinct from the objects directly in that folder.
-    async fn list_keys(&self, prefix: &str) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
+    async fn list_keys(&self, prefix: &str) -> anyhow::Result<Vec<String>> {
         let mut keys = Vec::new();
         let mut continuation_token = None;
 
@@ -90,7 +94,8 @@ impl ObjectDownloader for s3::Bucket {
                     None,
                     Some(MAX_LISTED_KEYS - keys.len()),
                 )
-                .await?;
+                .await
+                .with_context(|| format!("listing {prefix}"))?;
 
             keys.extend(page.contents.into_iter().map(|object| object.key));
             if keys.len() >= MAX_LISTED_KEYS {
@@ -204,7 +209,7 @@ impl ObjectStore {
             if e.is::<ObjectNotFound>() {
                 ObjectStoreError::NotFound
             } else {
-                ObjectStoreError::Remote(e.into())
+                ObjectStoreError::Remote(Box::<dyn Error + Send + Sync>::from(e).into())
             }
         })?;
 
@@ -245,7 +250,7 @@ impl ObjectStore {
             if e.is::<ObjectNotFound>() {
                 ObjectStoreError::NotFound
             } else {
-                ObjectStoreError::Remote(e.into())
+                ObjectStoreError::Remote(Box::<dyn Error + Send + Sync>::from(e).into())
             }
         })
     }
@@ -272,7 +277,7 @@ impl ObjectStore {
             .try_get_with(prefix.to_string(), downloader.list_keys(prefix))
             .await
             .unwrap_or_else(|e| {
-                tracing::warn!("Failed to list remote objects under {prefix:?}: {e}");
+                tracing::warn!("Failed to list remote objects under {prefix:?}: {e:#}");
                 Vec::new()
             })
     }

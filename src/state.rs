@@ -128,7 +128,7 @@ impl BotState {
         nickname: Option<&str>,
         action: &str,
         channel_id: Option<u64>,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ) -> anyhow::Result<()> {
         #[derive(Serialize)]
         struct MemberActivityEntry {
             timestamp: String,

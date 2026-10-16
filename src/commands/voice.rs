@@ -279,7 +279,7 @@ pub async fn dj_idle(
             };
             format!("DJ is now {what} {until}")
         }
-        Err(e) => format!("Failed to make the DJ idle: {e}"),
+        Err(e) => format!("Failed to make the DJ idle: {e:#}"),
     };
     ctx.say(content).await?;
 
@@ -591,7 +591,8 @@ async fn set_dj_profile(
         fade_out_duration: fade,
     });
     if let Err(e) = send_dj_command(ctx.data(), guild_id, command(playback)).await {
-        ctx.say(format!("Failed to update DJ {label}: {e}")).await?;
+        ctx.say(format!("Failed to update DJ {label}: {e:#}"))
+            .await?;
         return Ok(());
     }
     ctx.say(message).await?;

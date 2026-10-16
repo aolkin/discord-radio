@@ -8,10 +8,7 @@ use http::header::{AUTHORIZATION, CONTENT_TYPE};
 use std::net::SocketAddr;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
-pub async fn run_web_server(
-    bot_state: Data,
-    port: u16,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub async fn run_web_server(bot_state: Data, port: u16) -> anyhow::Result<()> {
     // Configure CORS - secure by default (localhost only), configurable via env var
     let localhost_predicate = AllowOrigin::predicate(|origin: &http::header::HeaderValue, _| {
         origin.as_bytes().starts_with(b"http://localhost:")

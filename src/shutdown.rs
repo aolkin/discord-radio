@@ -1,4 +1,5 @@
 use crate::state::Data;
+use anyhow::Context;
 use tokio::signal;
 
 pub async fn setup_shutdown_handler(data: Data) {
@@ -8,7 +9,7 @@ pub async fn setup_shutdown_handler(data: Data) {
         let (clean_shutdown, shutdown_reason) = tokio::select! {
             result = wait_for_shutdown_signal() => {
                 if let Err(e) = result {
-                    tracing::error!("Error waiting for shutdown signal: {}", e);
+                    tracing::error!("Error waiting for shutdown signal: {e:#}");
                 }
                 (true, "OS signal (SIGTERM/SIGINT/Ctrl+C)".to_string())
             }
@@ -42,13 +43,13 @@ pub async fn setup_shutdown_handler(data: Data) {
     });
 }
 
-async fn wait_for_shutdown_signal() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn wait_for_shutdown_signal() -> anyhow::Result<()> {
     #[cfg(unix)]
     {
         use signal::unix::{SignalKind, signal};
 
-        let mut sigterm = signal(SignalKind::terminate())?;
-        let mut sigint = signal(SignalKind::interrupt())?;
+        let mut sigterm = signal(SignalKind::terminate()).context("registering SIGTERM handler")?;
+        let mut sigint = signal(SignalKind::interrupt()).context("registering SIGINT handler")?;
 
         tokio::select! {
             _ = sigterm.recv() => {
