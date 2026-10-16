@@ -98,6 +98,7 @@ pub struct DJState {
     pub segment: SegmentContainer,
     pub background_profile: BackgroundProfile,
     pub override_profile: Option<SignalProfilePlayback>,
+    pub override_channel_status: Option<String>,
 }
 
 impl DJState {
@@ -106,7 +107,15 @@ impl DJState {
             segment: NoiseSegment::idle(Duration::from_secs(1)).into(),
             background_profile: BackgroundProfile::default(),
             override_profile: None,
+            override_channel_status: None,
         }
+    }
+
+    pub fn effective_channel_status(&self, config_status: Option<&str>) -> Option<String> {
+        self.override_channel_status
+            .clone()
+            .or_else(|| self.segment.channel_status())
+            .or_else(|| config_status.map(str::to_owned))
     }
 
     pub fn effective_profile(&self) -> SignalProfilePlayback {
@@ -146,6 +155,9 @@ pub struct DJStateMachine {
     bot_state: Data,
     config_name: String,
     applied_profile: Option<(SignalProfilePlayback, ProfileSource)>,
+    channel_status_enabled: bool,
+    /// `None` until a status reaches Discord, and again after the setting changes.
+    applied_channel_status: Option<Option<String>>,
 }
 
 impl DJStateMachine {
@@ -170,14 +182,11 @@ impl DJStateMachine {
 
         let initial_state = restored_state.unwrap_or_else(DJState::idle);
 
-        let status_message = {
-            let segment = &initial_state.segment;
-            let _ = segment
-                .restore(&SegmentCtx::new(&guild_id, bot_state))
-                .await
-                .inspect_err(|e| tracing::warn!("Failed to restore segment: {e:?}"));
-            segment.channel_status()
-        };
+        let _ = initial_state
+            .segment
+            .restore(&SegmentCtx::new(&guild_id, bot_state))
+            .await
+            .inspect_err(|e| tracing::warn!("Failed to restore segment: {e:?}"));
 
         let state = Arc::new(RwLock::new(initial_state));
         bot_state
@@ -186,17 +195,11 @@ impl DJStateMachine {
             .await
             .insert(guild_id, state.clone());
 
-        if let Some(status_msg) = status_message {
-            bot_state
-                .voice_status_manager
-                .push_status(guild_id, &status_msg, &http)
-                .await;
-            tracing::info!(
-                "Restored channel status '{}' in guild {}",
-                status_msg,
-                guild_id
-            );
-        }
+        let channel_status_enabled = !bot_state
+            .dj_settings
+            .get(guild_id)
+            .await
+            .channel_status_disabled;
 
         Self {
             state,
@@ -208,6 +211,8 @@ impl DJStateMachine {
             bot_state,
             config_name,
             applied_profile: None,
+            channel_status_enabled,
+            applied_channel_status: None,
         }
     }
 
@@ -217,6 +222,7 @@ impl DJStateMachine {
 
         'dj: loop {
             self.update_profile().await;
+            self.update_channel_status().await;
             let rotation_due = self.current_state().await.background_profile.completed();
             self.persist_state().await;
 
@@ -291,6 +297,38 @@ impl DJStateMachine {
         }
     }
 
+    async fn update_channel_status(&mut self) {
+        if !self.channel_status_enabled {
+            return;
+        }
+        let config_status = self.scheduler.config().channel_status.as_deref();
+        let target = self
+            .state
+            .read()
+            .await
+            .effective_channel_status(config_status);
+        self.apply_channel_status(target).await;
+    }
+
+    async fn apply_channel_status(&mut self, target: Option<String>) {
+        if self.applied_channel_status.as_ref() == Some(&target) {
+            return;
+        }
+        match self
+            .bot_state
+            .voice_status_manager
+            .set_status(self.guild_id, target.as_deref(), &self.http)
+            .await
+        {
+            Ok(true) => self.applied_channel_status = Some(target),
+            Ok(false) => {}
+            Err(e) => tracing::warn!(
+                "Failed to set voice channel status in guild {}: {e:#}",
+                self.guild_id
+            ),
+        }
+    }
+
     async fn persist_state(&self) {
         let current_state = self.current_state().await;
         let persist_state = crate::persistence::DJStateSnapshot {
@@ -330,7 +368,10 @@ impl DJStateMachine {
     }
 
     pub async fn stop(&mut self, bot_state: &Data) {
-        self.cleanup_current_state(bot_state).await;
+        self.cleanup_current_state().await;
+        if self.channel_status_enabled {
+            self.apply_channel_status(None).await;
+        }
 
         bot_state
             .log_dj_activity(
@@ -429,7 +470,7 @@ impl DJStateMachine {
         // Record the previous state before transitioning
         let from_state = self.current_state().await.segment.state_name().to_string();
 
-        self.cleanup_current_state(bot_state).await;
+        self.cleanup_current_state().await;
 
         segment.enter(&self.segment_ctx()).await?;
 
@@ -438,13 +479,6 @@ impl DJStateMachine {
             && let Err(e) = channel.say(&self.http, announcement).await
         {
             tracing::warn!("Failed to send DJ announcement: {}", e);
-        }
-
-        if let Some(status) = segment.channel_status() {
-            bot_state
-                .voice_status_manager
-                .push_status(self.guild_id, &status, &self.http)
-                .await;
         }
 
         let to_state = segment.state_name().to_string();
@@ -458,7 +492,7 @@ impl DJStateMachine {
         Ok(())
     }
 
-    async fn cleanup_current_state(&self, bot_state: &Data) {
+    async fn cleanup_current_state(&self) {
         let current = self.state.read().await;
         let segment = &current.segment;
         if let Some(metrics) = crate::metrics::get() {
@@ -470,12 +504,6 @@ impl DJStateMachine {
             );
         }
         segment.exit(&self.segment_ctx()).await;
-        if let Some(status) = segment.channel_status() {
-            bot_state
-                .voice_status_manager
-                .remove_status(self.guild_id, &status, &self.http)
-                .await;
-        }
     }
 
     /// Handle the command and return true if the DJ should be stopped
@@ -518,6 +546,11 @@ impl DJStateMachine {
             }
             DJCommand::SetOverrideProfile(profile_override) => {
                 self.state.write().await.override_profile = profile_override;
+                Ok(())
+            }
+            DJCommand::SetChannelStatusEnabled(enabled) => {
+                self.channel_status_enabled = enabled;
+                self.applied_channel_status = None;
                 Ok(())
             }
         };

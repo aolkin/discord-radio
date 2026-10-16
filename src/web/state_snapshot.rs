@@ -32,6 +32,7 @@ pub struct GuildState {
     pub tracks: Vec<TrackInfo>,
     pub dj_state: Option<DJStateInfo>,
     pub audio_profile: Option<AudioProfileInfo>,
+    pub channel_status_enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,6 +74,11 @@ impl BotSnapshot {
                 tracks: Vec::new(),
                 dj_state: None,
                 audio_profile: None,
+                channel_status_enabled: !bot_state
+                    .dj_settings
+                    .get(guild_id)
+                    .await
+                    .channel_status_disabled,
             };
 
             // Get track info

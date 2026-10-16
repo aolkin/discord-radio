@@ -322,6 +322,7 @@ async fn main() -> Result<(), Error> {
                 commands::voice::get_current_tracks(),
                 commands::voice::dj_profile(),
                 commands::voice::dj_profile_override(),
+                commands::voice::dj_channel_status(),
                 commands::voice::manage_dj(),
                 commands::voice::get_dj_state(),
                 commands::voice::advance_dj_state(),

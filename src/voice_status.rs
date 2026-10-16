@@ -1,3 +1,4 @@
+use anyhow::Context;
 use serenity::all::Http;
 use serenity::model::id::{ChannelId, GuildId};
 use std::collections::HashMap;
@@ -47,27 +48,6 @@ impl<T: PartialEq> StatusStack<T> {
         }
     }
 }
-
-impl StatusStack<String> {
-    /// Remove a specific message from the stack (removes the last occurrence)
-    /// Returns true if the message was found and removed
-    pub fn remove_str(&mut self, message: &str) -> bool {
-        if let Some(pos) = self.stack.iter().rposition(|m| m == message) {
-            self.stack.remove(pos);
-            true
-        } else {
-            false
-        }
-    }
-
-    /// Get the current active status (top of stack) as a string slice
-    pub fn current_str(&self) -> Option<&str> {
-        self.stack.last().map(|s| s.as_str())
-    }
-}
-
-/// Type alias for voice channel status stack
-pub type VoiceChannelStatusStack = StatusStack<String>;
 
 /// Activity type enum that supports equality comparison
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -133,9 +113,7 @@ impl From<&ActivityEntry> for serenity::all::ActivityData {
 /// Type alias for activity stack
 pub type ActivityStack = StatusStack<ActivityEntry>;
 
-/// Manager for voice channel status stacks across all guilds
 pub struct VoiceChannelStatusManager {
-    stacks: Arc<RwLock<HashMap<GuildId, Arc<RwLock<VoiceChannelStatusStack>>>>>,
     voice_connections: Arc<RwLock<HashMap<GuildId, Arc<tokio::sync::Mutex<songbird::Call>>>>>,
 }
 
@@ -143,19 +121,7 @@ impl VoiceChannelStatusManager {
     pub fn new(
         voice_connections: Arc<RwLock<HashMap<GuildId, Arc<tokio::sync::Mutex<songbird::Call>>>>>,
     ) -> Self {
-        Self {
-            stacks: Arc::new(RwLock::new(HashMap::new())),
-            voice_connections,
-        }
-    }
-
-    /// Get or create a status stack for a guild
-    async fn get_or_create_stack(&self, guild_id: GuildId) -> Arc<RwLock<VoiceChannelStatusStack>> {
-        let mut stacks = self.stacks.write().await;
-        stacks
-            .entry(guild_id)
-            .or_insert_with(|| Arc::new(RwLock::new(VoiceChannelStatusStack::new())))
-            .clone()
+        Self { voice_connections }
     }
 
     /// Get the current voice channel ID for a guild
@@ -169,97 +135,26 @@ impl VoiceChannelStatusManager {
         }
     }
 
-    /// Update the channel status to the given message
-    /// Returns true if the channel was updated, false if not connected to a voice channel
-    async fn update_channel_status(
+    /// Set or clear the status of the guild's current voice channel. Returns
+    /// false without calling Discord when the bot is not in a voice channel.
+    pub async fn set_status(
         &self,
         guild_id: GuildId,
-        status: &str,
+        status: Option<&str>,
         http: &Http,
-    ) -> Result<bool, Box<serenity::Error>> {
-        if let Some(channel_id) = self.get_voice_channel_id(guild_id).await {
-            channel_id
-                .edit(http, serenity::builder::EditChannel::new().status(status))
-                .await
-                .map_err(Box::new)?;
-            Ok(true)
-        } else {
-            Ok(false)
-        }
-    }
-
-    /// Push a status message for a guild and update the channel
-    pub async fn push_status(&self, guild_id: GuildId, message: &str, http: &Http) {
-        let stack = self.get_or_create_stack(guild_id).await;
-        let mut stack_guard = stack.write().await;
-        stack_guard.push(message.to_owned());
-        drop(stack_guard);
-
-        // Update the channel status if connected to a voice channel
-        match self.update_channel_status(guild_id, message, http).await {
-            Ok(true) => {
-                tracing::debug!(
-                    "Pushed voice channel status '{}' for guild {}",
-                    message,
-                    guild_id
-                );
-            }
-            Ok(false) => {
-                tracing::debug!(
-                    "Pushed voice channel status '{}' for guild {} (not connected to voice)",
-                    message,
-                    guild_id
-                );
-            }
-            Err(e) => {
-                tracing::warn!(
-                    "Failed to update voice channel status for guild {}: {}",
-                    guild_id,
-                    e
-                );
-            }
-        }
-    }
-
-    /// Remove a specific status message from the stack and update the channel
-    /// This allows removing a message that may not be at the top of the stack
-    pub async fn remove_status(&self, guild_id: GuildId, message: &str, http: &Http) {
-        let stack = self.get_or_create_stack(guild_id).await;
-        let mut stack_guard = stack.write().await;
-        let was_removed = stack_guard.remove_str(message);
-        let new_current = stack_guard.current_str().unwrap_or("").to_string();
-        drop(stack_guard);
-
-        if was_removed {
-            // Update the channel status if connected to a voice channel
-            match self
-                .update_channel_status(guild_id, &new_current, http)
-                .await
-            {
-                Ok(true) => {
-                    tracing::debug!(
-                        "Removed voice channel status '{}' for guild {}, new status: '{}'",
-                        message,
-                        guild_id,
-                        new_current
-                    );
-                }
-                Ok(false) => {
-                    tracing::debug!(
-                        "Removed voice channel status '{}' for guild {} (not connected to voice)",
-                        message,
-                        guild_id
-                    );
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        "Failed to update voice channel status for guild {}: {}",
-                        guild_id,
-                        e
-                    );
-                }
-            }
-        }
+    ) -> anyhow::Result<bool> {
+        let Some(channel_id) = self.get_voice_channel_id(guild_id).await else {
+            return Ok(false);
+        };
+        channel_id
+            .edit(
+                http,
+                serenity::builder::EditChannel::new().status(status.unwrap_or_default()),
+            )
+            .await
+            .with_context(|| format!("Failed to edit status of voice channel {channel_id}"))?;
+        tracing::debug!("Set voice channel status to {status:?} in guild {guild_id}");
+        Ok(true)
     }
 }
 

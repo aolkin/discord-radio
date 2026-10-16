@@ -1,6 +1,8 @@
 use crate::audio::connection::setup_voice_connection;
 use crate::audio::dj::config::DJConfig;
-use crate::audio::dj::manager::{DJCommand, DJStateType, send_dj_command};
+use crate::audio::dj::manager::{
+    DJCommand, DJStateType, send_dj_command, set_channel_status_enabled,
+};
 use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
 use crate::audio::processing::processor::ProcessorRef;
@@ -604,6 +606,37 @@ pub async fn dj_profile_override(
     .await
 }
 
+/// Turn the DJ's management of the voice channel status on or off
+#[poise::command(
+    slash_command,
+    guild_only,
+    default_member_permissions = "ADMINISTRATOR"
+)]
+pub async fn dj_channel_status(
+    ctx: Context<'_>,
+    #[description = "Whether the DJ sets the voice channel status"] enabled: bool,
+) -> Result<(), Error> {
+    ctx.defer_ephemeral().await?;
+
+    let guild_id = ctx
+        .guild_id()
+        .ok_or("This command can only be used in a server")?;
+
+    if let Err(e) = set_channel_status_enabled(ctx.data(), guild_id, enabled).await {
+        ctx.say(format!("Failed to update DJ channel status setting: {e:#}"))
+            .await?;
+        return Ok(());
+    }
+    let message = if enabled {
+        "DJ channel status management enabled"
+    } else {
+        "DJ channel status management disabled; the current status stays as it is"
+    };
+    ctx.say(message).await?;
+
+    Ok(())
+}
+
 /// Manage the radio DJ for automated playback
 #[poise::command(
     slash_command,
@@ -710,8 +743,7 @@ pub async fn manage_dj(
                 return Ok(());
             }
 
-            mgr.stop(ctx.data(), ctx.serenity_context().http.clone())
-                .await;
+            mgr.stop(ctx.data()).await;
             ctx.say("DJ stopped").await?;
         }
         "configure" => {
