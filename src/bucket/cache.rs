@@ -4,7 +4,6 @@
 
 use anyhow::{Context, bail};
 use async_trait::async_trait;
-use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -34,8 +33,8 @@ pub enum ObjectStoreError {
     NotConfigured,
     #[error("object not found")]
     NotFound,
-    #[error("remote download failed: {0}")]
-    Remote(Arc<dyn Error + Send + Sync>),
+    #[error("remote download failed: {0:#}")]
+    Remote(Arc<anyhow::Error>),
     #[error("local cache i/o failed: {0}")]
     Local(Arc<std::io::Error>),
 }
@@ -209,7 +208,7 @@ impl ObjectStore {
             if e.is::<ObjectNotFound>() {
                 ObjectStoreError::NotFound
             } else {
-                ObjectStoreError::Remote(Box::<dyn Error + Send + Sync>::from(e).into())
+                ObjectStoreError::Remote(Arc::new(e))
             }
         })?;
 
@@ -250,7 +249,7 @@ impl ObjectStore {
             if e.is::<ObjectNotFound>() {
                 ObjectStoreError::NotFound
             } else {
-                ObjectStoreError::Remote(Box::<dyn Error + Send + Sync>::from(e).into())
+                ObjectStoreError::Remote(Arc::new(e))
             }
         })
     }
