@@ -113,7 +113,9 @@ impl DJManager {
                 tracing::info!("DJ gracefully stopped for guild {}", self.guild_id);
             }
             _ = tokio::time::sleep(Duration::from_secs(5)) => {
-                tracing::warn!("DJ shutdown timeout for guild {}, task may have hung", self.guild_id);
+                self.task_handle.abort();
+                let _ = (&mut self.task_handle).await;
+                tracing::warn!("DJ shutdown timeout for guild {}, aborted the task", self.guild_id);
             }
         }
 
