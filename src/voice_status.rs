@@ -169,7 +169,7 @@ impl ActivityManager {
     }
 
     /// Restore activity state from disk
-    pub async fn restore_from_disk(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn restore_from_disk(&self) -> anyhow::Result<()> {
         if let Some(saved_state) = self.state_store.load_activity_state().await? {
             let activity_type = ActivityType::from_str(&saved_state.activity_type);
             let entry = ActivityEntry::new(activity_type, saved_state.status);

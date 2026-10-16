@@ -36,12 +36,12 @@ impl StubDownloader {
 
 #[async_trait]
 impl ObjectDownloader for StubDownloader {
-    async fn download(&self, _key: &str) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
+    async fn download(&self, _key: &str) -> anyhow::Result<Vec<u8>> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         Ok(self.payload.clone())
     }
 
-    async fn list_keys(&self, prefix: &str) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
+    async fn list_keys(&self, prefix: &str) -> anyhow::Result<Vec<String>> {
         self.list_calls.fetch_add(1, Ordering::SeqCst);
         Ok(self
             .remote_keys
@@ -56,12 +56,12 @@ struct FailingDownloader;
 
 #[async_trait]
 impl ObjectDownloader for FailingDownloader {
-    async fn download(&self, key: &str) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
-        Err(format!("no such object: {key}").into())
+    async fn download(&self, key: &str) -> anyhow::Result<Vec<u8>> {
+        Err(anyhow::anyhow!("no such object: {key}"))
     }
 
-    async fn list_keys(&self, _prefix: &str) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
-        Err("listing failed".into())
+    async fn list_keys(&self, _prefix: &str) -> anyhow::Result<Vec<String>> {
+        Err(anyhow::anyhow!("listing failed"))
     }
 }
 
@@ -69,11 +69,11 @@ struct NotFoundDownloader;
 
 #[async_trait]
 impl ObjectDownloader for NotFoundDownloader {
-    async fn download(&self, _key: &str) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
-        Err(Box::new(ObjectNotFound))
+    async fn download(&self, _key: &str) -> anyhow::Result<Vec<u8>> {
+        Err(ObjectNotFound.into())
     }
 
-    async fn list_keys(&self, _prefix: &str) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
+    async fn list_keys(&self, _prefix: &str) -> anyhow::Result<Vec<String>> {
         Ok(Vec::new())
     }
 }

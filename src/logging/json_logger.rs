@@ -1,3 +1,4 @@
+use anyhow::Context;
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -29,17 +30,14 @@ impl JsonLogger {
     }
 
     /// Log an entry by appending it as a JSON line to the file
-    pub async fn log<T: Serialize>(
-        &self,
-        entry: &T,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn log<T: Serialize>(&self, entry: &T) -> anyhow::Result<()> {
         // Acquire lock to ensure only one log operation at a time
         let _guard = self.lock.lock().await;
 
         self.ensure_directory_exists().await?;
 
         // Serialize to JSON
-        let json = serde_json::to_string(entry)?;
+        let json = serde_json::to_string(entry).context("serializing log entry")?;
 
         // Open file in append mode and write the JSON line
         let mut file = OpenOptions::new()

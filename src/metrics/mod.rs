@@ -1,3 +1,4 @@
+use anyhow::Context;
 use opentelemetry::{
     KeyValue,
     metrics::{Counter, Gauge, Histogram, Meter, MeterProvider as _},
@@ -122,7 +123,7 @@ impl BotMetrics {
 pub fn init_metrics(
     metrics_url: String,
     api_key: String,
-) -> Result<(SdkMeterProvider, &'static BotMetrics), Box<dyn std::error::Error + Send + Sync>> {
+) -> anyhow::Result<(SdkMeterProvider, &'static BotMetrics)> {
     tracing::info!("Initializing metrics with OTLP HTTP exporter");
 
     // Create OTLP exporter
@@ -135,7 +136,8 @@ pub fn init_metrics(
                 .collect(),
         )
         .with_timeout(Duration::from_secs(10))
-        .build()?;
+        .build()
+        .context("building metrics exporter")?;
 
     // Read metrics interval from env var, default to 60 seconds
     let metrics_interval_secs = std::env::var("METRICS_INTERVAL_SECONDS")

@@ -65,11 +65,11 @@ impl serenity::EventHandler for Handler {
 
         // Restore activity state from disk
         if let Err(e) = self.data.activity_manager.restore_from_disk().await {
-            tracing::error!("Failed to restore activity state: {:?}", e);
+            tracing::error!("Failed to restore activity state: {e:#}");
         }
 
         if let Err(e) = crate::startup::restore_voice_channels(&ctx, self.data).await {
-            tracing::error!("Failed to restore voice channels: {:?}", e);
+            tracing::error!("Failed to restore voice channels: {e:#}");
         }
     }
 
@@ -258,10 +258,7 @@ async fn main() -> anyhow::Result<()> {
                 Some(provider)
             }
             Err(e) => {
-                tracing::warn!(
-                    "Failed to initialize metrics: {}. Continuing without metrics.",
-                    e
-                );
+                tracing::warn!("Failed to initialize metrics: {e:#}. Continuing without metrics.",);
                 None
             }
         }
@@ -383,7 +380,7 @@ async fn main() -> anyhow::Result<()> {
     // Start web server in background
     tokio::spawn(async move {
         if let Err(e) = web::run_web_server(data, web_port).await {
-            tracing::error!("Web server error: {}", e);
+            tracing::error!("Web server error: {e:#}");
         }
     });
 

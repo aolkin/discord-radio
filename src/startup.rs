@@ -2,13 +2,18 @@ use crate::audio::connection::setup_voice_connection;
 use crate::audio::dj::manager::start_dj;
 use crate::audio::tracks::{StartTrackArgs, get_or_create_track_manager};
 use crate::state::Data;
+use anyhow::Context;
 use std::time::Duration;
 
 pub async fn restore_voice_channels(
     ctx: &poise::serenity_prelude::Context,
     bot_state: Data,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let saved_channels = bot_state.state_store.load_voice_channels().await?;
+) -> anyhow::Result<()> {
+    let saved_channels = bot_state
+        .state_store
+        .load_voice_channels()
+        .await
+        .context("loading saved voice channels")?;
 
     if saved_channels.is_empty() {
         tracing::info!("No saved voice channels found");
@@ -55,10 +60,12 @@ pub async fn restore_voice_channels(
     Ok(())
 }
 
-async fn restore_multitrack_playback(
-    bot_state: Data,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let saved_multitrack = bot_state.state_store.load_multitrack_playbacks().await?;
+async fn restore_multitrack_playback(bot_state: Data) -> anyhow::Result<()> {
+    let saved_multitrack = bot_state
+        .state_store
+        .load_multitrack_playbacks()
+        .await
+        .context("loading saved multitrack playbacks")?;
 
     if saved_multitrack.is_empty() {
         tracing::info!("No saved multitrack playbacks found");

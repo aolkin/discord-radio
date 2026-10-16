@@ -1,3 +1,4 @@
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
@@ -111,15 +112,14 @@ impl LogReader {
     }
 
     /// Read the last n lines from the file
-    pub async fn tail(
-        &self,
-        n: usize,
-    ) -> Result<LogReadResult, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn tail(&self, n: usize) -> anyhow::Result<LogReadResult> {
         if !self.file_path.exists() {
             return Ok(Self::empty_result());
         }
 
-        let file = File::open(&self.file_path).await?;
+        let file = File::open(&self.file_path)
+            .await
+            .with_context(|| format!("opening {:?}", self.file_path))?;
         let file_size = file.metadata().await?.len();
         let mut reader = BufReader::new(file);
 
@@ -179,16 +179,14 @@ impl LogReader {
     }
 
     /// Read n lines before the given offset
-    pub async fn read_before(
-        &self,
-        offset: u64,
-        n: usize,
-    ) -> Result<LogReadResult, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn read_before(&self, offset: u64, n: usize) -> anyhow::Result<LogReadResult> {
         if !self.file_path.exists() {
             return Ok(Self::empty_result());
         }
 
-        let file = File::open(&self.file_path).await?;
+        let file = File::open(&self.file_path)
+            .await
+            .with_context(|| format!("opening {:?}", self.file_path))?;
         let file_size = file.metadata().await?.len();
         let mut reader = BufReader::new(file);
 
@@ -250,16 +248,14 @@ impl LogReader {
     }
 
     /// Read n lines after the given offset
-    pub async fn read_after(
-        &self,
-        offset: u64,
-        n: usize,
-    ) -> Result<LogReadResult, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn read_after(&self, offset: u64, n: usize) -> anyhow::Result<LogReadResult> {
         if !self.file_path.exists() {
             return Ok(Self::empty_result());
         }
 
-        let file = File::open(&self.file_path).await?;
+        let file = File::open(&self.file_path)
+            .await
+            .with_context(|| format!("opening {:?}", self.file_path))?;
         let file_size = file.metadata().await?.len();
         let mut reader = BufReader::new(file);
 
