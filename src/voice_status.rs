@@ -168,11 +168,6 @@ impl ActivityManager {
         stack.last().cloned()
     }
 
-    /// Get the serenity context
-    pub async fn get_context(&self) -> Option<serenity::all::Context> {
-        self.ctx.read().await.clone()
-    }
-
     /// Restore activity state from disk
     pub async fn restore_from_disk(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if let Some(saved_state) = self.state_store.load_activity_state().await? {
