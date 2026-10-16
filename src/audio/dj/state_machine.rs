@@ -9,6 +9,7 @@ use crate::audio::dj::segments::{
 use crate::audio::dj::segments::{NoiseSegment, SegmentCtx};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
 use crate::state::Data;
+use anyhow::Context;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serenity::all::Http;
@@ -314,14 +315,25 @@ impl DJStateMachine {
         if self.applied_channel_status.as_ref() == Some(&target) {
             return;
         }
-        match self
-            .bot_state
-            .voice_status_manager
-            .set_status(self.guild_id, target.as_deref(), &self.http)
+        let Some(channel_id) = self.bot_state.get_voice_channel_id(self.guild_id).await else {
+            return;
+        };
+
+        let status = target.unwrap_or_default();
+        match channel_id
+            .edit(
+                &self.http,
+                serenity::builder::EditChannel::new().status(&status),
+            )
             .await
         {
-            Ok(true) => self.applied_channel_status = Some(target),
-            Ok(false) => {}
+            Ok(_) => {
+                tracing::debug!(
+                    "Set voice channel status to {status:?} in guild {}",
+                    self.guild_id
+                );
+                self.applied_channel_status = Some(status)
+            }
             Err(e) => tracing::warn!(
                 "Failed to set voice channel status in guild {}: {e:#}",
                 self.guild_id

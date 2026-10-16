@@ -1,7 +1,3 @@
-use anyhow::Context;
-use serenity::all::Http;
-use serenity::model::id::{ChannelId, GuildId};
-use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -80,7 +76,7 @@ impl Display for ActivityType {
     }
 }
 
-/// Activity entry stored on the stack (type + status text)
+/// Activity entry stored on the stack (type and status text)
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ActivityEntry {
     pub activity_type: ActivityType,
@@ -112,57 +108,6 @@ impl From<&ActivityEntry> for serenity::all::ActivityData {
 
 /// Type alias for activity stack
 pub type ActivityStack = StatusStack<ActivityEntry>;
-
-pub struct VoiceChannelStatusManager {
-    voice_connections: Arc<RwLock<HashMap<GuildId, Arc<tokio::sync::Mutex<songbird::Call>>>>>,
-}
-
-impl VoiceChannelStatusManager {
-    pub fn new(
-        voice_connections: Arc<RwLock<HashMap<GuildId, Arc<tokio::sync::Mutex<songbird::Call>>>>>,
-    ) -> Self {
-        Self { voice_connections }
-    }
-
-    /// Get the current voice channel ID for a guild
-    async fn get_voice_channel_id(&self, guild_id: GuildId) -> Option<ChannelId> {
-        let voice_connections = self.voice_connections.read().await;
-        if let Some(call_lock) = voice_connections.get(&guild_id) {
-            let call = call_lock.lock().await;
-            call.current_channel().map(|id| ChannelId::new(id.0.get()))
-        } else {
-            None
-        }
-    }
-
-    /// Set or clear the status of the guild's current voice channel. Returns
-    /// false without calling Discord when the bot is not in a voice channel.
-    pub async fn set_status(
-        &self,
-        guild_id: GuildId,
-        status: Option<&str>,
-        http: &Http,
-    ) -> anyhow::Result<bool> {
-        let Some(channel_id) = self.get_voice_channel_id(guild_id).await else {
-            return Ok(false);
-        };
-        channel_id
-            .edit(
-                http,
-                serenity::builder::EditChannel::new().status(status.unwrap_or_default()),
-            )
-            .await
-            .with_context(|| format!("Failed to edit status of voice channel {channel_id}"))?;
-        tracing::debug!("Set voice channel status to {status:?} in guild {guild_id}");
-        Ok(true)
-    }
-}
-
-impl Default for VoiceChannelStatusManager {
-    fn default() -> Self {
-        Self::new(Arc::new(RwLock::new(HashMap::new())))
-    }
-}
 
 /// Manager for bot activity stack (global, not per-guild)
 /// The activity is global for the entire bot.
@@ -214,7 +159,6 @@ impl ActivityManager {
     }
 
     /// Push a new activity onto the stack and update the bot's activity
-    #[allow(dead_code)]
     pub async fn push_activity(&self, activity_type: ActivityType, status: String) {
         let entry = ActivityEntry::new(activity_type, status);
         let mut stack = self.stack.write().await;
@@ -228,7 +172,6 @@ impl ActivityManager {
 
     /// Remove a specific activity from the stack and update the bot's activity
     /// Returns true if the activity was found and removed
-    #[allow(dead_code)]
     pub async fn remove_activity(&self, activity_type: ActivityType, status: &str) -> bool {
         let entry = ActivityEntry::new(activity_type, status.to_string());
         let mut stack = self.stack.write().await;
@@ -264,7 +207,6 @@ impl ActivityManager {
     }
 
     /// Get the current active activity (top of stack)
-    #[allow(dead_code)]
     pub async fn current(&self) -> Option<ActivityEntry> {
         let stack = self.stack.read().await;
         stack.current().cloned()
