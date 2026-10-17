@@ -155,7 +155,7 @@ pub async fn load_dj_config(
     config_name: Option<&str>,
 ) -> anyhow::Result<DJConfig> {
     let base = match config_name {
-        Some(name) => DJConfig::load_from_file(&format!("dj_configs/{name}.json"))
+        Some(name) => DJConfig::load_from_file(&bot_state.dj_config_path(name))
             .with_context(|| format!("loading DJ config '{name}'"))?,
         None => DJConfig::default(),
     };

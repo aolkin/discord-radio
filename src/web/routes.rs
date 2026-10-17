@@ -825,8 +825,7 @@ pub async fn get_default_state_weights(
 ) -> Result<AxumJson<crate::audio::dj::config::StateWeights>, StatusCode> {
     use crate::audio::dj::config::DJConfig;
 
-    // Load the default DJ config
-    let config_path = format!("{}/dj_configs/default.json", bot_state.content_path);
+    let config_path = bot_state.dj_config_path("default");
     let config =
         DJConfig::load_from_file(&config_path).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
