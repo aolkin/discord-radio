@@ -1,6 +1,4 @@
-use crate::audio::dj::manager::{
-    DJCommand, DJStateType, IdleRequest, TrackRequest, send_dj_command,
-};
+use crate::audio::dj::manager::{DJCommand, DJStateType, IdleRequest, TrackRequest};
 use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
 use crate::bot_profile::ProfileEdit;
@@ -45,10 +43,6 @@ pub async fn advance_dj_state(
     let guild_id_parsed: u64 = guild_id.parse().map_err(|_| StatusCode::BAD_REQUEST)?;
     let guild_id = GuildId::new(guild_id_parsed);
 
-    if !bot_state.dj_managers.read().await.contains_key(&guild_id) {
-        return Err(StatusCode::NOT_FOUND);
-    }
-
     let state_type_filter = if let Some(type_str) = request.state_type {
         match type_str.to_lowercase().as_str() {
             "track" => Some(DJStateType::Track),
@@ -66,9 +60,21 @@ pub async fn advance_dj_state(
         DJCommand::ForceAdvance(state_type_filter),
     )
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+}
 
-    Ok(StatusCode::OK)
+async fn send_dj_command(
+    bot_state: &Data,
+    guild_id: GuildId,
+    command: DJCommand,
+) -> Result<StatusCode, StatusCode> {
+    match bot_state.send_dj_command(guild_id, command).await {
+        Ok(true) => Ok(StatusCode::OK),
+        Ok(false) => Err(StatusCode::NOT_FOUND),
+        Err(e) => {
+            tracing::error!("Failed to send DJ command for guild {guild_id}: {e:#}");
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -89,11 +95,7 @@ pub async fn play_hex_message(
         volume: None,
         loops: None,
     };
-    send_dj_command(&bot_state, guild_id, DJCommand::ForceHexMessage(request))
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    Ok(StatusCode::OK)
+    send_dj_command(&bot_state, guild_id, DJCommand::ForceHexMessage(request)).await
 }
 
 pub async fn play_track(
@@ -115,11 +117,7 @@ pub async fn play_track(
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         })?;
 
-    send_dj_command(&bot_state, guild_id, DJCommand::ForceTrack(request))
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    Ok(StatusCode::OK)
+    send_dj_command(&bot_state, guild_id, DJCommand::ForceTrack(request)).await
 }
 
 pub async fn force_dj_idle(
@@ -137,11 +135,7 @@ pub async fn force_dj_idle(
         return Err(StatusCode::NOT_FOUND);
     }
 
-    send_dj_command(&bot_state, guild_id, DJCommand::ForceIdle(request))
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    Ok(StatusCode::OK)
+    send_dj_command(&bot_state, guild_id, DJCommand::ForceIdle(request)).await
 }
 
 #[derive(Debug, Deserialize)]
@@ -295,11 +289,7 @@ async fn set_dj_profile(
         fade_in_duration: fade,
         fade_out_duration: fade,
     });
-    send_dj_command(bot_state, guild_id, command(playback))
-        .await
-        .map_err(|_| StatusCode::CONFLICT)?;
-
-    Ok(StatusCode::OK)
+    send_dj_command(bot_state, guild_id, command(playback)).await
 }
 
 #[derive(Debug, Deserialize)]

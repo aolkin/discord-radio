@@ -1,4 +1,4 @@
-use crate::audio::dj::manager::DJManager;
+use crate::audio::dj::manager::{DJCommand, DJManager};
 use crate::audio::dj::state_machine::DJState;
 use crate::audio::duration::DurationCache;
 use crate::audio::processing::processor::{AudioProcessor, ProcessorRef};
@@ -102,6 +102,18 @@ impl BotState {
         let manager = self.dj_managers.read().await.get(&guild_id)?.clone();
         let state = manager.lock().await.state.clone();
         Some(state)
+    }
+
+    pub async fn send_dj_command(
+        &self,
+        guild_id: GuildId,
+        command: DJCommand,
+    ) -> anyhow::Result<bool> {
+        let Some(manager) = self.dj_managers.read().await.get(&guild_id).cloned() else {
+            return Ok(false);
+        };
+        manager.lock().await.send(command).await?;
+        Ok(true)
     }
 
     /// Get the current voice channel ID for a guild

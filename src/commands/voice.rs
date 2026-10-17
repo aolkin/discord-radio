@@ -1,5 +1,5 @@
 use crate::audio::connection::setup_voice_connection;
-use crate::audio::dj::manager::{DJCommand, DJStateType, send_dj_command, start_dj, stop_dj};
+use crate::audio::dj::manager::{DJCommand, DJStateType, start_dj, stop_dj};
 use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
 use crate::audio::processing::processor::ProcessorRef;
@@ -10,6 +10,17 @@ use anyhow::{Context as _, bail};
 use serenity::all::{ChannelId, ChannelType, GuildId};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+
+async fn send_to_dj(
+    bot_state: crate::state::Data,
+    guild_id: GuildId,
+    command: DJCommand,
+) -> anyhow::Result<()> {
+    if !bot_state.send_dj_command(guild_id, command).await? {
+        bail!("Not in a voice channel");
+    }
+    Ok(())
+}
 
 /// Join a voice channel to broadcast audio
 #[poise::command(
@@ -138,22 +149,22 @@ pub async fn play_message(
         volume,
         loops,
     };
-    let content =
-        match send_dj_command(ctx.data(), guild_id, DJCommand::ForceHexMessage(request)).await {
-            Ok(()) => {
-                let loops_text = match loops {
-                    Some(n) => format!("{n} loops"),
-                    None => "DJ default loop count".to_string(),
-                };
-                format!(
-                    "DJ is now playing message: \"{}\" ({}, volume {})",
-                    message,
-                    loops_text,
-                    volume.unwrap_or(1.0)
-                )
-            }
-            Err(e) => format!("Failed to use DJ for message playback: {}", e),
-        };
+    let content = match send_to_dj(ctx.data(), guild_id, DJCommand::ForceHexMessage(request)).await
+    {
+        Ok(()) => {
+            let loops_text = match loops {
+                Some(n) => format!("{n} loops"),
+                None => "DJ default loop count".to_string(),
+            };
+            format!(
+                "DJ is now playing message: \"{}\" ({}, volume {})",
+                message,
+                loops_text,
+                volume.unwrap_or(1.0)
+            )
+        }
+        Err(e) => format!("Failed to use DJ for message playback: {}", e),
+    };
     reply
         .edit(
             ctx,
@@ -211,8 +222,7 @@ pub async fn play_track(
         return Ok(());
     }
 
-    let content = match send_dj_command(ctx.data(), guild_id, DJCommand::ForceTrack(request)).await
-    {
+    let content = match send_to_dj(ctx.data(), guild_id, DJCommand::ForceTrack(request)).await {
         Ok(()) => format!(
             "DJ is now playing track: {} (volume {})",
             filename,
@@ -267,7 +277,7 @@ pub async fn dj_idle(
         return Ok(());
     }
 
-    let content = match send_dj_command(ctx.data(), guild_id, DJCommand::ForceIdle(request)).await {
+    let content = match send_to_dj(ctx.data(), guild_id, DJCommand::ForceIdle(request)).await {
         Ok(()) => {
             let what = match &noise_profile {
                 Some(profile) => format!("playing noise profile '{profile}'"),
@@ -590,7 +600,7 @@ async fn set_dj_profile(
         fade_in_duration: fade,
         fade_out_duration: fade,
     });
-    if let Err(e) = send_dj_command(ctx.data(), guild_id, command(playback)).await {
+    if let Err(e) = send_to_dj(ctx.data(), guild_id, command(playback)).await {
         ctx.say(format!("Failed to update DJ {label}: {e:#}"))
             .await?;
         return Ok(());
@@ -712,7 +722,7 @@ pub async fn manage_dj(
 
     match action_lower.as_str() {
         "configure" => {
-            if let Err(e) = send_dj_command(
+            if let Err(e) = send_to_dj(
                 ctx.data(),
                 guild_id,
                 DJCommand::SetAnnouncementChannel(announcement_channel),
@@ -828,7 +838,7 @@ pub async fn advance_dj_state(
         None
     };
 
-    if let Err(e) = send_dj_command(
+    if let Err(e) = send_to_dj(
         ctx.data(),
         guild_id,
         DJCommand::ForceAdvance(state_type_filter),

@@ -202,18 +202,3 @@ pub async fn stop_dj(bot_state: Data, guild_id: GuildId) {
         manager.lock().await.stop(&bot_state).await;
     }
 }
-
-pub async fn send_dj_command(
-    bot_state: &Data,
-    guild_id: GuildId,
-    command: DJCommand,
-) -> anyhow::Result<()> {
-    let manager = bot_state
-        .dj_managers
-        .read()
-        .await
-        .get(&guild_id)
-        .context("Not in a voice channel")?
-        .clone();
-    manager.lock().await.send(command).await
-}
