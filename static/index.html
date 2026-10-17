@@ -471,6 +471,66 @@
                 grid-template-columns: 1fr;
             }
         }
+        .file-browser-overlay {
+            z-index: 1100;
+        }
+
+        .file-browser-crumbs {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 4px;
+            margin-bottom: 15px;
+        }
+
+        .file-browser-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .file-browser-row-name {
+            font-weight: 500;
+            word-break: break-all;
+        }
+
+        .file-browser-row-meta {
+            font-size: 0.8rem;
+            color: #666;
+            word-break: break-all;
+        }
+
+        .file-browser-drop {
+            display: block;
+            margin-top: 15px;
+            padding: 20px;
+            border: 2px dashed #667eea;
+            border-radius: 8px;
+            color: #667eea;
+            text-align: center;
+            cursor: pointer;
+        }
+
+        .file-browser-drop.dragging {
+            background: #f0f2ff;
+        }
+
+        .file-browser-upload {
+            margin-top: 10px;
+        }
+
+        .file-browser-upload progress {
+            width: 100%;
+        }
+
+        .file-browser-new-folder {
+            display: flex;
+            gap: 8px;
+            margin-top: 15px;
+        }
     </style>
 </head>
 <body x-data="botPortal()">
@@ -522,6 +582,11 @@
                 <div class="empty-state" x-show="profiles.length === 0">No signal profiles</div>
             </div>
             <button class="btn btn-primary" @click="openProfileEditor(null)">+ New Signal Profile</button>
+        </div>
+
+        <div style="background: white; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+            <h2 style="color: #667eea; margin-bottom: 15px; font-size: 1.5rem;">Audio Files</h2>
+            <button class="btn btn-primary" @click="openFileBrowser()">Browse Audio Files</button>
         </div>
 
         <div class="guilds-grid" x-show="guilds.length > 0">
@@ -1392,6 +1457,94 @@
         </div>
     </div>
 
+    <div x-show="fileBrowser.open"
+         x-transition.opacity
+         class="modal-overlay file-browser-overlay"
+         @click.self="closeFileBrowser()"
+         @keydown.escape.window="closeFileBrowser()">
+        <div class="modal-content" x-show="fileBrowser.open" x-transition>
+            <div class="modal-header">
+                <div class="modal-title" x-text="fileBrowser.mode === 'file' ? 'Select Audio File' : fileBrowser.mode === 'folder' ? 'Select Folder' : 'Audio Files'"></div>
+                <button class="close" @click="closeFileBrowser()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div x-show="fileBrowser.message.text"
+                     :class="fileBrowser.message.type === 'error' ? 'error-message' : 'success-message'"
+                     x-text="fileBrowser.message.text"></div>
+
+                <div class="file-browser-crumbs">
+                    <button class="btn btn-secondary" :disabled="fileBrowserCrumbs().length < 2"
+                            @click="loadFileBrowser(fileBrowserCrumbs().at(-2).prefix)">&uarr; Up</button>
+                    <template x-for="(crumb, index) in fileBrowserCrumbs()" :key="crumb.prefix">
+                        <span>
+                            <span x-show="index > 0">/</span>
+                            <button class="btn btn-secondary" @click="loadFileBrowser(crumb.prefix)" x-text="crumb.name"></button>
+                        </span>
+                    </template>
+                </div>
+
+                <div class="loading" x-show="fileBrowser.loading">Loading...</div>
+
+                <div x-show="!fileBrowser.loading">
+                    <template x-for="folder in fileBrowser.folders" :key="folder">
+                        <div class="file-browser-row">
+                            <button class="btn btn-secondary" @click="loadFileBrowser(folder)"
+                                    x-text="'📁 ' + folder.slice(fileBrowser.prefix.length)"></button>
+                            <button class="btn btn-primary" x-show="fileBrowser.mode === 'folder'"
+                                    @click="selectFileBrowserEntry(folder)">Select</button>
+                        </div>
+                    </template>
+                    <template x-for="file in fileBrowser.files" :key="file.key">
+                        <div class="file-browser-row">
+                            <div>
+                                <div class="file-browser-row-name" x-text="file.key.slice(fileBrowser.prefix.length)"></div>
+                                <div class="file-browser-row-meta"
+                                     x-text="file.key + ' · ' + formatBytes(file.size) + ' · ' + formatDate(file.last_modified)"></div>
+                            </div>
+                            <button class="btn btn-primary" x-show="fileBrowser.mode === 'file'"
+                                    @click="selectFileBrowserEntry(file.key)">Select</button>
+                        </div>
+                    </template>
+                    <div class="empty-state"
+                         x-show="fileBrowser.folders.length === 0 && fileBrowser.files.length === 0">This folder is empty</div>
+                </div>
+
+                <form class="file-browser-new-folder" @submit.prevent="createFileBrowserFolder()">
+                    <input type="text" class="form-input" placeholder="New folder name"
+                           x-model="fileBrowser.newFolderName" required pattern="[A-Za-z0-9_\-]+"
+                           title="Letters, digits, - and _ only">
+                    <button type="submit" class="btn btn-secondary" :disabled="fileBrowser.creatingFolder">
+                        <span x-text="fileBrowser.creatingFolder ? 'Creating...' : 'New Folder'"></span>
+                    </button>
+                </form>
+
+                <label class="file-browser-drop" :class="{ dragging: fileBrowser.dragging }"
+                       @dragover.prevent="fileBrowser.dragging = true"
+                       @dragleave="fileBrowser.dragging = false"
+                       @drop.prevent="fileBrowser.dragging = false; uploadAudioFiles($event.dataTransfer.files)">
+                    <span>Drop audio files here or click to choose (.mp3, .ogg, .wav at 48kHz)</span>
+                    <input type="file" multiple accept=".mp3,.ogg,.wav" style="display: none;"
+                           @change="uploadAudioFiles($event.target.files); $event.target.value = ''">
+                </label>
+
+                <template x-for="upload in fileBrowser.uploads" :key="upload.id">
+                    <div class="file-browser-upload">
+                        <div class="file-browser-row-name" x-text="upload.name"></div>
+                        <progress max="100" :value="upload.progress" x-show="upload.status === 'uploading'"></progress>
+                        <div class="file-browser-row-meta" x-show="upload.status === 'done'"
+                             x-text="'Uploaded as ' + upload.detail"></div>
+                        <div class="error-message" x-show="upload.status === 'error'" x-text="upload.detail"></div>
+                    </div>
+                </template>
+
+                <div class="button-group" x-show="fileBrowser.mode === 'folder'">
+                    <button type="button" class="btn btn-primary"
+                            @click="selectFileBrowserEntry(fileBrowser.prefix)">Select This Folder</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         function botPortal() {
             return {
@@ -1441,6 +1594,21 @@
                 profileSaving: false,
                 profileMessage: { text: '', type: '' },
                 profiles: [],
+                fileBrowser: {
+                    open: false,
+                    mode: 'browse',
+                    onSelect: null,
+                    prefix: 'tracks/',
+                    folders: [],
+                    files: [],
+                    loading: false,
+                    message: { text: '', type: '' },
+                    newFolderName: '',
+                    creatingFolder: false,
+                    dragging: false,
+                    uploads: [],
+                },
+                nextUploadId: 0,
                 // Signal Profile Editor state
                 showProfileEditor: false,
                 profileEditorIsNew: false,
@@ -1566,6 +1734,144 @@
                     } catch (error) {
                         console.error('Failed to load profiles:', error);
                     }
+                },
+
+                // mode is 'browse' (no selection), 'file' or 'folder'. A picking
+                // mode calls onSelect with the chosen object key or folder prefix.
+                openFileBrowser({ mode = 'browse', prefix = 'tracks/', onSelect = null } = {}) {
+                    this.fileBrowser.mode = mode;
+                    this.fileBrowser.onSelect = onSelect;
+                    this.fileBrowser.newFolderName = '';
+                    this.fileBrowser.uploads = [];
+                    this.fileBrowser.open = true;
+                    return this.loadFileBrowser(prefix);
+                },
+
+                closeFileBrowser() {
+                    this.fileBrowser.open = false;
+                    this.fileBrowser.onSelect = null;
+                },
+
+                selectFileBrowserEntry(value) {
+                    const onSelect = this.fileBrowser.onSelect;
+                    this.closeFileBrowser();
+                    if (onSelect) onSelect(value);
+                },
+
+                fileBrowserCrumbs() {
+                    const names = this.fileBrowser.prefix.split('/').filter(Boolean);
+                    return names.map((name, index) => ({
+                        name,
+                        prefix: names.slice(0, index + 1).join('/') + '/',
+                    }));
+                },
+
+                async loadFileBrowser(prefix) {
+                    this.fileBrowser.loading = true;
+                    this.fileBrowser.message = { text: '', type: '' };
+                    try {
+                        const response = await fetch(`/api/audio-files?prefix=${encodeURIComponent(prefix)}`);
+                        if (!response.ok) {
+                            throw new Error((await response.text()) || `HTTP ${response.status}`);
+                        }
+                        const listing = await response.json();
+                        this.fileBrowser.prefix = listing.prefix;
+                        this.fileBrowser.folders = listing.folders;
+                        this.fileBrowser.files = listing.files;
+                    } catch (error) {
+                        console.error('Failed to load audio files:', error);
+                        this.fileBrowser.message = { text: `Failed to load files: ${error.message}`, type: 'error' };
+                    } finally {
+                        this.fileBrowser.loading = false;
+                    }
+                },
+
+                async createFileBrowserFolder() {
+                    this.fileBrowser.creatingFolder = true;
+                    this.fileBrowser.message = { text: '', type: '' };
+                    try {
+                        const response = await fetch('/api/audio-files/folders', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ prefix: this.fileBrowser.prefix, name: this.fileBrowser.newFolderName }),
+                        });
+                        if (!response.ok) {
+                            throw new Error((await response.text()) || `HTTP ${response.status}`);
+                        }
+                        this.fileBrowser.newFolderName = '';
+                        await this.loadFileBrowser(this.fileBrowser.prefix);
+                    } catch (error) {
+                        console.error('Failed to create folder:', error);
+                        this.fileBrowser.message = { text: `Failed to create folder: ${error.message}`, type: 'error' };
+                    } finally {
+                        this.fileBrowser.creatingFolder = false;
+                    }
+                },
+
+                async uploadAudioFiles(fileList) {
+                    const prefix = this.fileBrowser.prefix;
+                    let uploaded = false;
+                    for (const file of Array.from(fileList)) {
+                        this.fileBrowser.uploads.push({
+                            id: this.nextUploadId++, name: file.name, progress: 0, status: 'uploading', detail: '',
+                        });
+                        const upload = this.fileBrowser.uploads.at(-1);
+                        if (!/\.(mp3|ogg|wav)$/i.test(file.name)) {
+                            upload.status = 'error';
+                            upload.detail = 'Only .mp3, .ogg and .wav files are accepted';
+                            continue;
+                        }
+                        try {
+                            upload.detail = await this.sendAudioFile(file, prefix, (percent) => { upload.progress = percent; });
+                            upload.status = 'done';
+                            uploaded = true;
+                        } catch (error) {
+                            console.error('Failed to upload audio file:', error);
+                            upload.status = 'error';
+                            upload.detail = error.message;
+                        }
+                    }
+                    if (uploaded && this.fileBrowser.prefix === prefix) {
+                        await this.loadFileBrowser(prefix);
+                    }
+                },
+
+                // Resolves with the uploaded key. XMLHttpRequest rather than fetch because fetch reports no upload progress.
+                sendAudioFile(file, prefix, onProgress) {
+                    return new Promise((resolve, reject) => {
+                        const xhr = new XMLHttpRequest();
+                        xhr.open('POST', `/api/audio-files/upload?prefix=${encodeURIComponent(prefix)}`);
+                        xhr.upload.onprogress = (event) => {
+                            if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
+                        };
+                        xhr.onload = () => {
+                            if (xhr.status >= 200 && xhr.status < 300) {
+                                resolve(JSON.parse(xhr.responseText).key);
+                            } else {
+                                reject(new Error(xhr.responseText || `HTTP ${xhr.status}`));
+                            }
+                        };
+                        xhr.onerror = () => reject(new Error('Network error'));
+                        const form = new FormData();
+                        form.append('file', file);
+                        xhr.send(form);
+                    });
+                },
+
+                formatBytes(bytes) {
+                    const units = ['B', 'KB', 'MB', 'GB'];
+                    let value = bytes;
+                    let unit = 0;
+                    while (value >= 1024 && unit < units.length - 1) {
+                        value /= 1024;
+                        unit++;
+                    }
+                    return `${unit === 0 ? value : value.toFixed(1)} ${units[unit]}`;
+                },
+
+                formatDate(value) {
+                    const date = new Date(value);
+                    return isNaN(date) ? value : date.toLocaleString();
                 },
 
                 async openProfileEditor(name) {

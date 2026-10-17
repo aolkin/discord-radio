@@ -2,6 +2,7 @@ use crate::state::Data;
 use crate::web::{audio_stream, routes, websocket};
 use axum::{
     Router,
+    extract::DefaultBodyLimit,
     routing::{get, post},
 };
 use http::header::{AUTHORIZATION, CONTENT_TYPE};
@@ -84,6 +85,14 @@ pub async fn run_web_server(bot_state: Data, port: u16) -> anyhow::Result<()> {
             get(routes::get_profile).put(routes::put_profile),
         )
         .route("/api/audio-files", get(routes::browse_audio_files))
+        .route(
+            "/api/audio-files/upload",
+            post(routes::upload_audio_file).layer(DefaultBodyLimit::max(routes::MAX_UPLOAD_BYTES)),
+        )
+        .route(
+            "/api/audio-files/folders",
+            post(routes::create_audio_folder),
+        )
         .route("/api/activity/set", post(routes::set_bot_activity))
         .route("/api/activity/push", post(routes::push_bot_activity))
         .route("/api/activity/remove", post(routes::remove_bot_activity))

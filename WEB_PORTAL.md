@@ -19,6 +19,8 @@ The Discord bot includes a built-in web portal for monitoring bot status and con
 - **Signal profile management**
   - Set or clear the DJ's background profile and profile override
   - List, create, and edit signal profiles
+- **Audio file browser**
+  - Browse the folders and files under `tracks/` in object storage, create folders, and upload audio files by choosing or dropping them
 
 ## Configuration
 
@@ -90,6 +92,10 @@ The DJ plays the profile override if set, else the current segment's forced prof
 
 The Signal Profiles panel lists every profile by name. Saving a new or edited profile writes it to object storage; a DJ picks up the new parameters the next time it transitions to that profile.
 
+### Audio File Browser
+
+The Audio Files panel opens a browser over the `tracks/` folder of object storage. Dropping or choosing files uploads them to the current folder one after another, with a progress bar per file and the server's message when a file is rejected. Breadcrumbs and Up move between folders, and each file shows its full key, size and last modified time. The same browser opens in a mode that picks a file or a folder and hands the choice back to the section that opened it.
+
 ## Technology Stack
 
 - **Backend**: Axum web framework
@@ -115,6 +121,8 @@ The Signal Profiles panel lists every profile by name. Saving a new or edited pr
 - `GET /api/profiles/:name` - Get a signal profile's parameters. With `?refresh=true`, re-fetch the profile from object storage first and keep the fetched copy; returns 404 when object storage has no such profile
 - `PUT /api/profiles/:name` - Create or replace a signal profile in object storage. The body holds the profile's parameters; the name comes from `:name`, which may contain only letters, digits, `-` and `_`. Returns 503 when object storage is not configured
 - `GET /api/audio-files` - Browse object storage one folder level at a time. `?prefix=` (default `tracks/`) selects the folder; returns `{"prefix", "folders", "files"}`, where `folders` are the sub-folder prefixes and each file has `key`, `size` and `last_modified`. Returns 503 when object storage is not configured
+- `POST /api/audio-files/upload` - Upload an audio file to object storage as `{prefix}{filename}`. `?prefix=` (default `tracks/`) must be a folder under `tracks/`. The body is `multipart/form-data` with the file in a `file` field; it must be .mp3, .ogg or .wav at 48kHz and at most 100 MiB. Returns `{"key"}`; 400 for a bad prefix, name or type, 422 for a wrong sample rate or undecodable file, 503 when object storage is not configured
+- `POST /api/audio-files/folders` - Create a folder under `tracks/` in object storage (`{"prefix": "tracks/", "name": "my-folder"}`). The name may contain only letters, digits, `-` and `_`. Returns `{"key"}` of the folder marker
 - `GET /api/dj-config/overrides` - Get all DJ config overrides (hex messages, announcements, state weights)
 - `GET /api/dj-config/default-state-weights` - Get default state weights from config file
 - `POST /api/dj-config/overrides/hex-messages` - Add or update a hex message override
