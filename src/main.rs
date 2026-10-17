@@ -301,11 +301,15 @@ async fn main() -> anyhow::Result<()> {
         (file_cache_ttl_secs > 0).then(|| Duration::from_secs(file_cache_ttl_secs));
     tracing::info!("Using file cache ttl: {:?}", file_cache_ttl);
 
-    let file_cache = Arc::new(
-        bucket::ObjectStore::new(file_cache_dir.clone(), bucket, file_cache_ttl)
-            .await
-            .with_context(|| format!("Failed to create file cache at {file_cache_dir:?}"))?,
-    );
+    let bucket = match bucket {
+        Some(bucket) => Some(
+            bucket::Bucket::new(file_cache_dir.clone(), bucket, file_cache_ttl)
+                .await
+                .with_context(|| format!("Failed to create file cache at {file_cache_dir:?}"))?,
+        ),
+        None => None,
+    };
+    let file_resolver = bucket::FileResolver::new(content_path, bucket);
 
     let bot_user_id = anyhow::Context::context(
         http().get_current_user().await,
@@ -313,14 +317,16 @@ async fn main() -> anyhow::Result<()> {
     )?
     .id;
 
-    let profile_manager =
-        ProfileManager::from_storage(&signal_profiles_dir(&content_path), file_cache.clone()).await;
+    let profile_manager = ProfileManager::from_storage(
+        &signal_profiles_dir(file_resolver.content_path()),
+        file_resolver.clone(),
+    )
+    .await;
 
     let data: Data = Box::leak(Box::new(BotState::new(
-        content_path,
+        file_resolver,
         state_store,
         dj_settings_store,
-        file_cache,
         profile_manager,
         bot_user_id,
     )));

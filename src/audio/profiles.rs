@@ -1,10 +1,10 @@
-use crate::bucket::{ObjectStore, ObjectStoreError};
+use crate::bucket::FileResolver;
 use anyhow::Context;
 use futures_util::{StreamExt, stream};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct SignalProfile {
@@ -83,21 +83,21 @@ pub enum ProfileStorageError {
     #[error("profile names may only contain letters, digits, '-' and '_'")]
     InvalidName,
     #[error(transparent)]
-    Storage(#[from] ObjectStoreError),
+    Storage(#[from] anyhow::Error),
     #[error("parsing JSON: {0}")]
     Parse(#[from] serde_json::Error),
 }
 
 pub struct ProfileManager {
     profiles: RwLock<HashMap<String, SignalProfile>>,
-    store: Arc<ObjectStore>,
+    file_resolver: FileResolver,
 }
 
 impl ProfileManager {
     /// Loads every profile in `profiles_dir` and under `profiles/` in object
     /// storage. A profile in object storage replaces a local profile of the
     /// same name.
-    pub async fn from_storage(profiles_dir: &Path, store: Arc<ObjectStore>) -> Self {
+    pub async fn from_storage(profiles_dir: &Path, file_resolver: FileResolver) -> Self {
         let mut profiles = HashMap::new();
 
         let local_paths = match std::fs::read_dir(profiles_dir) {
@@ -121,14 +121,19 @@ impl ProfileManager {
                 (path.display().to_string(), bytes)
             });
 
-        let remote: Vec<_> = stream::iter(store.list_remote(REMOTE_PREFIX).await)
-            .filter(|key| std::future::ready(key.ends_with(".json")))
-            .then(|key| async {
-                let bytes = store.fetch_bytes(&key).await.context("fetching");
-                (key, bytes)
-            })
-            .collect()
-            .await;
+        let remote: Vec<_> = match file_resolver.bucket() {
+            Ok(bucket) => {
+                stream::iter(bucket.list_remote(REMOTE_PREFIX).await)
+                    .filter(|key| std::future::ready(key.ends_with(".json")))
+                    .then(|key| async {
+                        let bytes = bucket.fetch_bytes(&key).await.context("fetching");
+                        (key, bytes)
+                    })
+                    .collect()
+                    .await
+            }
+            Err(_) => Vec::new(),
+        };
 
         for (source, bytes) in local.chain(remote) {
             let parsed = bytes.and_then(|bytes| {
@@ -151,7 +156,7 @@ impl ProfileManager {
 
         Self {
             profiles: RwLock::new(profiles),
-            store,
+            file_resolver,
         }
     }
 
@@ -194,7 +199,10 @@ impl ProfileManager {
     pub async fn save(&self, profile: SignalProfile) -> Result<(), ProfileStorageError> {
         let key = remote_key(&profile.name)?;
         let bytes = serde_json::to_vec_pretty(&profile).expect("a SignalProfile always serializes");
-        self.store.upload(&key, &bytes, "application/json").await?;
+        self.file_resolver
+            .bucket()?
+            .upload(&key, &bytes, "application/json")
+            .await?;
 
         self.profiles
             .write()
@@ -206,7 +214,8 @@ impl ProfileManager {
     /// Re-fetches the profile named `name` from object storage and replaces
     /// the in-memory copy with it.
     pub async fn refresh(&self, name: &str) -> Result<SignalProfile, ProfileStorageError> {
-        let bytes = self.store.fetch_bytes(&remote_key(name)?).await?;
+        let key = remote_key(name)?;
+        let bytes = self.file_resolver.bucket()?.fetch_bytes(&key).await?;
         let profile: SignalProfile = serde_json::from_slice(&bytes)?;
         self.profiles
             .write()

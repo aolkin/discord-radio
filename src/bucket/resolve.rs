@@ -1,6 +1,10 @@
-use crate::bucket::cache::DirListing;
-use crate::bucket::{ObjectStore, ObjectStoreError};
-use std::sync::Arc;
+use crate::bucket::Bucket;
+use anyhow::Context;
+
+/// Marks a failure as caused by no object storage bucket being configured.
+#[derive(Debug, thiserror::Error)]
+#[error("object storage is not configured")]
+pub struct NoBucket;
 
 /// Resolves a playlist entry's `filename` to a local filesystem path.
 ///
@@ -10,21 +14,29 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct FileResolver {
     content_path: String,
-    file_cache: Arc<ObjectStore>,
+    bucket: Option<Bucket>,
 }
 
 impl FileResolver {
-    pub fn new(content_path: String, file_cache: Arc<ObjectStore>) -> Self {
+    pub fn new(content_path: String, bucket: Option<Bucket>) -> Self {
         Self {
             content_path,
-            file_cache,
+            bucket,
         }
     }
 
-    pub async fn resolve(&self, filename: &str) -> Result<String, ObjectStoreError> {
+    pub fn content_path(&self) -> &str {
+        &self.content_path
+    }
+
+    pub fn bucket(&self) -> anyhow::Result<&Bucket> {
+        self.bucket.as_ref().ok_or_else(|| NoBucket.into())
+    }
+
+    pub async fn resolve(&self, filename: &str) -> anyhow::Result<String> {
         if let Some(key) = filename.strip_prefix("s3://") {
             Ok(self
-                .file_cache
+                .bucket()?
                 .ensure_cached(key)
                 .await?
                 .to_string_lossy()
@@ -34,43 +46,15 @@ impl FileResolver {
         }
     }
 
-    pub async fn resolve_contents(&self, filename: &str) -> Result<Vec<u8>, ObjectStoreError> {
+    pub async fn resolve_contents(&self, filename: &str) -> anyhow::Result<Vec<u8>> {
         if let Some(key) = filename.strip_prefix("s3://") {
-            self.file_cache.fetch_bytes(key).await
+            self.bucket()?.fetch_bytes(key).await
         } else {
-            tokio::fs::read(format!("{}/{filename}", self.content_path))
+            let path = format!("{}/{filename}", self.content_path);
+            tokio::fs::read(&path)
                 .await
-                .map_err(|e| ObjectStoreError::Local(Arc::new(e)))
+                .with_context(|| format!("reading {path}"))
         }
-    }
-
-    /// Empty when no bucket is configured or the listing request fails.
-    pub async fn list_remote(&self, prefix: &str) -> Vec<String> {
-        self.file_cache.list_remote(prefix).await
-    }
-
-    pub async fn list_dir(&self, prefix: &str) -> Result<DirListing, ObjectStoreError> {
-        self.file_cache.list_dir(prefix).await
-    }
-
-    pub async fn upload(
-        &self,
-        key: &str,
-        bytes: &[u8],
-        content_type: &str,
-    ) -> Result<(), ObjectStoreError> {
-        self.file_cache.upload(key, bytes, content_type).await
-    }
-
-    /// Lists files (as s3:// URIs) whose key matches `partial` under `prefix`.
-    pub async fn list_content(&self, prefix: &str, partial: &str) -> Vec<String> {
-        let partial = partial.strip_prefix("s3://").unwrap_or(partial);
-        let partial = partial.strip_prefix(prefix).unwrap_or(partial);
-        self.list_remote(&format!("{prefix}{partial}"))
-            .await
-            .into_iter()
-            .map(|key| format!("s3://{key}"))
-            .collect()
     }
 }
 
