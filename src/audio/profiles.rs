@@ -85,7 +85,7 @@ impl ProfileManager {
     /// Loads every profile in `profiles_dir` and under `profiles/` in object
     /// storage. A profile in object storage replaces a local profile of the
     /// same name.
-    pub async fn load(profiles_dir: &Path, store: &ObjectStore) -> Self {
+    pub async fn from_storage(profiles_dir: &Path, store: &ObjectStore) -> Self {
         let mut profiles = HashMap::new();
 
         let local_paths = match std::fs::read_dir(profiles_dir) {

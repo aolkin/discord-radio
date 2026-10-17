@@ -12,6 +12,7 @@ mod state;
 mod voice_status;
 mod web;
 
+use crate::audio::profiles::ProfileManager;
 use crate::state::{BotState, Data};
 use anyhow::Context;
 use poise::serenity_prelude::{self as serenity, GatewayIntents};
@@ -313,7 +314,7 @@ async fn main() -> anyhow::Result<()> {
     .id;
 
     let profile_manager =
-        audio::profiles::ProfileManager::load(Path::new("audio_profiles"), &file_cache).await;
+        ProfileManager::from_storage(Path::new("audio_profiles"), &file_cache).await;
 
     let data: Data = Box::leak(Box::new(BotState::new(
         content_path,
