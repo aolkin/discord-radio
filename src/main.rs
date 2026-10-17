@@ -21,6 +21,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
+const SIGNAL_PROFILES_DIR: &str = "audio_profiles";
+
 /// Discord client with the default ratelimiter.
 static HTTP: LazyLock<serenity::Http> =
     LazyLock::new(|| serenity::HttpBuilder::new(discord_token()).build());
@@ -314,7 +316,7 @@ async fn main() -> anyhow::Result<()> {
     .id;
 
     let profile_manager =
-        ProfileManager::from_storage(Path::new("audio_profiles"), &file_cache).await;
+        ProfileManager::from_storage(Path::new(SIGNAL_PROFILES_DIR), &file_cache).await;
 
     let data: Data = Box::leak(Box::new(BotState::new(
         content_path,
