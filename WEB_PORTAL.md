@@ -15,7 +15,7 @@ The Discord bot includes a built-in web portal for monitoring bot status and con
 - **Audio track management**
   - Start, stop, and update tracks
   - Adjust volume and loop settings
-  - Select audio files from available content
+  - Select audio files from object storage
 - **Signal profile management**
   - Set or clear the DJ's background profile and profile override
   - List, create, and edit signal profiles
@@ -76,7 +76,7 @@ Customize DJ behavior by overriding configuration values from the web portal:
 Control audio tracks for any guild through the "Manage Tracks" button:
 
 - **Start New Track**: Begin playing an audio file
-  - Select from available audio files in the content directory
+  - Select from the audio files in the `tracks/` folder of object storage
   - Set initial volume and loop behavior
   - Configure fade-in time
 - **Stop Track**: Stop a playing track with configurable fade-out
@@ -114,7 +114,7 @@ The Signal Profiles panel lists every profile by name. Saving a new or edited pr
 - `GET /api/profiles` - List available signal profiles
 - `GET /api/profiles/:name` - Get a signal profile's parameters. With `?refresh=true`, re-fetch the profile from object storage first and keep the fetched copy; returns 404 when object storage has no such profile
 - `PUT /api/profiles/:name` - Create or replace a signal profile in object storage. The body holds the profile's parameters; the name comes from `:name`, which may contain only letters, digits, `-` and `_`. Returns 503 when object storage is not configured
-- `GET /api/audio-files` - List available audio files in content directory
+- `GET /api/audio-files` - Browse object storage one folder level at a time. `?prefix=` (default `tracks/`) selects the folder; returns `{"prefix", "folders", "files"}`, where `folders` are the sub-folder prefixes and each file has `key`, `size` and `last_modified`. Returns 503 when object storage is not configured
 - `GET /api/dj-config/overrides` - Get all DJ config overrides (hex messages, announcements, state weights)
 - `GET /api/dj-config/default-state-weights` - Get default state weights from config file
 - `POST /api/dj-config/overrides/hex-messages` - Add or update a hex message override

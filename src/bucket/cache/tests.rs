@@ -41,6 +41,10 @@ impl ObjectBackend for StubBackend {
         Ok(self.payload.clone())
     }
 
+    async fn list_dir(&self, _prefix: &str) -> anyhow::Result<DirListing> {
+        Ok(DirListing::default())
+    }
+
     async fn list_keys(&self, prefix: &str) -> anyhow::Result<Vec<String>> {
         self.list_calls.fetch_add(1, Ordering::SeqCst);
         Ok(self
@@ -64,6 +68,10 @@ impl ObjectBackend for FailingBackend {
         Err(anyhow::anyhow!("no such object: {key}"))
     }
 
+    async fn list_dir(&self, _prefix: &str) -> anyhow::Result<DirListing> {
+        Err(anyhow::anyhow!("listing failed"))
+    }
+
     async fn list_keys(&self, _prefix: &str) -> anyhow::Result<Vec<String>> {
         Err(anyhow::anyhow!("listing failed"))
     }
@@ -79,6 +87,10 @@ struct NotFoundBackend;
 impl ObjectBackend for NotFoundBackend {
     async fn download(&self, _key: &str) -> anyhow::Result<Vec<u8>> {
         Err(ObjectNotFound.into())
+    }
+
+    async fn list_dir(&self, _prefix: &str) -> anyhow::Result<DirListing> {
+        Ok(DirListing::default())
     }
 
     async fn list_keys(&self, _prefix: &str) -> anyhow::Result<Vec<String>> {

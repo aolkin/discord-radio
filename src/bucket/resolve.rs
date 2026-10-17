@@ -1,3 +1,4 @@
+use crate::bucket::cache::DirListing;
 use crate::bucket::{ObjectStore, ObjectStoreError};
 use std::sync::Arc;
 
@@ -46,6 +47,10 @@ impl FileResolver {
     /// Empty when no bucket is configured or the listing request fails.
     pub async fn list_remote(&self, prefix: &str) -> Vec<String> {
         self.file_cache.list_remote(prefix).await
+    }
+
+    pub async fn list_dir(&self, prefix: &str) -> Result<DirListing, ObjectStoreError> {
+        self.file_cache.list_dir(prefix).await
     }
 
     /// Lists files (as s3:// URIs) whose key matches `partial` under `prefix`.

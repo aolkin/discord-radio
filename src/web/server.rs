@@ -83,7 +83,7 @@ pub async fn run_web_server(bot_state: Data, port: u16) -> anyhow::Result<()> {
             "/api/profiles/{name}",
             get(routes::get_profile).put(routes::put_profile),
         )
-        .route("/api/audio-files", get(routes::get_audio_files))
+        .route("/api/audio-files", get(routes::browse_audio_files))
         .route("/api/activity/set", post(routes::set_bot_activity))
         .route("/api/activity/push", post(routes::push_bot_activity))
         .route("/api/activity/remove", post(routes::remove_bot_activity))

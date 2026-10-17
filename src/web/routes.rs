@@ -4,6 +4,7 @@ use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
 use crate::audio::profiles::{ProfileStorageError, SignalProfile};
 use crate::bot_profile::ProfileEdit;
 use crate::bucket::ObjectStoreError;
+use crate::bucket::cache::ObjectInfo;
 use crate::state::Data;
 use crate::web::state_snapshot::BotSnapshot;
 use axum::Json as AxumJson;
@@ -370,38 +371,52 @@ pub async fn put_profile(
 fn profile_storage_error(e: ProfileStorageError) -> (StatusCode, String) {
     let status = match e {
         ProfileStorageError::InvalidName => StatusCode::BAD_REQUEST,
-        ProfileStorageError::Storage(ObjectStoreError::NotConfigured) => {
-            StatusCode::SERVICE_UNAVAILABLE
-        }
-        ProfileStorageError::Storage(ObjectStoreError::NotFound) => StatusCode::NOT_FOUND,
-        ProfileStorageError::Storage(_) | ProfileStorageError::Parse(_) => StatusCode::BAD_GATEWAY,
+        ProfileStorageError::Storage(e) => return object_store_error(e),
+        ProfileStorageError::Parse(_) => StatusCode::BAD_GATEWAY,
     };
     (status, format!("{e:#}"))
 }
 
-#[derive(Debug, Serialize)]
-pub struct AudioFilesResponse {
-    pub files: Vec<String>,
+fn object_store_error(e: ObjectStoreError) -> (StatusCode, String) {
+    let status = match e {
+        ObjectStoreError::NotConfigured => StatusCode::SERVICE_UNAVAILABLE,
+        ObjectStoreError::NotFound => StatusCode::NOT_FOUND,
+        ObjectStoreError::Remote(_) | ObjectStoreError::Local(_) => StatusCode::BAD_GATEWAY,
+    };
+    (status, format!("{e:#}"))
 }
 
-pub async fn get_audio_files(State(bot_state): State<Data>) -> AxumJson<AudioFilesResponse> {
-    let content_path = &bot_state.content_path;
-    let mut files = Vec::new();
+fn default_audio_prefix() -> String {
+    "tracks/".to_string()
+}
 
-    if let Ok(entries) = std::fs::read_dir(content_path) {
-        for entry in entries.flatten() {
-            if let Ok(file_type) = entry.file_type()
-                && file_type.is_file()
-                && let Some(name) = entry.file_name().to_str()
-                && (name.ends_with(".mp3") || name.ends_with(".wav") || name.ends_with(".ogg"))
-            {
-                files.push(name.to_string());
-            }
-        }
-    }
+#[derive(Debug, Deserialize)]
+pub struct BrowseAudioFilesParams {
+    #[serde(default = "default_audio_prefix")]
+    pub prefix: String,
+}
 
-    files.sort();
-    AxumJson(AudioFilesResponse { files })
+#[derive(Debug, Serialize)]
+pub struct BrowseAudioFilesResponse {
+    pub prefix: String,
+    pub folders: Vec<String>,
+    pub files: Vec<ObjectInfo>,
+}
+
+pub async fn browse_audio_files(
+    State(bot_state): State<Data>,
+    Query(params): Query<BrowseAudioFilesParams>,
+) -> Result<AxumJson<BrowseAudioFilesResponse>, (StatusCode, String)> {
+    let listing = bot_state
+        .file_resolver
+        .list_dir(&params.prefix)
+        .await
+        .map_err(object_store_error)?;
+    Ok(AxumJson(BrowseAudioFilesResponse {
+        prefix: params.prefix,
+        folders: listing.folders,
+        files: listing.files,
+    }))
 }
 
 // Helper function to parse activity type from string
