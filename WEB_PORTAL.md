@@ -19,6 +19,8 @@ The Discord bot includes a built-in web portal for monitoring bot status and con
 - **Signal profile management**
   - Set or clear the DJ's background profile and profile override
   - List, create, and edit signal profiles
+- **Audio file browser**
+  - Browse the folders and files under `tracks/` in object storage, and create folders
 
 ## Configuration
 
@@ -89,6 +91,10 @@ Control audio tracks for any guild through the "Manage Tracks" button:
 The DJ plays the profile override if set, else the current segment's forced profile, else its background profile. The background profile is either one set by hand or a rotating pick from the DJ config; clearing a hand-set background profile returns the DJ to rotation. The DJ saves both settings with its state.
 
 The Signal Profiles panel lists every profile by name. Saving a new or edited profile writes it to object storage; a DJ picks up the new parameters the next time it transitions to that profile.
+
+### Audio File Browser
+
+The Audio Files panel opens a browser over the `tracks/` folder of object storage. Breadcrumbs and Up move between folders, and each file shows its full key, size and last modified time. The same browser opens in a mode that picks a file or a folder and hands the choice back to the section that opened it.
 
 ## Technology Stack
 
