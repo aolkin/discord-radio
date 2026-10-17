@@ -364,7 +364,7 @@ async fn main() -> anyhow::Result<()> {
                     .options()
                     .commands
                     .iter()
-                    .map(|cmd| cmd.name.as_str())
+                    .map(|cmd| cmd.name.as_ref())
                     .collect();
                 tracing::info!(
                     "Registered {} commands globally: {}",

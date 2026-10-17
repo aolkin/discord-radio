@@ -7,7 +7,7 @@ use crate::audio::tracks::get_or_create_track_manager;
 use crate::commands::utils;
 use crate::commands::utils::{Context, require_guild};
 use anyhow::{Context as _, bail};
-use serenity::all::{ChannelId, ChannelType, GuildId};
+use serenity::all::{ChannelId, ChannelType, CreateAutocompleteResponse, GuildId};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -305,7 +305,15 @@ fn has_audio_extension(path: &Path) -> bool {
     })
 }
 
-async fn autocomplete_audio_file(ctx: Context<'_>, partial: &'_ str) -> Vec<String> {
+fn autocomplete_response(choices: Vec<String>) -> CreateAutocompleteResponse {
+    choices
+        .into_iter()
+        .fold(CreateAutocompleteResponse::new(), |response, choice| {
+            response.add_string_choice(choice.clone(), choice)
+        })
+}
+
+async fn autocomplete_audio_file(ctx: Context<'_>, partial: &'_ str) -> CreateAutocompleteResponse {
     let content_dir = &ctx.data().content_path;
     let mut results = Vec::new();
 
@@ -356,7 +364,7 @@ async fn autocomplete_audio_file(ctx: Context<'_>, partial: &'_ str) -> Vec<Stri
 
     results.sort();
     results.truncate(25);
-    results
+    autocomplete_response(results)
 }
 
 /// Start or stop an audio track with fade transition
@@ -545,7 +553,7 @@ async fn join_voice_channel_helper(
     Ok(processor)
 }
 
-async fn autocomplete_profile(ctx: Context<'_>, partial: &'_ str) -> Vec<String> {
+async fn autocomplete_profile(ctx: Context<'_>, partial: &'_ str) -> CreateAutocompleteResponse {
     let mut profiles: Vec<String> = ctx
         .data()
         .profile_manager
@@ -554,7 +562,7 @@ async fn autocomplete_profile(ctx: Context<'_>, partial: &'_ str) -> Vec<String>
         .filter(|name| name.starts_with(partial))
         .collect();
     profiles.sort();
-    profiles
+    autocomplete_response(profiles)
 }
 
 async fn set_dj_profile(
@@ -861,7 +869,10 @@ pub async fn advance_dj_state(
     Ok(())
 }
 
-async fn autocomplete_content_file(ctx: Context<'_>, partial: &'_ str) -> Vec<String> {
+async fn autocomplete_content_file(
+    ctx: Context<'_>,
+    partial: &'_ str,
+) -> CreateAutocompleteResponse {
     let mut results: Vec<String> = ctx
         .data()
         .file_resolver
@@ -872,7 +883,7 @@ async fn autocomplete_content_file(ctx: Context<'_>, partial: &'_ str) -> Vec<St
         .collect();
     results.sort();
     results.truncate(25);
-    results
+    autocomplete_response(results)
 }
 
 async fn validate_content_uri(
