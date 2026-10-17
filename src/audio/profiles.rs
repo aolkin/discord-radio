@@ -4,7 +4,7 @@ use futures_util::{StreamExt, stream};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::{Arc, PoisonError, RwLock, RwLockReadGuard};
+use std::sync::{Arc, RwLock};
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct SignalProfile {
@@ -154,11 +154,11 @@ impl ProfileManager {
     }
 
     pub fn get_profile(&self, name: &str) -> Option<SignalProfile> {
-        self.read().get(name).cloned()
+        self.profiles.read().unwrap().get(name).cloned()
     }
 
     pub fn list_profiles(&self) -> Vec<String> {
-        self.read().keys().cloned().collect()
+        self.profiles.read().unwrap().keys().cloned().collect()
     }
 
     /// The "clear" profile, or a built-in equivalent when none is loaded.
@@ -210,12 +210,8 @@ impl ProfileManager {
 
         self.profiles
             .write()
-            .unwrap_or_else(PoisonError::into_inner)
+            .unwrap()
             .insert(profile.name.clone(), profile);
         Ok(())
-    }
-
-    fn read(&self) -> RwLockReadGuard<'_, HashMap<String, SignalProfile>> {
-        self.profiles.read().unwrap_or_else(PoisonError::into_inner)
     }
 }
