@@ -76,9 +76,10 @@ impl IdleRequest {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, poise::ChoiceParameter)]
 pub enum DJStateType {
     Track,
+    #[name = "hex"]
     HexMessage,
     Noise,
 }

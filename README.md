@@ -96,13 +96,13 @@ See [WEB_PORTAL.md](WEB_PORTAL.md) for more details.
 - `/get_current_tracks` - Display all currently playing audio tracks
 
 ### DJ Commands
-- `/dj state` - Force the DJ to advance to its next state now (for testing), optionally only to a noise, hex or track state
+- `/dj skip` - Skip the DJ to its next state now, optionally only to a noise, hex or track state
 - `/dj idle` - Have the DJ go idle now, optionally playing a noise profile, for a number of seconds or until the DJ is advanced
 - `/dj track` - Have the DJ play an audio track now
 - `/dj hex` - Have the DJ play a text message as hex audio
-- `/dj now` - Get the current state of the DJ
+- `/dj status` - Get the current status of the DJ
 - `/dj configure` - Restart the DJ with a chosen configuration (the DJ runs whenever the bot is in a voice channel)
-- `/dj announcements` - Choose the DJ announcement channel or turn announcements off
+- `/dj announcements` - Choose the DJ announcement channel, or turn announcements off by omitting it
 - `/dj profile` - Set the DJ's background signal profile with an optional fade used to fade in and out of it, or clear it to return to rotation
 - `/dj override` - Set the DJ's signal profile override with an optional fade used to fade in and out of it (0 switches instantly), or clear it
 - `/dj channel_status` - Turn the DJ's management of the voice channel status on or off; turning it off leaves the current status as it is

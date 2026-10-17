@@ -683,11 +683,11 @@ pub async fn channel_status(
     guild_only,
     default_member_permissions = "ADMINISTRATOR",
     subcommands(
-        "state",
+        "skip",
         "idle",
         "track",
         "hex",
-        "now",
+        "status",
         "configure",
         "announcements",
         "profile",
@@ -699,32 +699,11 @@ pub async fn dj(_ctx: Context<'_>) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn autocomplete_dj_config(_ctx: Context<'_>, partial: &'_ str) -> CreateAutocompleteResponse {
-    let mut names: Vec<String> = std::fs::read_dir("dj_configs")
-        .into_iter()
-        .flatten()
-        .flatten()
-        .filter_map(|entry| {
-            let path = entry.path();
-            if path.extension()? != "json" {
-                return None;
-            }
-            Some(path.file_stem()?.to_str()?.to_string())
-        })
-        .filter(|name| name.starts_with(partial))
-        .collect();
-    names.sort();
-    names.truncate(25);
-    autocomplete_response(names)
-}
-
 /// Restart the DJ with a configuration
 #[poise::command(slash_command, guild_only)]
 pub async fn configure(
     ctx: Context<'_>,
-    #[description = "DJ configuration name"]
-    #[autocomplete = "autocomplete_dj_config"]
-    config: String,
+    #[description = "DJ configuration name"] config: String,
 ) -> anyhow::Result<()> {
     let guild_id = require_guild(ctx)?;
 
@@ -752,8 +731,8 @@ pub async fn configure(
 #[poise::command(slash_command, guild_only)]
 pub async fn announcements(
     ctx: Context<'_>,
-    #[description = "Text channel for announcements"] announcement_channel: Option<ChannelId>,
-    #[description = "Turn announcements off"] disable_announcements: Option<bool>,
+    #[description = "Text channel for announcements (omit to turn announcements off)"]
+    announcement_channel: Option<ChannelId>,
 ) -> anyhow::Result<()> {
     let guild_id = require_guild(ctx)?;
 
@@ -765,18 +744,6 @@ pub async fn announcements(
     );
 
     ctx.defer_ephemeral().await?;
-
-    let disable_announcements = disable_announcements.unwrap_or(false);
-    if announcement_channel.is_some() && disable_announcements {
-        ctx.say("Set an announcement channel or turn announcements off, not both")
-            .await?;
-        return Ok(());
-    }
-    if announcement_channel.is_none() && !disable_announcements {
-        ctx.say("Set an announcement channel or turn announcements off")
-            .await?;
-        return Ok(());
-    }
 
     if let Err(e) = send_to_dj(
         ctx.data(),
@@ -798,43 +765,32 @@ pub async fn announcements(
     Ok(())
 }
 
-#[derive(Clone, Copy, Debug, poise::ChoiceParameter)]
-pub enum DjStateKind {
-    Noise,
-    Hex,
-    Track,
-}
-
-/// Force the DJ to advance to its next state now (for testing)
+/// Skip to the DJ's next state
 #[poise::command(slash_command, guild_only)]
-pub async fn state(
+pub async fn skip(
     ctx: Context<'_>,
-    #[description = "Only advance to this kind of state (default: any)"] kind: Option<DjStateKind>,
+    #[description = "Only advance to this kind of state (default: any)"] to_state: Option<
+        DJStateType,
+    >,
 ) -> anyhow::Result<()> {
     let guild_id = require_guild(ctx)?;
 
     tracing::info!(
-        "User {} executed dj state {:?} in guild {}",
+        "User {} executed dj skip {:?} in guild {}",
         ctx.author().id,
-        kind,
+        to_state,
         guild_id
     );
 
     ctx.defer_ephemeral().await?;
 
-    let filter = kind.map(|kind| match kind {
-        DjStateKind::Noise => DJStateType::Noise,
-        DjStateKind::Hex => DJStateType::HexMessage,
-        DjStateKind::Track => DJStateType::Track,
-    });
-
-    if let Err(e) = send_to_dj(ctx.data(), guild_id, DJCommand::ForceAdvance(filter)).await {
+    if let Err(e) = send_to_dj(ctx.data(), guild_id, DJCommand::ForceAdvance(to_state)).await {
         ctx.say(format!("Failed to force DJ state advance: {e:#}"))
             .await?;
         return Ok(());
     }
 
-    let message = match filter {
+    let message = match to_state {
         Some(filter) => format!("DJ advancing to {:?} state", filter),
         None => "DJ state advance triggered".to_string(),
     };
@@ -845,11 +801,11 @@ pub async fn state(
 
 /// Get the current state of the DJ
 #[poise::command(slash_command, guild_only)]
-pub async fn now(ctx: Context<'_>) -> anyhow::Result<()> {
+pub async fn status(ctx: Context<'_>) -> anyhow::Result<()> {
     let guild_id = require_guild(ctx)?;
     let user_id = ctx.author().id;
 
-    tracing::info!("User {} executed dj now in guild {}", user_id, guild_id);
+    tracing::info!("User {} executed dj status in guild {}", user_id, guild_id);
 
     ctx.defer_ephemeral().await?;
 
