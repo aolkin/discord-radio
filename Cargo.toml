@@ -16,7 +16,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 typetag = "0.2"
 async-trait = "0.1"
 dotenvy = "0.15.7"
-rand = "0.9.2"
+rand = "0.10"
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
@@ -37,17 +37,17 @@ parking_lot = "0.12"
 # Web portal dependencies
 axum = { version = "0.8", features = ["ws", "multipart"] }
 tower = "0.5"
-tower-http = { version = "0.6", features = ["fs", "cors"] }
+tower-http = { version = "0.7", features = ["fs", "cors"] }
 http = "1.0"
 futures-util = "0.3"
 
 # S3-compatible object storage
-rust-s3 = { version = "0.35", default-features = false, features = ["tokio-rustls-tls"] }
+rust-s3 = { version = "0.38", default-features = false, features = ["tokio-rustls-tls"] }
 
 # OpenTelemetry metrics
-opentelemetry = { version = "0.27", features = ["metrics"] }
-opentelemetry_sdk = { version = "0.27", features = ["metrics", "rt-tokio"] }
-opentelemetry-otlp = { version = "0.27", features = ["metrics", "http-proto", "reqwest-client"] }
+opentelemetry = { version = "0.33", features = ["metrics"] }
+opentelemetry_sdk = { version = "0.33", features = ["metrics", "rt-tokio"] }
+opentelemetry-otlp = { version = "0.33", features = ["metrics", "http-proto", "reqwest-client"] }
 moka = { version = "0.12.16", features = ["future"] }
 thiserror = "2.0.20"
 strum = { version = "0.28.0", features = ["derive"] }

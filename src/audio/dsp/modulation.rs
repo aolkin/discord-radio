@@ -1,4 +1,4 @@
-use rand::{Rng, SeedableRng, rngs::StdRng};
+use rand::{RngExt, SeedableRng, rngs::StdRng};
 
 #[allow(clippy::upper_case_acronyms)]
 pub struct LFO {
@@ -17,7 +17,7 @@ pub struct LFO {
 
 impl LFO {
     pub fn new(sample_rate: u32, frequency: f32, amplitude_jitter_amount: f32) -> Self {
-        use rand::RngCore;
+        use rand::Rng;
         let mut seed_rng = rand::rng();
         let mut seed = [0u8; 32];
         seed_rng.fill_bytes(&mut seed);
@@ -127,7 +127,7 @@ impl DropoutGenerator {
         duration_range_ms: (f32, f32),
         sample_rate: u32,
     ) -> Self {
-        use rand::RngCore;
+        use rand::Rng;
         let mut seed_rng = rand::rng();
         let mut seed = [0u8; 32];
         seed_rng.fill_bytes(&mut seed);

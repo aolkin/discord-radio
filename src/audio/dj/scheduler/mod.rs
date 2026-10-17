@@ -3,7 +3,7 @@ use crate::audio::dj::config::{
 };
 use crate::audio::dj::manager::DJStateType;
 use crate::audio::dj::weighted_choice::WeightedSelector;
-use rand::Rng;
+use rand::RngExt;
 use std::sync::LazyLock;
 
 #[derive(Clone, strum::Display)]

@@ -1,4 +1,4 @@
-use rand::{Rng, SeedableRng, rngs::StdRng};
+use rand::{RngExt, SeedableRng, rngs::StdRng};
 
 pub struct NoiseGenerator {
     white_state: WhiteNoiseState,
@@ -29,7 +29,7 @@ struct BrownNoiseState {
 
 impl NoiseGenerator {
     pub fn new() -> Self {
-        use rand::RngCore;
+        use rand::Rng;
         let mut seed_rng = rand::rng();
         let mut seed1 = [0u8; 32];
         let mut seed2 = [0u8; 32];

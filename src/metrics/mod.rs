@@ -151,17 +151,21 @@ pub fn init_metrics(
     );
 
     // Create periodic reader that exports at the configured interval
-    let reader = PeriodicReader::builder(exporter, opentelemetry_sdk::runtime::Tokio)
+    let reader = PeriodicReader::builder(exporter)
         .with_interval(Duration::from_secs(metrics_interval_secs))
         .build();
 
     // Create meter provider with resource attributes
     let provider = SdkMeterProvider::builder()
         .with_reader(reader)
-        .with_resource(Resource::new(vec![
-            KeyValue::new("service.name", "radio-bot"),
-            KeyValue::new("service.version", env!("BUILD_RUN_NUMBER")),
-        ]))
+        .with_resource(
+            Resource::builder()
+                .with_attributes([
+                    KeyValue::new("service.name", "radio-bot"),
+                    KeyValue::new("service.version", env!("BUILD_RUN_NUMBER")),
+                ])
+                .build(),
+        )
         .build();
 
     let meter = provider.meter("radio-bot");

@@ -6,7 +6,7 @@ use crate::audio::dj::segments::{
 };
 use crate::audio::dj::serde::{deser_instant, ser_instant};
 use async_trait::async_trait;
-use rand::Rng;
+use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 
