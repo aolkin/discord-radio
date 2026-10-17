@@ -211,7 +211,7 @@ pub async fn track(
     }
 
     if let Err(e) = ctx.data().file_resolver.resolve(&filename).await {
-        ctx.say(format!("Failed to resolve audio file: {}", e))
+        ctx.say(format!("Failed to resolve audio file: {e:#}"))
             .await?;
         return Ok(());
     }
@@ -304,7 +304,7 @@ fn autocomplete_response(choices: Vec<String>) -> CreateAutocompleteResponse {
 }
 
 async fn autocomplete_audio_file(ctx: Context<'_>, partial: &'_ str) -> CreateAutocompleteResponse {
-    let content_dir = &ctx.data().content_path;
+    let content_dir = ctx.data().file_resolver.content_path();
     let mut results = Vec::new();
 
     // Split partial into directory and filename parts
@@ -345,10 +345,12 @@ async fn autocomplete_audio_file(ctx: Context<'_>, partial: &'_ str) -> CreateAu
     // A typed "s3://" prefix narrows the object storage search to what
     // follows it; otherwise every key is searched, matching how local files
     // are searched from the content root.
-    let search_prefix = partial.strip_prefix("s3://").unwrap_or(partial);
-    for key in ctx.data().file_resolver.list_remote(search_prefix).await {
-        if has_audio_extension(Path::new(&key)) {
-            results.push(format!("s3://{}", key));
+    if let Ok(bucket) = ctx.data().file_resolver.bucket() {
+        let search_prefix = partial.strip_prefix("s3://").unwrap_or(partial);
+        for key in bucket.list_remote(search_prefix).await {
+            if has_audio_extension(Path::new(&key)) {
+                results.push(format!("s3://{}", key));
+            }
         }
     }
 
@@ -391,7 +393,7 @@ pub async fn change_track_state(
             };
 
             if let Err(e) = ctx.data().file_resolver.resolve(&filename).await {
-                ctx.say(format!("Failed to resolve audio file: {}", e))
+                ctx.say(format!("Failed to resolve audio file: {e:#}"))
                     .await?;
                 return Ok(());
             }
