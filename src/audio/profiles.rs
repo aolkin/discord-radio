@@ -79,11 +79,13 @@ impl SignalProfile {
 const REMOTE_PREFIX: &str = "profiles/";
 
 #[derive(Debug, thiserror::Error)]
-pub enum SaveProfileError {
+pub enum ProfileStorageError {
     #[error("profile names may only contain letters, digits, '-' and '_'")]
     InvalidName,
     #[error(transparent)]
     Storage(#[from] ObjectStoreError),
+    #[error("parsing JSON: {0}")]
+    Parse(#[from] serde_json::Error),
 }
 
 pub struct ProfileManager {
@@ -189,24 +191,10 @@ impl ProfileManager {
 
     /// Writes `profile` to object storage under its name, replacing any
     /// profile of the same name.
-    pub async fn save(&self, profile: SignalProfile) -> Result<(), SaveProfileError> {
-        let name_is_valid = !profile.name.is_empty()
-            && profile
-                .name
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
-        if !name_is_valid {
-            return Err(SaveProfileError::InvalidName);
-        }
-
+    pub async fn save(&self, profile: SignalProfile) -> Result<(), ProfileStorageError> {
+        let key = remote_key(&profile.name)?;
         let bytes = serde_json::to_vec_pretty(&profile).expect("a SignalProfile always serializes");
-        self.store
-            .upload(
-                &format!("{REMOTE_PREFIX}{}.json", profile.name),
-                &bytes,
-                "application/json",
-            )
-            .await?;
+        self.store.upload(&key, &bytes, "application/json").await?;
 
         self.profiles
             .write()
@@ -214,4 +202,27 @@ impl ProfileManager {
             .insert(profile.name.clone(), profile);
         Ok(())
     }
+
+    /// Re-fetches the profile named `name` from object storage and replaces
+    /// the in-memory copy with it.
+    pub async fn refresh(&self, name: &str) -> Result<SignalProfile, ProfileStorageError> {
+        let bytes = self.store.fetch_bytes(&remote_key(name)?).await?;
+        let profile: SignalProfile = serde_json::from_slice(&bytes)?;
+        self.profiles
+            .write()
+            .unwrap()
+            .insert(profile.name.clone(), profile.clone());
+        Ok(profile)
+    }
+}
+
+fn remote_key(name: &str) -> Result<String, ProfileStorageError> {
+    let name_is_valid = !name.is_empty()
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    if !name_is_valid {
+        return Err(ProfileStorageError::InvalidName);
+    }
+    Ok(format!("{REMOTE_PREFIX}{name}.json"))
 }
