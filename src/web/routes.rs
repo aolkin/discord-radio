@@ -339,14 +339,11 @@ pub async fn get_profile(
 pub async fn put_profile(
     State(bot_state): State<Data>,
     Path(name): Path<String>,
-    AxumJson(profile): AxumJson<SignalProfile>,
+    AxumJson(mut parameters): AxumJson<serde_json::Map<String, serde_json::Value>>,
 ) -> Result<StatusCode, (StatusCode, String)> {
-    if profile.name != name {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            format!("Body name {:?} does not match {name:?}", profile.name),
-        ));
-    }
+    parameters.insert("name".to_string(), name.into());
+    let profile: SignalProfile = serde_json::from_value(parameters.into())
+        .map_err(|e| (StatusCode::UNPROCESSABLE_ENTITY, e.to_string()))?;
     bot_state.profile_manager.save(profile).await.map_err(|e| {
         let status = match e {
             SaveProfileError::InvalidName => StatusCode::BAD_REQUEST,

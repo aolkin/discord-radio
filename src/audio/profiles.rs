@@ -161,6 +161,32 @@ impl ProfileManager {
         self.read().keys().cloned().collect()
     }
 
+    /// The "clear" profile, or a built-in equivalent when none is loaded.
+    pub fn default_profile(&self) -> SignalProfile {
+        if let Some(profile) = self.get_profile("clear") {
+            return profile;
+        }
+
+        tracing::debug!("Default 'clear' profile not found, using fallback");
+        SignalProfile {
+            name: "clear".to_string(),
+            bandpass_low: 20.0,
+            bandpass_high: 20000.0,
+            white_noise_level: 0.0,
+            pink_noise_level: 0.0,
+            brown_noise_level: 0.0,
+            tremolo_depth: 0.0,
+            tremolo_rate: 0.0,
+            tremolo_jitter: 0.0,
+            clip_pregain: 1.0,
+            clip_threshold: 1.0,
+            bitcrush_bits: None,
+            dropout_probability: 0.0,
+            dropout_duration_ms: (0.0, 0.0),
+            frequency_warble_hz: None,
+        }
+    }
+
     /// Writes `profile` to object storage under its name, replacing any
     /// profile of the same name.
     pub async fn save(&self, profile: SignalProfile) -> Result<(), SaveProfileError> {

@@ -3,14 +3,14 @@ use std::fs::FileTimes;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::SystemTime;
 
-struct StubDownloader {
+struct StubBackend {
     calls: Arc<AtomicUsize>,
     list_calls: Arc<AtomicUsize>,
     payload: Vec<u8>,
     remote_keys: Vec<String>,
 }
 
-impl StubDownloader {
+impl StubBackend {
     fn new(calls: &Arc<AtomicUsize>) -> Arc<Self> {
         Arc::new(Self {
             calls: Arc::clone(calls),
@@ -35,7 +35,7 @@ impl StubDownloader {
 }
 
 #[async_trait]
-impl ObjectDownloader for StubDownloader {
+impl ObjectBackend for StubBackend {
     async fn download(&self, _key: &str) -> anyhow::Result<Vec<u8>> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         Ok(self.payload.clone())
@@ -56,10 +56,10 @@ impl ObjectDownloader for StubDownloader {
     }
 }
 
-struct FailingDownloader;
+struct FailingBackend;
 
 #[async_trait]
-impl ObjectDownloader for FailingDownloader {
+impl ObjectBackend for FailingBackend {
     async fn download(&self, key: &str) -> anyhow::Result<Vec<u8>> {
         Err(anyhow::anyhow!("no such object: {key}"))
     }
@@ -73,10 +73,10 @@ impl ObjectDownloader for FailingDownloader {
     }
 }
 
-struct NotFoundDownloader;
+struct NotFoundBackend;
 
 #[async_trait]
-impl ObjectDownloader for NotFoundDownloader {
+impl ObjectBackend for NotFoundBackend {
     async fn download(&self, _key: &str) -> anyhow::Result<Vec<u8>> {
         Err(ObjectNotFound.into())
     }
@@ -112,8 +112,7 @@ async fn new_creates_the_cache_dir() {
 async fn ensure_cached_downloads_and_returns_the_local_path() {
     let dir = tempfile::tempdir().unwrap();
     let calls = Arc::new(AtomicUsize::new(0));
-    let cache =
-        ObjectStore::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls)).await;
+    let cache = ObjectStore::with_backend(dir.path().to_path_buf(), StubBackend::new(&calls)).await;
 
     let path = cache.ensure_cached("tracks/song.ogg").await.unwrap();
 
@@ -128,8 +127,7 @@ async fn ensure_cached_reuses_a_file_left_by_an_earlier_run() {
     let calls = Arc::new(AtomicUsize::new(0));
     write_cached_file(&dir.path().join("tracks/song.ogg"), b"already cached");
 
-    let cache =
-        ObjectStore::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls)).await;
+    let cache = ObjectStore::with_backend(dir.path().to_path_buf(), StubBackend::new(&calls)).await;
     cache.ensure_cached("tracks/song.ogg").await.unwrap();
 
     assert_eq!(calls.load(Ordering::SeqCst), 0);
@@ -180,7 +178,7 @@ async fn new_deletes_a_file_unread_for_longer_than_the_ttl() {
 
     assert!(!stale.exists());
     assert!(fresh.exists());
-    // With no downloader configured, only an adopted key resolves.
+    // With no backend configured, only an adopted key resolves.
     cache.ensure_cached("tracks/fresh.ogg").await.unwrap();
     assert!(matches!(
         cache.ensure_cached("tracks/stale.ogg").await.unwrap_err(),
@@ -192,8 +190,7 @@ async fn new_deletes_a_file_unread_for_longer_than_the_ttl() {
 async fn ensure_cached_re_downloads_after_invalidate() {
     let dir = tempfile::tempdir().unwrap();
     let calls = Arc::new(AtomicUsize::new(0));
-    let cache =
-        ObjectStore::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls)).await;
+    let cache = ObjectStore::with_backend(dir.path().to_path_buf(), StubBackend::new(&calls)).await;
 
     cache.ensure_cached("tracks/song.ogg").await.unwrap();
     cache.invalidate("tracks/song.ogg").await;
@@ -206,8 +203,7 @@ async fn ensure_cached_re_downloads_after_invalidate() {
 async fn ensure_cached_does_not_leave_a_temp_file_behind() {
     let dir = tempfile::tempdir().unwrap();
     let calls = Arc::new(AtomicUsize::new(0));
-    let cache =
-        ObjectStore::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls)).await;
+    let cache = ObjectStore::with_backend(dir.path().to_path_buf(), StubBackend::new(&calls)).await;
 
     cache.ensure_cached("tracks/song.ogg").await.unwrap();
 
@@ -218,8 +214,7 @@ async fn ensure_cached_does_not_leave_a_temp_file_behind() {
 async fn fill_does_not_leave_a_partial_file_when_the_write_fails() {
     let dir = tempfile::tempdir().unwrap();
     let calls = Arc::new(AtomicUsize::new(0));
-    let cache =
-        ObjectStore::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls)).await;
+    let cache = ObjectStore::with_backend(dir.path().to_path_buf(), StubBackend::new(&calls)).await;
     let dest = cache.cached_path("tracks/song.ogg");
     tokio::fs::create_dir_all(dest.parent().unwrap())
         .await
@@ -237,8 +232,7 @@ async fn fill_does_not_leave_a_partial_file_when_the_write_fails() {
 #[tokio::test]
 async fn ensure_cached_surfaces_download_failures() {
     let dir = tempfile::tempdir().unwrap();
-    let cache =
-        ObjectStore::with_downloader(dir.path().to_path_buf(), Arc::new(FailingDownloader)).await;
+    let cache = ObjectStore::with_backend(dir.path().to_path_buf(), Arc::new(FailingBackend)).await;
 
     let err = cache.ensure_cached("tracks/missing.ogg").await.unwrap_err();
 
@@ -249,7 +243,7 @@ async fn ensure_cached_surfaces_download_failures() {
 async fn ensure_cached_distinguishes_a_missing_object_from_other_failures() {
     let dir = tempfile::tempdir().unwrap();
     let cache =
-        ObjectStore::with_downloader(dir.path().to_path_buf(), Arc::new(NotFoundDownloader)).await;
+        ObjectStore::with_backend(dir.path().to_path_buf(), Arc::new(NotFoundBackend)).await;
 
     let err = cache.ensure_cached("tracks/missing.ogg").await.unwrap_err();
 
@@ -261,7 +255,7 @@ async fn pre_cache_downloads_every_key() {
     let dir = tempfile::tempdir().unwrap();
     let calls = Arc::new(AtomicUsize::new(0));
     let cache = Arc::new(
-        ObjectStore::with_downloader(dir.path().to_path_buf(), StubDownloader::new(&calls)).await,
+        ObjectStore::with_backend(dir.path().to_path_buf(), StubBackend::new(&calls)).await,
     );
 
     pre_cache(
@@ -295,9 +289,8 @@ async fn list_remote_is_empty_without_a_bucket() {
 #[tokio::test]
 async fn list_remote_filters_by_prefix() {
     let dir = tempfile::tempdir().unwrap();
-    let downloader =
-        StubDownloader::with_remote_keys(&["tracks/a.ogg", "tracks/b.ogg", "other/c.ogg"]);
-    let cache = ObjectStore::with_downloader(dir.path().to_path_buf(), downloader).await;
+    let backend = StubBackend::with_remote_keys(&["tracks/a.ogg", "tracks/b.ogg", "other/c.ogg"]);
+    let cache = ObjectStore::with_backend(dir.path().to_path_buf(), backend).await;
 
     let mut keys = cache.list_remote("tracks/").await;
     keys.sort();
@@ -309,11 +302,9 @@ async fn list_remote_filters_by_prefix() {
 async fn list_remote_reuses_a_cached_result_for_the_same_prefix() {
     let dir = tempfile::tempdir().unwrap();
     let list_calls = Arc::new(AtomicUsize::new(0));
-    let downloader = StubDownloader::with_remote_keys_and_counter(
-        &["tracks/a.ogg", "tracks/b.ogg"],
-        &list_calls,
-    );
-    let cache = ObjectStore::with_downloader(dir.path().to_path_buf(), downloader).await;
+    let backend =
+        StubBackend::with_remote_keys_and_counter(&["tracks/a.ogg", "tracks/b.ogg"], &list_calls);
+    let cache = ObjectStore::with_backend(dir.path().to_path_buf(), backend).await;
 
     cache.list_remote("tracks/").await;
     cache.list_remote("tracks/").await;
@@ -324,8 +315,7 @@ async fn list_remote_reuses_a_cached_result_for_the_same_prefix() {
 #[tokio::test]
 async fn list_remote_is_empty_when_listing_fails() {
     let dir = tempfile::tempdir().unwrap();
-    let cache =
-        ObjectStore::with_downloader(dir.path().to_path_buf(), Arc::new(FailingDownloader)).await;
+    let cache = ObjectStore::with_backend(dir.path().to_path_buf(), Arc::new(FailingBackend)).await;
 
     assert!(cache.list_remote("tracks/").await.is_empty());
 }
