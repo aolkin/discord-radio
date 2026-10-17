@@ -10,6 +10,56 @@ use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
 
+/// Fails unless `bytes` decode as `extension`-format audio at
+/// `required_sample_rate`. Decodes the first packet, so a file that probes
+/// but cannot be decoded fails too.
+pub fn check_sample_rate(
+    bytes: Vec<u8>,
+    extension: &str,
+    required_sample_rate: u32,
+) -> anyhow::Result<()> {
+    let mss = MediaSourceStream::new(Box::new(std::io::Cursor::new(bytes)), Default::default());
+    let mut hint = Hint::new();
+    hint.with_extension(extension);
+
+    let probed = symphonia::default::get_probe()
+        .format(
+            &hint,
+            mss,
+            &FormatOptions::default(),
+            &MetadataOptions::default(),
+        )
+        .context("Unrecognized audio format")?;
+    let mut format = probed.format;
+    let track = format
+        .default_track()
+        .context("No default audio track found")?;
+    let track_id = track.id;
+
+    let sample_rate = track
+        .codec_params
+        .sample_rate
+        .context("Audio file has no sample rate")?;
+    if sample_rate != required_sample_rate {
+        bail!(
+            "Audio file has sample rate {sample_rate}Hz, but {required_sample_rate}Hz is required"
+        );
+    }
+
+    let mut decoder = symphonia::default::get_codecs()
+        .make(&track.codec_params, &DecoderOptions::default())
+        .context("Unsupported audio codec")?;
+    loop {
+        let packet = format.next_packet().context("Reading the first packet")?;
+        if packet.track_id() == track_id {
+            decoder
+                .decode(&packet)
+                .context("Decoding the first packet")?;
+            return Ok(());
+        }
+    }
+}
+
 pub struct SymphoniaSource {
     format: Box<dyn FormatReader>,
     decoder: Box<dyn Decoder>,

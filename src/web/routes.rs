@@ -1,14 +1,16 @@
+use crate::audio::codec::decoder::check_sample_rate;
 use crate::audio::dj::manager::{DJCommand, DJStateType, IdleRequest, TrackRequest};
 use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
-use crate::audio::profiles::{ProfileStorageError, SignalProfile};
+use crate::audio::profiles::{ProfileStorageError, SignalProfile, is_valid_name};
 use crate::bot_profile::ProfileEdit;
 use crate::bucket::ObjectStoreError;
 use crate::bucket::cache::ObjectInfo;
 use crate::state::Data;
 use crate::web::state_snapshot::BotSnapshot;
 use axum::Json as AxumJson;
-use axum::extract::{Path, Query, State};
+use axum::extract::multipart::MultipartError;
+use axum::extract::{Multipart, Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse, Json};
 use serde::{Deserialize, Serialize};
@@ -386,8 +388,25 @@ fn object_store_error(e: ObjectStoreError) -> (StatusCode, String) {
     (status, format!("{e:#}"))
 }
 
+const AUDIO_ROOT: &str = "tracks/";
+const REQUIRED_SAMPLE_RATE: u32 = 48000;
+pub const MAX_UPLOAD_BYTES: usize = 100 * 1024 * 1024;
+
 fn default_audio_prefix() -> String {
-    "tracks/".to_string()
+    AUDIO_ROOT.to_string()
+}
+
+fn is_valid_audio_prefix(prefix: &str) -> bool {
+    prefix.starts_with(AUDIO_ROOT)
+        && prefix.ends_with('/')
+        && prefix
+            .trim_end_matches('/')
+            .split('/')
+            .all(|segment| !segment.is_empty() && segment != "..")
+}
+
+fn bad_request(message: impl Into<String>) -> (StatusCode, String) {
+    (StatusCode::BAD_REQUEST, message.into())
 }
 
 #[derive(Debug, Deserialize)]
@@ -417,6 +436,89 @@ pub async fn browse_audio_files(
         folders: listing.folders,
         files: listing.files,
     }))
+}
+
+#[derive(Debug, Serialize)]
+pub struct AudioKeyResponse {
+    pub key: String,
+}
+
+pub async fn upload_audio_file(
+    State(bot_state): State<Data>,
+    Query(params): Query<BrowseAudioFilesParams>,
+    mut multipart: Multipart,
+) -> Result<AxumJson<AudioKeyResponse>, (StatusCode, String)> {
+    if !is_valid_audio_prefix(&params.prefix) {
+        return Err(bad_request(format!("Invalid prefix {:?}", params.prefix)));
+    }
+
+    let multipart_error = |e: MultipartError| (e.status(), e.body_text());
+    let (filename, bytes) = loop {
+        let field = multipart
+            .next_field()
+            .await
+            .map_err(multipart_error)?
+            .ok_or_else(|| bad_request("Missing \"file\" field"))?;
+        if field.name() == Some("file") {
+            let filename = field.file_name().map(str::to_string);
+            let bytes = field.bytes().await.map_err(multipart_error)?;
+            break (filename, bytes);
+        }
+    };
+
+    let filename = filename
+        .filter(|name| !name.is_empty() && !name.contains(['/', '\\']) && name != "..")
+        .ok_or_else(|| bad_request("The file needs a plain filename"))?;
+    let (extension, content_type) = match filename.rsplit_once('.') {
+        Some((_, ext)) if ext.eq_ignore_ascii_case("mp3") => ("mp3", "audio/mpeg"),
+        Some((_, ext)) if ext.eq_ignore_ascii_case("ogg") => ("ogg", "audio/ogg"),
+        Some((_, ext)) if ext.eq_ignore_ascii_case("wav") => ("wav", "audio/wav"),
+        _ => return Err(bad_request("Only .mp3, .ogg and .wav files are accepted")),
+    };
+
+    let check_bytes = bytes.to_vec();
+    tokio::task::spawn_blocking(move || {
+        check_sample_rate(check_bytes, extension, REQUIRED_SAMPLE_RATE)
+    })
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .map_err(|e| (StatusCode::UNPROCESSABLE_ENTITY, format!("{e:#}")))?;
+
+    let key = format!("{}{filename}", params.prefix);
+    bot_state
+        .file_resolver
+        .upload(&key, &bytes, content_type)
+        .await
+        .map_err(object_store_error)?;
+    Ok(AxumJson(AudioKeyResponse { key }))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateAudioFolderRequest {
+    pub prefix: String,
+    pub name: String,
+}
+
+pub async fn create_audio_folder(
+    State(bot_state): State<Data>,
+    AxumJson(request): AxumJson<CreateAudioFolderRequest>,
+) -> Result<AxumJson<AudioKeyResponse>, (StatusCode, String)> {
+    if !is_valid_audio_prefix(&request.prefix) {
+        return Err(bad_request(format!("Invalid prefix {:?}", request.prefix)));
+    }
+    if !is_valid_name(&request.name) {
+        return Err(bad_request(
+            "Folder names may contain only letters, digits, - and _",
+        ));
+    }
+
+    let key = format!("{}{}/", request.prefix, request.name);
+    bot_state
+        .file_resolver
+        .upload(&key, &[], "application/x-directory")
+        .await
+        .map_err(object_store_error)?;
+    Ok(AxumJson(AudioKeyResponse { key }))
 }
 
 // Helper function to parse activity type from string
