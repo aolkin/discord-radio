@@ -1,4 +1,4 @@
-use rand::Rng;
+use rand::RngExt;
 use std::collections::VecDeque;
 
 /// A weight an item contributes to weighted random selection.

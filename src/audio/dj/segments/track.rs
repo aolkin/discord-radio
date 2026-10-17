@@ -9,7 +9,7 @@ use crate::audio::duration::DurationCache;
 use crate::audio::processing::mixer::TrackCommand;
 use crate::audio::tracks::open_track_source;
 use async_trait::async_trait;
-use rand::Rng;
+use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use std::time::{Duration, Instant};

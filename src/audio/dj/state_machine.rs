@@ -9,7 +9,7 @@ use crate::audio::dj::segments::{
 use crate::audio::dj::segments::{NoiseSegment, SegmentCtx};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
 use crate::state::Data;
-use rand::Rng;
+use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use serenity::model::id::{ChannelId, GuildId};
 use std::ops::Deref;
