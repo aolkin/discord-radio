@@ -42,20 +42,9 @@ impl BotState {
         state_store: Arc<dyn StateStore>,
         dj_settings: DjSettingsStore,
         file_cache: Arc<ObjectStore>,
+        profile_manager: ProfileManager,
         bot_user_id: UserId,
     ) -> Self {
-        let profiles_dir = "audio_profiles";
-        let mut profile_manager = ProfileManager::new(profiles_dir);
-
-        if let Err(e) = profile_manager.load_all() {
-            tracing::warn!("Failed to load audio profiles at startup: {}", e);
-        } else {
-            tracing::info!(
-                "Loaded {} audio profiles",
-                profile_manager.list_profiles().len()
-            );
-        }
-
         let voice_connections = Arc::new(RwLock::new(HashMap::new()));
 
         // Get logs base path from state store path

@@ -12,13 +12,16 @@ mod state;
 mod voice_status;
 mod web;
 
+use crate::audio::profiles::ProfileManager;
 use crate::state::{BotState, Data};
 use anyhow::Context;
 use poise::serenity_prelude::{self as serenity, GatewayIntents};
 use songbird::SerenityInit;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;
+
+const SIGNAL_PROFILES_DIR: &str = "audio_profiles";
 
 /// Discord client with the default ratelimiter.
 static HTTP: LazyLock<serenity::Http> =
@@ -312,11 +315,15 @@ async fn main() -> anyhow::Result<()> {
     )?
     .id;
 
+    let profile_manager =
+        ProfileManager::from_storage(Path::new(SIGNAL_PROFILES_DIR), &file_cache).await;
+
     let data: Data = Box::leak(Box::new(BotState::new(
         content_path,
         state_store,
         dj_settings_store,
         file_cache,
+        profile_manager,
         bot_user_id,
     )));
 

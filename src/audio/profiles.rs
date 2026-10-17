@@ -1,7 +1,9 @@
+use crate::bucket::ObjectStore;
 use anyhow::Context;
+use futures_util::{StreamExt, stream};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct SignalProfile {
@@ -73,60 +75,69 @@ impl SignalProfile {
     }
 }
 
+const REMOTE_PREFIX: &str = "profiles/";
+
 pub struct ProfileManager {
     profiles: HashMap<String, SignalProfile>,
-    profiles_dir: PathBuf,
 }
 
 impl ProfileManager {
-    pub fn new(profiles_dir: impl Into<PathBuf>) -> Self {
-        Self {
-            profiles: HashMap::new(),
-            profiles_dir: profiles_dir.into(),
-        }
-    }
+    /// Loads every profile in `profiles_dir` and under `profiles/` in object
+    /// storage. A profile in object storage replaces a local profile of the
+    /// same name.
+    pub async fn from_storage(profiles_dir: &Path, store: &ObjectStore) -> Self {
+        let mut profiles = HashMap::new();
 
-    pub fn load_all(&mut self) -> anyhow::Result<()> {
-        if !self.profiles_dir.exists() {
-            std::fs::create_dir_all(&self.profiles_dir)
-                .with_context(|| format!("creating {}", self.profiles_dir.display()))?;
-            tracing::warn!(
-                "Audio profiles directory created at: {}",
-                self.profiles_dir.display()
-            );
-            return Ok(());
-        }
+        let local_paths = match std::fs::read_dir(profiles_dir) {
+            Ok(entries) => entries
+                .filter_map(Result::ok)
+                .map(|entry| entry.path())
+                .collect(),
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to read signal profiles from {}: {e}",
+                    profiles_dir.display()
+                );
+                Vec::new()
+            }
+        };
+        let local = local_paths
+            .into_iter()
+            .filter(|path| path.extension().and_then(|s| s.to_str()) == Some("json"))
+            .map(|path| {
+                let bytes = std::fs::read(&path).context("reading file");
+                (path.display().to_string(), bytes)
+            });
 
-        for entry in std::fs::read_dir(&self.profiles_dir)
-            .with_context(|| format!("reading {}", self.profiles_dir.display()))?
-        {
-            let entry = entry?;
-            let path = entry.path();
+        let remote: Vec<_> = stream::iter(store.list_remote(REMOTE_PREFIX).await)
+            .filter(|key| std::future::ready(key.ends_with(".json")))
+            .then(|key| async {
+                let bytes = store.fetch_bytes(&key).await.context("fetching");
+                (key, bytes)
+            })
+            .collect()
+            .await;
 
-            if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                match self.load_profile(&path) {
-                    Ok(profile) => {
-                        tracing::info!("Loaded audio profile: {}", profile.name);
-                        self.profiles.insert(profile.name.clone(), profile);
-                    }
-                    Err(e) => {
-                        tracing::warn!("Failed to load profile from {}: {e:#}", path.display());
-                    }
+        for (source, bytes) in local.chain(remote) {
+            let parsed = bytes.and_then(|bytes| {
+                serde_json::from_slice::<SignalProfile>(&bytes).context("parsing JSON")
+            });
+            match parsed {
+                Ok(profile) => {
+                    tracing::info!("Loaded signal profile {} from {source}", profile.name);
+                    profiles.insert(profile.name.clone(), profile);
                 }
+                Err(e) => tracing::warn!("Failed to load signal profile from {source}: {e:#}"),
             }
         }
 
-        if self.profiles.is_empty() {
-            tracing::warn!("No audio profiles loaded");
+        if profiles.is_empty() {
+            tracing::warn!("No signal profiles loaded");
+        } else {
+            tracing::info!("Loaded {} signal profiles", profiles.len());
         }
 
-        Ok(())
-    }
-
-    fn load_profile(&self, path: &Path) -> anyhow::Result<SignalProfile> {
-        let content = std::fs::read_to_string(path).context("reading file")?;
-        let profile: SignalProfile = serde_json::from_str(&content).context("parsing JSON")?;
-        Ok(profile)
+        Self { profiles }
     }
 
     pub fn get_profile(&self, name: &str) -> Option<&SignalProfile> {
