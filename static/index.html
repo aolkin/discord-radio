@@ -513,6 +513,17 @@
             </button>
         </div>
 
+        <div style="background: white; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+            <h2 style="color: #667eea; margin-bottom: 15px; font-size: 1.5rem;">Signal Profiles</h2>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 15px;">
+                <template x-for="profile in profiles" :key="profile">
+                    <button class="btn btn-secondary" @click="openProfileEditor(profile)" x-text="profile"></button>
+                </template>
+                <div class="empty-state" x-show="profiles.length === 0">No signal profiles</div>
+            </div>
+            <button class="btn btn-primary" @click="openProfileEditor(null)">+ New Signal Profile</button>
+        </div>
+
         <div class="guilds-grid" x-show="guilds.length > 0">
             <template x-for="guild in guilds" :key="guild.guild_id">
                 <div class="guild-card">
@@ -1326,6 +1337,61 @@
         </div>
     </div>
 
+    <div x-show="showProfileEditor"
+         x-transition.opacity
+         class="modal-overlay"
+         @click.self="closeProfileEditor()"
+         @keydown.escape.window="closeProfileEditor()">
+        <div class="modal-content" x-show="showProfileEditor" x-transition>
+            <div class="modal-header">
+                <div class="modal-title" x-text="profileEditorIsNew ? 'New Signal Profile' : 'Edit Signal Profile'"></div>
+                <button class="close" @click="closeProfileEditor()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div x-show="profileEditorMessage.text"
+                     :class="profileEditorMessage.type === 'error' ? 'error-message' : 'success-message'"
+                     x-text="profileEditorMessage.text"></div>
+
+                <div class="loading" x-show="profileEditorLoading">Loading...</div>
+
+                <form x-show="!profileEditorLoading" @submit.prevent="saveProfile()">
+                    <div class="form-group">
+                        <label class="form-label">Name</label>
+                        <input type="text" class="form-input" x-model="profileForm.name"
+                               :readonly="!profileEditorIsNew" required pattern="[A-Za-z0-9_\-]+"
+                               title="Letters, digits, - and _ only">
+                    </div>
+                    <div class="form-row">
+                        <template x-for="field in profileFields" :key="field.key">
+                            <div class="form-group">
+                                <label class="form-label" x-text="field.label"></label>
+                                <input type="number" class="form-input" x-model.number="profileForm[field.key]"
+                                       :step="field.step" :min="field.min" :max="field.max"
+                                       :required="!field.optional" :placeholder="field.optional ? 'Off' : ''">
+                            </div>
+                        </template>
+                        <div class="form-group">
+                            <label class="form-label">Dropout Min Duration (ms)</label>
+                            <input type="number" class="form-input" x-model.number="profileForm.dropout_duration_ms[0]"
+                                   step="any" min="0" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Dropout Max Duration (ms)</label>
+                            <input type="number" class="form-input" x-model.number="profileForm.dropout_duration_ms[1]"
+                                   step="any" min="0" required>
+                        </div>
+                    </div>
+                    <div class="button-group">
+                        <button type="button" class="btn btn-secondary" @click="closeProfileEditor()">Close</button>
+                        <button type="submit" class="btn btn-primary" :disabled="profileEditorSaving">
+                            <span x-text="profileEditorSaving ? 'Saving...' : 'Save Profile'"></span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script>
         function botPortal() {
             return {
@@ -1375,6 +1441,28 @@
                 profileSaving: false,
                 profileMessage: { text: '', type: '' },
                 profiles: [],
+                // Signal Profile Editor state
+                showProfileEditor: false,
+                profileEditorIsNew: false,
+                profileEditorLoading: false,
+                profileEditorSaving: false,
+                profileEditorMessage: { text: '', type: '' },
+                profileForm: { dropout_duration_ms: [0, 0] },
+                profileFields: [
+                    { key: 'bandpass_low', label: 'Bandpass Low (Hz)', step: 'any', min: 0 },
+                    { key: 'bandpass_high', label: 'Bandpass High (Hz)', step: 'any', min: 0 },
+                    { key: 'white_noise_level', label: 'White Noise Level (0-2)', step: 'any', min: 0, max: 2 },
+                    { key: 'pink_noise_level', label: 'Pink Noise Level (0-2)', step: 'any', min: 0, max: 2 },
+                    { key: 'brown_noise_level', label: 'Brown Noise Level (0-2)', step: 'any', min: 0, max: 2 },
+                    { key: 'tremolo_depth', label: 'Tremolo Depth', step: 'any' },
+                    { key: 'tremolo_rate', label: 'Tremolo Rate (Hz)', step: 'any' },
+                    { key: 'tremolo_jitter', label: 'Tremolo Jitter', step: 'any' },
+                    { key: 'clip_pregain', label: 'Clip Pregain', step: 'any' },
+                    { key: 'clip_threshold', label: 'Clip Threshold', step: 'any' },
+                    { key: 'bitcrush_bits', label: 'Bitcrush Bits', step: 1, min: 1, max: 255, optional: true },
+                    { key: 'dropout_probability', label: 'Dropout Probability', step: 'any', min: 0 },
+                    { key: 'frequency_warble_hz', label: 'Frequency Warble (Hz)', step: 'any', optional: true },
+                ],
                 // Activity Modal state
                 showActivityModal: false,
                 currentActivity: { activity_type: null, status: null },
@@ -1473,10 +1561,86 @@
                         const response = await fetch('/api/profiles');
                         if (response.ok) {
                             const data = await response.json();
-                            this.profiles = data.profiles;
+                            this.profiles = data.profiles.sort();
                         }
                     } catch (error) {
                         console.error('Failed to load profiles:', error);
+                    }
+                },
+
+                async openProfileEditor(name) {
+                    this.profileEditorIsNew = name === null;
+                    this.profileEditorMessage = { text: '', type: '' };
+                    this.showProfileEditor = true;
+
+                    if (this.profileEditorIsNew) {
+                        this.profileForm = {
+                            name: '',
+                            bandpass_low: 20, bandpass_high: 20000,
+                            white_noise_level: 0, pink_noise_level: 0, brown_noise_level: 0,
+                            tremolo_depth: 0, tremolo_rate: 0, tremolo_jitter: 0,
+                            clip_pregain: 1, clip_threshold: 1, bitcrush_bits: '',
+                            dropout_probability: 0, dropout_duration_ms: [0, 0],
+                            frequency_warble_hz: '',
+                        };
+                        return;
+                    }
+
+                    this.profileEditorLoading = true;
+                    try {
+                        const response = await fetch(`/api/profiles/${encodeURIComponent(name)}`);
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}`);
+                        }
+                        const profile = await response.json();
+                        for (const field of this.profileFields) {
+                            if (profile[field.key] === null) profile[field.key] = '';
+                        }
+                        this.profileForm = profile;
+                    } catch (error) {
+                        console.error('Failed to load signal profile:', error);
+                        this.profileEditorMessage = { text: `Failed to load profile: ${error.message}`, type: 'error' };
+                    } finally {
+                        this.profileEditorLoading = false;
+                    }
+                },
+
+                closeProfileEditor() {
+                    this.showProfileEditor = false;
+                    this.profileEditorMessage = { text: '', type: '' };
+                },
+
+                async saveProfile() {
+                    const name = this.profileForm.name;
+                    if (this.profileEditorIsNew && this.profiles.includes(name)) {
+                        this.profileEditorMessage = { text: `A profile named "${name}" already exists`, type: 'error' };
+                        return;
+                    }
+
+                    const { name: _, ...body } = this.profileForm;
+                    for (const field of this.profileFields) {
+                        if (field.optional && body[field.key] === '') body[field.key] = null;
+                    }
+
+                    this.profileEditorSaving = true;
+                    this.profileEditorMessage = { text: '', type: '' };
+                    try {
+                        const response = await fetch(`/api/profiles/${encodeURIComponent(name)}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(body),
+                        });
+                        if (!response.ok) {
+                            throw new Error((await response.text()) || `HTTP ${response.status}`);
+                        }
+                        this.profileEditorIsNew = false;
+                        this.profileEditorMessage = { text: 'Signal profile saved', type: 'success' };
+                        await this.loadProfiles();
+                    } catch (error) {
+                        console.error('Failed to save signal profile:', error);
+                        this.profileEditorMessage = { text: `Failed to save profile: ${error.message}`, type: 'error' };
+                    } finally {
+                        this.profileEditorSaving = false;
                     }
                 },
 
