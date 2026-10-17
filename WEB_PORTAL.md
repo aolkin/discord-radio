@@ -109,6 +109,8 @@ The DJ plays the profile override if set, else the current segment's forced prof
 - `GET /api/guilds/:guild_id/bot-profile` - Get the bot's current per-guild profile from Discord (`{"nick", "avatar_url", "banner_url"}`)
 - `PUT /api/guilds/:guild_id/bot-profile` - Set the bot's per-guild profile on Discord. Body fields `nick`, `avatar`, `banner` are each optional; omitted fields are left unchanged, and at least one is required. `avatar` and `banner` are file references resolved like track filenames. Returns 429 when Discord rate limits the request
 - `GET /api/profiles` - List available signal profiles
+- `GET /api/profiles/:name` - Get a signal profile's parameters. With `?refresh=true`, re-fetch the profile from object storage first and keep the fetched copy; returns 404 when object storage has no such profile
+- `PUT /api/profiles/:name` - Create or replace a signal profile in object storage. The body holds the profile's parameters; the name comes from `:name`, which may contain only letters, digits, `-` and `_`. Returns 503 when object storage is not configured
 - `GET /api/audio-files` - List available audio files in content directory
 - `GET /api/dj-config/overrides` - Get all DJ config overrides (hex messages, announcements, state weights)
 - `GET /api/dj-config/default-state-weights` - Get default state weights from config file

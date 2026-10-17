@@ -3,7 +3,7 @@ use crate::audio::processing::mixer::{
     AudioSource, StopReason, TrackCallback, TrackCommand, TrackHandle, TrackId,
 };
 use crate::audio::processing::processor::ProcessorRef;
-use crate::state::{BotState, Data};
+use crate::state::Data;
 use anyhow::{Context, bail};
 use serenity::model::id::GuildId;
 use std::collections::HashMap;
@@ -345,32 +345,4 @@ pub async fn get_or_create_track_manager(
             Arc::new(tokio::sync::Mutex::new(manager))
         })
         .clone()
-}
-
-/// Load default profile, using fallback if not found
-pub fn load_default_profile(bot_state: &BotState) -> crate::audio::profiles::SignalProfile {
-    // Try to get the "clear" profile
-    if let Some(profile) = bot_state.profile_manager.get_profile("clear").cloned() {
-        return profile;
-    }
-
-    // Fallback: create a basic clear profile
-    tracing::debug!("Default 'clear' profile not found, using fallback");
-    crate::audio::profiles::SignalProfile {
-        name: "clear".to_string(),
-        bandpass_low: 20.0,
-        bandpass_high: 20000.0,
-        white_noise_level: 0.0,
-        pink_noise_level: 0.0,
-        brown_noise_level: 0.0,
-        tremolo_depth: 0.0,
-        tremolo_rate: 0.0,
-        tremolo_jitter: 0.0,
-        clip_pregain: 1.0,
-        clip_threshold: 1.0,
-        bitcrush_bits: None,
-        dropout_probability: 0.0,
-        dropout_duration_ms: (0.0, 0.0),
-        frequency_warble_hz: None,
-    }
 }

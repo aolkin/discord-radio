@@ -1,12 +1,13 @@
 use crate::audio::dj::manager::{DJCommand, DJStateType, IdleRequest, TrackRequest};
 use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
+use crate::audio::profiles::{ProfileStorageError, SignalProfile};
 use crate::bot_profile::ProfileEdit;
 use crate::bucket::ObjectStoreError;
 use crate::state::Data;
 use crate::web::state_snapshot::BotSnapshot;
 use axum::Json as AxumJson;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse, Json};
 use serde::{Deserialize, Serialize};
@@ -322,6 +323,60 @@ pub struct ProfilesResponse {
 pub async fn get_profiles(State(bot_state): State<Data>) -> AxumJson<ProfilesResponse> {
     let profiles = bot_state.profile_manager.list_profiles();
     AxumJson(ProfilesResponse { profiles })
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GetProfileParams {
+    #[serde(default)]
+    pub refresh: bool,
+}
+
+pub async fn get_profile(
+    State(bot_state): State<Data>,
+    Path(name): Path<String>,
+    Query(params): Query<GetProfileParams>,
+) -> Result<AxumJson<SignalProfile>, (StatusCode, String)> {
+    if params.refresh {
+        return bot_state
+            .profile_manager
+            .refresh(&name)
+            .await
+            .map(AxumJson)
+            .map_err(profile_storage_error);
+    }
+    bot_state
+        .profile_manager
+        .get_profile(&name)
+        .map(AxumJson)
+        .ok_or((StatusCode::NOT_FOUND, String::new()))
+}
+
+pub async fn put_profile(
+    State(bot_state): State<Data>,
+    Path(name): Path<String>,
+    AxumJson(mut parameters): AxumJson<serde_json::Map<String, serde_json::Value>>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    parameters.insert("name".to_string(), name.into());
+    let profile: SignalProfile = serde_json::from_value(parameters.into())
+        .map_err(|e| (StatusCode::UNPROCESSABLE_ENTITY, e.to_string()))?;
+    bot_state
+        .profile_manager
+        .save(profile)
+        .await
+        .map_err(profile_storage_error)?;
+    Ok(StatusCode::OK)
+}
+
+fn profile_storage_error(e: ProfileStorageError) -> (StatusCode, String) {
+    let status = match e {
+        ProfileStorageError::InvalidName => StatusCode::BAD_REQUEST,
+        ProfileStorageError::Storage(ObjectStoreError::NotConfigured) => {
+            StatusCode::SERVICE_UNAVAILABLE
+        }
+        ProfileStorageError::Storage(ObjectStoreError::NotFound) => StatusCode::NOT_FOUND,
+        ProfileStorageError::Storage(_) | ProfileStorageError::Parse(_) => StatusCode::BAD_GATEWAY,
+    };
+    (status, format!("{e:#}"))
 }
 
 #[derive(Debug, Serialize)]
@@ -665,7 +720,6 @@ pub async fn get_default_state_weights(
 
 use crate::audio::tracks::get_or_create_track_manager;
 use crate::logging::{LogReader, guild_logs_dir};
-use axum::extract::Query;
 
 #[derive(Debug, Deserialize)]
 pub struct LogQueryParams {

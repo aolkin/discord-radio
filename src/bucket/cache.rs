@@ -33,13 +33,13 @@ pub enum ObjectStoreError {
     NotConfigured,
     #[error("object not found")]
     NotFound,
-    #[error("remote download failed: {0:#}")]
+    #[error("object storage request failed: {0:#}")]
     Remote(Arc<anyhow::Error>),
     #[error("local cache i/o failed: {0}")]
     Local(Arc<std::io::Error>),
 }
 
-/// Marks a [`ObjectDownloader::download`] failure as specifically meaning the
+/// Marks a [`ObjectBackend::download`] failure as specifically meaning the
 /// key doesn't exist in object storage, distinct from a network or auth
 /// failure.
 #[derive(Debug, thiserror::Error)]
@@ -49,14 +49,16 @@ struct ObjectNotFound;
 /// Exists so tests can substitute a stub for a real bucket without real
 /// credentials.
 #[async_trait]
-pub(crate) trait ObjectDownloader: Send + Sync {
+pub(crate) trait ObjectBackend: Send + Sync {
     async fn download(&self, key: &str) -> anyhow::Result<Vec<u8>>;
 
     async fn list_keys(&self, prefix: &str) -> anyhow::Result<Vec<String>>;
+
+    async fn upload(&self, key: &str, bytes: &[u8], content_type: &str) -> anyhow::Result<()>;
 }
 
 #[async_trait]
-impl ObjectDownloader for s3::Bucket {
+impl ObjectBackend for s3::Bucket {
     async fn download(&self, key: &str) -> anyhow::Result<Vec<u8>> {
         let response = self
             .get_object(key)
@@ -110,13 +112,26 @@ impl ObjectDownloader for s3::Bucket {
 
         Ok(keys)
     }
+
+    async fn upload(&self, key: &str, bytes: &[u8], content_type: &str) -> anyhow::Result<()> {
+        let response = self
+            .put_object_with_content_type(key, bytes, content_type)
+            .await
+            .with_context(|| format!("uploading {key}"))?;
+
+        let status = response.status_code();
+        if !(200..300).contains(&status) {
+            bail!("unexpected status {status} uploading {key}");
+        }
+        Ok(())
+    }
 }
 
 /// Caches objects on local disk, mirroring the object storage key structure
 /// (`{cache_dir}/{key}`).
 pub struct ObjectStore {
     cache_dir: PathBuf,
-    downloader: Option<Arc<dyn ObjectDownloader>>,
+    backend: Option<Arc<dyn ObjectBackend>>,
     /// Seeded at construction from the files already in `cache_dir`.
     present: moka::future::Cache<String, ()>,
     /// `list_remote` results, keyed by prefix.
@@ -136,30 +151,27 @@ impl ObjectStore {
         bucket: Option<Arc<s3::Bucket>>,
         entry_ttl: Option<Duration>,
     ) -> Result<Self, ObjectStoreError> {
-        let downloader = bucket.map(|bucket| bucket as Arc<dyn ObjectDownloader>);
-        Self::build(cache_dir, downloader, entry_ttl).await
+        let backend = bucket.map(|bucket| bucket as Arc<dyn ObjectBackend>);
+        Self::build(cache_dir, backend, entry_ttl).await
     }
 
     #[cfg(test)]
-    pub(crate) async fn with_downloader(
-        cache_dir: PathBuf,
-        downloader: Arc<dyn ObjectDownloader>,
-    ) -> Self {
-        Self::build(cache_dir, Some(downloader), None)
+    pub(crate) async fn with_backend(cache_dir: PathBuf, backend: Arc<dyn ObjectBackend>) -> Self {
+        Self::build(cache_dir, Some(backend), None)
             .await
             .expect("the test cache dir is usable")
     }
 
     async fn build(
         cache_dir: PathBuf,
-        downloader: Option<Arc<dyn ObjectDownloader>>,
+        backend: Option<Arc<dyn ObjectBackend>>,
         entry_ttl: Option<Duration>,
     ) -> Result<Self, ObjectStoreError> {
         std::fs::create_dir_all(&cache_dir).map_err(|e| ObjectStoreError::Local(Arc::new(e)))?;
 
         let cache = Self {
             cache_dir,
-            downloader,
+            backend,
             present: moka::future::Cache::new(MAX_TRACKED_KEYS),
             remote_listings: moka::future::Cache::builder()
                 .max_capacity(MAX_TRACKED_LISTINGS)
@@ -200,11 +212,11 @@ impl ObjectStore {
     /// Downloads `key` and writes it to `dest`, replacing anything already
     /// there.
     async fn fill(&self, key: &str, dest: &Path) -> Result<(), ObjectStoreError> {
-        let downloader = self
-            .downloader
+        let backend = self
+            .backend
             .as_ref()
             .ok_or(ObjectStoreError::NotConfigured)?;
-        let bytes = downloader.download(key).await.map_err(|e| {
+        let bytes = backend.download(key).await.map_err(|e| {
             if e.is::<ObjectNotFound>() {
                 ObjectStoreError::NotFound
             } else {
@@ -241,17 +253,38 @@ impl ObjectStore {
     /// Downloads `key` and returns its bytes directly, without writing them
     /// to local disk.
     pub async fn fetch_bytes(&self, key: &str) -> Result<Vec<u8>, ObjectStoreError> {
-        let downloader = self
-            .downloader
+        let backend = self
+            .backend
             .as_ref()
             .ok_or(ObjectStoreError::NotConfigured)?;
-        downloader.download(key).await.map_err(|e| {
+        backend.download(key).await.map_err(|e| {
             if e.is::<ObjectNotFound>() {
                 ObjectStoreError::NotFound
             } else {
                 ObjectStoreError::Remote(Arc::new(e))
             }
         })
+    }
+
+    /// Writes `bytes` to `key` in object storage, replacing any object already
+    /// there, and forgets any cached copy of it.
+    pub async fn upload(
+        &self,
+        key: &str,
+        bytes: &[u8],
+        content_type: &str,
+    ) -> Result<(), ObjectStoreError> {
+        let backend = self
+            .backend
+            .as_ref()
+            .ok_or(ObjectStoreError::NotConfigured)?;
+        backend
+            .upload(key, bytes, content_type)
+            .await
+            .map_err(|e| ObjectStoreError::Remote(Arc::new(e)))?;
+        self.invalidate(key).await;
+        self.remote_listings.invalidate_all();
+        Ok(())
     }
 
     /// Forgets `key`, so the next `ensure_cached` re-downloads it.
@@ -268,12 +301,12 @@ impl ObjectStore {
     /// Empty when no bucket is configured or the listing request fails.
     /// Cached per prefix for [`REMOTE_LISTING_TTL`].
     pub async fn list_remote(&self, prefix: &str) -> Vec<String> {
-        let Some(downloader) = &self.downloader else {
+        let Some(backend) = &self.backend else {
             return Vec::new();
         };
 
         self.remote_listings
-            .try_get_with(prefix.to_string(), downloader.list_keys(prefix))
+            .try_get_with(prefix.to_string(), backend.list_keys(prefix))
             .await
             .unwrap_or_else(|e| {
                 tracing::warn!("Failed to list remote objects under {prefix:?}: {e:#}");

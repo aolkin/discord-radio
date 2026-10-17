@@ -316,7 +316,7 @@ async fn main() -> anyhow::Result<()> {
     .id;
 
     let profile_manager =
-        ProfileManager::from_storage(Path::new(SIGNAL_PROFILES_DIR), &file_cache).await;
+        ProfileManager::from_storage(Path::new(SIGNAL_PROFILES_DIR), file_cache.clone()).await;
 
     let data: Data = Box::leak(Box::new(BotState::new(
         content_path,

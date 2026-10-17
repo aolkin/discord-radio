@@ -1,9 +1,10 @@
-use crate::bucket::ObjectStore;
+use crate::bucket::{ObjectStore, ObjectStoreError};
 use anyhow::Context;
 use futures_util::{StreamExt, stream};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::{Arc, RwLock};
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct SignalProfile {
@@ -77,15 +78,26 @@ impl SignalProfile {
 
 const REMOTE_PREFIX: &str = "profiles/";
 
+#[derive(Debug, thiserror::Error)]
+pub enum ProfileStorageError {
+    #[error("profile names may only contain letters, digits, '-' and '_'")]
+    InvalidName,
+    #[error(transparent)]
+    Storage(#[from] ObjectStoreError),
+    #[error("parsing JSON: {0}")]
+    Parse(#[from] serde_json::Error),
+}
+
 pub struct ProfileManager {
-    profiles: HashMap<String, SignalProfile>,
+    profiles: RwLock<HashMap<String, SignalProfile>>,
+    store: Arc<ObjectStore>,
 }
 
 impl ProfileManager {
     /// Loads every profile in `profiles_dir` and under `profiles/` in object
     /// storage. A profile in object storage replaces a local profile of the
     /// same name.
-    pub async fn from_storage(profiles_dir: &Path, store: &ObjectStore) -> Self {
+    pub async fn from_storage(profiles_dir: &Path, store: Arc<ObjectStore>) -> Self {
         let mut profiles = HashMap::new();
 
         let local_paths = match std::fs::read_dir(profiles_dir) {
@@ -137,14 +149,80 @@ impl ProfileManager {
             tracing::info!("Loaded {} signal profiles", profiles.len());
         }
 
-        Self { profiles }
+        Self {
+            profiles: RwLock::new(profiles),
+            store,
+        }
     }
 
-    pub fn get_profile(&self, name: &str) -> Option<&SignalProfile> {
-        self.profiles.get(name)
+    pub fn get_profile(&self, name: &str) -> Option<SignalProfile> {
+        self.profiles.read().unwrap().get(name).cloned()
     }
 
     pub fn list_profiles(&self) -> Vec<String> {
-        self.profiles.keys().cloned().collect()
+        self.profiles.read().unwrap().keys().cloned().collect()
     }
+
+    /// The "clear" profile, or a built-in equivalent when none is loaded.
+    pub fn default_profile(&self) -> SignalProfile {
+        if let Some(profile) = self.get_profile("clear") {
+            return profile;
+        }
+
+        tracing::debug!("Default 'clear' profile not found, using fallback");
+        SignalProfile {
+            name: "clear".to_string(),
+            bandpass_low: 20.0,
+            bandpass_high: 20000.0,
+            white_noise_level: 0.0,
+            pink_noise_level: 0.0,
+            brown_noise_level: 0.0,
+            tremolo_depth: 0.0,
+            tremolo_rate: 0.0,
+            tremolo_jitter: 0.0,
+            clip_pregain: 1.0,
+            clip_threshold: 1.0,
+            bitcrush_bits: None,
+            dropout_probability: 0.0,
+            dropout_duration_ms: (0.0, 0.0),
+            frequency_warble_hz: None,
+        }
+    }
+
+    /// Writes `profile` to object storage under its name, replacing any
+    /// profile of the same name.
+    pub async fn save(&self, profile: SignalProfile) -> Result<(), ProfileStorageError> {
+        let key = remote_key(&profile.name)?;
+        let bytes = serde_json::to_vec_pretty(&profile).expect("a SignalProfile always serializes");
+        self.store.upload(&key, &bytes, "application/json").await?;
+
+        self.profiles
+            .write()
+            .unwrap()
+            .insert(profile.name.clone(), profile);
+        Ok(())
+    }
+
+    /// Re-fetches the profile named `name` from object storage and replaces
+    /// the in-memory copy with it.
+    pub async fn refresh(&self, name: &str) -> Result<SignalProfile, ProfileStorageError> {
+        let bytes = self.store.fetch_bytes(&remote_key(name)?).await?;
+        let profile: SignalProfile = serde_json::from_slice(&bytes)?;
+        self.profiles
+            .write()
+            .unwrap()
+            .insert(profile.name.clone(), profile.clone());
+        Ok(profile)
+    }
+}
+
+fn remote_key(name: &str) -> Result<String, ProfileStorageError> {
+    let name_is_valid = !name.is_empty()
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    if !name_is_valid {
+        return Err(ProfileStorageError::InvalidName);
+    }
+    Ok(format!("{REMOTE_PREFIX}{name}.json"))
 }

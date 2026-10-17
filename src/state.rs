@@ -81,7 +81,7 @@ impl BotState {
         processors
             .entry(guild_id)
             .or_insert_with(|| {
-                let initial_profile = crate::audio::tracks::load_default_profile(self);
+                let initial_profile = self.profile_manager.default_profile();
                 Arc::new(RwLock::new(AudioProcessor::new(initial_profile)))
             })
             .clone()
