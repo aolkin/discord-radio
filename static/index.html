@@ -503,6 +503,29 @@
             word-break: break-all;
         }
 
+        .file-browser-drop {
+            display: block;
+            margin-top: 15px;
+            padding: 20px;
+            border: 2px dashed #667eea;
+            border-radius: 8px;
+            color: #667eea;
+            text-align: center;
+            cursor: pointer;
+        }
+
+        .file-browser-drop.dragging {
+            background: #f0f2ff;
+        }
+
+        .file-browser-upload {
+            margin-top: 10px;
+        }
+
+        .file-browser-upload progress {
+            width: 100%;
+        }
+
         .file-browser-new-folder {
             display: flex;
             gap: 8px;
@@ -1495,6 +1518,25 @@
                     </button>
                 </form>
 
+                <label class="file-browser-drop" :class="{ dragging: fileBrowser.dragging }"
+                       @dragover.prevent="fileBrowser.dragging = true"
+                       @dragleave="fileBrowser.dragging = false"
+                       @drop.prevent="fileBrowser.dragging = false; uploadAudioFiles($event.dataTransfer.files)">
+                    <span>Drop audio files here or click to choose (.mp3, .ogg, .wav at 48kHz)</span>
+                    <input type="file" multiple accept=".mp3,.ogg,.wav" style="display: none;"
+                           @change="uploadAudioFiles($event.target.files); $event.target.value = ''">
+                </label>
+
+                <template x-for="upload in fileBrowser.uploads" :key="upload.id">
+                    <div class="file-browser-upload">
+                        <div class="file-browser-row-name" x-text="upload.name"></div>
+                        <progress max="100" :value="upload.progress" x-show="upload.status === 'uploading'"></progress>
+                        <div class="file-browser-row-meta" x-show="upload.status === 'done'"
+                             x-text="'Uploaded as ' + upload.detail"></div>
+                        <div class="error-message" x-show="upload.status === 'error'" x-text="upload.detail"></div>
+                    </div>
+                </template>
+
                 <div class="button-group" x-show="fileBrowser.mode === 'folder'">
                     <button type="button" class="btn btn-primary"
                             @click="selectFileBrowserEntry(fileBrowser.prefix)">Select This Folder</button>
@@ -1563,7 +1605,10 @@
                     message: { text: '', type: '' },
                     newFolderName: '',
                     creatingFolder: false,
+                    dragging: false,
+                    uploads: [],
                 },
+                nextUploadId: 0,
                 // Signal Profile Editor state
                 showProfileEditor: false,
                 profileEditorIsNew: false,
@@ -1697,6 +1742,7 @@
                     this.fileBrowser.mode = mode;
                     this.fileBrowser.onSelect = onSelect;
                     this.fileBrowser.newFolderName = '';
+                    this.fileBrowser.uploads = [];
                     this.fileBrowser.open = true;
                     return this.loadFileBrowser(prefix);
                 },
@@ -1760,6 +1806,56 @@
                     } finally {
                         this.fileBrowser.creatingFolder = false;
                     }
+                },
+
+                async uploadAudioFiles(fileList) {
+                    const prefix = this.fileBrowser.prefix;
+                    let uploaded = false;
+                    for (const file of Array.from(fileList)) {
+                        this.fileBrowser.uploads.push({
+                            id: this.nextUploadId++, name: file.name, progress: 0, status: 'uploading', detail: '',
+                        });
+                        const upload = this.fileBrowser.uploads.at(-1);
+                        if (!/\.(mp3|ogg|wav)$/i.test(file.name)) {
+                            upload.status = 'error';
+                            upload.detail = 'Only .mp3, .ogg and .wav files are accepted';
+                            continue;
+                        }
+                        try {
+                            upload.detail = await this.sendAudioFile(file, prefix, (percent) => { upload.progress = percent; });
+                            upload.status = 'done';
+                            uploaded = true;
+                        } catch (error) {
+                            console.error('Failed to upload audio file:', error);
+                            upload.status = 'error';
+                            upload.detail = error.message;
+                        }
+                    }
+                    if (uploaded && this.fileBrowser.prefix === prefix) {
+                        await this.loadFileBrowser(prefix);
+                    }
+                },
+
+                // Resolves with the uploaded key. XMLHttpRequest rather than fetch because fetch reports no upload progress.
+                sendAudioFile(file, prefix, onProgress) {
+                    return new Promise((resolve, reject) => {
+                        const xhr = new XMLHttpRequest();
+                        xhr.open('POST', `/api/audio-files/upload?prefix=${encodeURIComponent(prefix)}`);
+                        xhr.upload.onprogress = (event) => {
+                            if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
+                        };
+                        xhr.onload = () => {
+                            if (xhr.status >= 200 && xhr.status < 300) {
+                                resolve(JSON.parse(xhr.responseText).key);
+                            } else {
+                                reject(new Error(xhr.responseText || `HTTP ${xhr.status}`));
+                            }
+                        };
+                        xhr.onerror = () => reject(new Error('Network error'));
+                        const form = new FormData();
+                        form.append('file', file);
+                        xhr.send(form);
+                    });
                 },
 
                 formatBytes(bytes) {

@@ -20,7 +20,7 @@ The Discord bot includes a built-in web portal for monitoring bot status and con
   - Set or clear the DJ's background profile and profile override
   - List, create, and edit signal profiles
 - **Audio file browser**
-  - Browse the folders and files under `tracks/` in object storage, and create folders
+  - Browse the folders and files under `tracks/` in object storage, create folders, and upload audio files by choosing or dropping them
 
 ## Configuration
 
@@ -94,7 +94,7 @@ The Signal Profiles panel lists every profile by name. Saving a new or edited pr
 
 ### Audio File Browser
 
-The Audio Files panel opens a browser over the `tracks/` folder of object storage. Breadcrumbs and Up move between folders, and each file shows its full key, size and last modified time. The same browser opens in a mode that picks a file or a folder and hands the choice back to the section that opened it.
+The Audio Files panel opens a browser over the `tracks/` folder of object storage. Dropping or choosing files uploads them to the current folder one after another, with a progress bar per file and the server's message when a file is rejected. Breadcrumbs and Up move between folders, and each file shows its full key, size and last modified time. The same browser opens in a mode that picks a file or a folder and hands the choice back to the section that opened it.
 
 ## Technology Stack
 
