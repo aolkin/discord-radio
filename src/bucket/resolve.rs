@@ -53,6 +53,15 @@ impl FileResolver {
         self.file_cache.list_dir(prefix).await
     }
 
+    pub async fn upload(
+        &self,
+        key: &str,
+        bytes: &[u8],
+        content_type: &str,
+    ) -> Result<(), ObjectStoreError> {
+        self.file_cache.upload(key, bytes, content_type).await
+    }
+
     /// Lists files (as s3:// URIs) whose key matches `partial` under `prefix`.
     pub async fn list_content(&self, prefix: &str, partial: &str) -> Vec<String> {
         let partial = partial.strip_prefix("s3://").unwrap_or(partial);

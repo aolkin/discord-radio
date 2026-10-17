@@ -216,12 +216,15 @@ impl ProfileManager {
     }
 }
 
-fn remote_key(name: &str) -> Result<String, ProfileStorageError> {
-    let name_is_valid = !name.is_empty()
+pub fn is_valid_name(name: &str) -> bool {
+    !name.is_empty()
         && name
             .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
-    if !name_is_valid {
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+fn remote_key(name: &str) -> Result<String, ProfileStorageError> {
+    if !is_valid_name(name) {
         return Err(ProfileStorageError::InvalidName);
     }
     Ok(format!("{REMOTE_PREFIX}{name}.json"))
