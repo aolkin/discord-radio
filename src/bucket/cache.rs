@@ -4,6 +4,7 @@
 
 use anyhow::{Context, bail};
 use async_trait::async_trait;
+use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -46,6 +47,19 @@ pub enum ObjectStoreError {
 #[error("object not found")]
 struct ObjectNotFound;
 
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct DirListing {
+    pub folders: Vec<String>,
+    pub files: Vec<ObjectInfo>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ObjectInfo {
+    pub key: String,
+    pub size: u64,
+    pub last_modified: String,
+}
+
 /// Exists so tests can substitute a stub for a real bucket without real
 /// credentials.
 #[async_trait]
@@ -53,6 +67,9 @@ pub(crate) trait ObjectBackend: Send + Sync {
     async fn download(&self, key: &str) -> anyhow::Result<Vec<u8>>;
 
     async fn list_keys(&self, prefix: &str) -> anyhow::Result<Vec<String>>;
+
+    /// Lists the single level directly under `prefix`.
+    async fn list_dir(&self, prefix: &str) -> anyhow::Result<DirListing>;
 
     async fn upload(&self, key: &str, bytes: &[u8], content_type: &str) -> anyhow::Result<()>;
 }
@@ -111,6 +128,48 @@ impl ObjectBackend for s3::Bucket {
         }
 
         Ok(keys)
+    }
+
+    async fn list_dir(&self, prefix: &str) -> anyhow::Result<DirListing> {
+        let mut listing = DirListing::default();
+        let mut continuation_token = None;
+
+        loop {
+            let (page, _) = self
+                .list_page(
+                    prefix.to_string(),
+                    Some("/".to_string()),
+                    continuation_token,
+                    None,
+                    None,
+                )
+                .await
+                .with_context(|| format!("listing {prefix}"))?;
+
+            listing.folders.extend(
+                page.common_prefixes
+                    .into_iter()
+                    .flatten()
+                    .map(|common| common.prefix),
+            );
+            listing.files.extend(
+                page.contents
+                    .into_iter()
+                    .filter(|object| object.key != prefix)
+                    .map(|object| ObjectInfo {
+                        key: object.key,
+                        size: object.size,
+                        last_modified: object.last_modified,
+                    }),
+            );
+
+            continuation_token = page.next_continuation_token;
+            if continuation_token.is_none() {
+                break;
+            }
+        }
+
+        Ok(listing)
     }
 
     async fn upload(&self, key: &str, bytes: &[u8], content_type: &str) -> anyhow::Result<()> {
@@ -285,6 +344,18 @@ impl ObjectStore {
         self.invalidate(key).await;
         self.remote_listings.invalidate_all();
         Ok(())
+    }
+
+    /// The folders and files directly under `prefix`, listed live rather than
+    /// from the cache. A zero-byte folder marker object at `prefix` itself is
+    /// left out.
+    pub async fn list_dir(&self, prefix: &str) -> Result<DirListing, ObjectStoreError> {
+        self.backend
+            .as_ref()
+            .ok_or(ObjectStoreError::NotConfigured)?
+            .list_dir(prefix)
+            .await
+            .map_err(|e| ObjectStoreError::Remote(Arc::new(e)))
     }
 
     /// Forgets `key`, so the next `ensure_cached` re-downloads it.

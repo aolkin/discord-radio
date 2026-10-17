@@ -1549,7 +1549,7 @@
                         const response = await fetch('/api/audio-files');
                         if (response.ok) {
                             const data = await response.json();
-                            this.audioFiles = data.files;
+                            this.audioFiles = data.files.map(file => 's3://' + file.key);
                         }
                     } catch (error) {
                         console.error('Failed to load audio files:', error);
