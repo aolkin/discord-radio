@@ -88,31 +88,41 @@ impl ProfileManager {
     pub async fn load(profiles_dir: &Path, store: &ObjectStore) -> Self {
         let mut profiles = HashMap::new();
 
-        let local = std::fs::read_dir(profiles_dir)
-            .inspect_err(|e| {
+        let local_paths = match std::fs::read_dir(profiles_dir) {
+            Ok(entries) => entries
+                .filter_map(Result::ok)
+                .map(|entry| entry.path())
+                .collect(),
+            Err(e) => {
                 tracing::warn!(
                     "Failed to read signal profiles from {}: {e}",
                     profiles_dir.display()
-                )
-            })
+                );
+                Vec::new()
+            }
+        };
+        let local = local_paths
             .into_iter()
-            .flatten()
-            .flatten()
-            .map(|entry| entry.path())
             .filter(|path| path.extension().and_then(|s| s.to_str()) == Some("json"))
-            .map(|path| (path.display().to_string(), load_local(&path)));
+            .map(|path| {
+                let bytes = std::fs::read(&path).context("reading file");
+                (path.display().to_string(), bytes)
+            });
 
         let remote: Vec<_> = stream::iter(store.list_remote(REMOTE_PREFIX).await)
             .filter(|key| std::future::ready(key.ends_with(".json")))
             .then(|key| async {
-                let profile = fetch_remote(store, &key).await;
-                (key, profile)
+                let bytes = store.fetch_bytes(&key).await.context("fetching");
+                (key, bytes)
             })
             .collect()
             .await;
 
-        for (source, result) in local.chain(remote) {
-            match result {
+        for (source, bytes) in local.chain(remote) {
+            let parsed = bytes.and_then(|bytes| {
+                serde_json::from_slice::<SignalProfile>(&bytes).context("parsing JSON")
+            });
+            match parsed {
                 Ok(profile) => {
                     tracing::info!("Loaded signal profile {} from {source}", profile.name);
                     profiles.insert(profile.name.clone(), profile);
@@ -137,14 +147,4 @@ impl ProfileManager {
     pub fn list_profiles(&self) -> Vec<String> {
         self.profiles.keys().cloned().collect()
     }
-}
-
-fn load_local(path: &Path) -> anyhow::Result<SignalProfile> {
-    let content = std::fs::read_to_string(path).context("reading file")?;
-    serde_json::from_str(&content).context("parsing JSON")
-}
-
-async fn fetch_remote(store: &ObjectStore, key: &str) -> anyhow::Result<SignalProfile> {
-    let bytes = store.fetch_bytes(key).await.context("fetching")?;
-    serde_json::from_slice(&bytes).context("parsing JSON")
 }

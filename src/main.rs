@@ -16,7 +16,7 @@ use crate::state::{BotState, Data};
 use anyhow::Context;
 use poise::serenity_prelude::{self as serenity, GatewayIntents};
 use songbird::SerenityInit;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
@@ -312,16 +312,17 @@ async fn main() -> anyhow::Result<()> {
     )?
     .id;
 
-    let data: Data = Box::leak(Box::new(
-        BotState::new(
-            content_path,
-            state_store,
-            dj_settings_store,
-            file_cache,
-            bot_user_id,
-        )
-        .await,
-    ));
+    let profile_manager =
+        audio::profiles::ProfileManager::load(Path::new("audio_profiles"), &file_cache).await;
+
+    let data: Data = Box::leak(Box::new(BotState::new(
+        content_path,
+        state_store,
+        dj_settings_store,
+        file_cache,
+        profile_manager,
+        bot_user_id,
+    )));
 
     // Start gauge update task if metrics are configured
     if let Some(bot_metrics) = metrics::get() {

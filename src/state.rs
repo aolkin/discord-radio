@@ -14,7 +14,7 @@ use serenity::model::id::GuildId;
 use songbird::Call;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
@@ -37,15 +37,14 @@ pub struct BotState {
 }
 
 impl BotState {
-    pub async fn new(
+    pub fn new(
         content_path: String,
         state_store: Arc<dyn StateStore>,
         dj_settings: DjSettingsStore,
         file_cache: Arc<ObjectStore>,
+        profile_manager: ProfileManager,
         bot_user_id: UserId,
     ) -> Self {
-        let profile_manager = ProfileManager::load(Path::new("audio_profiles"), &file_cache).await;
-
         let voice_connections = Arc::new(RwLock::new(HashMap::new()));
 
         // Get logs base path from state store path
