@@ -1,12 +1,14 @@
 use crate::audio::connection::setup_voice_connection;
-use crate::audio::dj::manager::{DJCommand, DJStateType, start_dj, stop_dj};
+use crate::audio::dj::manager::{
+    DJCommand, DJStateType, restart_dj_with_config, start_dj, stop_dj,
+};
 use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
 use crate::audio::processing::processor::ProcessorRef;
 use crate::audio::tracks::get_or_create_track_manager;
 use crate::commands::utils;
 use crate::commands::utils::{Context, require_guild};
-use anyhow::{Context as _, bail};
+use anyhow::bail;
 use serenity::all::{ChannelId, ChannelType, CreateAutocompleteResponse, GuildId};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -114,12 +116,8 @@ pub async fn leave_voice_channel(ctx: Context<'_>) -> anyhow::Result<()> {
 }
 
 /// Have the DJ play a text message as hex audio
-#[poise::command(
-    slash_command,
-    guild_only,
-    default_member_permissions = "ADMINISTRATOR"
-)]
-pub async fn play_message(
+#[poise::command(slash_command, guild_only)]
+pub async fn hex(
     ctx: Context<'_>,
     #[description = "Message to convert to hex and play"] message: String,
     #[description = "Volume 0.0-2.0 (0=silence, 1.0=unity, 2.0=+18dB boost, default 1.0)"]
@@ -130,7 +128,7 @@ pub async fn play_message(
     let user_id = ctx.author().id;
 
     tracing::info!(
-        "User {} executed play_message with message '{}' in guild {}",
+        "User {} executed dj hex with message '{}' in guild {}",
         user_id,
         message,
         guild_id
@@ -178,12 +176,8 @@ pub async fn play_message(
 }
 
 /// Have the DJ play an audio track now
-#[poise::command(
-    slash_command,
-    guild_only,
-    default_member_permissions = "ADMINISTRATOR"
-)]
-pub async fn play_track(
+#[poise::command(slash_command, guild_only)]
+pub async fn track(
     ctx: Context<'_>,
     #[description = "Audio filename"]
     #[autocomplete = "autocomplete_audio_file"]
@@ -197,7 +191,7 @@ pub async fn play_track(
     let user_id = ctx.author().id;
 
     tracing::info!(
-        "User {} executed play_track with file '{}' in guild {}",
+        "User {} executed dj track with file '{}' in guild {}",
         user_id,
         filename,
         guild_id
@@ -236,12 +230,8 @@ pub async fn play_track(
 }
 
 /// Have the DJ go idle now, optionally playing a noise profile
-#[poise::command(
-    slash_command,
-    guild_only,
-    default_member_permissions = "ADMINISTRATOR"
-)]
-pub async fn dj_idle(
+#[poise::command(slash_command, guild_only)]
+pub async fn idle(
     ctx: Context<'_>,
     #[description = "Noise profile to play (default: none)"]
     #[autocomplete = "autocomplete_profile"]
@@ -253,7 +243,7 @@ pub async fn dj_idle(
     let guild_id = require_guild(ctx)?;
 
     tracing::info!(
-        "User {} executed dj_idle with noise profile {:?} in guild {}",
+        "User {} executed dj idle with noise profile {:?} in guild {}",
         ctx.author().id,
         noise_profile,
         guild_id
@@ -619,12 +609,8 @@ async fn set_dj_profile(
 }
 
 /// Set or clear the DJ's background signal profile, which replaces rotation
-#[poise::command(
-    slash_command,
-    guild_only,
-    default_member_permissions = "ADMINISTRATOR"
-)]
-pub async fn dj_profile(
+#[poise::command(slash_command, guild_only)]
+pub async fn profile(
     ctx: Context<'_>,
     #[description = "Profile name (omit to return to rotation)"]
     #[autocomplete = "autocomplete_profile"]
@@ -643,12 +629,8 @@ pub async fn dj_profile(
 }
 
 /// Set or clear the DJ's signal profile override, which beats every other profile
-#[poise::command(
-    slash_command,
-    guild_only,
-    default_member_permissions = "ADMINISTRATOR"
-)]
-pub async fn dj_profile_override(
+#[poise::command(slash_command, guild_only, rename = "override")]
+pub async fn override_profile(
     ctx: Context<'_>,
     #[description = "Profile name (omit to clear)"]
     #[autocomplete = "autocomplete_profile"]
@@ -669,12 +651,8 @@ pub async fn dj_profile_override(
 }
 
 /// Turn the DJ's management of the voice channel status on or off
-#[poise::command(
-    slash_command,
-    guild_only,
-    default_member_permissions = "ADMINISTRATOR"
-)]
-pub async fn dj_channel_status(
+#[poise::command(slash_command, guild_only)]
+pub async fn channel_status(
     ctx: Context<'_>,
     #[description = "Whether the DJ sets the voice channel status"] enabled: bool,
 ) -> anyhow::Result<()> {
@@ -699,79 +677,135 @@ pub async fn dj_channel_status(
     Ok(())
 }
 
-/// Manage the radio DJ for automated playback
+/// Control the radio DJ
 #[poise::command(
     slash_command,
     guild_only,
-    default_member_permissions = "ADMINISTRATOR"
+    default_member_permissions = "ADMINISTRATOR",
+    subcommands(
+        "skip",
+        "idle",
+        "track",
+        "hex",
+        "status",
+        "configure",
+        "announcements",
+        "profile",
+        "override_profile",
+        "channel_status"
+    )
 )]
-pub async fn manage_dj(
+pub async fn dj(_ctx: Context<'_>) -> anyhow::Result<()> {
+    Ok(())
+}
+
+/// Restart the DJ with a configuration
+#[poise::command(slash_command, guild_only)]
+pub async fn configure(
     ctx: Context<'_>,
     #[description = "DJ configuration name"] config: String,
-    #[description = "Action: configure"] action: String,
-    #[description = "Text channel for announcements (optional)"] announcement_channel: Option<
-        ChannelId,
-    >,
 ) -> anyhow::Result<()> {
     let guild_id = require_guild(ctx)?;
-    let user_id = ctx.author().id;
 
     tracing::info!(
-        "User {} executed manage_dj with config '{}' and action '{}' in guild {}",
-        user_id,
+        "User {} executed dj configure with config {:?} in guild {}",
+        ctx.author().id,
         config,
-        action,
         guild_id
     );
 
     ctx.defer_ephemeral().await?;
 
-    let action_lower = action.to_lowercase();
-
-    match action_lower.as_str() {
-        "configure" => {
-            if let Err(e) = send_to_dj(
-                ctx.data(),
-                guild_id,
-                DJCommand::SetAnnouncementChannel(announcement_channel),
-            )
-            .await
-            {
-                ctx.say(format!("Failed to configure DJ: {}", e)).await?;
-                return Ok(());
-            }
-
-            let msg = if let Some(ch_id) = announcement_channel {
-                format!("DJ configured: announcements will be sent to <#{}>", ch_id)
-            } else {
-                "DJ configured: announcements disabled".to_string()
-            };
-
-            ctx.say(msg).await?;
-        }
-        _ => {
-            ctx.say("Invalid action. Use 'configure'").await?;
-        }
+    if let Err(e) = restart_dj_with_config(ctx.data(), guild_id, config.clone()).await {
+        ctx.say(format!("Failed to configure DJ: {e:#}")).await?;
+        return Ok(());
     }
+
+    ctx.say(format!("DJ configured: configuration '{config}'"))
+        .await?;
+
+    Ok(())
+}
+
+/// Choose the announcement channel or turn announcements off
+#[poise::command(slash_command, guild_only)]
+pub async fn announcements(
+    ctx: Context<'_>,
+    #[description = "Text channel for announcements (omit to turn announcements off)"]
+    announcement_channel: Option<ChannelId>,
+) -> anyhow::Result<()> {
+    let guild_id = require_guild(ctx)?;
+
+    tracing::info!(
+        "User {} executed dj announcements with channel {:?} in guild {}",
+        ctx.author().id,
+        announcement_channel,
+        guild_id
+    );
+
+    ctx.defer_ephemeral().await?;
+
+    if let Err(e) = send_to_dj(
+        ctx.data(),
+        guild_id,
+        DJCommand::SetAnnouncementChannel(announcement_channel),
+    )
+    .await
+    {
+        ctx.say(format!("Failed to configure DJ: {e:#}")).await?;
+        return Ok(());
+    }
+
+    let message = match announcement_channel {
+        Some(channel) => format!("DJ announcements in <#{channel}>"),
+        None => "DJ announcements off".to_string(),
+    };
+    ctx.say(message).await?;
+
+    Ok(())
+}
+
+/// Skip to the DJ's next state
+#[poise::command(slash_command, guild_only)]
+pub async fn skip(
+    ctx: Context<'_>,
+    #[description = "Only advance to this kind of state (default: any)"] to_state: Option<
+        DJStateType,
+    >,
+) -> anyhow::Result<()> {
+    let guild_id = require_guild(ctx)?;
+
+    tracing::info!(
+        "User {} executed dj skip {:?} in guild {}",
+        ctx.author().id,
+        to_state,
+        guild_id
+    );
+
+    ctx.defer_ephemeral().await?;
+
+    if let Err(e) = send_to_dj(ctx.data(), guild_id, DJCommand::ForceAdvance(to_state)).await {
+        ctx.say(format!("Failed to force DJ state advance: {e:#}"))
+            .await?;
+        return Ok(());
+    }
+
+    let message = match to_state {
+        Some(filter) => format!("DJ advancing to {:?} state", filter),
+        None => "DJ state advance triggered".to_string(),
+    };
+    ctx.say(message).await?;
 
     Ok(())
 }
 
 /// Get the current state of the DJ
-#[poise::command(
-    slash_command,
-    guild_only,
-    default_member_permissions = "ADMINISTRATOR"
-)]
-pub async fn get_dj_state(ctx: Context<'_>) -> anyhow::Result<()> {
+#[poise::command(slash_command, guild_only)]
+pub async fn status(ctx: Context<'_>) -> anyhow::Result<()> {
     let guild_id = require_guild(ctx)?;
     let user_id = ctx.author().id;
 
-    tracing::info!(
-        "User {} executed get_dj_state in guild {}",
-        user_id,
-        guild_id
-    );
+    tracing::info!("User {} executed dj status in guild {}", user_id, guild_id);
 
     ctx.defer_ephemeral().await?;
 
@@ -803,178 +837,3 @@ pub async fn get_dj_state(ctx: Context<'_>) -> anyhow::Result<()> {
 
     Ok(())
 }
-
-/// Force the DJ to advance to the next state (for testing)
-#[poise::command(
-    slash_command,
-    guild_only,
-    default_member_permissions = "ADMINISTRATOR"
-)]
-pub async fn advance_dj_state(
-    ctx: Context<'_>,
-    #[description = "State type to advance to: track, hex, or noise (optional)"] state_type: Option<
-        String,
-    >,
-) -> anyhow::Result<()> {
-    let guild_id = require_guild(ctx)?;
-    let user_id = ctx.author().id;
-
-    tracing::info!(
-        "User {} executed advance_dj_state in guild {}",
-        user_id,
-        guild_id
-    );
-
-    ctx.defer_ephemeral().await?;
-
-    // Parse state type filter
-    let state_type_filter = if let Some(type_str) = state_type {
-        match type_str.to_lowercase().as_str() {
-            "track" => Some(DJStateType::Track),
-            "hex" | "hex_message" | "hexmessage" => Some(DJStateType::HexMessage),
-            "noise" => Some(DJStateType::Noise),
-            _ => {
-                ctx.say(format!(
-                    "Invalid state type '{}'. Valid types: track, hex, noise",
-                    type_str
-                ))
-                .await?;
-                return Ok(());
-            }
-        }
-    } else {
-        None
-    };
-
-    if let Err(e) = send_to_dj(
-        ctx.data(),
-        guild_id,
-        DJCommand::ForceAdvance(state_type_filter),
-    )
-    .await
-    {
-        ctx.say(format!("Failed to force DJ state advance: {}", e))
-            .await?;
-        return Ok(());
-    }
-
-    let message = if let Some(filter) = state_type_filter {
-        format!("DJ advancing to {:?} state", filter)
-    } else {
-        "DJ state advance triggered".to_string()
-    };
-
-    ctx.say(message).await?;
-
-    Ok(())
-}
-
-async fn autocomplete_content_file(
-    ctx: Context<'_>,
-    partial: &'_ str,
-) -> CreateAutocompleteResponse {
-    let mut results: Vec<String> = ctx
-        .data()
-        .file_resolver
-        .list_content("config/", partial)
-        .await
-        .into_iter()
-        .filter(|uri| uri.ends_with(".json"))
-        .collect();
-    results.sort();
-    results.truncate(25);
-    autocomplete_response(results)
-}
-
-async fn validate_content_uri(
-    resolver: &crate::bucket::FileResolver,
-    uri: &str,
-) -> anyhow::Result<()> {
-    let path = resolver
-        .resolve(uri)
-        .await
-        .with_context(|| format!("Could not resolve `{uri}`"))?;
-    match tokio::fs::metadata(&path).await {
-        Ok(meta) if meta.is_file() => Ok(()),
-        Ok(_) => bail!("`{uri}` does not point to a file"),
-        Err(e) => Err(e).with_context(|| format!("`{uri}` is not a readable file")),
-    }
-}
-
-async fn set_dj_content(
-    ctx: Context<'_>,
-    uri: Option<String>,
-    label: &str,
-    set: impl FnOnce(&mut crate::persistence::DjSettings, Option<String>),
-) -> anyhow::Result<()> {
-    ctx.defer_ephemeral().await?;
-
-    let guild_id = require_guild(ctx)?;
-
-    let uri = uri.filter(|u| !u.trim().is_empty());
-
-    if let Some(uri) = &uri
-        && let Err(e) = validate_content_uri(&ctx.data().file_resolver, uri).await
-    {
-        ctx.say(format!("{e:#}")).await?;
-        return Ok(());
-    }
-
-    let message = match &uri {
-        Some(value) => {
-            format!("DJ {label} set to `{value}`. This takes effect the next time the DJ starts.")
-        }
-        None => format!("DJ {label} cleared. This takes effect the next time the DJ starts."),
-    };
-
-    ctx.data()
-        .dj_settings
-        .update(guild_id, |s| {
-            set(s, uri);
-            Ok(())
-        })
-        .await?;
-
-    ctx.say(message).await?;
-
-    Ok(())
-}
-
-/// Set or clear the guild's DJ track pool
-#[poise::command(
-    slash_command,
-    guild_only,
-    default_member_permissions = "ADMINISTRATOR"
-)]
-pub async fn dj_tracks(
-    ctx: Context<'_>,
-    #[description = "Path or s3:// URI of the track pool file (omit to clear)"]
-    #[autocomplete = "autocomplete_content_file"]
-    uri: Option<String>,
-) -> anyhow::Result<()> {
-    set_dj_content(ctx, uri, "track pool", |settings, value| {
-        settings.tracks = value
-    })
-    .await
-}
-
-/// Set or clear the guild's DJ config
-#[poise::command(
-    slash_command,
-    guild_only,
-    default_member_permissions = "ADMINISTRATOR"
-)]
-pub async fn dj_config(
-    ctx: Context<'_>,
-    #[description = "Path or s3:// URI of the config file (omit to clear)"]
-    #[autocomplete = "autocomplete_content_file"]
-    uri: Option<String>,
-) -> anyhow::Result<()> {
-    set_dj_content(ctx, uri, "config", |settings, value| {
-        settings.config = value
-    })
-    .await
-}
-
-#[cfg(test)]
-mod tests;
