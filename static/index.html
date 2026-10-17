@@ -1617,7 +1617,7 @@
                         return;
                     }
 
-                    const body = { ...this.profileForm };
+                    const { name: _, ...body } = this.profileForm;
                     for (const field of this.profileFields) {
                         if (field.optional && body[field.key] === '') body[field.key] = null;
                     }
