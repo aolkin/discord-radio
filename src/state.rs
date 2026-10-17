@@ -18,6 +18,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
+pub fn signal_profiles_dir(content_path: &str) -> PathBuf {
+    PathBuf::from(content_path).join("audio_profiles")
+}
+
 pub type Data = &'static BotState;
 
 pub struct BotState {
@@ -67,6 +71,10 @@ impl BotState {
             file_resolver,
             bot_user_id,
         }
+    }
+
+    pub fn dj_config_path(&self, name: &str) -> String {
+        format!("{}/dj_configs/{name}.json", self.content_path)
     }
 
     pub async fn audio_processor(&self, guild_id: GuildId) -> ProcessorRef {
