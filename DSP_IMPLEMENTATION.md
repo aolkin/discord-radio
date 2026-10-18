@@ -76,7 +76,7 @@ Noise levels use perceptual (dB-based) scaling for natural-sounding volume contr
 JSON-based effect presets with smooth transitions.
 
 - **SignalProfile**: Complete effect parameter set
-- **ProfileManager**: Loads profiles from `audio_profiles/` directory under the content root
+- **ProfileManager**: Loads profiles from the `SIGNAL_PROFILES_PATH` directory (default `audio_profiles`), under both the content root and the object storage bucket root
 - **Profile Interpolation**: Smooth transitions between profiles
 
 ### 6. Audio Processing Thread (`audio/processing_thread.rs`)
@@ -96,7 +96,7 @@ Bridges the DSP output to Songbird's voice system.
 
 ## Signal Profiles
 
-Pre-configured effect presets in `audio_profiles/` (under the content root):
+Pre-configured effect presets in `audio_profiles/` (the default `SIGNAL_PROFILES_PATH`, under the content root):
 
 ### `clear.json`
 

@@ -18,10 +18,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
-pub fn signal_profiles_dir(content_path: &str) -> PathBuf {
-    PathBuf::from(content_path).join("audio_profiles")
-}
-
 pub type Data = &'static BotState;
 
 pub struct BotState {
