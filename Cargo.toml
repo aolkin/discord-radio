@@ -26,11 +26,11 @@ base64 = "0.22"
 symphonia = { version = "0.6", features = ["mp3", "ogg", "vorbis", "wav"] }
 
 # Audio DSP processing
-biquad = "0.4"
+biquad = "0.6"
 atomic_float = "1.0"
 
 # Opus encoding for audio streaming
-opus = "0.3"
+opus = "0.4"
 ogg = "0.9"
 parking_lot = "0.12"
 
