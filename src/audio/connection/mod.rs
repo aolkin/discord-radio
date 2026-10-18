@@ -21,7 +21,7 @@ pub async fn connect_voice_channel(
 
     if !call_exists {
         let mut call = handle_lock.lock().await;
-        let event_handler = crate::handlers::voice::ConnectionEventHandler { data: bot_state };
+        let event_handler = crate::handlers::voice::ConnectionEventHandler;
 
         for event in [
             songbird::events::CoreEvent::DriverConnect,
@@ -44,11 +44,6 @@ pub async fn connect_voice_channel(
         .join(guild_id, channel_id)
         .await
         .context("joining voice channel")?;
-
-    {
-        let mut voice_connections = bot_state.voice_connections.write().await;
-        voice_connections.insert(guild_id, handle_lock);
-    }
 
     Ok(processor)
 }

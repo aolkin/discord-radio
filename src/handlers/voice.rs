@@ -1,11 +1,8 @@
-use crate::state::Data;
 use serenity::model::id::{GuildId, UserId};
 use songbird::{Event, EventContext, EventHandler};
 
 #[derive(Clone)]
-pub struct ConnectionEventHandler {
-    pub data: Data,
-}
+pub struct ConnectionEventHandler;
 
 #[async_trait::async_trait]
 impl EventHandler for ConnectionEventHandler {
@@ -28,8 +25,6 @@ impl EventHandler for ConnectionEventHandler {
                 );
 
                 let guild_id = GuildId::new(data.guild_id.0.into());
-                let mut voice_connections = self.data.voice_connections.write().await;
-                voice_connections.remove(&guild_id);
 
                 // Note: We no longer clean up TrackManager, audio_processor, hex playback, etc.
                 // since they are now fully decoupled from voice connections.

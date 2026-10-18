@@ -64,9 +64,7 @@ impl BotSnapshot {
 
         for guild_id in guild_ids {
             // Check if guild is actually in voice
-            let voice_connections = bot_state.voice_connections.read().await;
-            let in_voice = voice_connections.contains_key(&guild_id);
-            drop(voice_connections);
+            let in_voice = bot_state.get_voice_channel_id(guild_id).await.is_some();
 
             let mut guild_state = GuildState {
                 guild_id: guild_id.to_string(),
