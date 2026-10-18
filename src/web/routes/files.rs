@@ -1,6 +1,6 @@
 use crate::audio::codec::decoder::check_sample_rate;
-use crate::audio::profiles::is_valid_name;
 use crate::bucket::cache::ObjectInfo;
+use crate::bucket::registry::is_valid_name;
 use crate::state::Data;
 use crate::web::error::{ApiError, WithStatus};
 use anyhow::Context;

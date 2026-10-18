@@ -262,9 +262,10 @@ impl DJStateMachine {
                 Some((previous, _)) => previous.fade_out(),
             };
             let processor_arc = self.bot_state.audio_processor(self.guild_id).await;
-            if let Some(new_profile) = self.bot_state.profile_manager.get_profile(&target.name) {
+            if let Some(new_profile) = self.bot_state.profile_manager.get(&target.name) {
                 let mut processor = processor_arc.write().await;
-                processor.start_profile_transition(new_profile, fade.as_secs_f32() * 1000.0);
+                processor
+                    .start_profile_transition((*new_profile).clone(), fade.as_secs_f32() * 1000.0);
 
                 tracing::info!(
                     "DJ transitioning to profile '{}' over {:.1}s in guild {}",

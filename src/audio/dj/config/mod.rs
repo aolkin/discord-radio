@@ -1,5 +1,6 @@
 use crate::audio::dj::weighted_choice::Weighted;
-use anyhow::{Context, bail};
+use crate::bucket::registry::RegistryEntry;
+use anyhow::bail;
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]
@@ -154,15 +155,15 @@ impl Default for StateWeights {
     }
 }
 
-impl DJConfig {
-    pub fn parse(bytes: &[u8]) -> anyhow::Result<Self> {
-        let config: DJConfig = serde_json::from_slice(bytes).context("parsing JSON")?;
-        config.validate()?;
-        Ok(config)
+impl RegistryEntry for DJConfig {
+    const KIND: &'static str = "DJ config";
+
+    fn name(&self) -> &str {
+        &self.name
     }
 
     /// Rejects values that would make the DJ panic when it picks them.
-    pub fn validate(&self) -> anyhow::Result<()> {
+    fn validate(&self) -> anyhow::Result<()> {
         for track in &self.track_pool {
             if let Some(seconds) = track.max_duration_seconds {
                 ensure_seconds(seconds, || format!("track {:?}", track.filename))?;
@@ -215,5 +216,3 @@ fn ensure_loops(min: u32, max: u32, context: impl Fn() -> String) -> anyhow::Res
     }
     Ok(())
 }
-
-pub mod storage;
