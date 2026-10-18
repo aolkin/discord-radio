@@ -31,10 +31,11 @@ export function dj() {
                 saving: 'djSaving',
                 message: 'djMessage',
                 label: 'advancing DJ state',
-                request: () => apiRequest(`/api/guilds/${this.currentGuildId}/dj/advance`, {
-                    method: 'POST',
-                    body: { state_type: this.djStateType || null },
-                }),
+                request: () =>
+                    apiRequest(`/api/guilds/${this.currentGuildId}/dj/advance`, {
+                        method: 'POST',
+                        body: { state_type: this.djStateType || null },
+                    }),
                 success: 'DJ state advanced successfully!',
                 failure: 'Failed to advance DJ state. Please try again.',
                 afterFn: () => this.closeModal('advanceDJ'),
@@ -48,10 +49,11 @@ export function dj() {
                 saving: 'hexSaving',
                 message: 'hexMessage',
                 label: 'playing hex message',
-                request: () => apiRequest(`/api/guilds/${this.currentGuildId}/hex/play`, {
-                    method: 'POST',
-                    body: { message: this.hexMessageText },
-                }),
+                request: () =>
+                    apiRequest(`/api/guilds/${this.currentGuildId}/hex/play`, {
+                        method: 'POST',
+                        body: { message: this.hexMessageText },
+                    }),
                 success: 'Hex message queued successfully!',
                 failure: 'Failed to play hex message. Please try again.',
                 afterFn: () => this.closeModal('playHex'),

@@ -36,7 +36,10 @@ export function botProfile() {
                 this.botProfileForm.nick = this.botProfileCurrent.nick || '';
             } catch (error) {
                 console.error('Failed to load bot profile:', error);
-                this.botProfileMessage = { text: `Failed to load the current profile: ${error.message}`, type: 'error' };
+                this.botProfileMessage = {
+                    text: `Failed to load the current profile: ${error.message}`,
+                    type: 'error',
+                };
             } finally {
                 this.botProfileLoading = false;
             }
@@ -46,7 +49,9 @@ export function botProfile() {
             this.openFileBrowser({
                 mode: 'file',
                 prefix: 'images/',
-                onSelect: (key) => { this.botProfileForm[field] = 's3://' + key; },
+                onSelect: (key) => {
+                    this.botProfileForm[field] = 's3://' + key;
+                },
             });
         },
 

@@ -51,7 +51,9 @@ export function tracks() {
 
         getTrackProgress(track) {
             if (!track.duration_secs || track.loops) return 0;
-            const elapsedMs = this.currentTime - (track.start_time.secs_since_epoch * 1000 + track.start_time.nanos_since_epoch / 1000000);
+            const elapsedMs =
+                this.currentTime -
+                (track.start_time.secs_since_epoch * 1000 + track.start_time.nanos_since_epoch / 1000000);
             const elapsedSecs = elapsedMs / 1000;
             const progress = Math.min((elapsedSecs / track.duration_secs) * 100, 100);
             return Math.max(0, progress);
@@ -59,7 +61,9 @@ export function tracks() {
 
         getTrackTimeDisplay(track) {
             if (!track.duration_secs) return '';
-            const elapsedMs = this.currentTime - (track.start_time.secs_since_epoch * 1000 + track.start_time.nanos_since_epoch / 1000000);
+            const elapsedMs =
+                this.currentTime -
+                (track.start_time.secs_since_epoch * 1000 + track.start_time.nanos_since_epoch / 1000000);
             const elapsedSecs = Math.max(0, Math.min(elapsedMs / 1000, track.duration_secs));
             return this.formatTime(elapsedSecs) + ' / ' + this.formatTime(track.duration_secs);
         },
@@ -74,7 +78,7 @@ export function tracks() {
             try {
                 const response = await apiRequest('/api/files?prefix=tracks/');
                 const data = await response.json();
-                this.audioFiles = data.files.map(file => 's3://' + file.key);
+                this.audioFiles = data.files.map((file) => 's3://' + file.key);
             } catch (error) {
                 console.error('Failed to load audio files:', error);
             }
@@ -100,10 +104,11 @@ export function tracks() {
                 saving: 'playTrackSaving',
                 message: 'playTrackMessage',
                 label: 'playing track',
-                request: () => apiRequest(`/api/guilds/${this.currentGuildId}/track/play`, {
-                    method: 'POST',
-                    body,
-                }),
+                request: () =>
+                    apiRequest(`/api/guilds/${this.currentGuildId}/track/play`, {
+                        method: 'POST',
+                        body,
+                    }),
                 success: 'Track started successfully!',
                 failure: 'Failed to play track. Please try again.',
                 afterFn: () => this.closeModal('playTrack'),
@@ -145,10 +150,11 @@ export function tracks() {
                 saving: 'trackSaving',
                 message: 'trackMessage',
                 label: 'changing track state',
-                request: () => apiRequest(`/api/guilds/${this.currentGuildId}/tracks`, {
-                    method: 'POST',
-                    body,
-                }),
+                request: () =>
+                    apiRequest(`/api/guilds/${this.currentGuildId}/tracks`, {
+                        method: 'POST',
+                        body,
+                    }),
                 success: 'Track state updated successfully!',
                 failure: 'Failed to change track state. Please try again.',
                 afterFn: () => this.closeModal('trackState'),

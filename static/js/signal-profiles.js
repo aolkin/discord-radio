@@ -68,11 +68,19 @@ export function signalProfiles() {
             if (this.profileEditorIsNew) {
                 this.profileForm = {
                     name: '',
-                    bandpass_low: 20, bandpass_high: 20000,
-                    white_noise_level: 0, pink_noise_level: 0, brown_noise_level: 0,
-                    tremolo_depth: 0, tremolo_rate: 0, tremolo_jitter: 0,
-                    clip_pregain: 1, clip_threshold: 1, bitcrush_bits: '',
-                    dropout_probability: 0, dropout_duration_ms: [0, 0],
+                    bandpass_low: 20,
+                    bandpass_high: 20000,
+                    white_noise_level: 0,
+                    pink_noise_level: 0,
+                    brown_noise_level: 0,
+                    tremolo_depth: 0,
+                    tremolo_rate: 0,
+                    tremolo_jitter: 0,
+                    clip_pregain: 1,
+                    clip_threshold: 1,
+                    bitcrush_bits: '',
+                    dropout_probability: 0,
+                    dropout_duration_ms: [0, 0],
                     frequency_warble_hz: '',
                 };
                 return;
@@ -133,8 +141,7 @@ export function signalProfiles() {
                 profile: this.selectedProfile || null,
             };
 
-            if (body.profile
-                && this.profileFadeDuration !== null && this.profileFadeDuration !== '') {
+            if (body.profile && this.profileFadeDuration !== null && this.profileFadeDuration !== '') {
                 body.fade_duration = parseFloat(this.profileFadeDuration);
             }
 
@@ -142,10 +149,11 @@ export function signalProfiles() {
                 saving: 'profileSaving',
                 message: 'profileMessage',
                 label: 'changing signal profile',
-                request: () => apiRequest(`/api/guilds/${this.currentGuildId}/dj/${this.profileSetting}`, {
-                    method: 'POST',
-                    body,
-                }),
+                request: () =>
+                    apiRequest(`/api/guilds/${this.currentGuildId}/dj/${this.profileSetting}`, {
+                        method: 'POST',
+                        body,
+                    }),
                 success: 'Signal profile changed successfully!',
                 failure: 'Failed to change signal profile. Please try again.',
                 afterFn: () => this.closeModal('signalProfile'),

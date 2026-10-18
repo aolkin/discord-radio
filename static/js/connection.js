@@ -40,17 +40,17 @@ export function connection() {
                 try {
                     const data = JSON.parse(event.data);
                     this.guilds = data.guilds || [];
-                    
+
                     // Update current activity from websocket data
                     if (data.current_activity) {
                         this.currentActivity = {
                             activity_type: data.current_activity.activity_type,
-                            status: data.current_activity.status
+                            status: data.current_activity.status,
                         };
                     } else {
                         this.currentActivity = { activity_type: null, status: null };
                     }
-                    
+
                     // Update version info
                     if (data.version) {
                         this.version = data.version;
