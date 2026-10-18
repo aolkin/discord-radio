@@ -1,3 +1,33 @@
+        // The response body text, or `HTTP <status>` when the body is empty.
+        // Pass as `errorMessage` to show what the server said.
+        async function bodyOrStatus(response) {
+            return (await response.text()) || `HTTP ${response.status}`;
+        }
+
+        // Sends a request and returns the response. Non-2xx responses and
+        // network failures throw an Error carrying `status` (when a response
+        // arrived). `body` is sent as JSON. `errorMessage` is the Error
+        // message: a string, or a function of the response returning one.
+        // With `includeStatus`, the message ends with ` (<status>: <statusText>)`.
+        async function apiRequest(url, { method = 'GET', body, errorMessage = 'Request failed', includeStatus = false } = {}) {
+            const options = { method };
+            if (body !== undefined) {
+                options.headers = { 'Content-Type': 'application/json' };
+                options.body = JSON.stringify(body);
+            }
+            const response = await fetch(url, options);
+            if (!response.ok) {
+                const message = typeof errorMessage === 'function' ? await errorMessage(response) : errorMessage;
+                const detail = includeStatus
+                    ? ` (${response.status}: ${response.statusText || 'Unknown error'})`
+                    : '';
+                const error = new Error(message + detail);
+                error.status = response.status;
+                throw error;
+            }
+            return response;
+        }
+
         function botPortal() {
             return {
                 ws: null,
@@ -171,13 +201,35 @@
                     }, 500);
                 },
 
+                // Runs a save request with the shared flow: set `saving`, clear
+                // `message`, send, then show a success or error message. After a
+                // success, `afterFn` runs once `afterMs` has elapsed.
+                async runAction({ saving, message, request, success, failure, label, onSuccess, afterFn, afterMs }) {
+                    this[saving] = true;
+                    this[message] = { text: '', type: '' };
+
+                    try {
+                        await request();
+                        if (onSuccess) {
+                            await onSuccess();
+                        }
+                        this[message] = { text: success, type: 'success' };
+                        if (afterFn) {
+                            setTimeout(afterFn, afterMs);
+                        }
+                    } catch (error) {
+                        console.error(`Error ${label}:`, error);
+                        this[message] = { text: failure, type: 'error' };
+                    } finally {
+                        this[saving] = false;
+                    }
+                },
+
                 async loadAudioFiles() {
                     try {
-                        const response = await fetch('/api/files?prefix=tracks/');
-                        if (response.ok) {
-                            const data = await response.json();
-                            this.audioFiles = data.files.map(file => 's3://' + file.key);
-                        }
+                        const response = await apiRequest('/api/files?prefix=tracks/');
+                        const data = await response.json();
+                        this.audioFiles = data.files.map(file => 's3://' + file.key);
                     } catch (error) {
                         console.error('Failed to load audio files:', error);
                     }
@@ -185,11 +237,9 @@
 
                 async loadProfiles() {
                     try {
-                        const response = await fetch('/api/profiles');
-                        if (response.ok) {
-                            const data = await response.json();
-                            this.profiles = data.profiles.sort();
-                        }
+                        const response = await apiRequest('/api/profiles');
+                        const data = await response.json();
+                        this.profiles = data.profiles.sort();
                     } catch (error) {
                         console.error('Failed to load profiles:', error);
                     }
@@ -233,10 +283,9 @@
                     this.fileBrowser.loading = true;
                     this.fileBrowser.message = { text: '', type: '' };
                     try {
-                        const response = await fetch(`/api/files?prefix=${encodeURIComponent(prefix)}`);
-                        if (!response.ok) {
-                            throw new Error((await response.text()) || `HTTP ${response.status}`);
-                        }
+                        const response = await apiRequest(`/api/files?prefix=${encodeURIComponent(prefix)}`, {
+                            errorMessage: bodyOrStatus,
+                        });
                         const listing = await response.json();
                         this.fileBrowser.prefix = listing.prefix;
                         this.fileBrowser.folders = listing.folders;
@@ -253,14 +302,11 @@
                     this.fileBrowser.creatingFolder = true;
                     this.fileBrowser.message = { text: '', type: '' };
                     try {
-                        const response = await fetch('/api/files/folders', {
+                        await apiRequest('/api/files/folders', {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ prefix: this.fileBrowser.prefix, name: this.fileBrowser.newFolderName }),
+                            body: { prefix: this.fileBrowser.prefix, name: this.fileBrowser.newFolderName },
+                            errorMessage: bodyOrStatus,
                         });
-                        if (!response.ok) {
-                            throw new Error((await response.text()) || `HTTP ${response.status}`);
-                        }
                         this.fileBrowser.newFolderName = '';
                         await this.loadFileBrowser(this.fileBrowser.prefix);
                     } catch (error) {
@@ -358,10 +404,9 @@
 
                     this.profileEditorLoading = true;
                     try {
-                        const response = await fetch(`/api/profiles/${encodeURIComponent(name)}`);
-                        if (!response.ok) {
-                            throw new Error(`HTTP ${response.status}`);
-                        }
+                        const response = await apiRequest(`/api/profiles/${encodeURIComponent(name)}`, {
+                            errorMessage: (response) => `HTTP ${response.status}`,
+                        });
                         const profile = await response.json();
                         for (const field of this.profileFields) {
                             if (profile[field.key] === null) profile[field.key] = '';
@@ -395,14 +440,11 @@
                     this.profileEditorSaving = true;
                     this.profileEditorMessage = { text: '', type: '' };
                     try {
-                        const response = await fetch(`/api/profiles/${encodeURIComponent(name)}`, {
+                        await apiRequest(`/api/profiles/${encodeURIComponent(name)}`, {
                             method: 'PUT',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(body),
+                            body,
+                            errorMessage: bodyOrStatus,
                         });
-                        if (!response.ok) {
-                            throw new Error((await response.text()) || `HTTP ${response.status}`);
-                        }
                         this.profileEditorIsNew = false;
                         this.profileEditorMessage = { text: 'Signal profile saved', type: 'success' };
                         await this.loadProfiles();
@@ -488,37 +530,19 @@
                 },
 
                 async advanceDJState() {
-                    this.djSaving = true;
-                    this.djMessage = { text: '', type: '' };
-
-                    try {
-                        const response = await fetch(`/api/guilds/${this.currentGuildId}/dj/advance`, {
+                    await this.runAction({
+                        saving: 'djSaving',
+                        message: 'djMessage',
+                        label: 'advancing DJ state',
+                        request: () => apiRequest(`/api/guilds/${this.currentGuildId}/dj/advance`, {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                state_type: this.djStateType || null,
-                            }),
-                        });
-
-                        if (!response.ok) {
-                            throw new Error('Failed to advance DJ state');
-                        }
-
-                        this.djMessage = {
-                            text: 'DJ state advanced successfully!',
-                            type: 'success'
-                        };
-
-                        setTimeout(() => this.closeAdvanceDJModal(), 1500);
-                    } catch (error) {
-                        console.error('Error advancing DJ state:', error);
-                        this.djMessage = {
-                            text: 'Failed to advance DJ state. Please try again.',
-                            type: 'error'
-                        };
-                    } finally {
-                        this.djSaving = false;
-                    }
+                            body: { state_type: this.djStateType || null },
+                        }),
+                        success: 'DJ state advanced successfully!',
+                        failure: 'Failed to advance DJ state. Please try again.',
+                        afterFn: () => this.closeAdvanceDJModal(),
+                        afterMs: 1500,
+                    });
                 },
 
                 // Hex Message Modal Functions
@@ -537,37 +561,19 @@
                 },
 
                 async playHexMessage() {
-                    this.hexSaving = true;
-                    this.hexMessage = { text: '', type: '' };
-
-                    try {
-                        const response = await fetch(`/api/guilds/${this.currentGuildId}/hex/play`, {
+                    await this.runAction({
+                        saving: 'hexSaving',
+                        message: 'hexMessage',
+                        label: 'playing hex message',
+                        request: () => apiRequest(`/api/guilds/${this.currentGuildId}/hex/play`, {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                message: this.hexMessageText,
-                            }),
-                        });
-
-                        if (!response.ok) {
-                            throw new Error('Failed to play hex message');
-                        }
-
-                        this.hexMessage = {
-                            text: 'Hex message queued successfully!',
-                            type: 'success'
-                        };
-
-                        setTimeout(() => this.closePlayHexModal(), 1500);
-                    } catch (error) {
-                        console.error('Error playing hex message:', error);
-                        this.hexMessage = {
-                            text: 'Failed to play hex message. Please try again.',
-                            type: 'error'
-                        };
-                    } finally {
-                        this.hexSaving = false;
-                    }
+                            body: { message: this.hexMessageText },
+                        }),
+                        success: 'Hex message queued successfully!',
+                        failure: 'Failed to play hex message. Please try again.',
+                        afterFn: () => this.closePlayHexModal(),
+                        afterMs: 1500,
+                    });
                 },
 
                 // Play Track Modal Functions
@@ -592,49 +598,33 @@
                 },
 
                 async playTrack() {
-                    this.playTrackSaving = true;
-                    this.playTrackMessage = { text: '', type: '' };
+                    const body = { filename: this.playTrackFilename };
 
-                    try {
-                        const body = { filename: this.playTrackFilename };
-
-                        if (this.playTrackVolume !== null && this.playTrackVolume !== '') {
-                            body.volume = parseFloat(this.playTrackVolume);
-                        }
-
-                        if (this.playTrackStart !== null && this.playTrackStart !== '') {
-                            body.start_position = parseFloat(this.playTrackStart);
-                        }
-
-                        if (this.playTrackDuration !== null && this.playTrackDuration !== '') {
-                            body.duration = parseFloat(this.playTrackDuration);
-                        }
-
-                        const response = await fetch(`/api/guilds/${this.currentGuildId}/track/play`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(body),
-                        });
-
-                        if (!response.ok) {
-                            throw new Error('Failed to play track');
-                        }
-
-                        this.playTrackMessage = {
-                            text: 'Track started successfully!',
-                            type: 'success'
-                        };
-
-                        setTimeout(() => this.closePlayTrackModal(), 1500);
-                    } catch (error) {
-                        console.error('Error playing track:', error);
-                        this.playTrackMessage = {
-                            text: 'Failed to play track. Please try again.',
-                            type: 'error'
-                        };
-                    } finally {
-                        this.playTrackSaving = false;
+                    if (this.playTrackVolume !== null && this.playTrackVolume !== '') {
+                        body.volume = parseFloat(this.playTrackVolume);
                     }
+
+                    if (this.playTrackStart !== null && this.playTrackStart !== '') {
+                        body.start_position = parseFloat(this.playTrackStart);
+                    }
+
+                    if (this.playTrackDuration !== null && this.playTrackDuration !== '') {
+                        body.duration = parseFloat(this.playTrackDuration);
+                    }
+
+                    await this.runAction({
+                        saving: 'playTrackSaving',
+                        message: 'playTrackMessage',
+                        label: 'playing track',
+                        request: () => apiRequest(`/api/guilds/${this.currentGuildId}/track/play`, {
+                            method: 'POST',
+                            body,
+                        }),
+                        success: 'Track started successfully!',
+                        failure: 'Failed to play track. Please try again.',
+                        afterFn: () => this.closePlayTrackModal(),
+                        afterMs: 1500,
+                    });
                 },
 
                 // Track State Modal Functions
@@ -670,56 +660,40 @@
                 },
 
                 async changeTrackState() {
-                    this.trackSaving = true;
-                    this.trackMessage = { text: '', type: '' };
+                    const body = {
+                        name: this.trackName,
+                        state: this.trackState || null,
+                    };
 
-                    try {
-                        const body = {
-                            name: this.trackName,
-                            state: this.trackState || null,
-                        };
-
-                        if (this.trackState === 'start' && this.trackFilename) {
-                            body.filename = this.trackFilename;
-                        }
-
-                        if (this.trackVolume !== null && this.trackVolume !== '') {
-                            body.volume = parseFloat(this.trackVolume);
-                        }
-
-                        if (this.trackLoops !== '') {
-                            body.loops = this.trackLoops === 'true';
-                        }
-
-                        if (this.trackFadeTime !== null && this.trackFadeTime !== '') {
-                            body.fade_time = parseFloat(this.trackFadeTime);
-                        }
-
-                        const response = await fetch(`/api/guilds/${this.currentGuildId}/tracks`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(body),
-                        });
-
-                        if (!response.ok) {
-                            throw new Error('Failed to change track state');
-                        }
-
-                        this.trackMessage = {
-                            text: 'Track state updated successfully!',
-                            type: 'success'
-                        };
-
-                        setTimeout(() => this.closeTrackStateModal(), 1500);
-                    } catch (error) {
-                        console.error('Error changing track state:', error);
-                        this.trackMessage = {
-                            text: 'Failed to change track state. Please try again.',
-                            type: 'error'
-                        };
-                    } finally {
-                        this.trackSaving = false;
+                    if (this.trackState === 'start' && this.trackFilename) {
+                        body.filename = this.trackFilename;
                     }
+
+                    if (this.trackVolume !== null && this.trackVolume !== '') {
+                        body.volume = parseFloat(this.trackVolume);
+                    }
+
+                    if (this.trackLoops !== '') {
+                        body.loops = this.trackLoops === 'true';
+                    }
+
+                    if (this.trackFadeTime !== null && this.trackFadeTime !== '') {
+                        body.fade_time = parseFloat(this.trackFadeTime);
+                    }
+
+                    await this.runAction({
+                        saving: 'trackSaving',
+                        message: 'trackMessage',
+                        label: 'changing track state',
+                        request: () => apiRequest(`/api/guilds/${this.currentGuildId}/tracks`, {
+                            method: 'POST',
+                            body,
+                        }),
+                        success: 'Track state updated successfully!',
+                        failure: 'Failed to change track state. Please try again.',
+                        afterFn: () => this.closeTrackStateModal(),
+                        afterMs: 1500,
+                    });
                 },
 
                 // Signal Profile Modal Functions
@@ -742,44 +716,28 @@
                 },
 
                 async changeSignalProfile() {
-                    this.profileSaving = true;
-                    this.profileMessage = { text: '', type: '' };
+                    const body = {
+                        profile: this.selectedProfile || null,
+                    };
 
-                    try {
-                        const body = {
-                            profile: this.selectedProfile || null,
-                        };
-
-                        if (body.profile
-                            && this.profileFadeDuration !== null && this.profileFadeDuration !== '') {
-                            body.fade_duration = parseFloat(this.profileFadeDuration);
-                        }
-
-                        const response = await fetch(`/api/guilds/${this.currentGuildId}/dj/${this.profileSetting}`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(body),
-                        });
-
-                        if (!response.ok) {
-                            throw new Error('Failed to change signal profile');
-                        }
-
-                        this.profileMessage = {
-                            text: 'Signal profile changed successfully!',
-                            type: 'success'
-                        };
-
-                        setTimeout(() => this.closeSignalProfileModal(), 1500);
-                    } catch (error) {
-                        console.error('Error changing signal profile:', error);
-                        this.profileMessage = {
-                            text: 'Failed to change signal profile. Please try again.',
-                            type: 'error'
-                        };
-                    } finally {
-                        this.profileSaving = false;
+                    if (body.profile
+                        && this.profileFadeDuration !== null && this.profileFadeDuration !== '') {
+                        body.fade_duration = parseFloat(this.profileFadeDuration);
                     }
+
+                    await this.runAction({
+                        saving: 'profileSaving',
+                        message: 'profileMessage',
+                        label: 'changing signal profile',
+                        request: () => apiRequest(`/api/guilds/${this.currentGuildId}/dj/${this.profileSetting}`, {
+                            method: 'POST',
+                            body,
+                        }),
+                        success: 'Signal profile changed successfully!',
+                        failure: 'Failed to change signal profile. Please try again.',
+                        afterFn: () => this.closeSignalProfileModal(),
+                        afterMs: 1500,
+                    });
                 },
 
                 openBotProfileModal(guildId) {
@@ -798,10 +756,9 @@
                 async loadBotProfile() {
                     this.botProfileLoading = true;
                     try {
-                        const response = await fetch(`/api/guilds/${this.currentGuildId}/bot-profile`);
-                        if (!response.ok) {
-                            throw new Error((await response.text()) || `HTTP ${response.status}`);
-                        }
+                        const response = await apiRequest(`/api/guilds/${this.currentGuildId}/bot-profile`, {
+                            errorMessage: bodyOrStatus,
+                        });
                         this.botProfileCurrent = await response.json();
                         this.botProfileForm.nick = this.botProfileCurrent.nick || '';
                     } catch (error) {
@@ -833,14 +790,11 @@
                     this.botProfileSaving = true;
                     this.botProfileMessage = { text: '', type: '' };
                     try {
-                        const response = await fetch(`/api/guilds/${this.currentGuildId}/bot-profile`, {
+                        await apiRequest(`/api/guilds/${this.currentGuildId}/bot-profile`, {
                             method: 'PUT',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(body),
+                            body,
+                            errorMessage: bodyOrStatus,
                         });
-                        if (!response.ok) {
-                            throw new Error((await response.text()) || `HTTP ${response.status}`);
-                        }
                         this.botProfileMessage = { text: 'Profile saved', type: 'success' };
                         this.botProfileForm.avatar = '';
                         this.botProfileForm.banner = '';
@@ -855,14 +809,10 @@
 
                 async setChannelStatusEnabled(guildId, enabled) {
                     try {
-                        const response = await fetch(`/api/guilds/${guildId}/dj/channel-status`, {
+                        await apiRequest(`/api/guilds/${guildId}/dj/channel-status`, {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ enabled }),
+                            body: { enabled },
                         });
-                        if (!response.ok) {
-                            throw new Error('Failed to change channel status setting');
-                        }
                     } catch (error) {
                         console.error('Error changing channel status setting:', error);
                         alert('Failed to change the voice channel status setting. Please try again.');
@@ -882,45 +832,27 @@
                 },
 
                 async performActivityAction(endpoint, activityType, status, successMessage, statusField) {
-                    this.activitySaving = true;
-                    this.activityMessage = { text: '', type: '' };
-
-                    try {
-                        const response = await fetch(endpoint, {
+                    await this.runAction({
+                        saving: 'activitySaving',
+                        message: 'activityMessage',
+                        label: 'performing activity action',
+                        request: () => apiRequest(endpoint, {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
+                            body: {
                                 activity_type: activityType,
                                 status: status,
-                            }),
-                        });
-
-                        if (!response.ok) {
-                            throw new Error('Failed to perform activity action');
-                        } else {
-                            this.activityMessage = {
-                                text: successMessage,
-                                type: 'success'
-                            };
-
-                            // Clear the status field
+                            },
+                        }),
+                        onSuccess: () => {
                             if (statusField) {
                                 this[statusField] = '';
                             }
-
-                            setTimeout(() => {
-                                this.activityMessage = { text: '', type: '' };
-                            }, 2000);
-                        }
-                    } catch (error) {
-                        console.error('Error performing activity action:', error);
-                        this.activityMessage = {
-                            text: 'Failed to perform action. Please try again.',
-                            type: 'error'
-                        };
-                    } finally {
-                        this.activitySaving = false;
-                    }
+                        },
+                        success: successMessage,
+                        failure: 'Failed to perform action. Please try again.',
+                        afterFn: () => { this.activityMessage = { text: '', type: '' }; },
+                        afterMs: 2000,
+                    });
                 },
 
                 async setActivity() {
@@ -985,35 +917,26 @@
                 },
 
                 async toggleDJConfigCategory(category) {
-                    this.djConfigSaving = true;
-                    this.djConfigMessage = { text: '', type: '' };
-                    
-                    try {
-                        const enabled = this.djConfigData[category].enabled;
-                        const response = await fetch(`/api/guilds/${this.currentGuildId}/dj-config/overrides/toggle`, {
+                    const enabled = this.djConfigData[category].enabled;
+                    await this.runDJConfigAction({
+                        label: 'toggling category',
+                        request: () => apiRequest(`/api/guilds/${this.currentGuildId}/dj-config/overrides/toggle`, {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ category, enabled }),
-                        });
-                        
-                        if (!response.ok) {
-                            throw new Error('Failed to toggle category');
-                        }
-                        
-                        this.djConfigMessage = {
-                            text: `${category.replace('_', ' ')} ${enabled ? 'enabled' : 'disabled'} successfully!`,
-                            type: 'success'
-                        };
-                        setTimeout(() => { this.djConfigMessage = { text: '', type: '' }; }, 2000);
-                    } catch (error) {
-                        console.error('Error toggling category:', error);
-                        this.djConfigMessage = {
-                            text: 'Failed to toggle category. Please try again.',
-                            type: 'error'
-                        };
-                    } finally {
-                        this.djConfigSaving = false;
-                    }
+                            body: { category, enabled },
+                        }),
+                        success: `${category.replace('_', ' ')} ${enabled ? 'enabled' : 'disabled'} successfully!`,
+                        failure: 'Failed to toggle category. Please try again.',
+                    });
+                },
+
+                runDJConfigAction(options) {
+                    return this.runAction({
+                        saving: 'djConfigSaving',
+                        message: 'djConfigMessage',
+                        afterFn: () => { this.djConfigMessage = { text: '', type: '' }; },
+                        afterMs: 2000,
+                        ...options,
+                    });
                 },
 
                 openHexMessageForm(index = null) {
@@ -1044,48 +967,29 @@
                 },
 
                 async saveHexMessage() {
-                    this.djConfigSaving = true;
-                    this.djConfigMessage = { text: '', type: '' };
-                    
-                    try {
-                        const payload = {
-                            index: this.hexMessageFormData.index,
-                            text: this.hexMessageFormData.text,
-                            weight: this.hexMessageFormData.weight,
-                            signal_profile: this.hexMessageFormData.signal_profile || null,
-                            loop_min: this.hexMessageFormData.loop_min || null,
-                            loop_max: this.hexMessageFormData.loop_max || null,
-                            announcement: this.hexMessageFormData.announcement || null
-                        };
-                        
-                        const response = await fetch(`/api/guilds/${this.currentGuildId}/dj-config/overrides/hex-messages`, {
+                    const payload = {
+                        index: this.hexMessageFormData.index,
+                        text: this.hexMessageFormData.text,
+                        weight: this.hexMessageFormData.weight,
+                        signal_profile: this.hexMessageFormData.signal_profile || null,
+                        loop_min: this.hexMessageFormData.loop_min || null,
+                        loop_max: this.hexMessageFormData.loop_max || null,
+                        announcement: this.hexMessageFormData.announcement || null
+                    };
+
+                    await this.runDJConfigAction({
+                        label: 'saving hex message',
+                        request: () => apiRequest(`/api/guilds/${this.currentGuildId}/dj-config/overrides/hex-messages`, {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(payload),
-                        });
-                        
-                        if (!response.ok) {
-                            throw new Error('Failed to save hex message');
-                        }
-                        
-                        // Reload the config
-                        await this.loadDJConfigOverrides();
-                        this.closeHexMessageForm();
-                        
-                        this.djConfigMessage = {
-                            text: 'Hex message saved successfully!',
-                            type: 'success'
-                        };
-                        setTimeout(() => { this.djConfigMessage = { text: '', type: '' }; }, 2000);
-                    } catch (error) {
-                        console.error('Error saving hex message:', error);
-                        this.djConfigMessage = {
-                            text: 'Failed to save hex message. Please try again.',
-                            type: 'error'
-                        };
-                    } finally {
-                        this.djConfigSaving = false;
-                    }
+                            body: payload,
+                        }),
+                        onSuccess: async () => {
+                            await this.loadDJConfigOverrides();
+                            this.closeHexMessageForm();
+                        },
+                        success: 'Hex message saved successfully!',
+                        failure: 'Failed to save hex message. Please try again.',
+                    });
                 },
 
                 async deleteHexMessage(index) {
@@ -1093,35 +997,15 @@
                         return;
                     }
                     
-                    this.djConfigSaving = true;
-                    this.djConfigMessage = { text: '', type: '' };
-                    
-                    try {
-                        const response = await fetch(`/api/guilds/${this.currentGuildId}/dj-config/overrides/hex-messages/${index}`, {
+                    await this.runDJConfigAction({
+                        label: 'deleting hex message',
+                        request: () => apiRequest(`/api/guilds/${this.currentGuildId}/dj-config/overrides/hex-messages/${index}`, {
                             method: 'DELETE',
-                        });
-                        
-                        if (!response.ok) {
-                            throw new Error('Failed to delete hex message');
-                        }
-                        
-                        // Reload the config
-                        await this.loadDJConfigOverrides();
-                        
-                        this.djConfigMessage = {
-                            text: 'Hex message deleted successfully!',
-                            type: 'success'
-                        };
-                        setTimeout(() => { this.djConfigMessage = { text: '', type: '' }; }, 2000);
-                    } catch (error) {
-                        console.error('Error deleting hex message:', error);
-                        this.djConfigMessage = {
-                            text: 'Failed to delete hex message. Please try again.',
-                            type: 'error'
-                        };
-                    } finally {
-                        this.djConfigSaving = false;
-                    }
+                        }),
+                        onSuccess: () => this.loadDJConfigOverrides(),
+                        success: 'Hex message deleted successfully!',
+                        failure: 'Failed to delete hex message. Please try again.',
+                    });
                 },
 
                 openAnnouncementForm(index = null) {
@@ -1146,43 +1030,24 @@
                 },
 
                 async saveAnnouncement() {
-                    this.djConfigSaving = true;
-                    this.djConfigMessage = { text: '', type: '' };
-                    
-                    try {
-                        const payload = {
-                            index: this.announcementFormData.index,
-                            text: this.announcementFormData.text
-                        };
-                        
-                        const response = await fetch(`/api/guilds/${this.currentGuildId}/dj-config/overrides/announcements`, {
+                    const payload = {
+                        index: this.announcementFormData.index,
+                        text: this.announcementFormData.text
+                    };
+
+                    await this.runDJConfigAction({
+                        label: 'saving announcement',
+                        request: () => apiRequest(`/api/guilds/${this.currentGuildId}/dj-config/overrides/announcements`, {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(payload),
-                        });
-                        
-                        if (!response.ok) {
-                            throw new Error('Failed to save announcement');
-                        }
-                        
-                        // Reload the config
-                        await this.loadDJConfigOverrides();
-                        this.closeAnnouncementForm();
-                        
-                        this.djConfigMessage = {
-                            text: 'Announcement saved successfully!',
-                            type: 'success'
-                        };
-                        setTimeout(() => { this.djConfigMessage = { text: '', type: '' }; }, 2000);
-                    } catch (error) {
-                        console.error('Error saving announcement:', error);
-                        this.djConfigMessage = {
-                            text: 'Failed to save announcement. Please try again.',
-                            type: 'error'
-                        };
-                    } finally {
-                        this.djConfigSaving = false;
-                    }
+                            body: payload,
+                        }),
+                        onSuccess: async () => {
+                            await this.loadDJConfigOverrides();
+                            this.closeAnnouncementForm();
+                        },
+                        success: 'Announcement saved successfully!',
+                        failure: 'Failed to save announcement. Please try again.',
+                    });
                 },
 
                 async deleteAnnouncement(index) {
@@ -1190,72 +1055,32 @@
                         return;
                     }
                     
-                    this.djConfigSaving = true;
-                    this.djConfigMessage = { text: '', type: '' };
-                    
-                    try {
-                        const response = await fetch(`/api/guilds/${this.currentGuildId}/dj-config/overrides/announcements/${index}`, {
+                    await this.runDJConfigAction({
+                        label: 'deleting announcement',
+                        request: () => apiRequest(`/api/guilds/${this.currentGuildId}/dj-config/overrides/announcements/${index}`, {
                             method: 'DELETE',
-                        });
-                        
-                        if (!response.ok) {
-                            throw new Error('Failed to delete announcement');
-                        }
-                        
-                        // Reload the config
-                        await this.loadDJConfigOverrides();
-                        
-                        this.djConfigMessage = {
-                            text: 'Announcement deleted successfully!',
-                            type: 'success'
-                        };
-                        setTimeout(() => { this.djConfigMessage = { text: '', type: '' }; }, 2000);
-                    } catch (error) {
-                        console.error('Error deleting announcement:', error);
-                        this.djConfigMessage = {
-                            text: 'Failed to delete announcement. Please try again.',
-                            type: 'error'
-                        };
-                    } finally {
-                        this.djConfigSaving = false;
-                    }
+                        }),
+                        onSuccess: () => this.loadDJConfigOverrides(),
+                        success: 'Announcement deleted successfully!',
+                        failure: 'Failed to delete announcement. Please try again.',
+                    });
                 },
 
                 async saveStateWeights() {
-                    this.djConfigSaving = true;
-                    this.djConfigMessage = { text: '', type: '' };
-                    
-                    try {
-                        const response = await fetch(`/api/guilds/${this.currentGuildId}/dj-config/overrides/state-weights`, {
+                    const weights = this.djConfigData.state_weights.value;
+                    await this.runDJConfigAction({
+                        label: 'saving state weights',
+                        request: () => apiRequest(`/api/guilds/${this.currentGuildId}/dj-config/overrides/state-weights`, {
                             method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
+                            body: {
+                                track: weights.track,
+                                hex_message: weights.hex_message,
+                                noise: weights.noise,
                             },
-                            body: JSON.stringify({
-                                track: this.djConfigData.state_weights.value.track,
-                                hex_message: this.djConfigData.state_weights.value.hex_message,
-                                noise: this.djConfigData.state_weights.value.noise,
-                            }),
-                        });
-                        
-                        if (!response.ok) {
-                            throw new Error('Failed to save state weights');
-                        }
-                        
-                        this.djConfigMessage = {
-                            text: 'State weights saved successfully!',
-                            type: 'success'
-                        };
-                        setTimeout(() => { this.djConfigMessage = { text: '', type: '' }; }, 2000);
-                    } catch (error) {
-                        console.error('Error saving state weights:', error);
-                        this.djConfigMessage = {
-                            text: 'Failed to save state weights. Please try again.',
-                            type: 'error'
-                        };
-                    } finally {
-                        this.djConfigSaving = false;
-                    }
+                        }),
+                        success: 'State weights saved successfully!',
+                        failure: 'Failed to save state weights. Please try again.',
+                    });
                 },
 
                 // Channel Message Functions
@@ -1270,12 +1095,11 @@
                     this.channelMessageDescription = '';
                     
                     try {
-                        const response = await fetch('/api/registered-channels');
-                        if (!response.ok) {
-                            const statusText = response.statusText || 'Unknown error';
-                            throw new Error(`Failed to load registered channels (${response.status}: ${statusText})`);
-                        }
-                        
+                        const response = await apiRequest('/api/registered-channels', {
+                            errorMessage: 'Failed to load registered channels',
+                            includeStatus: true,
+                        });
+
                         const data = await response.json();
                         this.registeredChannels = data.channels;
                     } catch (error) {
@@ -1320,19 +1144,13 @@
                             body.description = this.channelMessageDescription;
                         }
                         
-                        const response = await fetch(`/api/registered-channels/${this.selectedChannelId}/send`, {
+                        await apiRequest(`/api/registered-channels/${this.selectedChannelId}/send`, {
                             method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify(body),
+                            body,
+                            errorMessage: 'Failed to send message',
+                            includeStatus: true,
                         });
-                        
-                        if (!response.ok) {
-                            const statusText = response.statusText || 'Unknown error';
-                            throw new Error(`Failed to send message (${response.status}: ${statusText})`);
-                        }
-                        
+
                         this.channelMessageSuccess = 'Message sent successfully!';
                         
                         // Clear form fields after successful send
