@@ -1,6 +1,10 @@
-use crate::bucket::cache::DirListing;
-use crate::bucket::{ObjectStore, ObjectStoreError};
-use std::sync::Arc;
+use crate::bucket::Bucket;
+use anyhow::Context;
+
+/// Marks a failure as caused by no object storage bucket being configured.
+#[derive(Debug, thiserror::Error)]
+#[error("object storage is not configured")]
+pub struct NoBucket;
 
 /// Resolves a playlist entry's `filename` to a local filesystem path.
 ///
@@ -10,21 +14,29 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct FileResolver {
     content_path: String,
-    file_cache: Arc<ObjectStore>,
+    bucket: Option<Bucket>,
 }
 
 impl FileResolver {
-    pub fn new(content_path: String, file_cache: Arc<ObjectStore>) -> Self {
+    pub fn new(content_path: String, bucket: Option<Bucket>) -> Self {
         Self {
             content_path,
-            file_cache,
+            bucket,
         }
     }
 
-    pub async fn resolve(&self, filename: &str) -> Result<String, ObjectStoreError> {
+    pub fn content_path(&self) -> &str {
+        &self.content_path
+    }
+
+    pub fn bucket(&self) -> anyhow::Result<&Bucket> {
+        self.bucket.as_ref().ok_or_else(|| NoBucket.into())
+    }
+
+    pub async fn resolve(&self, filename: &str) -> anyhow::Result<String> {
         if let Some(key) = filename.strip_prefix("s3://") {
             Ok(self
-                .file_cache
+                .bucket()?
                 .ensure_cached(key)
                 .await?
                 .to_string_lossy()
@@ -34,43 +46,54 @@ impl FileResolver {
         }
     }
 
-    pub async fn resolve_contents(&self, filename: &str) -> Result<Vec<u8>, ObjectStoreError> {
-        if let Some(key) = filename.strip_prefix("s3://") {
-            self.file_cache.fetch_bytes(key).await
-        } else {
-            tokio::fs::read(format!("{}/{filename}", self.content_path))
-                .await
-                .map_err(|e| ObjectStoreError::Local(Arc::new(e)))
+    /// Filenames starting with `prefix`, from the content path and from object
+    /// storage when configured. Local directories end in `/`; object storage
+    /// keys carry the `s3://` prefix and cover every key under `prefix`.
+    pub async fn list(&self, prefix: &str) -> Vec<String> {
+        let (dir_part, name_part) = match prefix.rfind('/') {
+            Some(pos) => prefix.split_at(pos + 1),
+            None => ("", prefix),
+        };
+
+        let mut filenames = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(format!("{}/{dir_part}", self.content_path)) {
+            for entry in entries.flatten() {
+                let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
+                    continue;
+                };
+                if !name.starts_with(name_part) {
+                    continue;
+                }
+                if entry.path().is_dir() {
+                    filenames.push(format!("{dir_part}{name}/"));
+                } else {
+                    filenames.push(format!("{dir_part}{name}"));
+                }
+            }
         }
+
+        if let Ok(bucket) = self.bucket() {
+            let key_prefix = prefix.strip_prefix("s3://").unwrap_or(prefix);
+            filenames.extend(
+                bucket
+                    .list_remote(key_prefix)
+                    .await
+                    .into_iter()
+                    .map(|key| format!("s3://{key}")),
+            );
+        }
+        filenames
     }
 
-    /// Empty when no bucket is configured or the listing request fails.
-    pub async fn list_remote(&self, prefix: &str) -> Vec<String> {
-        self.file_cache.list_remote(prefix).await
-    }
-
-    pub async fn list_dir(&self, prefix: &str) -> Result<DirListing, ObjectStoreError> {
-        self.file_cache.list_dir(prefix).await
-    }
-
-    pub async fn upload(
-        &self,
-        key: &str,
-        bytes: &[u8],
-        content_type: &str,
-    ) -> Result<(), ObjectStoreError> {
-        self.file_cache.upload(key, bytes, content_type).await
-    }
-
-    /// Lists files (as s3:// URIs) whose key matches `partial` under `prefix`.
-    pub async fn list_content(&self, prefix: &str, partial: &str) -> Vec<String> {
-        let partial = partial.strip_prefix("s3://").unwrap_or(partial);
-        let partial = partial.strip_prefix(prefix).unwrap_or(partial);
-        self.list_remote(&format!("{prefix}{partial}"))
-            .await
-            .into_iter()
-            .map(|key| format!("s3://{key}"))
-            .collect()
+    pub async fn resolve_contents(&self, filename: &str) -> anyhow::Result<Vec<u8>> {
+        if let Some(key) = filename.strip_prefix("s3://") {
+            self.bucket()?.fetch_bytes(key).await
+        } else {
+            let path = format!("{}/{filename}", self.content_path);
+            tokio::fs::read(&path)
+                .await
+                .with_context(|| format!("reading {path}"))
+        }
     }
 }
 

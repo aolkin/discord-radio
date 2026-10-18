@@ -1,8 +1,7 @@
 use super::*;
-use crate::bucket::{FileResolver, ObjectStore};
+use crate::bucket::FileResolver;
 use crate::persistence::DjSettings;
 use std::path::Path;
-use std::sync::Arc;
 
 fn local_file_config() -> DJConfig {
     DJConfig {
@@ -46,13 +45,8 @@ fn local_file_config() -> DJConfig {
     }
 }
 
-async fn resolver(content_path: &Path) -> FileResolver {
-    let file_cache = Arc::new(
-        ObjectStore::new(content_path.to_path_buf(), None, None)
-            .await
-            .unwrap(),
-    );
-    FileResolver::new(content_path.to_string_lossy().to_string(), file_cache)
+fn resolver(content_path: &Path) -> FileResolver {
+    FileResolver::new(content_path.to_string_lossy().to_string(), None)
 }
 
 #[tokio::test]
@@ -74,7 +68,7 @@ async fn slots_replace_the_local_file_values_whether_set_or_cleared() {
                 "channel_status":"from the slot"}"#,
     )
     .unwrap();
-    let resolver = resolver(dir.path()).await;
+    let resolver = resolver(dir.path());
 
     let mut config = local_file_config();
     config
