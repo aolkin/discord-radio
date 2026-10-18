@@ -339,6 +339,25 @@ h1 {
     border-color: var(--color-primary);
 }
 
+.form-label .form-input {
+    margin-top: 5px;
+    font-weight: normal;
+}
+
+.list-row {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    margin-bottom: 15px;
+    border: 2px solid var(--color-divider);
+    border-radius: 6px;
+}
+
+.list-row > .btn {
+    align-self: flex-start;
+}
+
 .form-row {
     display: grid;
     grid-template-columns: 1fr 1fr;

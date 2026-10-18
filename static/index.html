@@ -65,6 +65,22 @@
             </div>
 
             <div class="card">
+                <h2 class="card-title">DJ Configs</h2>
+                <div class="chip-list">
+                    <template x-for="config in djConfigs" :key="config">
+                        <button
+                            type="button"
+                            class="btn btn-secondary"
+                            @click="openDjConfigEditor(config)"
+                            x-text="config"
+                        ></button>
+                    </template>
+                    <div class="empty-state" x-show="djConfigs.length === 0">No DJ configs</div>
+                </div>
+                <button type="button" class="btn btn-primary" @click="openDjConfigEditor(null)">+ New DJ Config</button>
+            </div>
+
+            <div class="card">
                 <h2 class="card-title">Audio Files</h2>
                 <button type="button" class="btn btn-primary" @click="openFileBrowser()">Browse Audio Files</button>
             </div>
@@ -731,6 +747,167 @@
                     >
                 </div>
             </div>
+        </template>
+
+        <template
+            x-modal
+            data-modal="djConfigEditor"
+            data-title-expression="djConfigEditorIsNew ? 'New DJ Config' : 'Edit DJ Config'"
+            data-message="djConfigEditorMessage"
+            data-loading="djConfigEditorLoading"
+            data-submit="saveDjConfig()"
+            data-saving="djConfigEditorSaving"
+            data-submit-label="Save DJ Config"
+            data-busy-label="Saving..."
+            data-cancel-label="Close"
+        >
+            <datalist id="dj-config-profile-options">
+                <template x-for="profile in profiles" :key="profile">
+                    <option :value="profile"></option>
+                </template>
+            </datalist>
+            <div class="modal-section">
+                <div class="form-group">
+                    <label class="form-label" for="dj-config-editor-name">Name</label>
+                    <input
+                        id="dj-config-editor-name"
+                        type="text"
+                        class="form-input"
+                        x-model="djConfigForm.name"
+                        :readonly="!djConfigEditorIsNew"
+                        required
+                        pattern="[A-Za-z0-9_\-]+"
+                        title="Letters, digits, - and _ only"
+                    >
+                </div>
+            </div>
+
+            <template x-for="group in djConfigScalarGroups" :key="group.title">
+                <div class="modal-section">
+                    <div class="modal-section-title" x-text="group.title"></div>
+                    <div class="form-row">
+                        <template x-for="field in group.fields" :key="field.key">
+                            <div class="form-group">
+                                <!-- biome-ignore lint/a11y/noLabelWithoutControl: the input is rendered by a template inside the label -->
+                                <label class="form-label">
+                                    <span x-text="field.label"></span>
+                                    <template x-if="field.type === 'number'">
+                                        <input
+                                            type="number"
+                                            class="form-input"
+                                            x-model.number="djConfigGroupValues(group)[field.key]"
+                                            :step="field.step"
+                                            :min="field.min"
+                                            :required="!field.optional"
+                                        >
+                                    </template>
+                                    <template x-if="field.type === 'text'">
+                                        <input
+                                            type="text"
+                                            class="form-input"
+                                            x-model="djConfigGroupValues(group)[field.key]"
+                                            :list="field.profile ? 'dj-config-profile-options' : null"
+                                            :required="!field.optional"
+                                            :placeholder="field.optional ? 'Optional' : ''"
+                                        >
+                                    </template>
+                                </label>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </template>
+
+            <div class="modal-section">
+                <div class="modal-section-title">Hex Message Announcements</div>
+                <template x-for="(announcement, index) in djConfigForm.hex_message_announcements" :key="index">
+                    <div class="list-row">
+                        <input
+                            type="text"
+                            class="form-input"
+                            aria-label="Announcement"
+                            x-model="djConfigForm.hex_message_announcements[index]"
+                            required
+                        >
+                        <button
+                            type="button"
+                            class="btn btn-secondary"
+                            @click="djConfigForm.hex_message_announcements.splice(index, 1)"
+                        >
+                            Remove
+                        </button>
+                    </div>
+                </template>
+                <div class="empty-state" x-show="djConfigForm.hex_message_announcements.length === 0">
+                    No announcements
+                </div>
+                <button
+                    type="button"
+                    class="btn btn-secondary"
+                    @click="djConfigForm.hex_message_announcements.push('')"
+                >
+                    + Add Announcement
+                </button>
+            </div>
+
+            <template x-for="list in djConfigLists" :key="list.key">
+                <div class="modal-section">
+                    <div class="modal-section-title" x-text="list.title"></div>
+                    <template x-for="(row, index) in djConfigForm[list.key]" :key="index">
+                        <div class="list-row">
+                            <div class="form-row">
+                                <template x-for="field in list.fields" :key="field.key">
+                                    <div class="form-group">
+                                        <label class="form-label">
+                                            <span x-text="field.label"></span>
+                                            <template x-if="field.type === 'number'">
+                                                <input
+                                                    type="number"
+                                                    class="form-input"
+                                                    x-model.number="row[field.key]"
+                                                    :step="field.step"
+                                                    :min="field.min"
+                                                    :max="field.max"
+                                                    :required="!field.optional"
+                                                    :placeholder="field.optional ? 'Optional' : ''"
+                                                >
+                                            </template>
+                                            <template x-if="field.type === 'text'">
+                                                <input
+                                                    type="text"
+                                                    class="form-input"
+                                                    x-model="row[field.key]"
+                                                    :list="field.profile ? 'dj-config-profile-options' : null"
+                                                    :required="!field.optional"
+                                                    :placeholder="field.optional ? 'Optional' : ''"
+                                                >
+                                            </template>
+                                            <template x-if="field.type === 'bool'">
+                                                <select class="form-input" x-model="row[field.key]">
+                                                    <option value="">Default</option>
+                                                    <option value="true">Yes</option>
+                                                    <option value="false">No</option>
+                                                </select>
+                                            </template>
+                                        </label>
+                                    </div>
+                                </template>
+                            </div>
+                            <button
+                                type="button"
+                                class="btn btn-secondary"
+                                @click="djConfigForm[list.key].splice(index, 1)"
+                            >
+                                Remove
+                            </button>
+                        </div>
+                    </template>
+                    <div class="empty-state" x-show="djConfigForm[list.key].length === 0">No entries</div>
+                    <button type="button" class="btn btn-secondary" @click="addDjConfigRow(list)">
+                        + Add <span x-text="list.itemLabel"></span>
+                    </button>
+                </div>
+            </template>
         </template>
 
         <template
