@@ -43,7 +43,10 @@ export function channels() {
                 this.registeredChannels = data.channels;
             } catch (error) {
                 console.error('Error loading registered channels:', error);
-                this.channelMessage = { type: 'error', text: error.message || 'Failed to load registered channels. Please try again.' };
+                this.channelMessage = {
+                    type: 'error',
+                    text: error.message || 'Failed to load registered channels. Please try again.',
+                };
             } finally {
                 this.channelsLoading = false;
             }
@@ -52,14 +55,17 @@ export function channels() {
         async sendChannelMessage() {
             this.channelMessageSaving = true;
             this.channelMessage = emptyMessage();
-            
+
             try {
                 // Validate at least one field is filled
                 if (!this.channelMessageText && !this.channelMessageTitle && !this.channelMessageDescription) {
-                    this.channelMessage = { type: 'error', text: 'Please provide at least a message, title, or description.' };
+                    this.channelMessage = {
+                        type: 'error',
+                        text: 'Please provide at least a message, title, or description.',
+                    };
                     return;
                 }
-                
+
                 const body = {};
                 if (this.channelMessageText) {
                     body.message = this.channelMessageText;
@@ -70,7 +76,7 @@ export function channels() {
                 if (this.channelMessageDescription) {
                     body.description = this.channelMessageDescription;
                 }
-                
+
                 await apiRequest(`/api/registered-channels/${this.selectedChannelId}/send`, {
                     method: 'POST',
                     body,
@@ -79,21 +85,24 @@ export function channels() {
                 });
 
                 this.channelMessage = { type: 'success', text: 'Message sent successfully!' };
-                
+
                 // Clear form fields after successful send
                 this.channelMessageText = '';
                 this.channelMessageTitle = '';
                 this.channelMessageDescription = '';
-                
+
                 setTimeout(() => {
                     if (this.channelMessage.type === 'success') this.channelMessage = emptyMessage();
                 }, 3000);
             } catch (error) {
                 console.error('Error sending message:', error);
-                this.channelMessage = { type: 'error', text: error.message || 'Failed to send message. Please try again.' };
+                this.channelMessage = {
+                    type: 'error',
+                    text: error.message || 'Failed to send message. Please try again.',
+                };
             } finally {
                 this.channelMessageSaving = false;
             }
-        }
+        },
     };
 }

@@ -45,14 +45,21 @@ document.addEventListener('alpine:init', () => {
         };
 
         const escapeHandler = config.escapeUnless ? `!(${config.escapeUnless}) && ${close}` : close;
-        const overlay = element('div', {
-            'x-show': flag,
-            'x-transition.opacity': '',
-            'x-on:click.self': close,
-            'x-on:keydown.escape.window': escapeHandler,
-        }, `modal-overlay ${config.overlayClass || ''}`.trim());
-        const content = element('div', { 'x-show': flag, 'x-transition': '' },
-            config.wide !== undefined ? 'modal-content modal-wide' : 'modal-content');
+        const overlay = element(
+            'div',
+            {
+                'x-show': flag,
+                'x-transition.opacity': '',
+                'x-on:click.self': close,
+                'x-on:keydown.escape.window': escapeHandler,
+            },
+            `modal-overlay ${config.overlayClass || ''}`.trim(),
+        );
+        const content = element(
+            'div',
+            { 'x-show': flag, 'x-transition': '' },
+            config.wide !== undefined ? 'modal-content modal-wide' : 'modal-content',
+        );
         overlay.append(content);
 
         const header = element('div', {}, 'modal-header');
@@ -68,11 +75,13 @@ document.addEventListener('alpine:init', () => {
 
         const body = element('div', {}, 'modal-body');
         if (config.message) {
-            body.append(element('div', {
-                'x-show': `${config.message}.text`,
-                ':class': `${config.message}.type === 'error' ? 'error-message' : 'success-message'`,
-                'x-text': `${config.message}.text`,
-            }));
+            body.append(
+                element('div', {
+                    'x-show': `${config.message}.text`,
+                    ':class': `${config.message}.type === 'error' ? 'error-message' : 'success-message'`,
+                    'x-text': `${config.message}.text`,
+                }),
+            );
         }
         content.append(header, body);
 
@@ -88,9 +97,11 @@ document.addEventListener('alpine:init', () => {
             cancel.textContent = config.cancelLabel || 'Cancel';
             const disabled = config.disabledWhen ? `${config.saving} || (${config.disabledWhen})` : config.saving;
             const submit = element('button', { type: 'submit', ':disabled': disabled }, 'btn btn-primary');
-            submit.append(element('span', {
-                'x-text': `${config.saving} ? ${JSON.stringify(config.busyLabel)} : ${JSON.stringify(config.submitLabel)}`,
-            }));
+            submit.append(
+                element('span', {
+                    'x-text': `${config.saving} ? ${JSON.stringify(config.busyLabel)} : ${JSON.stringify(config.submitLabel)}`,
+                }),
+            );
             const buttons = element('div', {}, 'button-group');
             buttons.append(cancel, submit);
             form.append(template.content.cloneNode(true), buttons);

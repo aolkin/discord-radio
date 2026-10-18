@@ -31,3 +31,20 @@ jobs:
 
       - name: Run tests
         run: cargo test
+
+  frontend:
+    name: Check Frontend Code
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Biome
+        uses: biomejs/setup-biome@v2
+        with:
+          version: 2.5.15
+
+      - name: Lint and check formatting
+        run: biome ci static

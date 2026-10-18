@@ -20,10 +20,10 @@ export function activity() {
 
         getActivityIcon(activityType) {
             const icons = {
-                'playing': '🎮',
-                'listening': '🎵',
-                'streaming': '📡',
-                'custom': '✨'
+                playing: '🎮',
+                listening: '🎵',
+                streaming: '📡',
+                custom: '✨',
             };
             return icons[activityType?.toLowerCase()] || '✨';
         },
@@ -34,13 +34,14 @@ export function activity() {
                 saving: 'activitySaving',
                 message: 'activityMessage',
                 label: 'performing activity action',
-                request: () => apiRequest(endpoint, {
-                    method: 'POST',
-                    body: {
-                        activity_type: activityType,
-                        status: status,
-                    },
-                }),
+                request: () =>
+                    apiRequest(endpoint, {
+                        method: 'POST',
+                        body: {
+                            activity_type: activityType,
+                            status: status,
+                        },
+                    }),
                 onSuccess: () => {
                     if (statusField) {
                         this[statusField] = '';
@@ -48,7 +49,9 @@ export function activity() {
                 },
                 success: successMessage,
                 failure: 'Failed to perform action. Please try again.',
-                afterFn: () => { this.activityMessage = { text: '', type: '' }; },
+                afterFn: () => {
+                    this.activityMessage = { text: '', type: '' };
+                },
                 afterMs: 2000,
             });
         },
@@ -59,7 +62,7 @@ export function activity() {
                 this.newActivityType,
                 this.newActivityStatus,
                 'Activity set successfully!',
-                'newActivityStatus'
+                'newActivityStatus',
             );
         },
     };

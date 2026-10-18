@@ -26,8 +26,20 @@ export function fileBrowser() {
         fileBrowserOnSelect: null,
         nextUploadId: 0,
         fileKinds: {
-            tracks: { noun: 'Audio File', extensions: '.mp3, .ogg and .wav', hint: '.mp3, .ogg, .wav at 48kHz', accept: '.mp3,.ogg,.wav', pattern: /\.(mp3|ogg|wav)$/i },
-            images: { noun: 'Image', extensions: '.png, .jpg and .gif', hint: '.png, .jpg, .gif', accept: '.png,.jpg,.jpeg,.gif', pattern: /\.(png|jpe?g|gif)$/i },
+            tracks: {
+                noun: 'Audio File',
+                extensions: '.mp3, .ogg and .wav',
+                hint: '.mp3, .ogg, .wav at 48kHz',
+                accept: '.mp3,.ogg,.wav',
+                pattern: /\.(mp3|ogg|wav)$/i,
+            },
+            images: {
+                noun: 'Image',
+                extensions: '.png, .jpg and .gif',
+                hint: '.png, .jpg, .gif',
+                accept: '.png,.jpg,.jpeg,.gif',
+                pattern: /\.(png|jpe?g|gif)$/i,
+            },
         },
 
         // mode is 'browse' (no selection), 'file' or 'folder'. A picking
@@ -103,7 +115,11 @@ export function fileBrowser() {
             let uploaded = false;
             for (const file of Array.from(fileList)) {
                 this.fileBrowser.uploads.push({
-                    id: this.nextUploadId++, name: file.name, progress: 0, status: 'uploading', detail: '',
+                    id: this.nextUploadId++,
+                    name: file.name,
+                    progress: 0,
+                    status: 'uploading',
+                    detail: '',
                 });
                 const upload = this.fileBrowser.uploads.at(-1);
                 if (!kind.pattern.test(file.name)) {
@@ -112,7 +128,9 @@ export function fileBrowser() {
                     continue;
                 }
                 try {
-                    upload.detail = await this.sendFile(file, prefix, (percent) => { upload.progress = percent; });
+                    upload.detail = await this.sendFile(file, prefix, (percent) => {
+                        upload.progress = percent;
+                    });
                     upload.status = 'done';
                     uploaded = true;
                 } catch (error) {
