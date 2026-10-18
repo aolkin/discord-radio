@@ -115,6 +115,7 @@
                             <div class="section-title">Live Audio Stream</div>
                             <div class="info-item">
                                 <div class="grow">
+                                    <!-- biome-ignore lint/a11y/useMediaCaption: live stream, no caption track exists -->
                                     <audio class="w-full mt-8"
                                         :src="'/api/guilds/' + guild.guild_id + '/audio-stream'"
                                         controls
@@ -185,9 +186,11 @@
                     <div class="section">
                         <div class="section-title">Activity Logs</div>
                         <div class="row-gap-10">
+                            <!-- biome-ignore lint/a11y/useValidAnchor: the href is set by :href -->
                             <a :href="'/logs.html?guild=' + guild.guild_id + '&type=members'" target="_blank" class="btn btn-secondary btn-link">
                                 👥 Member Activity
                             </a>
+                            <!-- biome-ignore lint/a11y/useValidAnchor: the href is set by :href -->
                             <a :href="'/logs.html?guild=' + guild.guild_id + '&type=dj'" target="_blank" class="btn btn-secondary btn-link">
                                 🎧 DJ Activity
                             </a>
@@ -366,6 +369,7 @@
                 <!-- biome-ignore lint/a11y/noLabelWithoutControl: labels an image and a button, not a single control -->
                 <label class="form-label" x-text="field === 'avatar' ? 'Avatar' : 'Banner'"></label>
                 <div class="track-details" x-show="!botProfileCurrent[field + '_url']">Not set for this server</div>
+                <!-- biome-ignore lint/a11y/useAltText: an alt attribute changes how a failed image renders -->
                 <img :src="botProfileCurrent[field + '_url']" x-show="botProfileCurrent[field + '_url']"
                      :class="field === 'avatar' ? 'bot-profile-avatar' : 'bot-profile-banner'">
                 <div class="row-center-8 mt-8">

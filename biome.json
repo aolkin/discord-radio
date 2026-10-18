@@ -4,6 +4,7 @@
     "includes": [
       "static/**/*.js",
       "static/**/*.css",
+      "static/**/*.html",
       "!static/alpine.min.js"
     ]
   },
