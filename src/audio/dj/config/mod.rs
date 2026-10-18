@@ -187,9 +187,8 @@ pub struct PlaybackSettings {
 impl Default for PlaybackSettings {
     fn default() -> Self {
         Self {
-            recent_history_size: 0,
-            // `WeightedSelector` applies no repetition penalty at 0.0.
-            duplicate_penalty_multiplier: 0.0,
+            recent_history_size: 12,
+            duplicate_penalty_multiplier: 0.5,
         }
     }
 }
