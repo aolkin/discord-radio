@@ -50,7 +50,7 @@ export function botProfile() {
                 mode: 'file',
                 prefix: 'images/',
                 onSelect: (key) => {
-                    this.botProfileForm[field] = 's3://' + key;
+                    this.botProfileForm[field] = `s3://${key}`;
                 },
             });
         },

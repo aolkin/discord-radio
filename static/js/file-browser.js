@@ -67,7 +67,7 @@ export function fileBrowser() {
             const names = this.fileBrowser.prefix.split('/').filter(Boolean);
             return names.map((name, index) => ({
                 name,
-                prefix: names.slice(0, index + 1).join('/') + '/',
+                prefix: `${names.slice(0, index + 1).join('/')}/`,
             }));
         },
 
@@ -179,7 +179,7 @@ export function fileBrowser() {
 
         formatDate(value) {
             const date = new Date(value);
-            return isNaN(date) ? value : date.toLocaleString();
+            return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
         },
     };
 }

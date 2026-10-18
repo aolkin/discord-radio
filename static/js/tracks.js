@@ -65,20 +65,20 @@ export function tracks() {
                 this.currentTime -
                 (track.start_time.secs_since_epoch * 1000 + track.start_time.nanos_since_epoch / 1000000);
             const elapsedSecs = Math.max(0, Math.min(elapsedMs / 1000, track.duration_secs));
-            return this.formatTime(elapsedSecs) + ' / ' + this.formatTime(track.duration_secs);
+            return `${this.formatTime(elapsedSecs)} / ${this.formatTime(track.duration_secs)}`;
         },
 
         formatTime(seconds) {
             const mins = Math.floor(seconds / 60);
             const secs = Math.floor(seconds % 60);
-            return mins + ':' + secs.toString().padStart(2, '0');
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
         },
 
         async loadAudioFiles() {
             try {
                 const response = await apiRequest('/api/files?prefix=tracks/');
                 const data = await response.json();
-                this.audioFiles = data.files.map((file) => 's3://' + file.key);
+                this.audioFiles = data.files.map((file) => `s3://${file.key}`);
             } catch (error) {
                 console.error('Failed to load audio files:', error);
             }
