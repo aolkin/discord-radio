@@ -1,4 +1,4 @@
-use crate::audio::connection::setup_voice_connection;
+use crate::audio::connection::connect_voice_channel;
 use crate::audio::dj::manager::{
     DJCommand, DJStateType, restart_dj_with_config, start_dj, stop_dj,
 };
@@ -494,9 +494,8 @@ async fn join_voice_channel_helper(
         .expect("Songbird Voice client placed in at initialisation.")
         .clone();
 
-    let handle_lock = manager.join(guild_id, channel_id).await?;
+    let processor = connect_voice_channel(&manager, guild_id, channel_id, ctx.data()).await?;
     tracing::info!("Joined voice channel");
-    let processor = setup_voice_connection(handle_lock.clone(), guild_id, ctx.data()).await;
     start_dj(ctx.data(), guild_id)
         .await
         .map_err(|e| e.context("Failed to start DJ"))?;
