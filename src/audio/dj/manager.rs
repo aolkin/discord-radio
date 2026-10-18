@@ -98,18 +98,28 @@ impl DJManager {
 
     pub async fn start(
         guild_id: GuildId,
+        config_name: String,
         config: Arc<DJConfig>,
-        saved: Option<crate::persistence::DJState>,
+        announcement_channel: Option<ChannelId>,
+        restored_state: Option<DJState>,
         bot_state: Data,
     ) -> Self {
         let (command_tx, command_rx) = mpsc::channel(10);
         let state = Arc::new(RwLock::new(DJState::default()));
         let task_state = state.clone();
         let task_handle = tokio::spawn(async move {
-            DJStateMachine::new(config, guild_id, saved, task_state, bot_state)
-                .await
-                .run(command_rx)
-                .await;
+            DJStateMachine::new(
+                guild_id,
+                config_name,
+                config,
+                announcement_channel,
+                restored_state,
+                task_state,
+                bot_state,
+            )
+            .await
+            .run(command_rx)
+            .await;
         });
 
         Self {
@@ -150,17 +160,13 @@ impl DJManager {
     }
 }
 
-pub fn load_dj_config(
-    bot_state: &Data,
-    config_name: Option<&str>,
-) -> anyhow::Result<Arc<DJConfig>> {
-    match config_name {
-        Some(name) => bot_state
-            .dj_config_manager
-            .get(name)
-            .with_context(|| format!("no DJ config {name:?}")),
-        None => Ok(Arc::default()),
-    }
+pub const DEFAULT_DJ_CONFIG: &str = "default";
+
+pub fn load_dj_config(bot_state: &Data, name: &str) -> anyhow::Result<Arc<DJConfig>> {
+    bot_state
+        .dj_config_manager
+        .get(name)
+        .with_context(|| format!("no DJ config {name:?}"))
 }
 
 /// Starts the guild's DJ if it is not running, resuming its saved state when
@@ -178,14 +184,30 @@ pub async fn start_dj(bot_state: Data, guild_id: GuildId) -> anyhow::Result<()> 
         .context("loading saved DJ state")?
         .remove(&guild_id);
 
-    let config_name = saved.as_ref().and_then(|s| s.config_name.as_deref());
-    let config = load_dj_config(&bot_state, config_name).unwrap_or_else(|e| {
+    let (config_name, announcement_channel, restored_state) = match saved {
+        Some(saved) => (
+            saved.config_name,
+            saved.announcement_channel_id.map(ChannelId::new),
+            saved.state_machine,
+        ),
+        None => (None, None, None),
+    };
+    let config_name = config_name.unwrap_or_else(|| DEFAULT_DJ_CONFIG.to_string());
+    let config = load_dj_config(&bot_state, &config_name).unwrap_or_else(|e| {
         tracing::warn!("Starting DJ with an empty config in guild {guild_id}: {e:#}");
         Arc::default()
     });
 
     tracing::info!("Starting DJ for guild {}", guild_id);
-    let manager = DJManager::start(guild_id, config, saved, bot_state).await;
+    let manager = DJManager::start(
+        guild_id,
+        config_name,
+        config,
+        announcement_channel,
+        restored_state,
+        bot_state,
+    )
+    .await;
     dj_managers.insert(guild_id, Arc::new(Mutex::new(manager)));
     Ok(())
 }
@@ -197,7 +219,7 @@ pub async fn restart_dj_with_config(
     guild_id: GuildId,
     config_name: String,
 ) -> anyhow::Result<()> {
-    let config = load_dj_config(&bot_state, Some(&config_name))?;
+    let config = load_dj_config(&bot_state, &config_name)?;
 
     let mut dj_managers = bot_state.dj_managers.write().await;
     let Some(manager) = dj_managers.remove(&guild_id) else {
@@ -214,13 +236,16 @@ pub async fn restart_dj_with_config(
 
     manager.lock().await.stop(&bot_state).await;
 
-    let saved = crate::persistence::DJState {
-        config_name: Some(config_name),
-        announcement_channel_id,
-        state_machine: None,
-    };
     tracing::info!("Restarting DJ for guild {}", guild_id);
-    let manager = DJManager::start(guild_id, config, Some(saved), bot_state).await;
+    let manager = DJManager::start(
+        guild_id,
+        config_name,
+        config,
+        announcement_channel_id.map(ChannelId::new),
+        None,
+        bot_state,
+    )
+    .await;
     dj_managers.insert(guild_id, Arc::new(Mutex::new(manager)));
     Ok(())
 }

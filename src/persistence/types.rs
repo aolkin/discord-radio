@@ -39,7 +39,7 @@ pub struct DJState {
 
 #[derive(Serialize, Debug)]
 pub struct DJStateSnapshot<'a> {
-    pub config_name: Option<&'a str>,
+    pub config_name: &'a str,
     pub announcement_channel_id: Option<u64>,
     pub state_machine: &'a crate::audio::dj::state_machine::DJState,
 }

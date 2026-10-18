@@ -77,7 +77,7 @@ The Signal Profiles panel lists every profile by name. Saving a new or edited pr
 
 ### DJ Configs
 
-The bot loads DJ configs from the `DJ_CONFIGS_PATH` directory (default `dj_configs/`; the value must end with a slash), under both the content root and the object storage bucket root. A config in object storage replaces a local config of the same name. Saving a config through the API writes it to object storage; a running DJ using that config switches to the saved copy the next time it advances to a new segment.
+The bot loads DJ configs from the `DJ_CONFIGS_PATH` directory (default `dj_configs/`; the value must end with a slash), under both the content root and the object storage bucket root. A config in object storage replaces a local config of the same name. A DJ uses the config named `default` until one is chosen with `/dj configure`. Saving a config through the API writes it to object storage; a running DJ using that config switches to the saved copy the next time it advances to a new segment.
 
 ### Audio File Browser
 

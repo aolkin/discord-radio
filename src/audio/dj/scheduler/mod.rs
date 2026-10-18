@@ -113,10 +113,6 @@ impl WeightedScheduler {
         }
         DJStateType::Noise
     }
-
-    pub fn config(&self) -> &Arc<DJConfig> {
-        &self.config
-    }
 }
 
 static DEFAULT_NOISE_PERIOD: LazyLock<NoisePeriodEntry> = LazyLock::new(|| NoisePeriodEntry {
