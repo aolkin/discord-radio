@@ -378,13 +378,14 @@ impl DJStateMachine {
             self.apply_channel_status(String::new()).await;
         }
 
-        if let Err(e) = crate::logging::log_dj_activity(
-            bot_state.state_store.base_path(),
-            self.guild_id.get(),
-            "stopped".to_string(),
-            serde_json::json!({}),
-        )
-        .await
+        if let Err(e) = bot_state
+            .state_store
+            .log_dj_activity(
+                self.guild_id.get(),
+                "stopped".to_string(),
+                serde_json::json!({}),
+            )
+            .await
         {
             tracing::error!("{e:#}");
         }
@@ -595,14 +596,11 @@ impl DJStateMachine {
         // across unrelated file I/O.
         drop(state);
 
-        crate::logging::log_dj_activity(
-            bot_state.state_store.base_path(),
-            self.guild_id.get(),
-            event_type,
-            details,
-        )
-        .await
-        .inspect_err(|e| tracing::error!("{e:#}"))
-        .is_ok()
+        bot_state
+            .state_store
+            .log_dj_activity(self.guild_id.get(), event_type, details)
+            .await
+            .inspect_err(|e| tracing::error!("{e:#}"))
+            .is_ok()
     }
 }
