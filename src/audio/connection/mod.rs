@@ -23,22 +23,14 @@ pub async fn connect_voice_channel(
         let mut call = handle_lock.lock().await;
         let event_handler = crate::handlers::voice::ConnectionEventHandler { data: bot_state };
 
-        call.add_global_event(
-            songbird::Event::Core(songbird::events::CoreEvent::DriverConnect),
-            event_handler.clone(),
-        );
-        call.add_global_event(
-            songbird::Event::Core(songbird::events::CoreEvent::DriverDisconnect),
-            event_handler.clone(),
-        );
-        call.add_global_event(
-            songbird::Event::Core(songbird::events::CoreEvent::DriverReconnect),
-            event_handler.clone(),
-        );
-        call.add_global_event(
-            songbird::Event::Core(songbird::events::CoreEvent::ClientDisconnect),
-            event_handler,
-        );
+        for event in [
+            songbird::events::CoreEvent::DriverConnect,
+            songbird::events::CoreEvent::DriverDisconnect,
+            songbird::events::CoreEvent::DriverReconnect,
+            songbird::events::CoreEvent::ClientDisconnect,
+        ] {
+            call.add_global_event(songbird::Event::Core(event), event_handler.clone());
+        }
 
         drop(call);
 
