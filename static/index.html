@@ -28,7 +28,7 @@
                         <div class="activity-status" x-text="currentActivity.status || 'Not set'"></div>
                     </div>
                 </div>
-                <button class="btn btn-primary btn-md" @click="openModal('activity')">
+                <button type="button" class="btn btn-primary btn-md" @click="openModal('activity')">
                     Manage Activity
                 </button>
                 <div class="status-indicator">
@@ -41,7 +41,7 @@
         <!-- Registered Channels Section -->
         <div class="card">
             <h2 class="card-title">Registered Channels</h2>
-            <button class="send-message-button" @click="openChannelMessageModal()">
+            <button type="button" class="send-message-button" @click="openChannelMessageModal()">
                 📤 Send Message to Registered Channel
             </button>
         </div>
@@ -50,16 +50,16 @@
             <h2 class="card-title">Signal Profiles</h2>
             <div class="chip-list">
                 <template x-for="profile in profiles" :key="profile">
-                    <button class="btn btn-secondary" @click="openProfileEditor(profile)" x-text="profile"></button>
+                    <button type="button" class="btn btn-secondary" @click="openProfileEditor(profile)" x-text="profile"></button>
                 </template>
                 <div class="empty-state" x-show="profiles.length === 0">No signal profiles</div>
             </div>
-            <button class="btn btn-primary" @click="openProfileEditor(null)">+ New Signal Profile</button>
+            <button type="button" class="btn btn-primary" @click="openProfileEditor(null)">+ New Signal Profile</button>
         </div>
 
         <div class="card">
             <h2 class="card-title">Audio Files</h2>
-            <button class="btn btn-primary" @click="openFileBrowser()">Browse Audio Files</button>
+            <button type="button" class="btn btn-primary" @click="openFileBrowser()">Browse Audio Files</button>
         </div>
 
         <div class="guilds-grid" x-show="guilds.length > 0">
@@ -80,13 +80,13 @@
                                 <div class="dj-details" x-text="guild.dj_state.details"></div>
                             </div>
                             <div class="button-group mt-12">
-                                <button class="btn btn-secondary" @click="openModal('advanceDJ', guild.guild_id)">
+                                <button type="button" class="btn btn-secondary" @click="openModal('advanceDJ', guild.guild_id)">
                                     Advance DJ State
                                 </button>
-                                <button class="btn btn-secondary" @click="openModal('playHex', guild.guild_id)">
+                                <button type="button" class="btn btn-secondary" @click="openModal('playHex', guild.guild_id)">
                                     Play Hex Message
                                 </button>
-                                <button class="btn btn-secondary" @click="openModal('playTrack', guild.guild_id)">
+                                <button type="button" class="btn btn-secondary" @click="openModal('playTrack', guild.guild_id)">
                                     Play Track
                                 </button>
                             </div>
@@ -103,7 +103,7 @@
                                     <div class="track-details" x-text="guild.audio_profile.source ? 'Source: ' + guild.audio_profile.source : 'No DJ'"></div>
                                 </div>
                             </div>
-                            <button class="btn btn-secondary mt-12 w-full" @click="openModal('signalProfile', guild.guild_id)">
+                            <button type="button" class="btn btn-secondary mt-12 w-full" @click="openModal('signalProfile', guild.guild_id)">
                                 Change Signal Profile
                             </button>
                         </div>
@@ -134,7 +134,7 @@
                         <div class="section">
                             <div class="section-title">
                                 Audio Tracks
-                                <button class="btn btn-secondary btn-float-right" @click="openModal('trackState', guild.guild_id)">
+                                <button type="button" class="btn btn-secondary btn-float-right" @click="openModal('trackState', guild.guild_id)">
                                     Manage Tracks
                                 </button>
                             </div>
@@ -167,7 +167,7 @@
 
                     <div class="section">
                         <div class="section-title">Bot Profile</div>
-                        <button class="btn btn-secondary w-full" @click="openBotProfileModal(guild.guild_id)">
+                        <button type="button" class="btn btn-secondary w-full" @click="openBotProfileModal(guild.guild_id)">
                             Edit Nickname, Avatar &amp; Banner
                         </button>
                     </div>
@@ -492,12 +492,12 @@
     <template x-modal data-modal="fileBrowser" data-message="fileBrowser.message" data-overlay-class="file-browser-overlay"
               data-title-expression="fileBrowser.mode === 'file' ? 'Select ' + fileBrowserKind().noun : fileBrowser.mode === 'folder' ? 'Select Folder' : fileBrowserKind().noun + 's'">
         <div class="file-browser-crumbs">
-            <button class="btn btn-secondary" :disabled="fileBrowserCrumbs().length < 2"
+            <button type="button" class="btn btn-secondary" :disabled="fileBrowserCrumbs().length < 2"
                     @click="loadFileBrowser(fileBrowserCrumbs().at(-2).prefix)">&uarr; Up</button>
             <template x-for="(crumb, index) in fileBrowserCrumbs()" :key="crumb.prefix">
                 <span>
                     <span x-show="index > 0">/</span>
-                    <button class="btn btn-secondary" @click="loadFileBrowser(crumb.prefix)" x-text="crumb.name"></button>
+                    <button type="button" class="btn btn-secondary" @click="loadFileBrowser(crumb.prefix)" x-text="crumb.name"></button>
                 </span>
             </template>
         </div>
@@ -507,9 +507,9 @@
         <div x-show="!fileBrowser.loading">
             <template x-for="folder in fileBrowser.folders" :key="folder">
                 <div class="file-browser-row">
-                    <button class="btn btn-secondary" @click="loadFileBrowser(folder)"
+                    <button type="button" class="btn btn-secondary" @click="loadFileBrowser(folder)"
                             x-text="'📁 ' + folder.slice(fileBrowser.prefix.length)"></button>
-                    <button class="btn btn-primary" x-show="fileBrowser.mode === 'folder'"
+                    <button type="button" class="btn btn-primary" x-show="fileBrowser.mode === 'folder'"
                             @click="selectFileBrowserEntry(folder)">Select</button>
                 </div>
             </template>
@@ -520,7 +520,7 @@
                         <div class="file-browser-row-meta"
                              x-text="file.key + ' · ' + formatBytes(file.size) + ' · ' + formatDate(file.last_modified)"></div>
                     </div>
-                    <button class="btn btn-primary" x-show="fileBrowser.mode === 'file'"
+                    <button type="button" class="btn btn-primary" x-show="fileBrowser.mode === 'file'"
                             @click="selectFileBrowserEntry(file.key)">Select</button>
                 </div>
             </template>

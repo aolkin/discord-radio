@@ -14,7 +14,7 @@
                 <h1 id="pageTitle">📜 Activity Logs</h1>
                 <div class="log-info" id="logInfo">Loading...</div>
             </div>
-            <button class="btn btn-secondary" onclick="window.close()">Close</button>
+            <button type="button" class="btn btn-secondary" onclick="window.close()">Close</button>
         </header>
 
         <div class="log-container">
@@ -37,9 +37,9 @@
             <div id="logsContent"></div>
 
             <div class="button-group hidden" id="navigationButtons">
-                <button class="btn btn-primary" id="prevBtn" onclick="loadPreviousLogs()" disabled>← Previous</button>
-                <button class="btn btn-primary" id="nextBtn" onclick="loadNextLogs()" disabled>Next →</button>
-                <button class="btn btn-secondary" onclick="loadLatestLogs()">Latest</button>
+                <button type="button" class="btn btn-primary" id="prevBtn" onclick="loadPreviousLogs()" disabled>← Previous</button>
+                <button type="button" class="btn btn-primary" id="nextBtn" onclick="loadNextLogs()" disabled>Next →</button>
+                <button type="button" class="btn btn-secondary" onclick="loadLatestLogs()">Latest</button>
             </div>
         </div>
     </div>
