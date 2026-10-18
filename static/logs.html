@@ -4,182 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Activity Logs</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-            color: #333;
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        header {
-            background: white;
-            border-radius: 12px;
-            padding: 20px 30px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 15px;
-        }
-
-        h1 {
-            color: #667eea;
-            font-size: 1.8rem;
-        }
-
-        .log-container {
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-
-        .log-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 2px solid #f0f0f0;
-        }
-
-        .log-info {
-            font-size: 0.95rem;
-            color: #666;
-        }
-
-        .log-entry {
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 10px;
-            border-left: 4px solid #667eea;
-        }
-
-        .log-entry.dj {
-            border-left-color: #22c55e;
-        }
-
-        .log-time {
-            font-size: 0.85rem;
-            color: #999;
-            margin-bottom: 5px;
-        }
-
-        .log-content {
-            font-size: 0.95rem;
-            color: #333;
-        }
-
-        .log-detail {
-            font-size: 0.85rem;
-            color: #666;
-            margin-top: 5px;
-        }
-
-        .button-group {
-            display: flex;
-            gap: 10px;
-            justify-content: center;
-            margin-top: 20px;
-        }
-
-        .btn {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 6px;
-            font-weight: 600;
-            cursor: pointer;
-            font-size: 0.9rem;
-            transition: all 0.2s;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-
-        .btn-primary:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
-        }
-
-        .btn-primary:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .btn-secondary {
-            background: #e0e0e0;
-            color: #333;
-        }
-
-        .btn-secondary:hover:not(:disabled) {
-            background: #d0d0d0;
-        }
-
-        .loading {
-            text-align: center;
-            padding: 40px;
-            color: #666;
-            font-size: 1.1rem;
-        }
-
-        .error-message {
-            background: #fee;
-            color: #ef4444;
-            border: 1px solid #ef4444;
-            padding: 15px;
-            border-radius: 6px;
-            margin-bottom: 20px;
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 60px 20px;
-            color: #999;
-            font-size: 1.1rem;
-        }
-
-        .badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            font-weight: 500;
-            margin-left: 10px;
-        }
-
-        .badge-info {
-            background: #eff6ff;
-            color: #667eea;
-        }
-
-        .badge-success {
-            background: #dcfce7;
-            color: #22c55e;
-        }
-
-        .badge-warning {
-            background: #fef3c7;
-            color: #f59e0b;
-        }
-    </style>
+    <link rel="stylesheet" href="/static/base.css">
+    <link rel="stylesheet" href="/static/logs.css">
 </head>
 <body>
     <div class="container">
@@ -199,18 +25,18 @@
                 </div>
                 <div>
                     <label>
-                        <input type="number" id="limitInput" min="10" max="500" value="50" style="width: 70px; padding: 5px; border: 1px solid #ddd; border-radius: 4px;">
+                        <input type="number" class="limit-input" id="limitInput" min="10" max="500" value="50">
                         entries
                     </label>
                 </div>
             </div>
 
             <div id="loadingState" class="loading">Loading logs...</div>
-            <div id="errorState" class="error-message" style="display: none;"></div>
-            <div id="emptyState" class="empty-state" style="display: none;">No log entries found</div>
+            <div id="errorState" class="error-message hidden"></div>
+            <div id="emptyState" class="empty-state hidden">No log entries found</div>
             <div id="logsContent"></div>
 
-            <div class="button-group" id="navigationButtons" style="display: none;">
+            <div class="button-group hidden" id="navigationButtons">
                 <button class="btn btn-primary" id="prevBtn" onclick="loadPreviousLogs()" disabled>← Previous</button>
                 <button class="btn btn-primary" id="nextBtn" onclick="loadNextLogs()" disabled>Next →</button>
                 <button class="btn btn-secondary" onclick="loadLatestLogs()">Latest</button>

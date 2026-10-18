@@ -31,6 +31,14 @@ pub async fn logs() -> Html<&'static str> {
 
 pub async fn static_file(Path(path): Path<String>) -> Result<impl IntoResponse, StatusCode> {
     let (content_type, body) = match path.as_str() {
+        "base.css" => (
+            "text/css; charset=utf-8",
+            include_str!("../../static/base.css"),
+        ),
+        "logs.css" => (
+            "text/css; charset=utf-8",
+            include_str!("../../static/logs.css"),
+        ),
         "index.css" => (
             "text/css; charset=utf-8",
             include_str!("../../static/index.css"),
