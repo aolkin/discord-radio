@@ -57,9 +57,15 @@ export function botProfile() {
 
         async saveBotProfile() {
             const body = {};
-            if (this.botProfileForm.nick !== (this.botProfileCurrent.nick || '')) body.nick = this.botProfileForm.nick;
-            if (this.botProfileForm.avatar) body.avatar = this.botProfileForm.avatar;
-            if (this.botProfileForm.banner) body.banner = this.botProfileForm.banner;
+            if (this.botProfileForm.nick !== (this.botProfileCurrent.nick || '')) {
+                body.nick = this.botProfileForm.nick;
+            }
+            if (this.botProfileForm.avatar) {
+                body.avatar = this.botProfileForm.avatar;
+            }
+            if (this.botProfileForm.banner) {
+                body.banner = this.botProfileForm.banner;
+            }
             if (Object.keys(body).length === 0) {
                 this.botProfileMessage = { text: 'Nothing changed', type: 'error' };
                 return;

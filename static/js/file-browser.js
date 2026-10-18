@@ -56,7 +56,9 @@ export function fileBrowser() {
         selectFileBrowserEntry(value) {
             const onSelect = this.fileBrowserOnSelect;
             this.closeModal('fileBrowser');
-            if (onSelect) onSelect(value);
+            if (onSelect) {
+                onSelect(value);
+            }
         },
 
         fileBrowserKind() {
@@ -150,7 +152,9 @@ export function fileBrowser() {
                 const xhr = new XMLHttpRequest();
                 xhr.open('POST', `/api/files/upload?prefix=${encodeURIComponent(prefix)}`);
                 xhr.upload.onprogress = (event) => {
-                    if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
+                    if (event.lengthComputable) {
+                        onProgress(Math.round((event.loaded / event.total) * 100));
+                    }
                 };
                 xhr.onload = () => {
                     if (xhr.status >= 200 && xhr.status < 300) {

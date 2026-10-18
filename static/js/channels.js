@@ -92,7 +92,9 @@ export function channels() {
                 this.channelMessageDescription = '';
 
                 setTimeout(() => {
-                    if (this.channelMessage.type === 'success') this.channelMessage = emptyMessage();
+                    if (this.channelMessage.type === 'success') {
+                        this.channelMessage = emptyMessage();
+                    }
                 }, 3000);
             } catch (error) {
                 console.error('Error sending message:', error);

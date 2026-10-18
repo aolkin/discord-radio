@@ -50,7 +50,9 @@ export function tracks() {
         audioFiles: [],
 
         getTrackProgress(track) {
-            if (!track.duration_secs || track.loops) return 0;
+            if (!track.duration_secs || track.loops) {
+                return 0;
+            }
             const elapsedMs =
                 this.currentTime -
                 (track.start_time.secs_since_epoch * 1000 + track.start_time.nanos_since_epoch / 1000000);
@@ -60,7 +62,9 @@ export function tracks() {
         },
 
         getTrackTimeDisplay(track) {
-            if (!track.duration_secs) return '';
+            if (!track.duration_secs) {
+                return '';
+            }
             const elapsedMs =
                 this.currentTime -
                 (track.start_time.secs_since_epoch * 1000 + track.start_time.nanos_since_epoch / 1000000);
@@ -89,15 +93,15 @@ export function tracks() {
             const body = { filename: this.playTrackFilename };
 
             if (this.playTrackVolume !== null && this.playTrackVolume !== '') {
-                body.volume = parseFloat(this.playTrackVolume);
+                body.volume = Number.parseFloat(this.playTrackVolume);
             }
 
             if (this.playTrackStart !== null && this.playTrackStart !== '') {
-                body.start_position = parseFloat(this.playTrackStart);
+                body.start_position = Number.parseFloat(this.playTrackStart);
             }
 
             if (this.playTrackDuration !== null && this.playTrackDuration !== '') {
-                body.duration = parseFloat(this.playTrackDuration);
+                body.duration = Number.parseFloat(this.playTrackDuration);
             }
 
             await this.runAction({
@@ -135,7 +139,7 @@ export function tracks() {
             }
 
             if (this.trackVolume !== null && this.trackVolume !== '') {
-                body.volume = parseFloat(this.trackVolume);
+                body.volume = Number.parseFloat(this.trackVolume);
             }
 
             if (this.trackLoops !== '') {
@@ -143,7 +147,7 @@ export function tracks() {
             }
 
             if (this.trackFadeTime !== null && this.trackFadeTime !== '') {
-                body.fade_time = parseFloat(this.trackFadeTime);
+                body.fade_time = Number.parseFloat(this.trackFadeTime);
             }
 
             await this.runAction({
