@@ -15,6 +15,7 @@ use axum::Json as AxumJson;
 use axum::extract::multipart::MultipartError;
 use axum::extract::{Multipart, Path, Query, State};
 use axum::http::StatusCode;
+use axum::http::header::CONTENT_TYPE;
 use axum::response::{Html, IntoResponse, Json};
 use serde::{Deserialize, Serialize};
 use serenity::model::id::{ChannelId, GuildId};
@@ -26,6 +27,21 @@ pub async fn index() -> Html<&'static str> {
 
 pub async fn logs() -> Html<&'static str> {
     Html(include_str!("../../static/logs.html"))
+}
+
+pub async fn static_file(Path(path): Path<String>) -> Result<impl IntoResponse, StatusCode> {
+    let (content_type, body) = match path.as_str() {
+        "index.css" => (
+            "text/css; charset=utf-8",
+            include_str!("../../static/index.css"),
+        ),
+        "index.js" => (
+            "text/javascript; charset=utf-8",
+            include_str!("../../static/index.js"),
+        ),
+        _ => return Err(StatusCode::NOT_FOUND),
+    };
+    Ok(([(CONTENT_TYPE, content_type)], body))
 }
 
 pub async fn get_status(State(bot_state): State<Data>) -> Json<BotSnapshot> {
