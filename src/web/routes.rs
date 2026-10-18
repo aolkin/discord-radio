@@ -858,14 +858,7 @@ pub async fn get_logs(
         .state_store
         .guild_logs_dir(guild_id.get())
         .join(log_filename);
-    let reader = LogReader::new(log_path.clone());
-
-    // Validate that the path is within the logs directory (security check)
-    let logs_dir = bot_state.state_store.logs_dir();
-    reader
-        .validate_path(&logs_dir)
-        .with_context(|| format!("Log {log_path:?} is outside the logs directory"))
-        .status(StatusCode::FORBIDDEN)?;
+    let reader = LogReader::new(log_path);
 
     let result = match (params.offset, params.direction.as_str()) {
         (None, _) => reader.tail(params.limit).await,

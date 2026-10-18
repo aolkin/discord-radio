@@ -19,7 +19,6 @@ use std::path::PathBuf;
 
 #[async_trait]
 pub trait StateStore: Send + Sync {
-    fn logs_dir(&self) -> PathBuf;
     fn guild_logs_dir(&self, guild_id: u64) -> PathBuf;
 
     async fn save_voice_channel(&self, guild_id: GuildId, channel_id: ChannelId) -> Result<()>;

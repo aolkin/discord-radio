@@ -124,10 +124,6 @@ impl FileStore {
 
 #[async_trait]
 impl StateStore for FileStore {
-    fn logs_dir(&self) -> PathBuf {
-        crate::logging::logs_dir(&self.base_path)
-    }
-
     fn guild_logs_dir(&self, guild_id: u64) -> PathBuf {
         crate::logging::guild_logs_dir(&self.base_path, guild_id)
     }
