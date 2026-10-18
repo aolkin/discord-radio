@@ -1,4 +1,4 @@
-use serenity::model::id::{GuildId, UserId};
+use serenity::model::id::GuildId;
 use songbird::{Event, EventContext, EventHandler};
 
 #[derive(Clone)]
@@ -37,10 +37,6 @@ impl EventHandler for ConnectionEventHandler {
                     data.guild_id,
                     data.channel_id
                 );
-            }
-            Ctx::ClientDisconnect(data) => {
-                let user_id = UserId::new(data.user_id.0);
-                tracing::info!("User {} disconnected from voice channel", user_id);
             }
             _ => {}
         }

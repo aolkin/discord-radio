@@ -27,7 +27,6 @@ pub async fn connect_voice_channel(
             songbird::events::CoreEvent::DriverConnect,
             songbird::events::CoreEvent::DriverDisconnect,
             songbird::events::CoreEvent::DriverReconnect,
-            songbird::events::CoreEvent::ClientDisconnect,
         ] {
             call.add_global_event(songbird::Event::Core(event), event_handler.clone());
         }
