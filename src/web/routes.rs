@@ -35,6 +35,10 @@ pub async fn static_file(Path(path): Path<String>) -> Result<impl IntoResponse, 
             "text/css; charset=utf-8",
             include_str!("../../static/index.css"),
         ),
+        "alpine.min.js" => (
+            "text/javascript; charset=utf-8",
+            include_str!("../../static/alpine.min.js"),
+        ),
         "index.js" => (
             "text/javascript; charset=utf-8",
             include_str!("../../static/index.js"),
