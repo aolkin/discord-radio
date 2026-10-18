@@ -1,6 +1,7 @@
 use crate::audio::dj::config::DJConfig;
 use crate::audio::dj::manager::{
-    ADVANCE_RETRY_DELAY, DJCommand, DJStateType, HexMessageRequest, IdleRequest, TrackRequest,
+    ADVANCE_RETRY_DELAY, DEFAULT_DJ_CONFIG, DJCommand, DJStateType, HexMessageRequest, IdleRequest,
+    TrackRequest, load_dj_config,
 };
 use crate::audio::dj::scheduler::{DJStateEntry, WeightedScheduler};
 use crate::audio::dj::segments::{
@@ -162,13 +163,24 @@ pub struct DJStateMachine {
 impl DJStateMachine {
     pub async fn new(
         guild_id: GuildId,
-        config_name: String,
-        config: Arc<DJConfig>,
-        announcement_channel: Option<ChannelId>,
-        restored_state: Option<DJState>,
+        saved: Option<crate::persistence::DJState>,
         state: Arc<RwLock<DJState>>,
         bot_state: Data,
     ) -> Self {
+        let (config_name, announcement_channel, restored_state) = match saved {
+            Some(saved) => (
+                saved.config_name,
+                saved.announcement_channel_id.map(ChannelId::new),
+                saved.state_machine,
+            ),
+            None => (None, None, None),
+        };
+        let config_name = config_name.unwrap_or_else(|| DEFAULT_DJ_CONFIG.to_string());
+        let config = load_dj_config(&bot_state, &config_name).unwrap_or_else(|e| {
+            tracing::warn!("Starting DJ with an empty config in guild {guild_id}: {e:#}");
+            Arc::default()
+        });
+
         tracing::info!(
             "Starting DJ task for guild {} with config {:?}",
             guild_id,
