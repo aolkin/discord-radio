@@ -1,3 +1,4 @@
+mod activity;
 mod audio;
 mod bot_profile;
 mod bucket;
@@ -9,7 +10,6 @@ mod persistence;
 mod shutdown;
 mod startup;
 mod state;
-mod voice_status;
 mod web;
 
 use crate::audio::profiles::ProfileManager;

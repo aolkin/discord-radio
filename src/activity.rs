@@ -33,7 +33,7 @@ impl Display for ActivityType {
     }
 }
 
-/// Activity entry stored on the stack (type and status text)
+/// Activity type and status text
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ActivityEntry {
     pub activity_type: ActivityType,
@@ -63,13 +63,9 @@ impl From<&ActivityEntry> for serenity::all::ActivityData {
     }
 }
 
-/// Type alias for activity stack
-pub type ActivityStack = Vec<ActivityEntry>;
-
-/// Manager for bot activity stack (global, not per-guild)
-/// The activity is global for the entire bot.
+/// The bot's current activity (global, not per-guild)
 pub struct ActivityManager {
-    stack: RwLock<ActivityStack>,
+    current: RwLock<Option<ActivityEntry>>,
     ctx: OnceLock<serenity::all::Context>,
     state_store: Arc<dyn crate::persistence::StateStore>,
 }
@@ -77,7 +73,7 @@ pub struct ActivityManager {
 impl ActivityManager {
     pub fn new(state_store: Arc<dyn crate::persistence::StateStore>) -> Self {
         Self {
-            stack: RwLock::new(ActivityStack::new()),
+            current: RwLock::new(None),
             ctx: OnceLock::new(),
             state_store,
         }
@@ -93,101 +89,45 @@ impl ActivityManager {
         self.update_activity(current.as_ref());
     }
 
-    /// Update the bot's activity to the current top of the stack
     fn update_activity(&self, current: Option<&ActivityEntry>) {
         if let Some(ctx) = self.ctx.get() {
-            let activity_data = current.map(|entry| entry.into());
-            ctx.set_activity(activity_data);
+            ctx.set_activity(current.map(Into::into));
             tracing::debug!("Updated bot activity");
         }
     }
 
-    /// Clear the stack and push a new activity
+    /// Replace the current activity and persist it
     pub async fn set_activity(&self, activity_type: ActivityType, status: String) {
         let entry = ActivityEntry::new(activity_type, status);
-        let mut stack = self.stack.write().await;
-        stack.clear();
-        stack.push(entry.clone());
-        drop(stack);
+        *self.current.write().await = Some(entry.clone());
 
         self.update_activity(Some(&entry));
-        self.persist_current_activity().await;
-        tracing::debug!("Set bot activity and cleared stack");
-    }
-
-    /// Push a new activity onto the stack and update the bot's activity
-    pub async fn push_activity(&self, activity_type: ActivityType, status: String) {
-        let entry = ActivityEntry::new(activity_type, status);
-        let mut stack = self.stack.write().await;
-        stack.push(entry.clone());
-        drop(stack);
-
-        self.update_activity(Some(&entry));
-        self.persist_current_activity().await;
-        tracing::debug!("Pushed new bot activity");
-    }
-
-    /// Remove a specific activity from the stack and update the bot's activity
-    /// Returns true if the activity was found and removed
-    pub async fn remove_activity(&self, activity_type: ActivityType, status: &str) -> bool {
-        let entry = ActivityEntry::new(activity_type, status.to_string());
-        let mut stack = self.stack.write().await;
-        if let Some(pos) = stack.iter().rposition(|m| m == &entry) {
-            stack.remove(pos);
-            let last = stack.last().cloned();
-            drop(stack);
-
-            self.update_activity(last.as_ref());
-            self.persist_current_activity().await;
-            tracing::debug!("Removed bot activity from stack");
-            true
-        } else {
-            false
-        }
-    }
-
-    /// Persist the current top of the stack to disk (or that there is none)
-    async fn persist_current_activity(&self) {
-        let stack = self.stack.read().await;
-        let current = stack.last().cloned();
-        drop(stack);
-
-        let activity_state = current.map(|entry| crate::persistence::ActivityState {
+        let state = crate::persistence::ActivityState {
             activity_type: entry.activity_type.to_string(),
             status: entry.status,
-        });
-
-        if let Err(e) = self
-            .state_store
-            .save_activity_state(activity_state.as_ref())
-            .await
-        {
-            tracing::error!("Failed to persist activity state: {}", e);
+        };
+        if let Err(e) = self.state_store.save_activity_state(Some(&state)).await {
+            tracing::error!("Failed to persist activity state: {e:#}");
         }
     }
 
-    /// Get the current active activity (top of stack)
     pub async fn current(&self) -> Option<ActivityEntry> {
-        let stack = self.stack.read().await;
-        stack.last().cloned()
+        self.current.read().await.clone()
     }
 
-    /// Restore activity state from disk
+    /// Load the saved activity, replacing the current one if a saved one exists
     pub async fn restore_from_disk(&self) -> anyhow::Result<()> {
-        if let Some(saved_state) = self.state_store.load_activity_state().await? {
-            let activity_type = ActivityType::from_str(&saved_state.activity_type);
-            let entry = ActivityEntry::new(activity_type, saved_state.status);
-
-            let mut stack = self.stack.write().await;
-            stack.clear();
-            stack.push(entry.clone());
-            drop(stack);
-
-            self.update_activity(Some(&entry));
-            tracing::info!("Restored activity state from disk");
-        } else {
+        let Some(saved_state) = self.state_store.load_activity_state().await? else {
             tracing::info!("No saved activity state found");
-        }
+            return Ok(());
+        };
+        let entry = ActivityEntry::new(
+            ActivityType::from_str(&saved_state.activity_type),
+            saved_state.status,
+        );
+        *self.current.write().await = Some(entry.clone());
+        self.update_activity(Some(&entry));
+        tracing::info!("Restored activity state from disk");
         Ok(())
     }
 }
