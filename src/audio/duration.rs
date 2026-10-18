@@ -35,7 +35,7 @@ impl DurationCache {
             .resolve(filename)
             .await
             .inspect_err(|e| {
-                tracing::warn!("Failed to resolve {} for duration lookup: {}", filename, e)
+                tracing::warn!("Failed to resolve {filename} for duration lookup: {e:#}")
             })
             .ok();
 

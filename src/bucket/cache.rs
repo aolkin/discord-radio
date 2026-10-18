@@ -1,14 +1,9 @@
-// `pre_cache` and `invalidate` have no callers outside this module and its
-// tests yet.
-#![allow(dead_code)]
-
-use anyhow::{Context, bail};
+use anyhow::{Context, anyhow, bail};
 use async_trait::async_trait;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::Semaphore;
 
 /// Evicting an entry costs a redundant download, since this cache is the only
 /// record of what is on disk.
@@ -28,24 +23,11 @@ const MAX_TRACKED_LISTINGS: u64 = 1_000;
 
 const TEMP_SUFFIX: &str = ".tmp";
 
-#[derive(Clone, Debug, thiserror::Error)]
-pub enum ObjectStoreError {
-    #[error("object storage is not configured")]
-    NotConfigured,
-    #[error("object not found")]
-    NotFound,
-    #[error("object storage request failed: {0:#}")]
-    Remote(Arc<anyhow::Error>),
-    #[error("local cache i/o failed: {0}")]
-    Local(Arc<std::io::Error>),
-}
-
-/// Marks a [`ObjectBackend::download`] failure as specifically meaning the
-/// key doesn't exist in object storage, distinct from a network or auth
-/// failure.
+/// Marks a download failure as specifically meaning the key doesn't exist in
+/// object storage, distinct from a network or auth failure.
 #[derive(Debug, thiserror::Error)]
 #[error("object not found")]
-struct ObjectNotFound;
+pub struct NotFound;
 
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct DirListing {
@@ -84,7 +66,7 @@ impl ObjectBackend for s3::Bucket {
 
         let status = response.status_code();
         if status == 404 {
-            return Err(ObjectNotFound.into());
+            return Err(NotFound.into());
         }
         if !(200..300).contains(&status) {
             bail!("unexpected status {status} fetching {key}");
@@ -188,45 +170,37 @@ impl ObjectBackend for s3::Bucket {
 
 /// Caches objects on local disk, mirroring the object storage key structure
 /// (`{cache_dir}/{key}`).
-pub struct ObjectStore {
+#[derive(Clone)]
+pub struct Bucket {
     cache_dir: PathBuf,
-    backend: Option<Arc<dyn ObjectBackend>>,
+    backend: Arc<dyn ObjectBackend>,
     /// Seeded at construction from the files already in `cache_dir`.
     present: moka::future::Cache<String, ()>,
     /// `list_remote` results, keyed by prefix.
     remote_listings: moka::future::Cache<String, Vec<String>>,
 }
 
-impl ObjectStore {
+impl Bucket {
     /// Creates the cache, creating `cache_dir` on disk if it doesn't exist
-    /// yet, and adopts the files already in it. With `bucket` set to `None`
-    /// nothing can be downloaded, and `ensure_cached` fails with
-    /// [`ObjectStoreError::NotConfigured`] for any key that wasn't adopted.
+    /// yet, and adopts the files already in it.
     ///
     /// A file whose last access is older than `entry_ttl` is deleted rather
     /// than adopted; `None` keeps every file forever.
     pub async fn new(
         cache_dir: PathBuf,
-        bucket: Option<Arc<s3::Bucket>>,
+        bucket: Arc<s3::Bucket>,
         entry_ttl: Option<Duration>,
-    ) -> Result<Self, ObjectStoreError> {
-        let backend = bucket.map(|bucket| bucket as Arc<dyn ObjectBackend>);
-        Self::build(cache_dir, backend, entry_ttl).await
-    }
-
-    #[cfg(test)]
-    pub(crate) async fn with_backend(cache_dir: PathBuf, backend: Arc<dyn ObjectBackend>) -> Self {
-        Self::build(cache_dir, Some(backend), None)
-            .await
-            .expect("the test cache dir is usable")
+    ) -> anyhow::Result<Self> {
+        Self::build(cache_dir, bucket, entry_ttl).await
     }
 
     async fn build(
         cache_dir: PathBuf,
-        backend: Option<Arc<dyn ObjectBackend>>,
+        backend: Arc<dyn ObjectBackend>,
         entry_ttl: Option<Duration>,
-    ) -> Result<Self, ObjectStoreError> {
-        std::fs::create_dir_all(&cache_dir).map_err(|e| ObjectStoreError::Local(Arc::new(e)))?;
+    ) -> anyhow::Result<Self> {
+        std::fs::create_dir_all(&cache_dir)
+            .with_context(|| format!("creating cache dir {cache_dir:?}"))?;
 
         let cache = Self {
             cache_dir,
@@ -240,7 +214,7 @@ impl ObjectStore {
 
         let mut keys = Vec::new();
         collect_cached_keys(&cache.cache_dir, &cache.cache_dir, entry_ttl, &mut keys)
-            .map_err(|e| ObjectStoreError::Local(Arc::new(e)))?;
+            .context("adopting cached files")?;
         for key in keys {
             cache.present.insert(key, ()).await;
         }
@@ -250,43 +224,39 @@ impl ObjectStore {
 
     /// The local path for a key, regardless of whether it's actually cached
     /// yet.
-    pub fn cached_path(&self, key: &str) -> PathBuf {
+    fn cached_path(&self, key: &str) -> PathBuf {
         self.cache_dir.join(key)
     }
 
     /// Returns the local path for `key`, downloading the object first if it
     /// isn't already cached. Concurrent calls for the same key share a single
     /// download.
-    pub async fn ensure_cached(&self, key: &str) -> Result<PathBuf, ObjectStoreError> {
+    pub async fn ensure_cached(&self, key: &str) -> anyhow::Result<PathBuf> {
         let dest = self.cached_path(key);
 
         self.present
             .try_get_with(key.to_string(), self.fill(key, &dest))
             .await
-            .map_err(|e| (*e).clone())?;
+            .map_err(|e| {
+                if e.is::<NotFound>() {
+                    NotFound.into()
+                } else {
+                    anyhow!("{e:#}")
+                }
+            })?;
 
         Ok(dest)
     }
 
     /// Downloads `key` and writes it to `dest`, replacing anything already
     /// there.
-    async fn fill(&self, key: &str, dest: &Path) -> Result<(), ObjectStoreError> {
-        let backend = self
-            .backend
-            .as_ref()
-            .ok_or(ObjectStoreError::NotConfigured)?;
-        let bytes = backend.download(key).await.map_err(|e| {
-            if e.is::<ObjectNotFound>() {
-                ObjectStoreError::NotFound
-            } else {
-                ObjectStoreError::Remote(Arc::new(e))
-            }
-        })?;
+    async fn fill(&self, key: &str, dest: &Path) -> anyhow::Result<()> {
+        let bytes = self.backend.download(key).await?;
 
         if let Some(parent) = dest.parent() {
             tokio::fs::create_dir_all(parent)
                 .await
-                .map_err(|e| ObjectStoreError::Local(Arc::new(e)))?;
+                .with_context(|| format!("creating {parent:?}"))?;
         }
 
         // Write to a temporary path in the same directory as `dest` and
@@ -301,47 +271,28 @@ impl ObjectStore {
             {
                 tracing::warn!("Failed to clean up temp file {temp_dest:?}: {cleanup_err}");
             }
-            return Err(ObjectStoreError::Local(Arc::new(e)));
+            return Err(e).with_context(|| format!("writing {temp_dest:?}"));
         }
 
         tokio::fs::rename(&temp_dest, dest)
             .await
-            .map_err(|e| ObjectStoreError::Local(Arc::new(e)))
+            .with_context(|| format!("renaming {temp_dest:?} into place"))
     }
 
     /// Downloads `key` and returns its bytes directly, without writing them
     /// to local disk.
-    pub async fn fetch_bytes(&self, key: &str) -> Result<Vec<u8>, ObjectStoreError> {
-        let backend = self
-            .backend
-            .as_ref()
-            .ok_or(ObjectStoreError::NotConfigured)?;
-        backend.download(key).await.map_err(|e| {
-            if e.is::<ObjectNotFound>() {
-                ObjectStoreError::NotFound
-            } else {
-                ObjectStoreError::Remote(Arc::new(e))
-            }
-        })
+    pub async fn fetch_bytes(&self, key: &str) -> anyhow::Result<Vec<u8>> {
+        self.backend.download(key).await
     }
 
     /// Writes `bytes` to `key` in object storage, replacing any object already
     /// there, and forgets any cached copy of it.
-    pub async fn upload(
-        &self,
-        key: &str,
-        bytes: &[u8],
-        content_type: &str,
-    ) -> Result<(), ObjectStoreError> {
-        let backend = self
-            .backend
-            .as_ref()
-            .ok_or(ObjectStoreError::NotConfigured)?;
-        backend
-            .upload(key, bytes, content_type)
-            .await
-            .map_err(|e| ObjectStoreError::Remote(Arc::new(e)))?;
-        self.invalidate(key).await;
+    pub async fn upload(&self, key: &str, bytes: &[u8], content_type: &str) -> anyhow::Result<()> {
+        self.backend.upload(key, bytes, content_type).await?;
+        // The stale file stays on disk until the next download overwrites it;
+        // deleting it here would race a concurrent `fill` that just renamed a
+        // fresh copy into place.
+        self.present.invalidate(key).await;
         self.remote_listings.invalidate_all();
         Ok(())
     }
@@ -349,35 +300,15 @@ impl ObjectStore {
     /// The folders and files directly under `prefix`, listed live rather than
     /// from the cache. A zero-byte folder marker object at `prefix` itself is
     /// left out.
-    pub async fn list_dir(&self, prefix: &str) -> Result<DirListing, ObjectStoreError> {
-        self.backend
-            .as_ref()
-            .ok_or(ObjectStoreError::NotConfigured)?
-            .list_dir(prefix)
-            .await
-            .map_err(|e| ObjectStoreError::Remote(Arc::new(e)))
+    pub async fn list_dir(&self, prefix: &str) -> anyhow::Result<DirListing> {
+        self.backend.list_dir(prefix).await
     }
 
-    /// Forgets `key`, so the next `ensure_cached` re-downloads it.
-    ///
-    /// The file stays on disk. `fill` overwrites unconditionally and nothing
-    /// reads a file this cache has forgotten, so the stale bytes cost disk
-    /// space until the next download replaces them; deleting here would
-    /// instead race a concurrent `fill` and remove the file it just renamed
-    /// into place while its entry claims the key is cached.
-    pub async fn invalidate(&self, key: &str) {
-        self.present.invalidate(key).await;
-    }
-
-    /// Empty when no bucket is configured or the listing request fails.
-    /// Cached per prefix for [`REMOTE_LISTING_TTL`].
+    /// Empty when the listing request fails. Cached per prefix for
+    /// [`REMOTE_LISTING_TTL`].
     pub async fn list_remote(&self, prefix: &str) -> Vec<String> {
-        let Some(backend) = &self.backend else {
-            return Vec::new();
-        };
-
         self.remote_listings
-            .try_get_with(prefix.to_string(), backend.list_keys(prefix))
+            .try_get_with(prefix.to_string(), self.backend.list_keys(prefix))
             .await
             .unwrap_or_else(|e| {
                 tracing::warn!("Failed to list remote objects under {prefix:?}: {e:#}");
@@ -467,34 +398,6 @@ fn remove_best_effort(path: &Path) {
     if let Err(e) = std::fs::remove_file(path) {
         tracing::warn!("Failed to remove {path:?} from the cache dir: {e}");
     }
-}
-
-/// Downloads `keys` into `cache` in the background, at most `max_concurrent`
-/// at a time. Returns immediately; failures are logged rather than surfaced.
-/// Await the returned handle to wait for every key to have been attempted.
-pub fn pre_cache(
-    cache: Arc<ObjectStore>,
-    keys: Vec<String>,
-    max_concurrent: usize,
-) -> tokio::task::JoinHandle<()> {
-    tokio::spawn(async move {
-        let semaphore = Arc::new(Semaphore::new(max_concurrent));
-        let mut tasks = tokio::task::JoinSet::new();
-        for key in keys {
-            let semaphore = Arc::clone(&semaphore);
-            let cache = Arc::clone(&cache);
-            tasks.spawn(async move {
-                let _permit = semaphore
-                    .acquire_owned()
-                    .await
-                    .expect("semaphore is never closed");
-                if let Err(e) = cache.ensure_cached(&key).await {
-                    tracing::warn!("Failed to pre-cache {key}: {e}");
-                }
-            });
-        }
-        while tasks.join_next().await.is_some() {}
-    })
 }
 
 #[cfg(test)]
