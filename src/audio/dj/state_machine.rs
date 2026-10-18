@@ -378,17 +378,13 @@ impl DJStateMachine {
             self.apply_channel_status(String::new()).await;
         }
 
-        if let Err(e) = bot_state
-            .state_store
+        bot_state
             .log_dj_activity(
                 self.guild_id.get(),
                 "stopped".to_string(),
                 serde_json::json!({}),
             )
-            .await
-        {
-            tracing::error!("{e:#}");
-        }
+            .await;
     }
 
     pub async fn force_advance(
@@ -588,7 +584,7 @@ impl DJStateMachine {
         }
     }
 
-    async fn log_state_transition(&self, bot_state: &Data) -> bool {
+    async fn log_state_transition(&self, bot_state: &Data) {
         let state = self.state.read().await;
         let event_type = state.segment.state_name().to_string();
         let details = state.segment.loggable_properties();
@@ -597,10 +593,7 @@ impl DJStateMachine {
         drop(state);
 
         bot_state
-            .state_store
             .log_dj_activity(self.guild_id.get(), event_type, details)
             .await
-            .inspect_err(|e| tracing::error!("{e:#}"))
-            .is_ok()
     }
 }

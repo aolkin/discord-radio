@@ -6,8 +6,9 @@ use crate::audio::processing::processor::{AudioProcessor, ProcessorRef};
 use crate::audio::profiles::ProfileManager;
 use crate::audio::tracks::TrackManager;
 use crate::bucket::FileResolver;
-
+use crate::logging::JsonLogger;
 use crate::persistence::{DjSettingsStore, StateStore};
+use serde::Serialize;
 use serenity::all::{ChannelId, UserId};
 use serenity::model::id::GuildId;
 use songbird::Call;
@@ -108,6 +109,76 @@ impl BotState {
             call.current_channel().map(|id| ChannelId::new(id.0.get()))
         } else {
             None
+        }
+    }
+
+    /// Log a member activity event
+    pub async fn log_member_activity(
+        &self,
+        guild_id: u64,
+        user_id: u64,
+        username: &str,
+        nickname: Option<&str>,
+        action: &str,
+        channel_id: Option<u64>,
+    ) {
+        #[derive(Serialize)]
+        struct MemberActivityEntry {
+            timestamp: String,
+            user_id: u64,
+            username: String,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            nickname: Option<String>,
+            action: String,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            channel_id: Option<u64>,
+        }
+
+        let log_path = self
+            .state_store
+            .guild_logs_dir(guild_id)
+            .join("members.jsonl");
+        let logger = JsonLogger::new(log_path);
+
+        let entry = MemberActivityEntry {
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            user_id,
+            username: username.to_string(),
+            nickname: nickname.map(|s| s.to_string()),
+            action: action.to_string(),
+            channel_id,
+        };
+
+        if let Err(e) = logger.log(&entry).await {
+            tracing::error!("{e:#}");
+        }
+    }
+
+    /// Log a DJ state transition event
+    pub async fn log_dj_activity(
+        &self,
+        guild_id: u64,
+        event_type: String,
+        details: serde_json::Value,
+    ) {
+        #[derive(Serialize)]
+        struct DJActivityEntry {
+            timestamp: String,
+            event_type: String,
+            details: serde_json::Value,
+        }
+
+        let log_path = self.state_store.guild_logs_dir(guild_id).join("dj.jsonl");
+        let logger = JsonLogger::new(log_path);
+
+        let entry = DJActivityEntry {
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            event_type,
+            details,
+        };
+
+        if let Err(e) = logger.log(&entry).await {
+            tracing::error!("{e:#}");
         }
     }
 }

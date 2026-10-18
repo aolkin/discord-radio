@@ -1,5 +1,4 @@
 use super::{DJState, MultiTrackPlaybackState, RegisteredChannel, StateStore};
-use crate::logging::JsonLogger;
 use crate::persistence::types::DJStateSnapshot;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
@@ -131,69 +130,6 @@ impl StateStore for FileStore {
 
     fn guild_logs_dir(&self, guild_id: u64) -> PathBuf {
         crate::logging::guild_logs_dir(&self.base_path, guild_id)
-    }
-
-    async fn log_member_activity(
-        &self,
-        guild_id: u64,
-        user_id: u64,
-        username: &str,
-        nickname: Option<&str>,
-        action: &str,
-        channel_id: Option<u64>,
-    ) -> Result<()> {
-        #[derive(Serialize)]
-        struct MemberActivityEntry<'a> {
-            timestamp: String,
-            user_id: u64,
-            username: &'a str,
-            #[serde(skip_serializing_if = "Option::is_none")]
-            nickname: Option<&'a str>,
-            action: &'a str,
-            #[serde(skip_serializing_if = "Option::is_none")]
-            channel_id: Option<u64>,
-        }
-
-        let logger = JsonLogger::new(self.guild_logs_dir(guild_id).join("members.jsonl"));
-        let entry = MemberActivityEntry {
-            timestamp: chrono::Utc::now().to_rfc3339(),
-            user_id,
-            username,
-            nickname,
-            action,
-            channel_id,
-        };
-
-        logger
-            .log(&entry)
-            .await
-            .with_context(|| format!("Failed to log member activity in guild {guild_id}"))
-    }
-
-    async fn log_dj_activity(
-        &self,
-        guild_id: u64,
-        event_type: String,
-        details: serde_json::Value,
-    ) -> Result<()> {
-        #[derive(Serialize)]
-        struct DJActivityEntry {
-            timestamp: String,
-            event_type: String,
-            details: serde_json::Value,
-        }
-
-        let logger = JsonLogger::new(self.guild_logs_dir(guild_id).join("dj.jsonl"));
-        let entry = DJActivityEntry {
-            timestamp: chrono::Utc::now().to_rfc3339(),
-            event_type,
-            details,
-        };
-
-        logger
-            .log(&entry)
-            .await
-            .with_context(|| format!("Failed to log DJ activity in guild {guild_id}"))
     }
 
     async fn save_voice_channel(&self, guild_id: GuildId, channel_id: ChannelId) -> Result<()> {
