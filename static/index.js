@@ -29,6 +29,7 @@
         }
 
         const emptyMessage = () => ({ text: '', type: '' });
+        const emptyHexMessageForm = () => ({ index: null, text: '', weight: 1, signal_profile: '', loop_min: null, loop_max: null, announcement: '' });
 
         // State behind each `<template x-modal data-modal="name">` in
         // index.html: `flag` is the visibility property, `perGuild` makes
@@ -69,6 +70,51 @@
                 perGuild: false,
                 reset: () => ({ newActivityStatus: '', activityMessage: emptyMessage() }),
             },
+            trackState: {
+                flag: 'showTrackStateModal',
+                perGuild: true,
+                reset: () => ({
+                    trackName: '',
+                    trackState: '',
+                    trackFilename: '',
+                    trackVolume: null,
+                    trackLoops: '',
+                    trackFadeTime: null,
+                    trackMessage: emptyMessage(),
+                }),
+            },
+            signalProfile: {
+                flag: 'showSignalProfileModal',
+                perGuild: true,
+                reset: () => ({
+                    selectedProfile: '',
+                    profileSetting: 'profile',
+                    profileFadeDuration: null,
+                    profileMessage: emptyMessage(),
+                }),
+            },
+            hexMessageForm: {
+                flag: 'showHexMessageForm',
+                perGuild: false,
+                reset: () => ({ hexMessageFormData: emptyHexMessageForm() }),
+            },
+            announcementForm: {
+                flag: 'showAnnouncementForm',
+                perGuild: false,
+                reset: () => ({ announcementFormData: { index: null, text: '' } }),
+            },
+            channelMessage: {
+                flag: 'showChannelMessageModal',
+                perGuild: false,
+                reset: () => ({
+                    registeredChannels: [],
+                    selectedChannelId: '',
+                    channelMessageText: '',
+                    channelMessageTitle: '',
+                    channelMessageDescription: '',
+                    channelMessage: emptyMessage(),
+                }),
+            },
         };
 
         // `<template x-modal data-modal="name" ...>` renders the shared modal
@@ -78,9 +124,13 @@
         // Open state comes from `modals[name]`; the other settings are
         // data attributes:
         //   data-title         header text
-        //   data-message       property holding the { text, type } message
+        //   data-title-expression  expression for the header text, instead
+        //                      of data-title
+        //   data-message       property holding the { text, type } message;
+        //                      no message area when omitted
         //   data-submit        expression run on form submit
         //   data-saving        property that is true while submitting
+        //   data-disabled-when expression; Submit is also disabled while true
         //   data-submit-label  Submit button text
         //   data-busy-label    Submit button text while saving
         //   data-cancel-label  Cancel button text (default "Cancel")
@@ -114,17 +164,23 @@
 
                 const header = element('div', {}, 'modal-header');
                 const title = element('div', {}, 'modal-title');
-                title.textContent = config.title;
+                if (config.titleExpression) {
+                    title.setAttribute('x-text', config.titleExpression);
+                } else {
+                    title.textContent = config.title;
+                }
                 const closeButton = element('button', { 'x-on:click': close }, 'close');
                 closeButton.innerHTML = '&times;';
                 header.append(title, closeButton);
 
                 const body = element('div', {}, 'modal-body');
-                body.append(element('div', {
-                    'x-show': `${config.message}.text`,
-                    ':class': `${config.message}.type === 'error' ? 'error-message' : 'success-message'`,
-                    'x-text': `${config.message}.text`,
-                }));
+                if (config.message) {
+                    body.append(element('div', {
+                        'x-show': `${config.message}.text`,
+                        ':class': `${config.message}.type === 'error' ? 'error-message' : 'success-message'`,
+                        'x-text': `${config.message}.text`,
+                    }));
+                }
                 content.append(header, body);
 
                 if (config.loading) {
@@ -137,7 +193,8 @@
                     if (config.loading) form.setAttribute('x-show', `!${config.loading}`);
                     const cancel = element('button', { type: 'button', 'x-on:click': close }, 'btn btn-secondary');
                     cancel.textContent = config.cancelLabel || 'Cancel';
-                    const submit = element('button', { type: 'submit', ':disabled': config.saving }, 'btn btn-primary');
+                    const disabled = config.disabledWhen ? `${config.saving} || (${config.disabledWhen})` : config.saving;
+                    const submit = element('button', { type: 'submit', ':disabled': disabled }, 'btn btn-primary');
                     submit.append(element('span', {
                         'x-text': `${config.saving} ? ${JSON.stringify(config.busyLabel)} : ${JSON.stringify(config.submitLabel)}`,
                     }));
@@ -282,8 +339,7 @@
                 channelMessageTitle: '',
                 channelMessageDescription: '',
                 channelMessageSaving: false,
-                channelMessageError: '',
-                channelMessageSuccess: '',
+                channelMessage: { text: '', type: '' },
 
                 getTrackProgress(track) {
                     if (!track.duration_secs || track.loops) return 0;
@@ -726,30 +782,6 @@
                 },
 
                 // Track State Modal Functions
-                openTrackStateModal(guildId) {
-                    this.currentGuildId = guildId;
-                    this.showTrackStateModal = true;
-                    this.trackName = '';
-                    this.trackState = '';
-                    this.trackFilename = '';
-                    this.trackVolume = null;
-                    this.trackLoops = '';
-                    this.trackFadeTime = null;
-                    this.trackMessage = { text: '', type: '' };
-                },
-
-                closeTrackStateModal() {
-                    this.showTrackStateModal = false;
-                    this.currentGuildId = null;
-                    this.trackName = '';
-                    this.trackState = '';
-                    this.trackFilename = '';
-                    this.trackVolume = null;
-                    this.trackLoops = '';
-                    this.trackFadeTime = null;
-                    this.trackMessage = { text: '', type: '' };
-                },
-
                 trackStateChanged() {
                     // Clear filename when not starting
                     if (this.trackState !== 'start') {
@@ -789,30 +821,12 @@
                         }),
                         success: 'Track state updated successfully!',
                         failure: 'Failed to change track state. Please try again.',
-                        afterFn: () => this.closeTrackStateModal(),
+                        afterFn: () => this.closeModal('trackState'),
                         afterMs: 1500,
                     });
                 },
 
                 // Signal Profile Modal Functions
-                openSignalProfileModal(guildId) {
-                    this.currentGuildId = guildId;
-                    this.showSignalProfileModal = true;
-                    this.selectedProfile = '';
-                    this.profileSetting = 'profile';
-                    this.profileFadeDuration = null;
-                    this.profileMessage = { text: '', type: '' };
-                },
-
-                closeSignalProfileModal() {
-                    this.showSignalProfileModal = false;
-                    this.currentGuildId = null;
-                    this.selectedProfile = '';
-                    this.profileSetting = 'profile';
-                    this.profileFadeDuration = null;
-                    this.profileMessage = { text: '', type: '' };
-                },
-
                 async changeSignalProfile() {
                     const body = {
                         profile: this.selectedProfile || null,
@@ -833,7 +847,7 @@
                         }),
                         success: 'Signal profile changed successfully!',
                         failure: 'Failed to change signal profile. Please try again.',
-                        afterFn: () => this.closeSignalProfileModal(),
+                        afterFn: () => this.closeModal('signalProfile'),
                         afterMs: 1500,
                     });
                 },
@@ -1014,6 +1028,7 @@
                 },
 
                 openHexMessageForm(index = null) {
+                    this.openModal('hexMessageForm');
                     if (index !== null) {
                         const msg = this.djConfigData.hex_messages.items[index];
                         this.hexMessageFormData = {
@@ -1025,19 +1040,11 @@
                             loop_max: msg.loop_max || null,
                             announcement: msg.announcement || ''
                         };
-                    } else {
-                        this.hexMessageFormData = { index: null, text: '', weight: 1, signal_profile: '', loop_min: null, loop_max: null, announcement: '' };
                     }
-                    this.showHexMessageForm = true;
                 },
 
                 editHexMessage(index) {
                     this.openHexMessageForm(index);
-                },
-
-                closeHexMessageForm() {
-                    this.showHexMessageForm = false;
-                    this.hexMessageFormData = { index: null, text: '', weight: 1, signal_profile: '', loop_min: null, loop_max: null, announcement: '' };
                 },
 
                 async saveHexMessage() {
@@ -1059,7 +1066,7 @@
                         }),
                         onSuccess: async () => {
                             await this.loadDJConfigOverrides();
-                            this.closeHexMessageForm();
+                            this.closeModal('hexMessageForm');
                         },
                         success: 'Hex message saved successfully!',
                         failure: 'Failed to save hex message. Please try again.',
@@ -1083,24 +1090,17 @@
                 },
 
                 openAnnouncementForm(index = null) {
+                    this.openModal('announcementForm');
                     if (index !== null) {
                         this.announcementFormData = {
                             index,
                             text: this.djConfigData.hex_message_announcements.items[index]
                         };
-                    } else {
-                        this.announcementFormData = { index: null, text: '' };
                     }
-                    this.showAnnouncementForm = true;
                 },
 
                 editAnnouncement(index) {
                     this.openAnnouncementForm(index);
-                },
-
-                closeAnnouncementForm() {
-                    this.showAnnouncementForm = false;
-                    this.announcementFormData = { index: null, text: '' };
                 },
 
                 async saveAnnouncement() {
@@ -1117,7 +1117,7 @@
                         }),
                         onSuccess: async () => {
                             await this.loadDJConfigOverrides();
-                            this.closeAnnouncementForm();
+                            this.closeModal('announcementForm');
                         },
                         success: 'Announcement saved successfully!',
                         failure: 'Failed to save announcement. Please try again.',
@@ -1159,15 +1159,9 @@
 
                 // Channel Message Functions
                 async openChannelMessageModal() {
-                    this.showChannelMessageModal = true;
+                    this.openModal('channelMessage');
                     this.channelsLoading = true;
-                    this.channelMessageError = '';
-                    this.channelMessageSuccess = '';
-                    this.selectedChannelId = '';
-                    this.channelMessageText = '';
-                    this.channelMessageTitle = '';
-                    this.channelMessageDescription = '';
-                    
+
                     try {
                         const response = await apiRequest('/api/registered-channels', {
                             errorMessage: 'Failed to load registered channels',
@@ -1178,32 +1172,20 @@
                         this.registeredChannels = data.channels;
                     } catch (error) {
                         console.error('Error loading registered channels:', error);
-                        this.channelMessageError = error.message || 'Failed to load registered channels. Please try again.';
+                        this.channelMessage = { type: 'error', text: error.message || 'Failed to load registered channels. Please try again.' };
                     } finally {
                         this.channelsLoading = false;
                     }
                 },
 
-                closeChannelMessageModal() {
-                    this.showChannelMessageModal = false;
-                    this.registeredChannels = [];
-                    this.selectedChannelId = '';
-                    this.channelMessageText = '';
-                    this.channelMessageTitle = '';
-                    this.channelMessageDescription = '';
-                    this.channelMessageError = '';
-                    this.channelMessageSuccess = '';
-                },
-
                 async sendChannelMessage() {
                     this.channelMessageSaving = true;
-                    this.channelMessageError = '';
-                    this.channelMessageSuccess = '';
+                    this.channelMessage = emptyMessage();
                     
                     try {
                         // Validate at least one field is filled
                         if (!this.channelMessageText && !this.channelMessageTitle && !this.channelMessageDescription) {
-                            this.channelMessageError = 'Please provide at least a message, title, or description.';
+                            this.channelMessage = { type: 'error', text: 'Please provide at least a message, title, or description.' };
                             return;
                         }
                         
@@ -1225,7 +1207,7 @@
                             includeStatus: true,
                         });
 
-                        this.channelMessageSuccess = 'Message sent successfully!';
+                        this.channelMessage = { type: 'success', text: 'Message sent successfully!' };
                         
                         // Clear form fields after successful send
                         this.channelMessageText = '';
@@ -1233,11 +1215,11 @@
                         this.channelMessageDescription = '';
                         
                         setTimeout(() => {
-                            this.channelMessageSuccess = '';
+                            if (this.channelMessage.type === 'success') this.channelMessage = emptyMessage();
                         }, 3000);
                     } catch (error) {
                         console.error('Error sending message:', error);
-                        this.channelMessageError = error.message || 'Failed to send message. Please try again.';
+                        this.channelMessage = { type: 'error', text: error.message || 'Failed to send message. Please try again.' };
                     } finally {
                         this.channelMessageSaving = false;
                     }
