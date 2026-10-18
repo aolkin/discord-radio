@@ -21,6 +21,11 @@
       "Alpine"
     ]
   },
+  "html": {
+    "formatter": {
+      "enabled": true
+    }
+  },
   "linter": {
     "rules": {
       "correctness": "error",

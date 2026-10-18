@@ -1,573 +1,863 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Discord Bot Portal</title>
-    <script type="module" src="/static/index.js"></script>
-    <script defer src="/static/alpine.min.js"></script>
-    <link rel="stylesheet" href="/static/base.css">
-    <link rel="stylesheet" href="/static/index.css">
-</head>
-<body x-data="botPortal()">
-    <div class="container">
-        <header>
-            <div class="header-left">
-                <h1>🎵 Discord Bot Portal</h1>
-                <div class="version-info" x-show="version">
-                    Version: <span x-text="version"></span> • 
-                    Commit: <span x-text="commitHash ? commitHash.substring(0, 7) : 'unknown'"></span>
-                </div>
-            </div>
-            <div class="header-right">
-                <!-- Current Activity Display -->
-                <div class="activity-display" x-show="currentActivity.status" @click="openModal('activity')">
-                    <div class="activity-icon" x-text="getActivityIcon(currentActivity.activity_type)"></div>
-                    <div class="activity-info">
-                        <div class="activity-type" x-text="currentActivity.activity_type || 'No Activity'"></div>
-                        <div class="activity-status" x-text="currentActivity.status || 'Not set'"></div>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Discord Bot Portal</title>
+        <script type="module" src="/static/index.js"></script>
+        <script defer src="/static/alpine.min.js"></script>
+        <link rel="stylesheet" href="/static/base.css">
+        <link rel="stylesheet" href="/static/index.css">
+    </head>
+    <body x-data="botPortal()">
+        <div class="container">
+            <header>
+                <div class="header-left">
+                    <h1>🎵 Discord Bot Portal</h1>
+                    <div class="version-info" x-show="version">
+                        Version: <span x-text="version"></span> • Commit:
+                        <span x-text="commitHash ? commitHash.substring(0, 7) : 'unknown'"></span>
                     </div>
                 </div>
-                <button type="button" class="btn btn-primary btn-md" @click="openModal('activity')">
-                    Manage Activity
+                <div class="header-right">
+                    <!-- Current Activity Display -->
+                    <div class="activity-display" x-show="currentActivity.status" @click="openModal('activity')">
+                        <div class="activity-icon" x-text="getActivityIcon(currentActivity.activity_type)"></div>
+                        <div class="activity-info">
+                            <div class="activity-type" x-text="currentActivity.activity_type || 'No Activity'"></div>
+                            <div class="activity-status" x-text="currentActivity.status || 'Not set'"></div>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-primary btn-md" @click="openModal('activity')">
+                        Manage Activity
+                    </button>
+                    <div class="status-indicator">
+                        <span class="status-dot" :class="{ 'disconnected': !connected }"></span>
+                        <span x-text="statusText"></span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Registered Channels Section -->
+            <div class="card">
+                <h2 class="card-title">Registered Channels</h2>
+                <button type="button" class="send-message-button" @click="openChannelMessageModal()">
+                    📤 Send Message to Registered Channel
                 </button>
-                <div class="status-indicator">
-                    <span class="status-dot" :class="{ 'disconnected': !connected }"></span>
-                    <span x-text="statusText"></span>
+            </div>
+
+            <div class="card">
+                <h2 class="card-title">Signal Profiles</h2>
+                <div class="chip-list">
+                    <template x-for="profile in profiles" :key="profile">
+                        <button
+                            type="button"
+                            class="btn btn-secondary"
+                            @click="openProfileEditor(profile)"
+                            x-text="profile"
+                        ></button>
+                    </template>
+                    <div class="empty-state" x-show="profiles.length === 0">No signal profiles</div>
                 </div>
+                <button type="button" class="btn btn-primary" @click="openProfileEditor(null)">
+                    + New Signal Profile
+                </button>
             </div>
-        </header>
 
-        <!-- Registered Channels Section -->
-        <div class="card">
-            <h2 class="card-title">Registered Channels</h2>
-            <button type="button" class="send-message-button" @click="openChannelMessageModal()">
-                📤 Send Message to Registered Channel
-            </button>
-        </div>
-
-        <div class="card">
-            <h2 class="card-title">Signal Profiles</h2>
-            <div class="chip-list">
-                <template x-for="profile in profiles" :key="profile">
-                    <button type="button" class="btn btn-secondary" @click="openProfileEditor(profile)" x-text="profile"></button>
-                </template>
-                <div class="empty-state" x-show="profiles.length === 0">No signal profiles</div>
+            <div class="card">
+                <h2 class="card-title">Audio Files</h2>
+                <button type="button" class="btn btn-primary" @click="openFileBrowser()">Browse Audio Files</button>
             </div>
-            <button type="button" class="btn btn-primary" @click="openProfileEditor(null)">+ New Signal Profile</button>
-        </div>
 
-        <div class="card">
-            <h2 class="card-title">Audio Files</h2>
-            <button type="button" class="btn btn-primary" @click="openFileBrowser()">Browse Audio Files</button>
-        </div>
-
-        <div class="guilds-grid" x-show="guilds.length > 0">
-            <template x-for="guild in guilds" :key="guild.guild_id">
-                <div class="guild-card">
-                    <div class="guild-header">
-                        <div class="guild-id" x-text="'Guild: ' + guild.guild_id"></div>
-                        <span class="voice-badge" x-show="guild.in_voice">In Voice</span>
-                    </div>
-
-                    <div class="guild-content">
-                    <!-- DJ State -->
-                    <template x-if="guild.dj_state">
-                        <div class="section">
-                            <div class="section-title">DJ State</div>
-                            <div class="dj-state">
-                                <div class="dj-type" x-text="guild.dj_state.state_type"></div>
-                                <div class="dj-details" x-text="guild.dj_state.details"></div>
-                            </div>
-                            <div class="button-group mt-12">
-                                <button type="button" class="btn btn-secondary" @click="openModal('advanceDJ', guild.guild_id)">
-                                    Advance DJ State
-                                </button>
-                                <button type="button" class="btn btn-secondary" @click="openModal('playHex', guild.guild_id)">
-                                    Play Hex Message
-                                </button>
-                                <button type="button" class="btn btn-secondary" @click="openModal('playTrack', guild.guild_id)">
-                                    Play Track
-                                </button>
-                            </div>
+            <div class="guilds-grid" x-show="guilds.length > 0">
+                <template x-for="guild in guilds" :key="guild.guild_id">
+                    <div class="guild-card">
+                        <div class="guild-header">
+                            <div class="guild-id" x-text="'Guild: ' + guild.guild_id"></div>
+                            <span class="voice-badge" x-show="guild.in_voice">In Voice</span>
                         </div>
-                    </template>
 
-                    <!-- Audio Profile -->
-                    <template x-if="guild.audio_profile">
-                        <div class="section">
-                            <div class="section-title">Audio Profile</div>
-                            <div class="info-item">
-                                <div class="grow">
-                                    <div class="track-name" x-text="guild.audio_profile.name"></div>
-                                    <div class="track-details" x-text="guild.audio_profile.source ? 'Source: ' + guild.audio_profile.source : 'No DJ'"></div>
-                                </div>
-                            </div>
-                            <button type="button" class="btn btn-secondary mt-12 w-full" @click="openModal('signalProfile', guild.guild_id)">
-                                Change Signal Profile
-                            </button>
-                        </div>
-                    </template>
-
-                    <!-- Live Audio Stream -->
-                    <template x-if="guild.in_voice">
-                        <div class="section">
-                            <div class="section-title">Live Audio Stream</div>
-                            <div class="info-item">
-                                <div class="grow">
-                                    <!-- biome-ignore lint/a11y/useMediaCaption: live stream, no caption track exists -->
-                                    <audio class="w-full mt-8"
-                                        :src="'/api/guilds/' + guild.guild_id + '/audio-stream'"
-                                        controls
-                                        preload="none">
-                                        Your browser does not support the audio element.
-                                    </audio>
-                                    <div class="track-details mt-8 text-center">
-                                        🎧 Listen to bot's audio output in real-time
+                        <div class="guild-content">
+                            <!-- DJ State -->
+                            <template x-if="guild.dj_state">
+                                <div class="section">
+                                    <div class="section-title">DJ State</div>
+                                    <div class="dj-state">
+                                        <div class="dj-type" x-text="guild.dj_state.state_type"></div>
+                                        <div class="dj-details" x-text="guild.dj_state.details"></div>
+                                    </div>
+                                    <div class="button-group mt-12">
+                                        <button
+                                            type="button"
+                                            class="btn btn-secondary"
+                                            @click="openModal('advanceDJ', guild.guild_id)"
+                                        >
+                                            Advance DJ State
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="btn btn-secondary"
+                                            @click="openModal('playHex', guild.guild_id)"
+                                        >
+                                            Play Hex Message
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="btn btn-secondary"
+                                            @click="openModal('playTrack', guild.guild_id)"
+                                        >
+                                            Play Track
+                                        </button>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-                    </template>
+                            </template>
 
-                    <!-- Audio Tracks -->
-                    <template x-if="guild.tracks && guild.tracks.length > 0">
-                        <div class="section">
-                            <div class="section-title">
-                                Audio Tracks
-                                <button type="button" class="btn btn-secondary btn-float-right" @click="openModal('trackState', guild.guild_id)">
-                                    Manage Tracks
-                                </button>
-                            </div>
-                            <template x-for="track in guild.tracks" :key="track.filename">
-                                <div class="track-item">
-                                    <div class="grow">
-                                        <div class="track-name" x-text="track.name"></div>
-                                        <div class="track-details">
-                                            <span x-text="track.filename.split('/').pop()"></span>
+                            <!-- Audio Profile -->
+                            <template x-if="guild.audio_profile">
+                                <div class="section">
+                                    <div class="section-title">Audio Profile</div>
+                                    <div class="info-item">
+                                        <div class="grow">
+                                            <div class="track-name" x-text="guild.audio_profile.name"></div>
+                                            <div
+                                                class="track-details"
+                                                x-text="guild.audio_profile.source ? 'Source: ' + guild.audio_profile.source : 'No DJ'"
+                                            ></div>
                                         </div>
-                                        <template x-if="track.duration_secs && !track.loops">
-                                            <div>
-                                                <div class="progress-bar">
-                                                    <div class="progress-fill" :style="'width: ' + getTrackProgress(track) + '%'"></div>
-                                                </div>
-                                                <div class="progress-time" x-text="getTrackTimeDisplay(track)"></div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        class="btn btn-secondary mt-12 w-full"
+                                        @click="openModal('signalProfile', guild.guild_id)"
+                                    >
+                                        Change Signal Profile
+                                    </button>
+                                </div>
+                            </template>
+
+                            <!-- Live Audio Stream -->
+                            <template x-if="guild.in_voice">
+                                <div class="section">
+                                    <div class="section-title">Live Audio Stream</div>
+                                    <div class="info-item">
+                                        <div class="grow">
+                                            <!-- biome-ignore lint/a11y/useMediaCaption: live stream, no caption track exists -->
+                                            <audio
+                                                class="w-full mt-8"
+                                                :src="'/api/guilds/' + guild.guild_id + '/audio-stream'"
+                                                controls
+                                                preload="none"
+                                            >
+                                                Your browser does not support the audio element.
+                                            </audio>
+                                            <div class="track-details mt-8 text-center">
+                                                🎧 Listen to bot's audio output in real-time
                                             </div>
-                                        </template>
-                                        <div class="track-details">
-                                            <span x-text="track.loops ? '🔁 Looping' : '▶️ Once'"></span> •
-                                            🔊 <div class="volume-bar volume-bar-inline">
-                                                <div class="volume-fill" :style="'width: ' + (track.volume * 100) + '%'"></div>
-                                            </div> <span x-text="Math.round(track.volume * 100) + '%'"></span>
                                         </div>
                                     </div>
                                 </div>
                             </template>
+
+                            <!-- Audio Tracks -->
+                            <template x-if="guild.tracks && guild.tracks.length > 0">
+                                <div class="section">
+                                    <div class="section-title">
+                                        Audio Tracks
+                                        <button
+                                            type="button"
+                                            class="btn btn-secondary btn-float-right"
+                                            @click="openModal('trackState', guild.guild_id)"
+                                        >
+                                            Manage Tracks
+                                        </button>
+                                    </div>
+                                    <template x-for="track in guild.tracks" :key="track.filename">
+                                        <div class="track-item">
+                                            <div class="grow">
+                                                <div class="track-name" x-text="track.name"></div>
+                                                <div class="track-details">
+                                                    <span x-text="track.filename.split('/').pop()"></span>
+                                                </div>
+                                                <template x-if="track.duration_secs && !track.loops">
+                                                    <div>
+                                                        <div class="progress-bar">
+                                                            <div
+                                                                class="progress-fill"
+                                                                :style="'width: ' + getTrackProgress(track) + '%'"
+                                                            ></div>
+                                                        </div>
+                                                        <div
+                                                            class="progress-time"
+                                                            x-text="getTrackTimeDisplay(track)"
+                                                        ></div>
+                                                    </div>
+                                                </template>
+                                                <div class="track-details">
+                                                    <span x-text="track.loops ? '🔁 Looping' : '▶️ Once'"></span>
+                                                    • 🔊
+                                                    <div class="volume-bar volume-bar-inline">
+                                                        <div
+                                                            class="volume-fill"
+                                                            :style="'width: ' + (track.volume * 100) + '%'"
+                                                        ></div>
+                                                    </div>
+                                                    <span x-text="Math.round(track.volume * 100) + '%'"></span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+
+                            <div class="section">
+                                <div class="section-title">Bot Profile</div>
+                                <button
+                                    type="button"
+                                    class="btn btn-secondary w-full"
+                                    @click="openBotProfileModal(guild.guild_id)"
+                                >
+                                    Edit Nickname, Avatar &amp; Banner
+                                </button>
+                            </div>
+
+                            <div class="section">
+                                <div class="section-title">Voice Channel Status</div>
+                                <!-- biome-ignore lint/a11y/noLabelWithoutControl: the checkbox is nested and the text comes from x-text -->
+                                <label class="checkbox-label">
+                                    <input
+                                        type="checkbox"
+                                        :checked="guild.channel_status_enabled"
+                                        @change="setChannelStatusEnabled(guild.guild_id, $event.target.checked)"
+                                    >
+                                    <span
+                                        x-text="guild.channel_status_enabled ? 'Managed by the DJ' : 'Not managed (left as it is)'"
+                                    ></span>
+                                </label>
+                            </div>
+
+                            <!-- Activity Logs-->
+                            <div class="section">
+                                <div class="section-title">Activity Logs</div>
+                                <div class="row-gap-10">
+                                    <!-- biome-ignore lint/a11y/useValidAnchor: the href is set by :href -->
+                                    <a
+                                        :href="'/logs.html?guild=' + guild.guild_id + '&type=members'"
+                                        target="_blank"
+                                        class="btn btn-secondary btn-link"
+                                    >
+                                        👥 Member Activity
+                                    </a>
+                                    <!-- biome-ignore lint/a11y/useValidAnchor: the href is set by :href -->
+                                    <a
+                                        :href="'/logs.html?guild=' + guild.guild_id + '&type=dj'"
+                                        target="_blank"
+                                        class="btn btn-secondary btn-link"
+                                    >
+                                        🎧 DJ Activity
+                                    </a>
+                                </div>
+                            </div>
+
+                            <!-- Empty State -->
+                            <template x-if="!guild.tracks.length && !guild.dj_state && !guild.audio_profile">
+                                <div class="empty-state">No active features</div>
+                            </template>
                         </div>
-                    </template>
-
-                    <div class="section">
-                        <div class="section-title">Bot Profile</div>
-                        <button type="button" class="btn btn-secondary w-full" @click="openBotProfileModal(guild.guild_id)">
-                            Edit Nickname, Avatar &amp; Banner
-                        </button>
                     </div>
-
-                    <div class="section">
-                        <div class="section-title">Voice Channel Status</div>
-                        <!-- biome-ignore lint/a11y/noLabelWithoutControl: the checkbox is nested and the text comes from x-text -->
-                        <label class="checkbox-label">
-                            <input type="checkbox" :checked="guild.channel_status_enabled" @change="setChannelStatusEnabled(guild.guild_id, $event.target.checked)">
-                            <span x-text="guild.channel_status_enabled ? 'Managed by the DJ' : 'Not managed (left as it is)'"></span>
-                        </label>
-                    </div>
-
-                    <!-- Activity Logs-->
-                    <div class="section">
-                        <div class="section-title">Activity Logs</div>
-                        <div class="row-gap-10">
-                            <!-- biome-ignore lint/a11y/useValidAnchor: the href is set by :href -->
-                            <a :href="'/logs.html?guild=' + guild.guild_id + '&type=members'" target="_blank" class="btn btn-secondary btn-link">
-                                👥 Member Activity
-                            </a>
-                            <!-- biome-ignore lint/a11y/useValidAnchor: the href is set by :href -->
-                            <a :href="'/logs.html?guild=' + guild.guild_id + '&type=dj'" target="_blank" class="btn btn-secondary btn-link">
-                                🎧 DJ Activity
-                            </a>
-                        </div>
-                    </div>
-
-                    <!-- Empty State -->
-                    <template x-if="!guild.tracks.length && !guild.dj_state && !guild.audio_profile">
-                        <div class="empty-state">No active features</div>
-                    </template>
-                    </div>
-                </div>
-            </template>
-        </div>
-
-        <div class="no-guilds" x-show="guilds.length === 0">
-            <div class="no-guilds-icon">💤</div>
-            <p x-text="connected ? 'No active guilds' : 'Connecting to bot...'"></p>
-        </div>
-    </div>
-
-    <!-- Advance DJ State Modal -->
-    <template x-modal data-modal="advanceDJ" data-title="Advance DJ State" data-message="djMessage"
-              data-submit="advanceDJState()" data-saving="djSaving"
-              data-submit-label="Advance State" data-busy-label="Advancing...">
-        <div class="form-group">
-            <label class="form-label" for="advance-state-type">State Type (Optional)</label>
-            <select id="advance-state-type" class="form-input" x-model="djStateType">
-                <option value="">Any (default)</option>
-                <option value="track">Track</option>
-                <option value="hex">Hex Message</option>
-                <option value="noise">Noise</option>
-            </select>
-            <small class="hint">
-                Leave as "Any" to advance to the next state, or select a specific state type to force.
-            </small>
-        </div>
-    </template>
-
-    <!-- Play Hex Message Modal -->
-    <template x-modal data-modal="playHex" data-title="Play Hex Message via DJ" data-message="hexMessage"
-              data-submit="playHexMessage()" data-saving="hexSaving"
-              data-submit-label="Play Message" data-busy-label="Playing...">
-        <div class="form-group">
-            <label class="form-label" for="hex-message">Message</label>
-            <input id="hex-message" type="text" class="form-input" x-model="hexMessageText" 
-                   placeholder="Enter message to play..." required>
-            <small class="hint">
-                Message will be played using the DJ with default settings.
-            </small>
-        </div>
-    </template>
-
-    <!-- Play Track Modal -->
-    <template x-modal data-modal="playTrack" data-title="Play Track via DJ" data-message="playTrackMessage"
-              data-submit="playTrack()" data-saving="playTrackSaving"
-              data-submit-label="Play Track" data-busy-label="Playing...">
-        <div class="form-group">
-            <label class="form-label" for="play-track-file">Audio File</label>
-            <select id="play-track-file" class="form-input" x-model="playTrackFilename" required>
-                <option value="">Select audio file...</option>
-                <template x-for="file in audioFiles" :key="file">
-                    <option :value="file" x-text="file"></option>
                 </template>
-            </select>
-        </div>
-        <div class="form-row">
-            <div class="form-group">
-                <label class="form-label" for="play-track-volume">Volume</label>
-                <input id="play-track-volume" type="number" class="form-input" x-model.number="playTrackVolume"
-                       min="0" max="2" step="0.1" placeholder="0.0-2.0">
             </div>
-            <div class="form-group">
-                <label class="form-label" for="play-track-start">Start (seconds)</label>
-                <input id="play-track-start" type="number" class="form-input" x-model.number="playTrackStart"
-                       min="0" step="0.1">
-            </div>
-            <div class="form-group">
-                <label class="form-label" for="play-track-duration">Duration (seconds)</label>
-                <input id="play-track-duration" type="number" class="form-input" x-model.number="playTrackDuration"
-                       min="0" step="0.1">
-            </div>
-        </div>
-    </template>
 
-    <!-- Track State Management Modal -->
-    <template x-modal data-modal="trackState" data-title="Manage Track State" data-message="trackMessage"
-              data-submit="changeTrackState()" data-saving="trackSaving"
-              data-submit-label="Apply" data-busy-label="Saving...">
-        <div class="form-group">
-            <label class="form-label" for="track-state-name">Track Name</label>
-            <input id="track-state-name" type="text" class="form-input" x-model="trackName"
-                   placeholder="Track identifier..." required>
+            <div class="no-guilds" x-show="guilds.length === 0">
+                <div class="no-guilds-icon">💤</div>
+                <p x-text="connected ? 'No active guilds' : 'Connecting to bot...'"></p>
+            </div>
         </div>
-        <div class="form-group">
-            <label class="form-label" for="track-state-action">Action</label>
-            <select id="track-state-action" class="form-input" x-model="trackState" @change="trackStateChanged()">
-                <option value="">Update Existing Track</option>
-                <option value="start">Start New Track</option>
-                <option value="stop">Stop Track</option>
-            </select>
-        </div>
-        <template x-if="trackState === 'start'">
+
+        <!-- Advance DJ State Modal -->
+        <template
+            x-modal
+            data-modal="advanceDJ"
+            data-title="Advance DJ State"
+            data-message="djMessage"
+            data-submit="advanceDJState()"
+            data-saving="djSaving"
+            data-submit-label="Advance State"
+            data-busy-label="Advancing..."
+        >
             <div class="form-group">
-                <label class="form-label" for="track-state-file">Audio File</label>
-                <select id="track-state-file" class="form-input" x-model="trackFilename" required>
+                <label class="form-label" for="advance-state-type">State Type (Optional)</label>
+                <select id="advance-state-type" class="form-input" x-model="djStateType">
+                    <option value="">Any (default)</option>
+                    <option value="track">Track</option>
+                    <option value="hex">Hex Message</option>
+                    <option value="noise">Noise</option>
+                </select>
+                <small class="hint">
+                    Leave as "Any" to advance to the next state, or select a specific state type to force.
+                </small>
+            </div>
+        </template>
+
+        <!-- Play Hex Message Modal -->
+        <template
+            x-modal
+            data-modal="playHex"
+            data-title="Play Hex Message via DJ"
+            data-message="hexMessage"
+            data-submit="playHexMessage()"
+            data-saving="hexSaving"
+            data-submit-label="Play Message"
+            data-busy-label="Playing..."
+        >
+            <div class="form-group">
+                <label class="form-label" for="hex-message">Message</label>
+                <input
+                    id="hex-message"
+                    type="text"
+                    class="form-input"
+                    x-model="hexMessageText"
+                    placeholder="Enter message to play..."
+                    required
+                >
+                <small class="hint"> Message will be played using the DJ with default settings. </small>
+            </div>
+        </template>
+
+        <!-- Play Track Modal -->
+        <template
+            x-modal
+            data-modal="playTrack"
+            data-title="Play Track via DJ"
+            data-message="playTrackMessage"
+            data-submit="playTrack()"
+            data-saving="playTrackSaving"
+            data-submit-label="Play Track"
+            data-busy-label="Playing..."
+        >
+            <div class="form-group">
+                <label class="form-label" for="play-track-file">Audio File</label>
+                <select id="play-track-file" class="form-input" x-model="playTrackFilename" required>
                     <option value="">Select audio file...</option>
                     <template x-for="file in audioFiles" :key="file">
                         <option :value="file" x-text="file"></option>
                     </template>
                 </select>
             </div>
-        </template>
-        <template x-if="trackState !== 'stop'">
             <div class="form-row">
                 <div class="form-group">
-                    <label class="form-label" for="track-state-volume">Volume</label>
-                    <input id="track-state-volume" type="number" class="form-input" x-model.number="trackVolume"
-                           min="0" max="2" step="0.1" placeholder="0.0-2.0">
+                    <label class="form-label" for="play-track-volume">Volume</label>
+                    <input
+                        id="play-track-volume"
+                        type="number"
+                        class="form-input"
+                        x-model.number="playTrackVolume"
+                        min="0"
+                        max="2"
+                        step="0.1"
+                        placeholder="0.0-2.0"
+                    >
                 </div>
                 <div class="form-group">
-                    <label class="form-label" for="track-state-loop">Loop</label>
-                    <select id="track-state-loop" class="form-input" x-model="trackLoops">
-                        <option value="">Default</option>
-                        <option value="true">Yes</option>
-                        <option value="false">No</option>
+                    <label class="form-label" for="play-track-start">Start (seconds)</label>
+                    <input
+                        id="play-track-start"
+                        type="number"
+                        class="form-input"
+                        x-model.number="playTrackStart"
+                        min="0"
+                        step="0.1"
+                    >
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="play-track-duration">Duration (seconds)</label>
+                    <input
+                        id="play-track-duration"
+                        type="number"
+                        class="form-input"
+                        x-model.number="playTrackDuration"
+                        min="0"
+                        step="0.1"
+                    >
+                </div>
+            </div>
+        </template>
+
+        <!-- Track State Management Modal -->
+        <template
+            x-modal
+            data-modal="trackState"
+            data-title="Manage Track State"
+            data-message="trackMessage"
+            data-submit="changeTrackState()"
+            data-saving="trackSaving"
+            data-submit-label="Apply"
+            data-busy-label="Saving..."
+        >
+            <div class="form-group">
+                <label class="form-label" for="track-state-name">Track Name</label>
+                <input
+                    id="track-state-name"
+                    type="text"
+                    class="form-input"
+                    x-model="trackName"
+                    placeholder="Track identifier..."
+                    required
+                >
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="track-state-action">Action</label>
+                <select id="track-state-action" class="form-input" x-model="trackState" @change="trackStateChanged()">
+                    <option value="">Update Existing Track</option>
+                    <option value="start">Start New Track</option>
+                    <option value="stop">Stop Track</option>
+                </select>
+            </div>
+            <template x-if="trackState === 'start'">
+                <div class="form-group">
+                    <label class="form-label" for="track-state-file">Audio File</label>
+                    <select id="track-state-file" class="form-input" x-model="trackFilename" required>
+                        <option value="">Select audio file...</option>
+                        <template x-for="file in audioFiles" :key="file">
+                            <option :value="file" x-text="file"></option>
+                        </template>
                     </select>
                 </div>
-            </div>
-        </template>
-        <div class="form-group">
-            <label class="form-label" for="track-state-fade">Fade Time (seconds)</label>
-            <input id="track-state-fade" type="number" class="form-input" x-model.number="trackFadeTime"
-                   min="0" step="0.1" placeholder="1.0">
-        </div>
-    </template>
-
-    <!-- Signal Profile Modal -->
-    <template x-modal data-modal="signalProfile" data-title="Change Signal Profile" data-message="profileMessage"
-              data-submit="changeSignalProfile()" data-saving="profileSaving"
-              data-submit-label="Apply Profile" data-busy-label="Applying...">
-        <div class="form-group">
-            <label class="form-label" for="signal-profile-setting">Setting</label>
-            <select id="signal-profile-setting" class="form-input" x-model="profileSetting">
-                <option value="profile">Background (replaces rotation)</option>
-                <option value="profile-override">Override (beats everything)</option>
-            </select>
-        </div>
-        <div class="form-group">
-            <label class="form-label" for="signal-profile-profile">Profile</label>
-            <select id="signal-profile-profile" class="form-input" x-model="selectedProfile">
-                <option value="">None (clear)</option>
-                <template x-for="profile in profiles" :key="profile">
-                    <option :value="profile" x-text="profile"></option>
-                </template>
-            </select>
-        </div>
-        <div class="form-group" x-show="selectedProfile">
-            <label class="form-label" for="signal-profile-fade">Fade Duration (seconds)</label>
-            <input id="signal-profile-fade" type="number" class="form-input" x-model.number="profileFadeDuration"
-                   min="0" step="0.1" :placeholder="profileSetting === 'profile-override' ? '2.0' : 'default'">
-        </div>
-    </template>
-
-    <template x-modal data-modal="botProfile" data-title="Bot Profile" data-message="botProfileMessage"
-              data-loading="botProfileLoading" data-submit="saveBotProfile()" data-saving="botProfileSaving"
-              data-submit-label="Save" data-busy-label="Saving..." data-cancel-label="Close"
-              data-escape-unless="fileBrowser.open">
-        <div class="form-group">
-            <label class="form-label" for="bot-profile-nick">Nickname</label>
-            <input id="bot-profile-nick" type="text" class="form-input" x-model="botProfileForm.nick" maxlength="32"
-                   placeholder="Empty uses the bot's username">
-        </div>
-        <template x-for="field in ['avatar', 'banner']" :key="field">
-            <div class="form-group">
-                <!-- biome-ignore lint/a11y/noLabelWithoutControl: labels an image and a button, not a single control -->
-                <label class="form-label" x-text="field === 'avatar' ? 'Avatar' : 'Banner'"></label>
-                <div class="track-details" x-show="!botProfileCurrent[field + '_url']">Not set for this server</div>
-                <!-- biome-ignore lint/a11y/useAltText: an alt attribute changes how a failed image renders -->
-                <img :src="botProfileCurrent[field + '_url']" x-show="botProfileCurrent[field + '_url']"
-                     :class="field === 'avatar' ? 'bot-profile-avatar' : 'bot-profile-banner'">
-                <div class="row-center-8 mt-8">
-                    <button type="button" class="btn btn-secondary" @click="pickBotProfileImage(field)">Choose Image</button>
-                    <span class="track-details" x-text="botProfileForm[field] || 'Unchanged'"></span>
-                </div>
-            </div>
-        </template>
-    </template>
-
-    <!-- Activity Management Modal -->
-    <template x-modal data-modal="activity" data-title="Manage Bot Activity" data-message="activityMessage">
-        <!-- Current Activity Section -->
-        <div class="modal-section">
-            <div class="modal-section-title">Current Activity</div>
-            <template x-if="currentActivity.status">
-                <div class="info-item info-item-accent">
-                    <div class="grow">
-                        <div class="activity-icon-large" x-text="getActivityIcon(currentActivity.activity_type)"></div>
-                        <div class="activity-type-small" x-text="currentActivity.activity_type"></div>
-                        <div class="activity-status-large" x-text="currentActivity.status"></div>
+            </template>
+            <template x-if="trackState !== 'stop'">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label" for="track-state-volume">Volume</label>
+                        <input
+                            id="track-state-volume"
+                            type="number"
+                            class="form-input"
+                            x-model.number="trackVolume"
+                            min="0"
+                            max="2"
+                            step="0.1"
+                            placeholder="0.0-2.0"
+                        >
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="track-state-loop">Loop</label>
+                        <select id="track-state-loop" class="form-input" x-model="trackLoops">
+                            <option value="">Default</option>
+                            <option value="true">Yes</option>
+                            <option value="false">No</option>
+                        </select>
                     </div>
                 </div>
             </template>
-            <template x-if="!currentActivity.status">
-                <div class="empty-state">No activity set</div>
-            </template>
-        </div>
+            <div class="form-group">
+                <label class="form-label" for="track-state-fade">Fade Time (seconds)</label>
+                <input
+                    id="track-state-fade"
+                    type="number"
+                    class="form-input"
+                    x-model.number="trackFadeTime"
+                    min="0"
+                    step="0.1"
+                    placeholder="1.0"
+                >
+            </div>
+        </template>
 
-        <!-- Set Activity Form -->
-        <div class="modal-section">
-            <div class="modal-section-title">Set New Activity</div>
-            <form @submit.prevent="setActivity()">
+        <!-- Signal Profile Modal -->
+        <template
+            x-modal
+            data-modal="signalProfile"
+            data-title="Change Signal Profile"
+            data-message="profileMessage"
+            data-submit="changeSignalProfile()"
+            data-saving="profileSaving"
+            data-submit-label="Apply Profile"
+            data-busy-label="Applying..."
+        >
+            <div class="form-group">
+                <label class="form-label" for="signal-profile-setting">Setting</label>
+                <select id="signal-profile-setting" class="form-input" x-model="profileSetting">
+                    <option value="profile">Background (replaces rotation)</option>
+                    <option value="profile-override">Override (beats everything)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="signal-profile-profile">Profile</label>
+                <select id="signal-profile-profile" class="form-input" x-model="selectedProfile">
+                    <option value="">None (clear)</option>
+                    <template x-for="profile in profiles" :key="profile">
+                        <option :value="profile" x-text="profile"></option>
+                    </template>
+                </select>
+            </div>
+            <div class="form-group" x-show="selectedProfile">
+                <label class="form-label" for="signal-profile-fade">Fade Duration (seconds)</label>
+                <input
+                    id="signal-profile-fade"
+                    type="number"
+                    class="form-input"
+                    x-model.number="profileFadeDuration"
+                    min="0"
+                    step="0.1"
+                    :placeholder="profileSetting === 'profile-override' ? '2.0' : 'default'"
+                >
+            </div>
+        </template>
+
+        <template
+            x-modal
+            data-modal="botProfile"
+            data-title="Bot Profile"
+            data-message="botProfileMessage"
+            data-loading="botProfileLoading"
+            data-submit="saveBotProfile()"
+            data-saving="botProfileSaving"
+            data-submit-label="Save"
+            data-busy-label="Saving..."
+            data-cancel-label="Close"
+            data-escape-unless="fileBrowser.open"
+        >
+            <div class="form-group">
+                <label class="form-label" for="bot-profile-nick">Nickname</label>
+                <input
+                    id="bot-profile-nick"
+                    type="text"
+                    class="form-input"
+                    x-model="botProfileForm.nick"
+                    maxlength="32"
+                    placeholder="Empty uses the bot's username"
+                >
+            </div>
+            <template x-for="field in ['avatar', 'banner']" :key="field">
                 <div class="form-group">
-                    <label class="form-label" for="activity-type">Activity Type</label>
-                    <select id="activity-type" class="form-input" x-model="newActivityType" required>
-                        <option value="playing">🎮 Playing</option>
-                        <option value="listening">🎵 Listening</option>
-                        <option value="streaming">📡 Streaming</option>
-                        <option value="custom">✨ Custom</option>
-                    </select>
+                    <!-- biome-ignore lint/a11y/noLabelWithoutControl: labels an image and a button, not a single control -->
+                    <label class="form-label" x-text="field === 'avatar' ? 'Avatar' : 'Banner'"></label>
+                    <div class="track-details" x-show="!botProfileCurrent[field + '_url']">Not set for this server</div>
+                    <!-- biome-ignore lint/a11y/useAltText: an alt attribute changes how a failed image renders -->
+                    <img
+                        :src="botProfileCurrent[field + '_url']"
+                        x-show="botProfileCurrent[field + '_url']"
+                        :class="field === 'avatar' ? 'bot-profile-avatar' : 'bot-profile-banner'"
+                    >
+                    <div class="row-center-8 mt-8">
+                        <button type="button" class="btn btn-secondary" @click="pickBotProfileImage(field)">
+                            Choose Image
+                        </button>
+                        <span class="track-details" x-text="botProfileForm[field] || 'Unchanged'"></span>
+                    </div>
+                </div>
+            </template>
+        </template>
+
+        <!-- Activity Management Modal -->
+        <template x-modal data-modal="activity" data-title="Manage Bot Activity" data-message="activityMessage">
+            <!-- Current Activity Section -->
+            <div class="modal-section">
+                <div class="modal-section-title">Current Activity</div>
+                <template x-if="currentActivity.status">
+                    <div class="info-item info-item-accent">
+                        <div class="grow">
+                            <div
+                                class="activity-icon-large"
+                                x-text="getActivityIcon(currentActivity.activity_type)"
+                            ></div>
+                            <div class="activity-type-small" x-text="currentActivity.activity_type"></div>
+                            <div class="activity-status-large" x-text="currentActivity.status"></div>
+                        </div>
+                    </div>
+                </template>
+                <template x-if="!currentActivity.status">
+                    <div class="empty-state">No activity set</div>
+                </template>
+            </div>
+
+            <!-- Set Activity Form -->
+            <div class="modal-section">
+                <div class="modal-section-title">Set New Activity</div>
+                <form @submit.prevent="setActivity()">
+                    <div class="form-group">
+                        <label class="form-label" for="activity-type">Activity Type</label>
+                        <select id="activity-type" class="form-input" x-model="newActivityType" required>
+                            <option value="playing">🎮 Playing</option>
+                            <option value="listening">🎵 Listening</option>
+                            <option value="streaming">📡 Streaming</option>
+                            <option value="custom">✨ Custom</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="activity-status">Status Text</label>
+                        <input
+                            id="activity-status"
+                            type="text"
+                            class="form-input"
+                            x-model="newActivityStatus"
+                            placeholder="Enter activity status..."
+                            required
+                        >
+                    </div>
+                    <div class="button-group">
+                        <button type="submit" class="btn btn-primary" :disabled="activitySaving">
+                            <span x-text="activitySaving ? 'Setting...' : 'Set Activity'"></span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </template>
+
+        <!-- Channel Message Modal -->
+        <template
+            x-modal
+            data-modal="channelMessage"
+            data-title="Send Message to Registered Channel"
+            data-message="channelMessage"
+            data-loading="channelsLoading"
+            data-submit="sendChannelMessage()"
+            data-saving="channelMessageSaving"
+            data-disabled-when="!selectedChannelId"
+            data-submit-label="Send Message"
+            data-busy-label="Sending..."
+        >
+            <div class="form-group">
+                <label class="form-label" for="channel-message-channel">Channel *</label>
+                <select id="channel-message-channel" class="form-input" x-model="selectedChannelId" required>
+                    <option value="">Select a channel...</option>
+                    <template x-for="channel in registeredChannels" :key="channel.channel_id">
+                        <option
+                            :value="channel.channel_id"
+                            x-text="`${channel.name} (${channel.channel_type}) - Guild: ${channel.guild_id}`"
+                        ></option>
+                    </template>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="channel-message-text">Message</label>
+                <textarea
+                    id="channel-message-text"
+                    class="form-input"
+                    x-model="channelMessageText"
+                    rows="3"
+                    placeholder="Optional plain text message"
+                ></textarea>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="channel-message-title">Embed Title (Optional)</label>
+                <input
+                    id="channel-message-title"
+                    type="text"
+                    class="form-input"
+                    x-model="channelMessageTitle"
+                    placeholder="Optional embed title"
+                >
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="channel-message-description">Embed Description (Optional)</label>
+                <textarea
+                    id="channel-message-description"
+                    class="form-input"
+                    x-model="channelMessageDescription"
+                    rows="4"
+                    placeholder="Optional embed description"
+                ></textarea>
+            </div>
+        </template>
+
+        <template
+            x-modal
+            data-modal="profileEditor"
+            data-title-expression="profileEditorIsNew ? 'New Signal Profile' : 'Edit Signal Profile'"
+            data-message="profileEditorMessage"
+            data-loading="profileEditorLoading"
+            data-submit="saveProfile()"
+            data-saving="profileEditorSaving"
+            data-submit-label="Save Profile"
+            data-busy-label="Saving..."
+            data-cancel-label="Close"
+        >
+            <div class="form-group">
+                <label class="form-label" for="profile-editor-name">Name</label>
+                <input
+                    id="profile-editor-name"
+                    type="text"
+                    class="form-input"
+                    x-model="profileForm.name"
+                    :readonly="!profileEditorIsNew"
+                    required
+                    pattern="[A-Za-z0-9_\-]+"
+                    title="Letters, digits, - and _ only"
+                >
+            </div>
+            <div class="form-row">
+                <template x-for="field in profileFields" :key="field.key">
+                    <div class="form-group">
+                        <!-- biome-ignore lint/a11y/noLabelWithoutControl: the label text comes from x-text -->
+                        <label class="form-label" :for="'profile-field-' + field.key" x-text="field.label"></label>
+                        <input
+                            :id="'profile-field-' + field.key"
+                            type="number"
+                            class="form-input"
+                            x-model.number="profileForm[field.key]"
+                            :step="field.step"
+                            :min="field.min"
+                            :max="field.max"
+                            :required="!field.optional"
+                            :placeholder="field.optional ? 'Off' : ''"
+                        >
+                    </div>
+                </template>
+                <div class="form-group">
+                    <label class="form-label" for="profile-editor-dropout-min">Dropout Min Duration (ms)</label>
+                    <input
+                        id="profile-editor-dropout-min"
+                        type="number"
+                        class="form-input"
+                        x-model.number="profileForm.dropout_duration_ms[0]"
+                        step="any"
+                        min="0"
+                        required
+                    >
                 </div>
                 <div class="form-group">
-                    <label class="form-label" for="activity-status">Status Text</label>
-                    <input id="activity-status" type="text" class="form-input" x-model="newActivityStatus" 
-                           placeholder="Enter activity status..." required>
+                    <label class="form-label" for="profile-editor-dropout-max">Dropout Max Duration (ms)</label>
+                    <input
+                        id="profile-editor-dropout-max"
+                        type="number"
+                        class="form-input"
+                        x-model.number="profileForm.dropout_duration_ms[1]"
+                        step="any"
+                        min="0"
+                        required
+                    >
                 </div>
-                <div class="button-group">
-                    <button type="submit" class="btn btn-primary" :disabled="activitySaving">
-                        <span x-text="activitySaving ? 'Setting...' : 'Set Activity'"></span>
-                    </button>
+            </div>
+        </template>
+
+        <template
+            x-modal
+            data-modal="fileBrowser"
+            data-message="fileBrowser.message"
+            data-overlay-class="file-browser-overlay"
+            data-title-expression="fileBrowser.mode === 'file' ? 'Select ' + fileBrowserKind().noun : fileBrowser.mode === 'folder' ? 'Select Folder' : fileBrowserKind().noun + 's'"
+        >
+            <div class="file-browser-crumbs">
+                <button
+                    type="button"
+                    class="btn btn-secondary"
+                    :disabled="fileBrowserCrumbs().length < 2"
+                    @click="loadFileBrowser(fileBrowserCrumbs().at(-2).prefix)"
+                >
+                    &uarr; Up
+                </button>
+                <template x-for="(crumb, index) in fileBrowserCrumbs()" :key="crumb.prefix">
+                    <span>
+                        <span x-show="index > 0">/</span>
+                        <button
+                            type="button"
+                            class="btn btn-secondary"
+                            @click="loadFileBrowser(crumb.prefix)"
+                            x-text="crumb.name"
+                        ></button>
+                    </span>
+                </template>
+            </div>
+
+            <div class="loading" x-show="fileBrowser.loading">Loading...</div>
+
+            <div x-show="!fileBrowser.loading">
+                <template x-for="folder in fileBrowser.folders" :key="folder">
+                    <div class="file-browser-row">
+                        <button
+                            type="button"
+                            class="btn btn-secondary"
+                            @click="loadFileBrowser(folder)"
+                            x-text="'📁 ' + folder.slice(fileBrowser.prefix.length)"
+                        ></button>
+                        <button
+                            type="button"
+                            class="btn btn-primary"
+                            x-show="fileBrowser.mode === 'folder'"
+                            @click="selectFileBrowserEntry(folder)"
+                        >
+                            Select
+                        </button>
+                    </div>
+                </template>
+                <template x-for="file in fileBrowser.files" :key="file.key">
+                    <div class="file-browser-row">
+                        <div>
+                            <div class="file-browser-row-name" x-text="file.key.slice(fileBrowser.prefix.length)"></div>
+                            <div
+                                class="file-browser-row-meta"
+                                x-text="file.key + ' · ' + formatBytes(file.size) + ' · ' + formatDate(file.last_modified)"
+                            ></div>
+                        </div>
+                        <button
+                            type="button"
+                            class="btn btn-primary"
+                            x-show="fileBrowser.mode === 'file'"
+                            @click="selectFileBrowserEntry(file.key)"
+                        >
+                            Select
+                        </button>
+                    </div>
+                </template>
+                <div class="empty-state" x-show="fileBrowser.folders.length === 0 && fileBrowser.files.length === 0">
+                    This folder is empty
                 </div>
+            </div>
+
+            <form class="file-browser-new-folder" @submit.prevent="createFileBrowserFolder()">
+                <input
+                    type="text"
+                    class="form-input"
+                    placeholder="New folder name"
+                    x-model="fileBrowser.newFolderName"
+                    required
+                    pattern="[A-Za-z0-9_\-]+"
+                    title="Letters, digits, - and _ only"
+                >
+                <button type="submit" class="btn btn-secondary" :disabled="fileBrowser.creatingFolder">
+                    <span x-text="fileBrowser.creatingFolder ? 'Creating...' : 'New Folder'"></span>
+                </button>
             </form>
-        </div>
-    </template>
 
-    <!-- Channel Message Modal -->
-    <template x-modal data-modal="channelMessage" data-title="Send Message to Registered Channel"
-              data-message="channelMessage" data-loading="channelsLoading"
-              data-submit="sendChannelMessage()" data-saving="channelMessageSaving"
-              data-disabled-when="!selectedChannelId"
-              data-submit-label="Send Message" data-busy-label="Sending...">
-        <div class="form-group">
-            <label class="form-label" for="channel-message-channel">Channel *</label>
-            <select id="channel-message-channel" class="form-input" x-model="selectedChannelId" required>
-                <option value="">Select a channel...</option>
-                <template x-for="channel in registeredChannels" :key="channel.channel_id">
-                    <option :value="channel.channel_id"
-                            x-text="`${channel.name} (${channel.channel_type}) - Guild: ${channel.guild_id}`">
-                    </option>
-                </template>
-            </select>
-        </div>
+            <!-- biome-ignore lint/a11y/noLabelWithoutControl: the file input is nested and the text comes from x-text -->
+            <label
+                class="file-browser-drop"
+                :class="{ dragging: fileBrowser.dragging }"
+                @dragover.prevent="fileBrowser.dragging = true"
+                @dragleave="fileBrowser.dragging = false"
+                @drop.prevent="fileBrowser.dragging = false; uploadFiles($event.dataTransfer.files)"
+            >
+                <span x-text="'Drop files here or click to choose (' + fileBrowserKind().hint + ')'"></span>
+                <input
+                    class="hidden"
+                    type="file"
+                    multiple
+                    :accept="fileBrowserKind().accept"
+                    @change="uploadFiles($event.target.files); $event.target.value = ''"
+                >
+            </label>
 
-        <div class="form-group">
-            <label class="form-label" for="channel-message-text">Message</label>
-            <textarea id="channel-message-text" class="form-input" x-model="channelMessageText" rows="3"
-                      placeholder="Optional plain text message"></textarea>
-        </div>
-
-        <div class="form-group">
-            <label class="form-label" for="channel-message-title">Embed Title (Optional)</label>
-            <input id="channel-message-title" type="text" class="form-input" x-model="channelMessageTitle"
-                   placeholder="Optional embed title">
-        </div>
-
-        <div class="form-group">
-            <label class="form-label" for="channel-message-description">Embed Description (Optional)</label>
-            <textarea id="channel-message-description" class="form-input" x-model="channelMessageDescription" rows="4"
-                      placeholder="Optional embed description"></textarea>
-        </div>
-    </template>
-
-    <template x-modal data-modal="profileEditor" data-title-expression="profileEditorIsNew ? 'New Signal Profile' : 'Edit Signal Profile'"
-              data-message="profileEditorMessage" data-loading="profileEditorLoading"
-              data-submit="saveProfile()" data-saving="profileEditorSaving"
-              data-submit-label="Save Profile" data-busy-label="Saving..." data-cancel-label="Close">
-        <div class="form-group">
-            <label class="form-label" for="profile-editor-name">Name</label>
-            <input id="profile-editor-name" type="text" class="form-input" x-model="profileForm.name"
-                   :readonly="!profileEditorIsNew" required pattern="[A-Za-z0-9_\-]+"
-                   title="Letters, digits, - and _ only">
-        </div>
-        <div class="form-row">
-            <template x-for="field in profileFields" :key="field.key">
-                <div class="form-group">
-                    <!-- biome-ignore lint/a11y/noLabelWithoutControl: the label text comes from x-text -->
-                    <label class="form-label" :for="'profile-field-' + field.key" x-text="field.label"></label>
-                    <input :id="'profile-field-' + field.key" type="number" class="form-input" x-model.number="profileForm[field.key]"
-                           :step="field.step" :min="field.min" :max="field.max"
-                           :required="!field.optional" :placeholder="field.optional ? 'Off' : ''">
+            <template x-for="upload in fileBrowser.uploads" :key="upload.id">
+                <div class="file-browser-upload">
+                    <div class="file-browser-row-name" x-text="upload.name"></div>
+                    <progress max="100" :value="upload.progress" x-show="upload.status === 'uploading'"></progress>
+                    <div
+                        class="file-browser-row-meta"
+                        x-show="upload.status === 'done'"
+                        x-text="'Uploaded as ' + upload.detail"
+                    ></div>
+                    <div class="error-message" x-show="upload.status === 'error'" x-text="upload.detail"></div>
                 </div>
             </template>
-            <div class="form-group">
-                <label class="form-label" for="profile-editor-dropout-min">Dropout Min Duration (ms)</label>
-                <input id="profile-editor-dropout-min" type="number" class="form-input" x-model.number="profileForm.dropout_duration_ms[0]"
-                       step="any" min="0" required>
-            </div>
-            <div class="form-group">
-                <label class="form-label" for="profile-editor-dropout-max">Dropout Max Duration (ms)</label>
-                <input id="profile-editor-dropout-max" type="number" class="form-input" x-model.number="profileForm.dropout_duration_ms[1]"
-                       step="any" min="0" required>
-            </div>
-        </div>
-    </template>
 
-    <template x-modal data-modal="fileBrowser" data-message="fileBrowser.message" data-overlay-class="file-browser-overlay"
-              data-title-expression="fileBrowser.mode === 'file' ? 'Select ' + fileBrowserKind().noun : fileBrowser.mode === 'folder' ? 'Select Folder' : fileBrowserKind().noun + 's'">
-        <div class="file-browser-crumbs">
-            <button type="button" class="btn btn-secondary" :disabled="fileBrowserCrumbs().length < 2"
-                    @click="loadFileBrowser(fileBrowserCrumbs().at(-2).prefix)">&uarr; Up</button>
-            <template x-for="(crumb, index) in fileBrowserCrumbs()" :key="crumb.prefix">
-                <span>
-                    <span x-show="index > 0">/</span>
-                    <button type="button" class="btn btn-secondary" @click="loadFileBrowser(crumb.prefix)" x-text="crumb.name"></button>
-                </span>
-            </template>
-        </div>
-
-        <div class="loading" x-show="fileBrowser.loading">Loading...</div>
-
-        <div x-show="!fileBrowser.loading">
-            <template x-for="folder in fileBrowser.folders" :key="folder">
-                <div class="file-browser-row">
-                    <button type="button" class="btn btn-secondary" @click="loadFileBrowser(folder)"
-                            x-text="'📁 ' + folder.slice(fileBrowser.prefix.length)"></button>
-                    <button type="button" class="btn btn-primary" x-show="fileBrowser.mode === 'folder'"
-                            @click="selectFileBrowserEntry(folder)">Select</button>
-                </div>
-            </template>
-            <template x-for="file in fileBrowser.files" :key="file.key">
-                <div class="file-browser-row">
-                    <div>
-                        <div class="file-browser-row-name" x-text="file.key.slice(fileBrowser.prefix.length)"></div>
-                        <div class="file-browser-row-meta"
-                             x-text="file.key + ' · ' + formatBytes(file.size) + ' · ' + formatDate(file.last_modified)"></div>
-                    </div>
-                    <button type="button" class="btn btn-primary" x-show="fileBrowser.mode === 'file'"
-                            @click="selectFileBrowserEntry(file.key)">Select</button>
-                </div>
-            </template>
-            <div class="empty-state"
-                 x-show="fileBrowser.folders.length === 0 && fileBrowser.files.length === 0">This folder is empty</div>
-        </div>
-
-        <form class="file-browser-new-folder" @submit.prevent="createFileBrowserFolder()">
-            <input type="text" class="form-input" placeholder="New folder name"
-                   x-model="fileBrowser.newFolderName" required pattern="[A-Za-z0-9_\-]+"
-                   title="Letters, digits, - and _ only">
-            <button type="submit" class="btn btn-secondary" :disabled="fileBrowser.creatingFolder">
-                <span x-text="fileBrowser.creatingFolder ? 'Creating...' : 'New Folder'"></span>
-            </button>
-        </form>
-
-        <!-- biome-ignore lint/a11y/noLabelWithoutControl: the file input is nested and the text comes from x-text -->
-        <label class="file-browser-drop" :class="{ dragging: fileBrowser.dragging }"
-               @dragover.prevent="fileBrowser.dragging = true"
-               @dragleave="fileBrowser.dragging = false"
-               @drop.prevent="fileBrowser.dragging = false; uploadFiles($event.dataTransfer.files)">
-            <span x-text="'Drop files here or click to choose (' + fileBrowserKind().hint + ')'"></span>
-            <input class="hidden" type="file" multiple :accept="fileBrowserKind().accept"
-                   @change="uploadFiles($event.target.files); $event.target.value = ''">
-        </label>
-
-        <template x-for="upload in fileBrowser.uploads" :key="upload.id">
-            <div class="file-browser-upload">
-                <div class="file-browser-row-name" x-text="upload.name"></div>
-                <progress max="100" :value="upload.progress" x-show="upload.status === 'uploading'"></progress>
-                <div class="file-browser-row-meta" x-show="upload.status === 'done'"
-                     x-text="'Uploaded as ' + upload.detail"></div>
-                <div class="error-message" x-show="upload.status === 'error'" x-text="upload.detail"></div>
+            <div class="button-group" x-show="fileBrowser.mode === 'folder'">
+                <button type="button" class="btn btn-primary" @click="selectFileBrowserEntry(fileBrowser.prefix)">
+                    Select This Folder
+                </button>
             </div>
         </template>
-
-        <div class="button-group" x-show="fileBrowser.mode === 'folder'">
-            <button type="button" class="btn btn-primary"
-                    @click="selectFileBrowserEntry(fileBrowser.prefix)">Select This Folder</button>
-        </div>
-    </template>
-</body>
+    </body>
 </html>

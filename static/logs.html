@@ -1,50 +1,54 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Activity Logs</title>
-    <link rel="stylesheet" href="/static/base.css">
-    <link rel="stylesheet" href="/static/logs.css">
-</head>
-<body>
-    <div class="container">
-        <header>
-            <div>
-                <h1 id="pageTitle">📜 Activity Logs</h1>
-                <div class="log-info" id="logInfo">Loading...</div>
-            </div>
-            <button type="button" class="btn btn-secondary" onclick="window.close()">Close</button>
-        </header>
-
-        <div class="log-container">
-            <div class="log-header">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Activity Logs</title>
+        <link rel="stylesheet" href="/static/base.css">
+        <link rel="stylesheet" href="/static/logs.css">
+    </head>
+    <body>
+        <div class="container">
+            <header>
                 <div>
-                    <strong>Total Entries:</strong> <span id="totalEntries">0</span>
-                    <span class="badge badge-info" id="offsetInfo">Loading...</span>
+                    <h1 id="pageTitle">📜 Activity Logs</h1>
+                    <div class="log-info" id="logInfo">Loading...</div>
                 </div>
-                <div>
-                    <label>
-                        <input type="number" class="limit-input" id="limitInput" min="10" max="500" value="50">
-                        entries
-                    </label>
+                <button type="button" class="btn btn-secondary" onclick="window.close()">Close</button>
+            </header>
+
+            <div class="log-container">
+                <div class="log-header">
+                    <div>
+                        <strong>Total Entries:</strong> <span id="totalEntries">0</span>
+                        <span class="badge badge-info" id="offsetInfo">Loading...</span>
+                    </div>
+                    <div>
+                        <label>
+                            <input type="number" class="limit-input" id="limitInput" min="10" max="500" value="50">
+                            entries
+                        </label>
+                    </div>
                 </div>
-            </div>
 
-            <div id="loadingState" class="loading">Loading logs...</div>
-            <div id="errorState" class="error-message hidden"></div>
-            <div id="emptyState" class="empty-state hidden">No log entries found</div>
-            <div id="logsContent"></div>
+                <div id="loadingState" class="loading">Loading logs...</div>
+                <div id="errorState" class="error-message hidden"></div>
+                <div id="emptyState" class="empty-state hidden">No log entries found</div>
+                <div id="logsContent"></div>
 
-            <div class="button-group hidden" id="navigationButtons">
-                <button type="button" class="btn btn-primary" id="prevBtn" onclick="loadPreviousLogs()" disabled>← Previous</button>
-                <button type="button" class="btn btn-primary" id="nextBtn" onclick="loadNextLogs()" disabled>Next →</button>
-                <button type="button" class="btn btn-secondary" onclick="loadLatestLogs()">Latest</button>
+                <div class="button-group hidden" id="navigationButtons">
+                    <button type="button" class="btn btn-primary" id="prevBtn" onclick="loadPreviousLogs()" disabled>
+                        ← Previous
+                    </button>
+                    <button type="button" class="btn btn-primary" id="nextBtn" onclick="loadNextLogs()" disabled>
+                        Next →
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="loadLatestLogs()">Latest</button>
+                </div>
             </div>
         </div>
-    </div>
 
-    <script>
+        <script>
         // Parse URL parameters
         const urlParams = new URLSearchParams(window.location.search);
         const guildId = urlParams.get('guild');
@@ -53,9 +57,8 @@
         let currentResult = null;
 
         // Update page title
-        document.getElementById('pageTitle').textContent = logType === 'members' 
-            ? '👥 Member Activity Logs' 
-            : '🎧 DJ Activity Logs';
+        document.getElementById('pageTitle').textContent =
+            logType === 'members' ? '👥 Member Activity Logs' : '🎧 DJ Activity Logs';
         document.getElementById('logInfo').textContent = `Guild: ${guildId}`;
 
         async function loadLogs(offset = null, direction = 'backward') {
@@ -91,14 +94,13 @@
 
                 // Update stats
                 document.getElementById('totalEntries').textContent = currentResult.entries.length;
-                document.getElementById('offsetInfo').textContent = 
+                document.getElementById('offsetInfo').textContent =
                     `Offset: ${currentResult.start_offset} - ${currentResult.end_offset} / ${currentResult.file_size} bytes`;
 
                 // Show navigation buttons
                 document.getElementById('navigationButtons').style.display = 'flex';
                 document.getElementById('prevBtn').disabled = !currentResult.has_previous;
                 document.getElementById('nextBtn').disabled = !currentResult.has_next;
-
             } catch (error) {
                 document.getElementById('loadingState').style.display = 'none';
                 document.getElementById('errorState').style.display = 'block';
@@ -109,7 +111,7 @@
         function renderLogs(entries) {
             const logsContent = document.getElementById('logsContent');
 
-            entries.forEach(entry => {
+            entries.forEach((entry) => {
                 const logEntry = document.createElement('div');
                 logEntry.className = `log-entry ${logType}`;
 
@@ -130,13 +132,13 @@
 
             const mainContent = document.createElement('div');
             mainContent.className = 'log-content';
-            
+
             const actionEmoji = {
-                'joined': '➕',
-                'left': '➖',
-                'moved': '↔️'
+                joined: '➕',
+                left: '➖',
+                moved: '↔️',
             };
-            
+
             const emoji = actionEmoji[content.action] || '•';
             const nickname = content.nickname ? ` (${content.nickname})` : '';
             mainContent.textContent = `${emoji} ${content.username}${nickname} ${content.action}`;
@@ -160,20 +162,20 @@
 
             const mainContent = document.createElement('div');
             mainContent.className = 'log-content';
-            
+
             const eventEmoji = {
-                'playing_track': '🎵',
-                'playing_hex_message': '📡',
-                'playing_noise': '🔊',
-                'stopped': '⏹️'
+                playing_track: '🎵',
+                playing_hex_message: '📡',
+                playing_noise: '🔊',
+                stopped: '⏹️',
             };
-            
+
             const emoji = eventEmoji[content.event_type] || '•';
             mainContent.textContent = `${emoji} ${content.event_type.replace(/_/g, ' ').toUpperCase()}`;
 
             const detail = document.createElement('div');
             detail.className = 'log-detail';
-            
+
             const details = content.details;
             if (details.filename) {
                 detail.textContent = `Track: ${details.filename} (${details.duration_secs}s)`;
@@ -219,6 +221,6 @@
 
         // Add event listener for limit change
         document.getElementById('limitInput').addEventListener('change', loadLatestLogs);
-    </script>
-</body>
+        </script>
+    </body>
 </html>
