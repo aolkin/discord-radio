@@ -104,7 +104,7 @@
                                     <div class="track-details" x-text="guild.audio_profile.source ? 'Source: ' + guild.audio_profile.source : 'No DJ'"></div>
                                 </div>
                             </div>
-                            <button class="btn btn-secondary" style="margin-top: 12px; width: 100%;" @click="openSignalProfileModal(guild.guild_id)">
+                            <button class="btn btn-secondary" style="margin-top: 12px; width: 100%;" @click="openModal('signalProfile', guild.guild_id)">
                                 Change Signal Profile
                             </button>
                         </div>
@@ -136,7 +136,7 @@
                         <div class="section">
                             <div class="section-title">
                                 Audio Tracks
-                                <button class="btn btn-secondary" style="float: right; font-size: 0.85rem; padding: 6px 12px;" @click="openTrackStateModal(guild.guild_id)">
+                                <button class="btn btn-secondary" style="float: right; font-size: 0.85rem; padding: 6px 12px;" @click="openModal('trackState', guild.guild_id)">
                                     Manage Tracks
                                 </button>
                             </div>
@@ -283,127 +283,83 @@
     </template>
 
     <!-- Track State Management Modal -->
-    <div x-show="showTrackStateModal"
-         x-transition.opacity
-         class="modal-overlay"
-         @click.self="closeTrackStateModal()"
-         @keydown.escape.window="closeTrackStateModal()">
-        <div class="modal-content" x-show="showTrackStateModal" x-transition>
-            <div class="modal-header">
-                <div class="modal-title">Manage Track State</div>
-                <button class="close" @click="closeTrackStateModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div x-show="trackMessage.text"
-                     :class="trackMessage.type === 'error' ? 'error-message' : 'success-message'"
-                     x-text="trackMessage.text"></div>
-
-                <form @submit.prevent="changeTrackState()">
-                    <div class="form-group">
-                        <label class="form-label">Track Name</label>
-                        <input type="text" class="form-input" x-model="trackName" 
-                               placeholder="Track identifier..." required>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Action</label>
-                        <select class="form-input" x-model="trackState" @change="trackStateChanged()">
-                            <option value="">Update Existing Track</option>
-                            <option value="start">Start New Track</option>
-                            <option value="stop">Stop Track</option>
-                        </select>
-                    </div>
-                    <template x-if="trackState === 'start'">
-                        <div class="form-group">
-                            <label class="form-label">Audio File</label>
-                            <select class="form-input" x-model="trackFilename" required>
-                                <option value="">Select audio file...</option>
-                                <template x-for="file in audioFiles" :key="file">
-                                    <option :value="file" x-text="file"></option>
-                                </template>
-                            </select>
-                        </div>
-                    </template>
-                    <template x-if="trackState !== 'stop'">
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label class="form-label">Volume</label>
-                                <input type="number" class="form-input" x-model.number="trackVolume" 
-                                       min="0" max="2" step="0.1" placeholder="0.0-2.0">
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Loop</label>
-                                <select class="form-input" x-model="trackLoops">
-                                    <option value="">Default</option>
-                                    <option value="true">Yes</option>
-                                    <option value="false">No</option>
-                                </select>
-                            </div>
-                        </div>
-                    </template>
-                    <div class="form-group">
-                        <label class="form-label">Fade Time (seconds)</label>
-                        <input type="number" class="form-input" x-model.number="trackFadeTime" 
-                               min="0" step="0.1" placeholder="1.0">
-                    </div>
-                    <div class="button-group">
-                        <button type="button" class="btn btn-secondary" @click="closeTrackStateModal()">Cancel</button>
-                        <button type="submit" class="btn btn-primary" :disabled="trackSaving">
-                            <span x-text="trackSaving ? 'Saving...' : 'Apply'"></span>
-                        </button>
-                    </div>
-                </form>
-            </div>
+    <template x-modal data-modal="trackState" data-title="Manage Track State" data-message="trackMessage"
+              data-submit="changeTrackState()" data-saving="trackSaving"
+              data-submit-label="Apply" data-busy-label="Saving...">
+        <div class="form-group">
+            <label class="form-label">Track Name</label>
+            <input type="text" class="form-input" x-model="trackName"
+                   placeholder="Track identifier..." required>
         </div>
-    </div>
+        <div class="form-group">
+            <label class="form-label">Action</label>
+            <select class="form-input" x-model="trackState" @change="trackStateChanged()">
+                <option value="">Update Existing Track</option>
+                <option value="start">Start New Track</option>
+                <option value="stop">Stop Track</option>
+            </select>
+        </div>
+        <template x-if="trackState === 'start'">
+            <div class="form-group">
+                <label class="form-label">Audio File</label>
+                <select class="form-input" x-model="trackFilename" required>
+                    <option value="">Select audio file...</option>
+                    <template x-for="file in audioFiles" :key="file">
+                        <option :value="file" x-text="file"></option>
+                    </template>
+                </select>
+            </div>
+        </template>
+        <template x-if="trackState !== 'stop'">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Volume</label>
+                    <input type="number" class="form-input" x-model.number="trackVolume"
+                           min="0" max="2" step="0.1" placeholder="0.0-2.0">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Loop</label>
+                    <select class="form-input" x-model="trackLoops">
+                        <option value="">Default</option>
+                        <option value="true">Yes</option>
+                        <option value="false">No</option>
+                    </select>
+                </div>
+            </div>
+        </template>
+        <div class="form-group">
+            <label class="form-label">Fade Time (seconds)</label>
+            <input type="number" class="form-input" x-model.number="trackFadeTime"
+                   min="0" step="0.1" placeholder="1.0">
+        </div>
+    </template>
 
     <!-- Signal Profile Modal -->
-    <div x-show="showSignalProfileModal"
-         x-transition.opacity
-         class="modal-overlay"
-         @click.self="closeSignalProfileModal()"
-         @keydown.escape.window="closeSignalProfileModal()">
-        <div class="modal-content" x-show="showSignalProfileModal" x-transition>
-            <div class="modal-header">
-                <div class="modal-title">Change Signal Profile</div>
-                <button class="close" @click="closeSignalProfileModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div x-show="profileMessage.text"
-                     :class="profileMessage.type === 'error' ? 'error-message' : 'success-message'"
-                     x-text="profileMessage.text"></div>
-
-                <form @submit.prevent="changeSignalProfile()">
-                    <div class="form-group">
-                        <label class="form-label">Setting</label>
-                        <select class="form-input" x-model="profileSetting">
-                            <option value="profile">Background (replaces rotation)</option>
-                            <option value="profile-override">Override (beats everything)</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Profile</label>
-                        <select class="form-input" x-model="selectedProfile">
-                            <option value="">None (clear)</option>
-                            <template x-for="profile in profiles" :key="profile">
-                                <option :value="profile" x-text="profile"></option>
-                            </template>
-                        </select>
-                    </div>
-                    <div class="form-group" x-show="selectedProfile">
-                        <label class="form-label">Fade Duration (seconds)</label>
-                        <input type="number" class="form-input" x-model.number="profileFadeDuration"
-                               min="0" step="0.1" :placeholder="profileSetting === 'profile-override' ? '2.0' : 'default'">
-                    </div>
-                    <div class="button-group">
-                        <button type="button" class="btn btn-secondary" @click="closeSignalProfileModal()">Cancel</button>
-                        <button type="submit" class="btn btn-primary" :disabled="profileSaving">
-                            <span x-text="profileSaving ? 'Applying...' : 'Apply Profile'"></span>
-                        </button>
-                    </div>
-                </form>
-            </div>
+    <template x-modal data-modal="signalProfile" data-title="Change Signal Profile" data-message="profileMessage"
+              data-submit="changeSignalProfile()" data-saving="profileSaving"
+              data-submit-label="Apply Profile" data-busy-label="Applying...">
+        <div class="form-group">
+            <label class="form-label">Setting</label>
+            <select class="form-input" x-model="profileSetting">
+                <option value="profile">Background (replaces rotation)</option>
+                <option value="profile-override">Override (beats everything)</option>
+            </select>
         </div>
-    </div>
+        <div class="form-group">
+            <label class="form-label">Profile</label>
+            <select class="form-input" x-model="selectedProfile">
+                <option value="">None (clear)</option>
+                <template x-for="profile in profiles" :key="profile">
+                    <option :value="profile" x-text="profile"></option>
+                </template>
+            </select>
+        </div>
+        <div class="form-group" x-show="selectedProfile">
+            <label class="form-label">Fade Duration (seconds)</label>
+            <input type="number" class="form-input" x-model.number="profileFadeDuration"
+                   min="0" step="0.1" :placeholder="profileSetting === 'profile-override' ? '2.0' : 'default'">
+        </div>
+    </template>
 
     <template x-modal data-modal="botProfile" data-title="Bot Profile" data-message="botProfileMessage"
               data-loading="botProfileLoading" data-submit="saveBotProfile()" data-saving="botProfileSaving"
@@ -621,156 +577,85 @@
     </div>
 
     <!-- Hex Message Form Modal -->
-    <div x-show="showHexMessageForm"
-         x-transition.opacity
-         class="modal-overlay"
-         @click.self="closeHexMessageForm()"
-         @keydown.escape.window="closeHexMessageForm()">
-        <div class="modal-content" x-show="showHexMessageForm" x-transition>
-            <div class="modal-header">
-                <div class="modal-title" x-text="hexMessageFormData.index !== null ? 'Edit Hex Message' : 'Add Hex Message'"></div>
-                <button class="close" @click="closeHexMessageForm()">&times;</button>
-            </div>
-            
-            <form @submit.prevent="saveHexMessage()">
-                <div class="modal-body">
-                    <div class="form-group">
-                        <label class="form-label">Text *</label>
-                        <textarea class="form-input" x-model="hexMessageFormData.text" rows="3" required></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Weight *</label>
-                        <input type="number" class="form-input" x-model.number="hexMessageFormData.weight" min="1" required>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Signal Profile (optional)</label>
-                        <input type="text" class="form-input" x-model="hexMessageFormData.signal_profile">
-                    </div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                        <div class="form-group">
-                            <label class="form-label">Loop Min (optional)</label>
-                            <input type="number" class="form-input" x-model.number="hexMessageFormData.loop_min" min="1">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Loop Max (optional)</label>
-                            <input type="number" class="form-input" x-model.number="hexMessageFormData.loop_max" min="1">
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Announcement (optional)</label>
-                        <input type="text" class="form-input" x-model="hexMessageFormData.announcement">
-                    </div>
-                </div>
-                
-                <div class="button-group" style="padding: 0 25px 25px;">
-                    <button type="button" class="btn btn-secondary" @click="closeHexMessageForm()">Cancel</button>
-                    <button type="submit" class="btn btn-primary" :disabled="djConfigSaving">
-                        <span x-text="djConfigSaving ? 'Saving...' : 'Save'"></span>
-                    </button>
-                </div>
-            </form>
+    <template x-modal data-modal="hexMessageForm"
+              data-title-expression="hexMessageFormData.index !== null ? 'Edit Hex Message' : 'Add Hex Message'"
+              data-submit="saveHexMessage()" data-saving="djConfigSaving"
+              data-submit-label="Save" data-busy-label="Saving...">
+        <div class="form-group">
+            <label class="form-label">Text *</label>
+            <textarea class="form-input" x-model="hexMessageFormData.text" rows="3" required></textarea>
         </div>
-    </div>
+        <div class="form-group">
+            <label class="form-label">Weight *</label>
+            <input type="number" class="form-input" x-model.number="hexMessageFormData.weight" min="1" required>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Signal Profile (optional)</label>
+            <input type="text" class="form-input" x-model="hexMessageFormData.signal_profile">
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+            <div class="form-group">
+                <label class="form-label">Loop Min (optional)</label>
+                <input type="number" class="form-input" x-model.number="hexMessageFormData.loop_min" min="1">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Loop Max (optional)</label>
+                <input type="number" class="form-input" x-model.number="hexMessageFormData.loop_max" min="1">
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Announcement (optional)</label>
+            <input type="text" class="form-input" x-model="hexMessageFormData.announcement">
+        </div>
+    </template>
 
     <!-- Announcement Form Modal -->
-    <div x-show="showAnnouncementForm"
-         x-transition.opacity
-         class="modal-overlay"
-         @click.self="closeAnnouncementForm()"
-         @keydown.escape.window="closeAnnouncementForm()">
-        <div class="modal-content" x-show="showAnnouncementForm" x-transition>
-            <div class="modal-header">
-                <div class="modal-title" x-text="announcementFormData.index !== null ? 'Edit Announcement' : 'Add Announcement'"></div>
-                <button class="close" @click="closeAnnouncementForm()">&times;</button>
-            </div>
-            
-            <form @submit.prevent="saveAnnouncement()">
-                <div class="modal-body">
-                    <div class="form-group">
-                        <label class="form-label">Announcement Text *</label>
-                        <textarea class="form-input" x-model="announcementFormData.text" rows="3" required></textarea>
-                    </div>
-                </div>
-                
-                <div class="button-group" style="padding: 0 25px 25px;">
-                    <button type="button" class="btn btn-secondary" @click="closeAnnouncementForm()">Cancel</button>
-                    <button type="submit" class="btn btn-primary" :disabled="djConfigSaving">
-                        <span x-text="djConfigSaving ? 'Saving...' : 'Save'"></span>
-                    </button>
-                </div>
-            </form>
+    <template x-modal data-modal="announcementForm"
+              data-title-expression="announcementFormData.index !== null ? 'Edit Announcement' : 'Add Announcement'"
+              data-submit="saveAnnouncement()" data-saving="djConfigSaving"
+              data-submit-label="Save" data-busy-label="Saving...">
+        <div class="form-group">
+            <label class="form-label">Announcement Text *</label>
+            <textarea class="form-input" x-model="announcementFormData.text" rows="3" required></textarea>
         </div>
-    </div>
+    </template>
 
     <!-- Channel Message Modal -->
-    <div x-show="showChannelMessageModal"
-         x-transition.opacity
-         class="modal-overlay"
-         @click.self="closeChannelMessageModal()"
-         @keydown.escape.window="closeChannelMessageModal()">
-        <div class="modal-content" x-show="showChannelMessageModal" x-transition>
-            <div class="modal-header">
-                <div class="modal-title">Send Message to Registered Channel</div>
-                <button class="close" @click="closeChannelMessageModal()">&times;</button>
-            </div>
-            
-            <div class="modal-body">
-                <!-- Loading State -->
-                <div x-show="channelsLoading" style="text-align: center; padding: 40px;">
-                    <div style="font-size: 2rem; margin-bottom: 10px;">⏳</div>
-                    <div>Loading channels...</div>
-                </div>
-
-                <!-- Error Message -->
-                <div x-show="channelMessageError" class="error-message" x-text="channelMessageError"></div>
-
-                <!-- Success Message -->
-                <div x-show="channelMessageSuccess" class="success-message" x-text="channelMessageSuccess"></div>
-
-                <!-- Form -->
-                <div x-show="!channelsLoading">
-                    <form @submit.prevent="sendChannelMessage()">
-                        <div class="form-group">
-                            <label class="form-label">Channel *</label>
-                            <select class="form-input" x-model="selectedChannelId" required>
-                                <option value="">Select a channel...</option>
-                                <template x-for="channel in registeredChannels" :key="channel.channel_id">
-                                    <option :value="channel.channel_id" 
-                                            x-text="`${channel.name} (${channel.channel_type}) - Guild: ${channel.guild_id}`">
-                                    </option>
-                                </template>
-                            </select>
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">Message</label>
-                            <textarea class="form-input" x-model="channelMessageText" rows="3" 
-                                      placeholder="Optional plain text message"></textarea>
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">Embed Title (Optional)</label>
-                            <input type="text" class="form-input" x-model="channelMessageTitle" 
-                                   placeholder="Optional embed title">
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">Embed Description (Optional)</label>
-                            <textarea class="form-input" x-model="channelMessageDescription" rows="4" 
-                                      placeholder="Optional embed description"></textarea>
-                        </div>
-
-                        <div class="button-group">
-                            <button type="button" class="btn btn-secondary" @click="closeChannelMessageModal()">Cancel</button>
-                            <button type="submit" class="btn btn-primary" :disabled="channelMessageSaving || !selectedChannelId">
-                                <span x-text="channelMessageSaving ? 'Sending...' : 'Send Message'"></span>
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
+    <template x-modal data-modal="channelMessage" data-title="Send Message to Registered Channel"
+              data-message="channelMessage" data-loading="channelsLoading"
+              data-submit="sendChannelMessage()" data-saving="channelMessageSaving"
+              data-disabled-when="!selectedChannelId"
+              data-submit-label="Send Message" data-busy-label="Sending...">
+        <div class="form-group">
+            <label class="form-label">Channel *</label>
+            <select class="form-input" x-model="selectedChannelId" required>
+                <option value="">Select a channel...</option>
+                <template x-for="channel in registeredChannels" :key="channel.channel_id">
+                    <option :value="channel.channel_id"
+                            x-text="`${channel.name} (${channel.channel_type}) - Guild: ${channel.guild_id}`">
+                    </option>
+                </template>
+            </select>
         </div>
-    </div>
+
+        <div class="form-group">
+            <label class="form-label">Message</label>
+            <textarea class="form-input" x-model="channelMessageText" rows="3"
+                      placeholder="Optional plain text message"></textarea>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Embed Title (Optional)</label>
+            <input type="text" class="form-input" x-model="channelMessageTitle"
+                   placeholder="Optional embed title">
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Embed Description (Optional)</label>
+            <textarea class="form-input" x-model="channelMessageDescription" rows="4"
+                      placeholder="Optional embed description"></textarea>
+        </div>
+    </template>
 
     <div x-show="showProfileEditor"
          x-transition.opacity
