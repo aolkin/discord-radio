@@ -6,6 +6,7 @@
     <title>Discord Bot Portal</title>
     <script type="module" src="/static/index.js"></script>
     <script defer src="/static/alpine.min.js"></script>
+    <link rel="stylesheet" href="/static/base.css">
     <link rel="stylesheet" href="/static/index.css">
 </head>
 <body x-data="botPortal()">
@@ -27,7 +28,7 @@
                         <div class="activity-status" x-text="currentActivity.status || 'Not set'"></div>
                     </div>
                 </div>
-                <button class="btn btn-primary" style="padding: 8px 16px;" @click="openModal('activity')">
+                <button class="btn btn-primary btn-md" @click="openModal('activity')">
                     Manage Activity
                 </button>
                 <div class="status-indicator">
@@ -38,19 +39,16 @@
         </header>
 
         <!-- Registered Channels Section -->
-        <div style="background: white; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-            <h2 style="color: #667eea; margin-bottom: 15px; font-size: 1.5rem;">Registered Channels</h2>
-            <button @click="openChannelMessageModal()" 
-                    style="background: #667eea; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 1rem; font-weight: 500; transition: background 0.2s;"
-                    @mouseover="$el.style.background='#5568d3'" 
-                    @mouseout="$el.style.background='#667eea'">
+        <div class="card">
+            <h2 class="card-title">Registered Channels</h2>
+            <button class="send-message-button" @click="openChannelMessageModal()">
                 📤 Send Message to Registered Channel
             </button>
         </div>
 
-        <div style="background: white; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-            <h2 style="color: #667eea; margin-bottom: 15px; font-size: 1.5rem;">Signal Profiles</h2>
-            <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 15px;">
+        <div class="card">
+            <h2 class="card-title">Signal Profiles</h2>
+            <div class="chip-list">
                 <template x-for="profile in profiles" :key="profile">
                     <button class="btn btn-secondary" @click="openProfileEditor(profile)" x-text="profile"></button>
                 </template>
@@ -59,8 +57,8 @@
             <button class="btn btn-primary" @click="openProfileEditor(null)">+ New Signal Profile</button>
         </div>
 
-        <div style="background: white; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-            <h2 style="color: #667eea; margin-bottom: 15px; font-size: 1.5rem;">Audio Files</h2>
+        <div class="card">
+            <h2 class="card-title">Audio Files</h2>
             <button class="btn btn-primary" @click="openFileBrowser()">Browse Audio Files</button>
         </div>
 
@@ -81,7 +79,7 @@
                                 <div class="dj-type" x-text="guild.dj_state.state_type"></div>
                                 <div class="dj-details" x-text="guild.dj_state.details"></div>
                             </div>
-                            <div class="button-group" style="margin-top: 12px;">
+                            <div class="button-group mt-12">
                                 <button class="btn btn-secondary" @click="openModal('advanceDJ', guild.guild_id)">
                                     Advance DJ State
                                 </button>
@@ -100,12 +98,12 @@
                         <div class="section">
                             <div class="section-title">Audio Profile</div>
                             <div class="info-item">
-                                <div style="flex: 1;">
+                                <div class="grow">
                                     <div class="track-name" x-text="guild.audio_profile.name"></div>
                                     <div class="track-details" x-text="guild.audio_profile.source ? 'Source: ' + guild.audio_profile.source : 'No DJ'"></div>
                                 </div>
                             </div>
-                            <button class="btn btn-secondary" style="margin-top: 12px; width: 100%;" @click="openModal('signalProfile', guild.guild_id)">
+                            <button class="btn btn-secondary mt-12 w-full" @click="openModal('signalProfile', guild.guild_id)">
                                 Change Signal Profile
                             </button>
                         </div>
@@ -116,15 +114,14 @@
                         <div class="section">
                             <div class="section-title">Live Audio Stream</div>
                             <div class="info-item">
-                                <div style="flex: 1;">
-                                    <audio
+                                <div class="grow">
+                                    <audio class="w-full mt-8"
                                         :src="'/api/guilds/' + guild.guild_id + '/audio-stream'"
                                         controls
-                                        preload="none"
-                                        style="width: 100%; margin-top: 8px;">
+                                        preload="none">
                                         Your browser does not support the audio element.
                                     </audio>
-                                    <div class="track-details" style="margin-top: 8px; text-align: center;">
+                                    <div class="track-details mt-8 text-center">
                                         🎧 Listen to bot's audio output in real-time
                                     </div>
                                 </div>
@@ -137,13 +134,13 @@
                         <div class="section">
                             <div class="section-title">
                                 Audio Tracks
-                                <button class="btn btn-secondary" style="float: right; font-size: 0.85rem; padding: 6px 12px;" @click="openModal('trackState', guild.guild_id)">
+                                <button class="btn btn-secondary btn-float-right" @click="openModal('trackState', guild.guild_id)">
                                     Manage Tracks
                                 </button>
                             </div>
                             <template x-for="track in guild.tracks" :key="track.filename">
                                 <div class="track-item">
-                                    <div style="flex: 1;">
+                                    <div class="grow">
                                         <div class="track-name" x-text="track.name"></div>
                                         <div class="track-details">
                                             <span x-text="track.filename.split('/').pop()"></span>
@@ -158,7 +155,7 @@
                                         </template>
                                         <div class="track-details">
                                             <span x-text="track.loops ? '🔁 Looping' : '▶️ Once'"></span> •
-                                            🔊 <div class="volume-bar" style="display: inline-block; width: 100px; vertical-align: middle;">
+                                            🔊 <div class="volume-bar volume-bar-inline">
                                                 <div class="volume-fill" :style="'width: ' + (track.volume * 100) + '%'"></div>
                                             </div> <span x-text="Math.round(track.volume * 100) + '%'"></span>
                                         </div>
@@ -171,21 +168,21 @@
                     <!-- DJ Config Overrides -->
                     <div class="section">
                         <div class="section-title">DJ Config Overrides</div>
-                        <button class="btn btn-secondary" style="width: 100%;" @click="openDJConfigModal(guild.guild_id)">
+                        <button class="btn btn-secondary w-full" @click="openDJConfigModal(guild.guild_id)">
                             ⚙️ Manage Hex Messages &amp; Announcements
                         </button>
                     </div>
 
                     <div class="section">
                         <div class="section-title">Bot Profile</div>
-                        <button class="btn btn-secondary" style="width: 100%;" @click="openBotProfileModal(guild.guild_id)">
+                        <button class="btn btn-secondary w-full" @click="openBotProfileModal(guild.guild_id)">
                             Edit Nickname, Avatar &amp; Banner
                         </button>
                     </div>
 
                     <div class="section">
                         <div class="section-title">Voice Channel Status</div>
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <label class="checkbox-label">
                             <input type="checkbox" :checked="guild.channel_status_enabled" @change="setChannelStatusEnabled(guild.guild_id, $event.target.checked)">
                             <span x-text="guild.channel_status_enabled ? 'Managed by the DJ' : 'Not managed (left as it is)'"></span>
                         </label>
@@ -194,11 +191,11 @@
                     <!-- Activity Logs-->
                     <div class="section">
                         <div class="section-title">Activity Logs</div>
-                        <div style="display: flex; gap: 10px;">
-                            <a :href="'/logs.html?guild=' + guild.guild_id + '&type=members'" target="_blank" class="btn btn-secondary" style="flex: 1; text-decoration: none; text-align: center; display: block;">
+                        <div class="row-gap-10">
+                            <a :href="'/logs.html?guild=' + guild.guild_id + '&type=members'" target="_blank" class="btn btn-secondary btn-link">
                                 👥 Member Activity
                             </a>
-                            <a :href="'/logs.html?guild=' + guild.guild_id + '&type=dj'" target="_blank" class="btn btn-secondary" style="flex: 1; text-decoration: none; text-align: center; display: block;">
+                            <a :href="'/logs.html?guild=' + guild.guild_id + '&type=dj'" target="_blank" class="btn btn-secondary btn-link">
                                 🎧 DJ Activity
                             </a>
                         </div>
@@ -231,7 +228,7 @@
                 <option value="hex">Hex Message</option>
                 <option value="noise">Noise</option>
             </select>
-            <small style="color: #666; font-size: 0.85rem;">
+            <small class="hint">
                 Leave as "Any" to advance to the next state, or select a specific state type to force.
             </small>
         </div>
@@ -245,7 +242,7 @@
             <label class="form-label">Message</label>
             <input type="text" class="form-input" x-model="hexMessageText" 
                    placeholder="Enter message to play..." required>
-            <small style="color: #666; font-size: 0.85rem;">
+            <small class="hint">
                 Message will be played using the DJ with default settings.
             </small>
         </div>
@@ -376,8 +373,8 @@
                 <label class="form-label" x-text="field === 'avatar' ? 'Avatar' : 'Banner'"></label>
                 <div class="track-details" x-show="!botProfileCurrent[field + '_url']">Not set for this server</div>
                 <img :src="botProfileCurrent[field + '_url']" x-show="botProfileCurrent[field + '_url']"
-                     :style="field === 'avatar' ? 'width: 80px; height: 80px; border-radius: 50%;' : 'width: 100%; max-height: 120px; object-fit: cover; border-radius: 6px;'">
-                <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px;">
+                     :class="field === 'avatar' ? 'bot-profile-avatar' : 'bot-profile-banner'">
+                <div class="row-center-8 mt-8">
                     <button type="button" class="btn btn-secondary" @click="pickBotProfileImage(field)">Choose Image</button>
                     <span class="track-details" x-text="botProfileForm[field] || 'Unchanged'"></span>
                 </div>
@@ -391,11 +388,11 @@
         <div class="modal-section">
             <div class="modal-section-title">Current Activity</div>
             <template x-if="currentActivity.status">
-                <div class="info-item" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
-                    <div style="flex: 1;">
-                        <div style="font-size: 2rem; margin-bottom: 5px;" x-text="getActivityIcon(currentActivity.activity_type)"></div>
-                        <div style="font-size: 0.85rem; text-transform: uppercase; opacity: 0.9;" x-text="currentActivity.activity_type"></div>
-                        <div style="font-size: 1.1rem; font-weight: 600; margin-top: 4px;" x-text="currentActivity.status"></div>
+                <div class="info-item info-item-accent">
+                    <div class="grow">
+                        <div class="activity-icon-large" x-text="getActivityIcon(currentActivity.activity_type)"></div>
+                        <div class="activity-type-small" x-text="currentActivity.activity_type"></div>
+                        <div class="activity-status-large" x-text="currentActivity.status"></div>
                     </div>
                 </div>
             </template>
@@ -434,48 +431,48 @@
     <!-- DJ Config Overrides Modal -->
     <template x-modal data-modal="djConfig" data-title="DJ Config Overrides" data-message="djConfigMessage" data-wide>
         <!-- Loading State -->
-        <div x-show="djConfigLoading" style="text-align: center; padding: 40px;">
-            <div style="font-size: 2rem; margin-bottom: 10px;">⏳</div>
+        <div class="modal-loading" x-show="djConfigLoading">
+            <div class="loading-icon">⏳</div>
             <div>Loading DJ config...</div>
         </div>
 
         <!-- Error Message -->
-        <div x-show="djConfigError" style="background: #fee; border: 1px solid #fcc; border-radius: 6px; padding: 15px; margin-bottom: 20px; color: #c33;">
+        <div class="config-error" x-show="djConfigError">
             <strong>Error:</strong> <span x-text="djConfigError"></span>
         </div>
 
         <!-- Hex Messages Section -->
-        <div x-show="!djConfigLoading" style="margin-bottom: 30px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                <h3 style="color: #667eea; margin: 0;">Hex Messages</h3>
-                <div style="display: flex; align-items: center; gap: 15px;">
-                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+        <div class="mb-30" x-show="!djConfigLoading">
+            <div class="section-header">
+                <h3 class="config-heading">Hex Messages</h3>
+                <div class="row-center-15">
+                    <label class="checkbox-label">
                         <input type="checkbox" x-model="djConfigData.hex_messages.enabled" @change="toggleDJConfigCategory('hex_messages')">
                         <span x-text="djConfigData.hex_messages.enabled ? 'Enabled' : 'Disabled'"></span>
                     </label>
-                    <button @click="openHexMessageForm()" class="btn btn-primary" style="padding: 8px 16px;">+ Add Message</button>
+                    <button @click="openHexMessageForm()" class="btn btn-primary btn-md">+ Add Message</button>
                 </div>
             </div>
             
-            <div x-show="djConfigData.hex_messages.items.length === 0" style="text-align: center; padding: 30px; background: #f8f9fa; border-radius: 6px; color: #666;">
+            <div class="empty-box" x-show="djConfigData.hex_messages.items.length === 0">
                 No hex messages configured
             </div>
             
-            <div style="display: grid; gap: 10px;">
+            <div class="item-list">
                 <template x-for="(msg, index) in djConfigData.hex_messages.items" :key="index">
-                    <div style="background: #f8f9fa; border-radius: 6px; padding: 15px; display: flex; justify-content: space-between; align-items: start;">
-                        <div style="flex: 1;">
-                            <div style="font-weight: 600; margin-bottom: 5px;" x-text="msg.text"></div>
-                            <div style="display: flex; gap: 15px; font-size: 0.9rem; color: #666;">
+                    <div class="list-item align-start">
+                        <div class="grow">
+                            <div class="item-title" x-text="msg.text"></div>
+                            <div class="item-meta">
                                 <span>Weight: <strong x-text="msg.weight"></strong></span>
                                 <span x-show="msg.signal_profile">Profile: <strong x-text="msg.signal_profile"></strong></span>
                                 <span x-show="msg.loop_min || msg.loop_max">Loops: <strong x-text="(msg.loop_min || 1) + '-' + (msg.loop_max || msg.loop_min || 1)"></strong></span>
                                 <span x-show="msg.announcement">Announcement: <strong x-text="msg.announcement"></strong></span>
                             </div>
                         </div>
-                        <div style="display: flex; gap: 8px;">
-                            <button @click="editHexMessage(index)" class="btn btn-secondary" style="padding: 5px 10px; font-size: 0.85rem;">✏️ Edit</button>
-                            <button @click="deleteHexMessage(index)" class="btn btn-danger" style="padding: 5px 10px; font-size: 0.85rem;">🗑️ Delete</button>
+                        <div class="row-gap-8">
+                            <button @click="editHexMessage(index)" class="btn btn-secondary btn-sm">✏️ Edit</button>
+                            <button @click="deleteHexMessage(index)" class="btn btn-danger btn-sm">🗑️ Delete</button>
                         </div>
                     </div>
                 </template>
@@ -484,28 +481,28 @@
 
         <!-- Hex Message Announcements Section -->
         <div x-show="!djConfigLoading">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                <h3 style="color: #667eea; margin: 0;">Hex Message Announcements</h3>
-                <div style="display: flex; align-items: center; gap: 15px;">
-                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+            <div class="section-header">
+                <h3 class="config-heading">Hex Message Announcements</h3>
+                <div class="row-center-15">
+                    <label class="checkbox-label">
                         <input type="checkbox" x-model="djConfigData.hex_message_announcements.enabled" @change="toggleDJConfigCategory('hex_message_announcements')">
                         <span x-text="djConfigData.hex_message_announcements.enabled ? 'Enabled' : 'Disabled'"></span>
                     </label>
-                    <button @click="openAnnouncementForm()" class="btn btn-primary" style="padding: 8px 16px;">+ Add Announcement</button>
+                    <button @click="openAnnouncementForm()" class="btn btn-primary btn-md">+ Add Announcement</button>
                 </div>
             </div>
             
-            <div x-show="djConfigData.hex_message_announcements.items.length === 0" style="text-align: center; padding: 30px; background: #f8f9fa; border-radius: 6px; color: #666;">
+            <div class="empty-box" x-show="djConfigData.hex_message_announcements.items.length === 0">
                 No announcements configured
             </div>
             
-            <div style="display: grid; gap: 10px;">
+            <div class="item-list">
                 <template x-for="(announcement, index) in djConfigData.hex_message_announcements.items" :key="index">
-                    <div style="background: #f8f9fa; border-radius: 6px; padding: 15px; display: flex; justify-content: space-between; align-items: center;">
-                        <div style="flex: 1;" x-text="announcement"></div>
-                        <div style="display: flex; gap: 8px;">
-                            <button @click="editAnnouncement(index)" class="btn btn-secondary" style="padding: 5px 10px; font-size: 0.85rem;">✏️ Edit</button>
-                            <button @click="deleteAnnouncement(index)" class="btn btn-danger" style="padding: 5px 10px; font-size: 0.85rem;">🗑️ Delete</button>
+                    <div class="list-item">
+                        <div class="grow" x-text="announcement"></div>
+                        <div class="row-gap-8">
+                            <button @click="editAnnouncement(index)" class="btn btn-secondary btn-sm">✏️ Edit</button>
+                            <button @click="deleteAnnouncement(index)" class="btn btn-danger btn-sm">🗑️ Delete</button>
                         </div>
                     </div>
                 </template>
@@ -513,45 +510,42 @@
         </div>
 
         <!-- State Weights Section -->
-        <div x-show="!djConfigLoading" style="margin-top: 30px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                <h3 style="color: #667eea; margin: 0;">State Weights</h3>
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+        <div class="mt-30" x-show="!djConfigLoading">
+            <div class="section-header">
+                <h3 class="config-heading">State Weights</h3>
+                <label class="checkbox-label">
                     <input type="checkbox" x-model="djConfigData.state_weights.enabled" @change="toggleDJConfigCategory('state_weights')">
                     <span x-text="djConfigData.state_weights.enabled ? 'Enabled' : 'Disabled'"></span>
                 </label>
             </div>
             
-            <div style="background: #f8f9fa; border-radius: 6px; padding: 20px;">
-                <div style="margin-bottom: 15px; padding: 10px; background: #e3f2fd; border-radius: 6px; border-left: 4px solid #2196f3;">
+            <div class="weights-panel">
+                <div class="info-callout">
                     <strong>Default Values:</strong>
-                    <div style="display: flex; gap: 20px; margin-top: 8px; font-size: 0.95rem;">
+                    <div class="weights-defaults">
                         <span>Track: <strong x-text="defaultStateWeights.track"></strong></span>
                         <span>Hex Message: <strong x-text="defaultStateWeights.hex_message"></strong></span>
                         <span>Noise: <strong x-text="defaultStateWeights.noise"></strong></span>
                     </div>
                 </div>
                 
-                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+                <div class="grid-3">
                     <div>
-                        <label style="display: block; margin-bottom: 5px; font-weight: 500;">Track Weight</label>
-                        <input type="number" x-model.number="djConfigData.state_weights.value.track" min="0" 
-                               style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        <label class="field-label">Track Weight</label>
+                        <input class="weight-input" type="number" x-model.number="djConfigData.state_weights.value.track" min="0">
                     </div>
                     <div>
-                        <label style="display: block; margin-bottom: 5px; font-weight: 500;">Hex Message Weight</label>
-                        <input type="number" x-model.number="djConfigData.state_weights.value.hex_message" min="0" 
-                               style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        <label class="field-label">Hex Message Weight</label>
+                        <input class="weight-input" type="number" x-model.number="djConfigData.state_weights.value.hex_message" min="0">
                     </div>
                     <div>
-                        <label style="display: block; margin-bottom: 5px; font-weight: 500;">Noise Weight</label>
-                        <input type="number" x-model.number="djConfigData.state_weights.value.noise" min="0" 
-                               style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        <label class="field-label">Noise Weight</label>
+                        <input class="weight-input" type="number" x-model.number="djConfigData.state_weights.value.noise" min="0">
                     </div>
                 </div>
                 
-                <div style="margin-top: 15px;">
-                    <button @click="saveStateWeights()" class="btn btn-primary" style="padding: 10px 20px;">
+                <div class="mt-15">
+                    <button @click="saveStateWeights()" class="btn btn-primary">
                         💾 Save State Weights
                     </button>
                 </div>
@@ -576,7 +570,7 @@
             <label class="form-label">Signal Profile (optional)</label>
             <input type="text" class="form-input" x-model="hexMessageFormData.signal_profile">
         </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+        <div class="grid-2">
             <div class="form-group">
                 <label class="form-label">Loop Min (optional)</label>
                 <input type="number" class="form-input" x-model.number="hexMessageFormData.loop_min" min="1">
@@ -725,7 +719,7 @@
                @dragleave="fileBrowser.dragging = false"
                @drop.prevent="fileBrowser.dragging = false; uploadFiles($event.dataTransfer.files)">
             <span x-text="'Drop files here or click to choose (' + fileBrowserKind().hint + ')'"></span>
-            <input type="file" multiple :accept="fileBrowserKind().accept" style="display: none;"
+            <input class="hidden" type="file" multiple :accept="fileBrowserKind().accept"
                    @change="uploadFiles($event.target.files); $event.target.value = ''">
         </label>
 
