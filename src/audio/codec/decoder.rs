@@ -3,13 +3,73 @@ use anyhow::{Context, bail};
 use std::path::Path;
 use std::time::Duration;
 use symphonia::core::codecs::CodecParameters;
-use symphonia::core::codecs::audio::{AudioDecoder, AudioDecoderOptions};
+use symphonia::core::codecs::audio::{AudioCodecParameters, AudioDecoder, AudioDecoderOptions};
 use symphonia::core::errors::Error as SymphoniaError;
 use symphonia::core::formats::probe::Hint;
-use symphonia::core::formats::{FormatOptions, FormatReader, SeekMode, SeekTo, TrackType};
-use symphonia::core::io::MediaSourceStream;
+use symphonia::core::formats::{FormatOptions, FormatReader, SeekMode, SeekTo, Track, TrackType};
+use symphonia::core::io::{MediaSource, MediaSourceStream};
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::units::Time;
+
+/// A probed audio container with its default audio track selected.
+pub struct OpenedAudio {
+    pub format: Box<dyn FormatReader>,
+    pub track: Track,
+    params: AudioCodecParameters,
+}
+
+impl OpenedAudio {
+    /// Probes `source` for a container format, using `extension` as a hint.
+    pub fn open(source: Box<dyn MediaSource>, extension: Option<&str>) -> anyhow::Result<Self> {
+        let mss = MediaSourceStream::new(source, Default::default());
+        let mut hint = Hint::new();
+        if let Some(extension) = extension {
+            hint.with_extension(extension);
+        }
+
+        let format = symphonia::default::get_probe()
+            .probe(
+                &hint,
+                mss,
+                FormatOptions::default(),
+                MetadataOptions::default(),
+            )
+            .context("Unrecognized audio format")?;
+        let track = format
+            .default_track(TrackType::Audio)
+            .context("No default audio track found")?
+            .clone();
+        let Some(CodecParameters::Audio(params)) = track.codec_params.clone() else {
+            bail!("No default audio track found");
+        };
+
+        Ok(Self {
+            format,
+            track,
+            params,
+        })
+    }
+
+    /// Fails unless the track's sample rate is `required_sample_rate`.
+    pub fn require_sample_rate(&self, required_sample_rate: u32) -> anyhow::Result<u32> {
+        let sample_rate = self
+            .params
+            .sample_rate
+            .context("Audio file has no sample rate")?;
+        if sample_rate != required_sample_rate {
+            bail!(
+                "Audio file has sample rate {sample_rate}Hz, but {required_sample_rate}Hz is required. Please resample the file first."
+            );
+        }
+        Ok(sample_rate)
+    }
+
+    fn make_decoder(&self) -> anyhow::Result<Box<dyn AudioDecoder>> {
+        symphonia::default::get_codecs()
+            .make_audio_decoder(&self.params, &AudioDecoderOptions::default())
+            .context("Unsupported audio codec")
+    }
+}
 
 /// Fails unless `bytes` decode as `extension`-format audio at
 /// `required_sample_rate`. Decodes the first packet, so a file that probes
@@ -19,44 +79,17 @@ pub fn check_sample_rate(
     extension: &str,
     required_sample_rate: u32,
 ) -> anyhow::Result<()> {
-    let mss = MediaSourceStream::new(Box::new(std::io::Cursor::new(bytes)), Default::default());
-    let mut hint = Hint::new();
-    hint.with_extension(extension);
+    let mut audio = OpenedAudio::open(Box::new(std::io::Cursor::new(bytes)), Some(extension))?;
+    audio.require_sample_rate(required_sample_rate)?;
 
-    let mut format = symphonia::default::get_probe()
-        .probe(
-            &hint,
-            mss,
-            FormatOptions::default(),
-            MetadataOptions::default(),
-        )
-        .context("Unrecognized audio format")?;
-    let track = format
-        .default_track(TrackType::Audio)
-        .context("No default audio track found")?;
-    let track_id = track.id;
-    let Some(CodecParameters::Audio(params)) = &track.codec_params else {
-        bail!("No default audio track found");
-    };
-
-    let sample_rate = params
-        .sample_rate
-        .context("Audio file has no sample rate")?;
-    if sample_rate != required_sample_rate {
-        bail!(
-            "Audio file has sample rate {sample_rate}Hz, but {required_sample_rate}Hz is required"
-        );
-    }
-
-    let mut decoder = symphonia::default::get_codecs()
-        .make_audio_decoder(params, &AudioDecoderOptions::default())
-        .context("Unsupported audio codec")?;
+    let mut decoder = audio.make_decoder()?;
     loop {
-        let packet = format
+        let packet = audio
+            .format
             .next_packet()
             .context("Reading the first packet")?
             .context("Audio file has no packets")?;
-        if packet.track_id == track_id {
+        if packet.track_id == audio.track.id {
             decoder
                 .decode(&packet)
                 .context("Decoding the first packet")?;
@@ -80,43 +113,20 @@ impl SymphoniaSource {
     pub fn from_file(path: impl AsRef<Path>, required_sample_rate: u32) -> anyhow::Result<Self> {
         let path_str = path.as_ref().to_string_lossy().to_string();
         let file = std::fs::File::open(&path).with_context(|| format!("opening {path_str}"))?;
-        let mss = MediaSourceStream::new(Box::new(file), Default::default());
+        let extension = path.as_ref().extension().and_then(|e| e.to_str());
 
-        let mut hint = Hint::new();
-        if let Some(ext) = path.as_ref().extension().and_then(|e| e.to_str()) {
-            hint.with_extension(ext);
-        }
+        let audio = OpenedAudio::open(Box::new(file), extension)?;
+        let sample_rate = audio.require_sample_rate(required_sample_rate)?;
+        let decoder = audio.make_decoder()?;
+        let track_id = audio.track.id;
+        let format = audio.format;
 
-        let format = symphonia::default::get_probe().probe(
-            &hint,
-            mss,
-            FormatOptions::default(),
-            MetadataOptions::default(),
-        )?;
-
-        let track = format
-            .default_track(TrackType::Audio)
-            .context("No default audio track found")?;
-
-        let track_id = track.id;
-        let Some(CodecParameters::Audio(params)) = &track.codec_params else {
-            bail!("No default audio track found");
-        };
-        let decoder = symphonia::default::get_codecs()
-            .make_audio_decoder(params, &AudioDecoderOptions::default())?;
-
-        let sample_rate = params
-            .sample_rate
-            .context("Audio file has no sample rate")?;
-
-        // Validate sample rate matches required rate
-        if sample_rate != required_sample_rate {
-            bail!(
-                "Audio file has sample rate {sample_rate}Hz, but {required_sample_rate}Hz is required. Please resample the file first."
-            );
-        }
-
-        let channels = params.channels.as_ref().map(|ch| ch.count()).unwrap_or(2);
+        let channels = audio
+            .params
+            .channels
+            .as_ref()
+            .map(|ch| ch.count())
+            .unwrap_or(2);
 
         tracing::debug!(
             "Loaded audio file: {} (sample rate: {}Hz, channels: {})",
