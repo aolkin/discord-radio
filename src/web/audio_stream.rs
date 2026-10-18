@@ -1,4 +1,5 @@
 use crate::state::Data;
+use crate::web::error::ApiError;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::Response;
@@ -144,14 +145,13 @@ impl<'a> Stream for OpusOggStream<'a> {
 /// HTTP endpoint handler for audio streaming
 pub async fn audio_stream(
     State(bot_state): State<Data>,
-    Path(guild_id): Path<String>,
-) -> Result<Response, StatusCode> {
-    let guild_id_parsed: u64 = guild_id.parse().map_err(|_| StatusCode::BAD_REQUEST)?;
-    let guild_id = GuildId::new(guild_id_parsed);
-
+    Path(guild_id): Path<GuildId>,
+) -> Result<Response, ApiError> {
     // Get the audio processor for this guild
     let processors = bot_state.audio_processors.read().await;
-    let processor = processors.get(&guild_id).ok_or(StatusCode::NOT_FOUND)?;
+    let processor = processors
+        .get(&guild_id)
+        .ok_or_else(|| ApiError::not_found(format!("No audio stream for guild {guild_id}")))?;
 
     let receiver = processor.read().await.stream_opus();
 
