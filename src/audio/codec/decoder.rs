@@ -118,9 +118,6 @@ impl SymphoniaSource {
         let audio = OpenedAudio::open(Box::new(file), extension)?;
         let sample_rate = audio.require_sample_rate(required_sample_rate)?;
         let decoder = audio.make_decoder()?;
-        let track_id = audio.track.id;
-        let format = audio.format;
-
         let channels = audio
             .params
             .channels
@@ -136,9 +133,9 @@ impl SymphoniaSource {
         );
 
         Ok(Self {
-            format,
+            format: audio.format,
             decoder,
-            track_id,
+            track_id: audio.track.id,
             sample_buf: Vec::new(),
             current_frame_idx: 0,
             sample_rate,
