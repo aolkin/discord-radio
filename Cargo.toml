@@ -23,7 +23,7 @@ chrono = { version = "0.4", features = ["serde"] }
 base64 = "0.22"
 
 # Audio codec support via Symphonia
-symphonia = { version = "0.5", features = ["mp3", "ogg", "vorbis", "wav"] }
+symphonia = { version = "0.6", features = ["mp3", "ogg", "vorbis", "wav"] }
 
 # Audio DSP processing
 biquad = "0.4"

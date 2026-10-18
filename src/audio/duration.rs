@@ -50,10 +50,10 @@ impl DurationCache {
 }
 
 fn compute_audio_duration(filename: &str) -> Option<Duration> {
-    use symphonia::core::formats::FormatOptions;
+    use symphonia::core::formats::probe::Hint;
+    use symphonia::core::formats::{FormatOptions, TrackType};
     use symphonia::core::io::MediaSourceStream;
     use symphonia::core::meta::MetadataOptions;
-    use symphonia::core::probe::Hint;
 
     let file = std::fs::File::open(filename).ok()?;
     let mss = MediaSourceStream::new(Box::new(file), Default::default());
@@ -63,25 +63,17 @@ fn compute_audio_duration(filename: &str) -> Option<Duration> {
         hint.with_extension(ext);
     }
 
-    let format_opts = FormatOptions::default();
-    let metadata_opts = MetadataOptions::default();
-
-    let probed = symphonia::default::get_probe()
-        .format(&hint, mss, &format_opts, &metadata_opts)
+    let format = symphonia::default::get_probe()
+        .probe(
+            &hint,
+            mss,
+            FormatOptions::default(),
+            MetadataOptions::default(),
+        )
         .ok()?;
 
-    let format = probed.format;
-    let track = format.default_track()?;
+    let track = format.default_track(TrackType::Audio)?;
+    let time = track.time_base?.calc_duration(track.duration?)?;
 
-    if let Some(time_base) = track.codec_params.time_base
-        && let Some(n_frames) = track.codec_params.n_frames
-    {
-        let seconds = time_base.calc_time(n_frames).seconds;
-        let frac = time_base.calc_time(n_frames).frac;
-
-        let duration_secs = seconds as f64 + frac;
-        return Some(Duration::from_secs_f64(duration_secs));
-    }
-
-    None
+    Duration::try_from_secs_f64(time.as_secs_f64()).ok()
 }
