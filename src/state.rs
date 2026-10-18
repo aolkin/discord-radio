@@ -21,6 +21,7 @@ use tokio::sync::{Mutex, RwLock};
 
 pub type Data = &'static BotState;
 
+#[derive(Clone)]
 pub struct GuildRadio {
     pub audio_processor: ProcessorRef,
     pub track_manager: Arc<Mutex<TrackManager>>,
@@ -31,7 +32,7 @@ pub struct BotState {
     pub state_store: Arc<dyn StateStore>,
     pub dj_settings: DjSettingsStore,
     pub duration_cache: DurationCache,
-    pub guilds: StdMutex<HashMap<GuildId, Arc<GuildRadio>>>,
+    pub guilds: StdMutex<HashMap<GuildId, GuildRadio>>,
     pub profile_manager: JsonRegistry<SignalProfile>,
     pub dj_config_manager: JsonRegistry<DJConfig>,
     pub dj_managers: RwLock<HashMap<GuildId, Arc<Mutex<DJManager>>>>,
@@ -65,12 +66,11 @@ impl BotState {
         }
     }
 
-
-    pub fn guild(&self, guild_id: GuildId) -> Option<Arc<GuildRadio>> {
+    pub fn guild(&self, guild_id: GuildId) -> Option<GuildRadio> {
         self.guilds.lock().unwrap().get(&guild_id).cloned()
     }
 
-    pub fn guild_or_create(&'static self, guild_id: GuildId) -> Arc<GuildRadio> {
+    pub fn guild_or_create(&'static self, guild_id: GuildId) -> GuildRadio {
         self.guilds
             .lock()
             .unwrap()
@@ -84,10 +84,10 @@ impl BotState {
                     self,
                     audio_processor.clone(),
                 )));
-                Arc::new(GuildRadio {
+                GuildRadio {
                     audio_processor,
                     track_manager,
-                })
+                }
             })
             .clone()
     }
