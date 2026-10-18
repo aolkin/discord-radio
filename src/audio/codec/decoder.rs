@@ -252,6 +252,7 @@ impl AudioSource for SymphoniaSource {
             )
             .is_ok()
         {
+            self.decoder.reset();
             self.current_frame_idx = 0;
             self.sample_buf.clear();
             tracing::debug!("Reset audio source by seeking to beginning");
