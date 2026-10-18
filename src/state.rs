@@ -4,7 +4,7 @@ use crate::audio::duration::DurationCache;
 use crate::audio::processing::processor::{AudioProcessor, ProcessorRef};
 use crate::audio::profiles::ProfileManager;
 use crate::audio::tracks::TrackManager;
-use crate::bucket::{FileResolver, ObjectStore};
+use crate::bucket::FileResolver;
 use crate::logging::{JsonLogger, guild_logs_dir};
 use crate::persistence::{DjSettingsStore, StateStore};
 use crate::voice_status::ActivityManager;
@@ -27,7 +27,6 @@ pub type Data = &'static BotState;
 pub struct BotState {
     pub voice_connections: Arc<RwLock<HashMap<GuildId, Arc<Mutex<Call>>>>>,
     pub track_managers: RwLock<HashMap<GuildId, Arc<Mutex<TrackManager>>>>,
-    pub content_path: String,
     pub state_store: Arc<dyn StateStore>,
     pub dj_settings: DjSettingsStore,
     pub duration_cache: DurationCache,
@@ -42,10 +41,9 @@ pub struct BotState {
 
 impl BotState {
     pub fn new(
-        content_path: String,
+        file_resolver: FileResolver,
         state_store: Arc<dyn StateStore>,
         dj_settings: DjSettingsStore,
-        file_cache: Arc<ObjectStore>,
         profile_manager: ProfileManager,
         bot_user_id: UserId,
     ) -> Self {
@@ -54,13 +52,10 @@ impl BotState {
         // Get logs base path from state store path
         let logs_base_path = state_store.base_path().to_path_buf();
 
-        let file_resolver = FileResolver::new(content_path.clone(), file_cache.clone());
-
         Self {
             voice_connections: voice_connections.clone(),
             track_managers: RwLock::new(HashMap::new()),
             duration_cache: DurationCache::new(file_resolver.clone()),
-            content_path,
             state_store: state_store.clone(),
             dj_settings,
             audio_processors: RwLock::new(HashMap::new()),
@@ -74,7 +69,10 @@ impl BotState {
     }
 
     pub fn dj_config_path(&self, name: &str) -> String {
-        format!("{}/dj_configs/{name}.json", self.content_path)
+        format!(
+            "{}/dj_configs/{name}.json",
+            self.file_resolver.content_path()
+        )
     }
 
     pub async fn audio_processor(&self, guild_id: GuildId) -> ProcessorRef {
@@ -197,7 +195,7 @@ impl BotState {
 impl Debug for BotState {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("BotState")
-            .field("content_path", &self.content_path)
+            .field("content_path", &self.file_resolver.content_path())
             .field("state_store", &"<dyn StateStore>")
             .finish_non_exhaustive()
     }

@@ -1,14 +1,13 @@
 pub mod cache;
 pub mod resolve;
 
-pub use cache::{ObjectStore, ObjectStoreError};
-pub use resolve::FileResolver;
+pub use cache::{Bucket, NotFound};
+pub use resolve::{FileResolver, NoBucket};
 
-use s3::bucket::Bucket;
 use s3::creds::Credentials;
 use s3::region::Region;
 
-pub fn init_from_env() -> Option<Box<Bucket>> {
+pub fn init_from_env() -> Option<Box<s3::Bucket>> {
     let endpoint = std::env::var("BUCKET_ENDPOINT").ok()?;
     let access_key_id = std::env::var("BUCKET_ACCESS_KEY_ID").ok()?;
     let secret_access_key = std::env::var("BUCKET_SECRET_ACCESS_KEY").ok()?;
@@ -29,7 +28,7 @@ pub fn init_from_env() -> Option<Box<Bucket>> {
     .map_err(|e| tracing::warn!("Failed to create bucket credentials: {e}"))
     .ok()?;
 
-    Bucket::new(&bucket_name, region, credentials)
+    s3::Bucket::new(&bucket_name, region, credentials)
         .map(|b| b.with_path_style())
         .map_err(|e| tracing::warn!("Failed to create bucket: {e}"))
         .ok()

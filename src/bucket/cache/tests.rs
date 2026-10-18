@@ -86,7 +86,7 @@ struct NotFoundBackend;
 #[async_trait]
 impl ObjectBackend for NotFoundBackend {
     async fn download(&self, _key: &str) -> anyhow::Result<Vec<u8>> {
-        Err(ObjectNotFound.into())
+        Err(NotFound.into())
     }
 
     async fn list_dir(&self, _prefix: &str) -> anyhow::Result<DirListing> {
@@ -107,15 +107,17 @@ fn write_cached_file(path: &Path, contents: &[u8]) {
     std::fs::write(path, contents).unwrap();
 }
 
+async fn bucket(cache_dir: PathBuf, backend: Arc<dyn ObjectBackend>) -> Bucket {
+    Bucket::build(cache_dir, backend, None).await.unwrap()
+}
+
 #[tokio::test]
 async fn new_creates_the_cache_dir() {
     let dir = tempfile::tempdir().unwrap();
     let cache_dir = dir.path().join("nested/cache");
     assert!(!cache_dir.exists());
 
-    ObjectStore::new(cache_dir.clone(), None, None)
-        .await
-        .unwrap();
+    bucket(cache_dir.clone(), Arc::new(NotFoundBackend)).await;
 
     assert!(cache_dir.is_dir());
 }
@@ -124,7 +126,7 @@ async fn new_creates_the_cache_dir() {
 async fn ensure_cached_downloads_and_returns_the_local_path() {
     let dir = tempfile::tempdir().unwrap();
     let calls = Arc::new(AtomicUsize::new(0));
-    let cache = ObjectStore::with_backend(dir.path().to_path_buf(), StubBackend::new(&calls)).await;
+    let cache = bucket(dir.path().to_path_buf(), StubBackend::new(&calls)).await;
 
     let path = cache.ensure_cached("tracks/song.ogg").await.unwrap();
 
@@ -139,7 +141,7 @@ async fn ensure_cached_reuses_a_file_left_by_an_earlier_run() {
     let calls = Arc::new(AtomicUsize::new(0));
     write_cached_file(&dir.path().join("tracks/song.ogg"), b"already cached");
 
-    let cache = ObjectStore::with_backend(dir.path().to_path_buf(), StubBackend::new(&calls)).await;
+    let cache = bucket(dir.path().to_path_buf(), StubBackend::new(&calls)).await;
     cache.ensure_cached("tracks/song.ogg").await.unwrap();
 
     assert_eq!(calls.load(Ordering::SeqCst), 0);
@@ -151,18 +153,16 @@ async fn new_deletes_a_partial_download_without_adopting_it() {
     let partial = temp_path(&dir.path().join("tracks/song.ogg"));
     write_cached_file(&partial, b"half a s");
 
-    let cache = ObjectStore::new(dir.path().to_path_buf(), None, None)
-        .await
-        .unwrap();
+    let cache = bucket(dir.path().to_path_buf(), Arc::new(NotFoundBackend)).await;
 
     assert!(!partial.exists());
-    assert!(matches!(
+    assert!(
         cache
             .ensure_cached("tracks/song.ogg.tmp")
             .await
-            .unwrap_err(),
-        ObjectStoreError::NotConfigured
-    ));
+            .unwrap_err()
+            .is::<NotFound>()
+    );
 }
 
 #[tokio::test]
@@ -180,9 +180,9 @@ async fn new_deletes_a_file_unread_for_longer_than_the_ttl() {
         .set_times(times)
         .unwrap();
 
-    let cache = ObjectStore::new(
+    let cache = Bucket::build(
         dir.path().to_path_buf(),
-        None,
+        Arc::new(NotFoundBackend),
         Some(Duration::from_secs(60)),
     )
     .await
@@ -190,22 +190,27 @@ async fn new_deletes_a_file_unread_for_longer_than_the_ttl() {
 
     assert!(!stale.exists());
     assert!(fresh.exists());
-    // With no backend configured, only an adopted key resolves.
     cache.ensure_cached("tracks/fresh.ogg").await.unwrap();
-    assert!(matches!(
-        cache.ensure_cached("tracks/stale.ogg").await.unwrap_err(),
-        ObjectStoreError::NotConfigured
-    ));
+    assert!(
+        cache
+            .ensure_cached("tracks/stale.ogg")
+            .await
+            .unwrap_err()
+            .is::<NotFound>()
+    );
 }
 
 #[tokio::test]
-async fn ensure_cached_re_downloads_after_invalidate() {
+async fn ensure_cached_re_downloads_after_upload() {
     let dir = tempfile::tempdir().unwrap();
     let calls = Arc::new(AtomicUsize::new(0));
-    let cache = ObjectStore::with_backend(dir.path().to_path_buf(), StubBackend::new(&calls)).await;
+    let cache = bucket(dir.path().to_path_buf(), StubBackend::new(&calls)).await;
 
     cache.ensure_cached("tracks/song.ogg").await.unwrap();
-    cache.invalidate("tracks/song.ogg").await;
+    cache
+        .upload("tracks/song.ogg", b"new", "audio/ogg")
+        .await
+        .unwrap();
     cache.ensure_cached("tracks/song.ogg").await.unwrap();
 
     assert_eq!(calls.load(Ordering::SeqCst), 2);
@@ -215,7 +220,7 @@ async fn ensure_cached_re_downloads_after_invalidate() {
 async fn ensure_cached_does_not_leave_a_temp_file_behind() {
     let dir = tempfile::tempdir().unwrap();
     let calls = Arc::new(AtomicUsize::new(0));
-    let cache = ObjectStore::with_backend(dir.path().to_path_buf(), StubBackend::new(&calls)).await;
+    let cache = bucket(dir.path().to_path_buf(), StubBackend::new(&calls)).await;
 
     cache.ensure_cached("tracks/song.ogg").await.unwrap();
 
@@ -226,7 +231,7 @@ async fn ensure_cached_does_not_leave_a_temp_file_behind() {
 async fn fill_does_not_leave_a_partial_file_when_the_write_fails() {
     let dir = tempfile::tempdir().unwrap();
     let calls = Arc::new(AtomicUsize::new(0));
-    let cache = ObjectStore::with_backend(dir.path().to_path_buf(), StubBackend::new(&calls)).await;
+    let cache = bucket(dir.path().to_path_buf(), StubBackend::new(&calls)).await;
     let dest = cache.cached_path("tracks/song.ogg");
     tokio::fs::create_dir_all(dest.parent().unwrap())
         .await
@@ -237,72 +242,35 @@ async fn fill_does_not_leave_a_partial_file_when_the_write_fails() {
 
     let err = cache.ensure_cached("tracks/song.ogg").await.unwrap_err();
 
-    assert!(matches!(err, ObjectStoreError::Local(_)));
+    assert!(!err.is::<NotFound>());
     assert!(!dest.exists());
 }
 
 #[tokio::test]
 async fn ensure_cached_surfaces_download_failures() {
     let dir = tempfile::tempdir().unwrap();
-    let cache = ObjectStore::with_backend(dir.path().to_path_buf(), Arc::new(FailingBackend)).await;
+    let cache = bucket(dir.path().to_path_buf(), Arc::new(FailingBackend)).await;
 
     let err = cache.ensure_cached("tracks/missing.ogg").await.unwrap_err();
 
-    assert!(matches!(err, ObjectStoreError::Remote(_)));
+    assert!(!err.is::<NotFound>());
 }
 
 #[tokio::test]
 async fn ensure_cached_distinguishes_a_missing_object_from_other_failures() {
     let dir = tempfile::tempdir().unwrap();
-    let cache =
-        ObjectStore::with_backend(dir.path().to_path_buf(), Arc::new(NotFoundBackend)).await;
+    let cache = bucket(dir.path().to_path_buf(), Arc::new(NotFoundBackend)).await;
 
     let err = cache.ensure_cached("tracks/missing.ogg").await.unwrap_err();
 
-    assert!(matches!(err, ObjectStoreError::NotFound));
-}
-
-#[tokio::test]
-async fn pre_cache_downloads_every_key() {
-    let dir = tempfile::tempdir().unwrap();
-    let calls = Arc::new(AtomicUsize::new(0));
-    let cache = Arc::new(
-        ObjectStore::with_backend(dir.path().to_path_buf(), StubBackend::new(&calls)).await,
-    );
-
-    pre_cache(
-        Arc::clone(&cache),
-        vec![
-            "tracks/a.ogg".to_string(),
-            "tracks/b.ogg".to_string(),
-            "tracks/c.ogg".to_string(),
-        ],
-        2,
-    )
-    .await
-    .unwrap();
-
-    assert_eq!(calls.load(Ordering::SeqCst), 3);
-    assert!(cache.cached_path("tracks/a.ogg").exists());
-    assert!(cache.cached_path("tracks/b.ogg").exists());
-    assert!(cache.cached_path("tracks/c.ogg").exists());
-}
-
-#[tokio::test]
-async fn list_remote_is_empty_without_a_bucket() {
-    let dir = tempfile::tempdir().unwrap();
-    let cache = ObjectStore::new(dir.path().to_path_buf(), None, None)
-        .await
-        .unwrap();
-
-    assert!(cache.list_remote("tracks/").await.is_empty());
+    assert!(err.is::<NotFound>());
 }
 
 #[tokio::test]
 async fn list_remote_filters_by_prefix() {
     let dir = tempfile::tempdir().unwrap();
     let backend = StubBackend::with_remote_keys(&["tracks/a.ogg", "tracks/b.ogg", "other/c.ogg"]);
-    let cache = ObjectStore::with_backend(dir.path().to_path_buf(), backend).await;
+    let cache = bucket(dir.path().to_path_buf(), backend).await;
 
     let mut keys = cache.list_remote("tracks/").await;
     keys.sort();
@@ -316,7 +284,7 @@ async fn list_remote_reuses_a_cached_result_for_the_same_prefix() {
     let list_calls = Arc::new(AtomicUsize::new(0));
     let backend =
         StubBackend::with_remote_keys_and_counter(&["tracks/a.ogg", "tracks/b.ogg"], &list_calls);
-    let cache = ObjectStore::with_backend(dir.path().to_path_buf(), backend).await;
+    let cache = bucket(dir.path().to_path_buf(), backend).await;
 
     cache.list_remote("tracks/").await;
     cache.list_remote("tracks/").await;
@@ -327,7 +295,7 @@ async fn list_remote_reuses_a_cached_result_for_the_same_prefix() {
 #[tokio::test]
 async fn list_remote_is_empty_when_listing_fails() {
     let dir = tempfile::tempdir().unwrap();
-    let cache = ObjectStore::with_backend(dir.path().to_path_buf(), Arc::new(FailingBackend)).await;
+    let cache = bucket(dir.path().to_path_buf(), Arc::new(FailingBackend)).await;
 
     assert!(cache.list_remote("tracks/").await.is_empty());
 }

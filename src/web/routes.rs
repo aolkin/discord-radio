@@ -4,8 +4,8 @@ use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
 use crate::audio::profiles::{ProfileStorageError, SignalProfile, is_valid_name};
 use crate::bot_profile::ProfileEdit;
-use crate::bucket::ObjectStoreError;
 use crate::bucket::cache::ObjectInfo;
+use crate::bucket::{NoBucket, NotFound};
 use crate::state::Data;
 use crate::web::state_snapshot::BotSnapshot;
 use axum::Json as AxumJson;
@@ -116,9 +116,12 @@ pub async fn play_track(
         .file_resolver
         .resolve(&request.filename)
         .await
-        .map_err(|e| match e {
-            ObjectStoreError::NotFound => StatusCode::NOT_FOUND,
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        .map_err(|e| {
+            if e.is::<NotFound>() {
+                StatusCode::NOT_FOUND
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
         })?;
 
     send_dj_command(&bot_state, guild_id, DJCommand::ForceTrack(request)).await
@@ -175,9 +178,12 @@ pub async fn change_track_state(
                 .file_resolver
                 .resolve(&filename)
                 .await
-                .map_err(|e| match e {
-                    ObjectStoreError::NotFound => StatusCode::NOT_FOUND,
-                    _ => StatusCode::INTERNAL_SERVER_ERROR,
+                .map_err(|e| {
+                    if e.is::<NotFound>() {
+                        StatusCode::NOT_FOUND
+                    } else {
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    }
                 })?;
             let volume = request.volume.unwrap_or(1.0);
             let loops = request.loops.unwrap_or(true);
@@ -379,11 +385,13 @@ fn profile_storage_error(e: ProfileStorageError) -> (StatusCode, String) {
     (status, format!("{e:#}"))
 }
 
-fn object_store_error(e: ObjectStoreError) -> (StatusCode, String) {
-    let status = match e {
-        ObjectStoreError::NotConfigured => StatusCode::SERVICE_UNAVAILABLE,
-        ObjectStoreError::NotFound => StatusCode::NOT_FOUND,
-        ObjectStoreError::Remote(_) | ObjectStoreError::Local(_) => StatusCode::BAD_GATEWAY,
+fn object_store_error(e: anyhow::Error) -> (StatusCode, String) {
+    let status = if e.is::<NoBucket>() {
+        StatusCode::SERVICE_UNAVAILABLE
+    } else if e.is::<NotFound>() {
+        StatusCode::NOT_FOUND
+    } else {
+        StatusCode::BAD_GATEWAY
     };
     (status, format!("{e:#}"))
 }
@@ -428,6 +436,8 @@ pub async fn browse_audio_files(
 ) -> Result<AxumJson<BrowseAudioFilesResponse>, (StatusCode, String)> {
     let listing = bot_state
         .file_resolver
+        .bucket()
+        .map_err(object_store_error)?
         .list_dir(&params.prefix)
         .await
         .map_err(object_store_error)?;
@@ -487,6 +497,8 @@ pub async fn upload_audio_file(
     let key = format!("{}{filename}", params.prefix);
     bot_state
         .file_resolver
+        .bucket()
+        .map_err(object_store_error)?
         .upload(&key, &bytes, content_type)
         .await
         .map_err(object_store_error)?;
@@ -515,6 +527,8 @@ pub async fn create_audio_folder(
     let key = format!("{}{}/", request.prefix, request.name);
     bot_state
         .file_resolver
+        .bucket()
+        .map_err(object_store_error)?
         .upload(&key, &[], "application/x-directory")
         .await
         .map_err(object_store_error)?;
