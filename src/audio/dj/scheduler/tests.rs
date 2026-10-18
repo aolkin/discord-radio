@@ -35,7 +35,7 @@ fn track() -> TrackEntry {
 
 #[test]
 fn all_pools_empty_falls_back_to_noise() {
-    let scheduler = WeightedScheduler::new(config(Vec::new()));
+    let scheduler = WeightedScheduler::new(config(Vec::new()).into());
     for _ in 0..100 {
         assert!(matches!(scheduler.choose_state_type(), DJStateType::Noise));
     }
@@ -43,7 +43,7 @@ fn all_pools_empty_falls_back_to_noise() {
 
 #[test]
 fn empty_categories_are_skipped() {
-    let scheduler = WeightedScheduler::new(config(vec![track()]));
+    let scheduler = WeightedScheduler::new(config(vec![track()]).into());
     for _ in 0..100 {
         assert!(matches!(scheduler.choose_state_type(), DJStateType::Track,));
     }

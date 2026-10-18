@@ -151,7 +151,6 @@ pub struct DJStateMachine {
     scheduler: WeightedScheduler,
     guild_id: GuildId,
     announcement_channel: Option<ChannelId>,
-    hex_message_announcements: Vec<String>,
     bot_state: Data,
     config_name: Option<String>,
     applied_profile: Option<(SignalProfilePlayback, ProfileSource)>,
@@ -161,7 +160,7 @@ pub struct DJStateMachine {
 
 impl DJStateMachine {
     pub async fn new(
-        config: DJConfig,
+        config: Arc<DJConfig>,
         guild_id: GuildId,
         saved: Option<crate::persistence::DJState>,
         state: Arc<RwLock<DJState>>,
@@ -182,9 +181,6 @@ impl DJStateMachine {
             config_name
         );
 
-        let hex_message_announcements =
-            config.hex_message_announcements.clone().unwrap_or_default();
-
         let initial_state = restored_state.unwrap_or_default();
 
         let _ = initial_state
@@ -200,7 +196,6 @@ impl DJStateMachine {
             scheduler: WeightedScheduler::new(config),
             guild_id,
             announcement_channel,
-            hex_message_announcements,
             bot_state,
             config_name,
             applied_profile: None,
@@ -392,6 +387,7 @@ impl DJStateMachine {
         bot_state: &Data,
         state_type_filter: Option<DJStateType>,
     ) -> anyhow::Result<()> {
+        self.reload_config();
         let Self { scheduler, .. } = self;
         let next_state_type = scheduler.next_state(state_type_filter);
         tracing::info!("DJ transitioning to state: {next_state_type}");
@@ -410,6 +406,21 @@ impl DJStateMachine {
             DJStateEntry::Noise(entry) => NoiseSegment::from(entry).into(),
         };
         self.enter_state(next_state, bot_state).await
+    }
+
+    /// Switches to the latest saved copy of the DJ's named config. A new
+    /// scheduler starts with an empty recent history.
+    fn reload_config(&mut self) {
+        let Some(name) = &self.config_name else {
+            return;
+        };
+        let Some(config) = self.bot_state.dj_config_manager.get(name) else {
+            return;
+        };
+        if !Arc::ptr_eq(&config, self.scheduler.config()) {
+            tracing::info!("DJ reloading config {name:?} in guild {}", self.guild_id);
+            self.scheduler = WeightedScheduler::new(config);
+        }
     }
 
     pub async fn force_hex_message(
@@ -575,10 +586,16 @@ impl DJStateMachine {
     }
 
     fn pick_random_announcement(&self) -> Option<String> {
-        if !self.hex_message_announcements.is_empty() {
+        let announcements = self
+            .scheduler
+            .config()
+            .hex_message_announcements
+            .as_deref()
+            .unwrap_or_default();
+        if !announcements.is_empty() {
             let mut rng = rand::rng();
-            let announcement_idx = rng.random_range(0..self.hex_message_announcements.len());
-            Some(self.hex_message_announcements[announcement_idx].clone())
+            let announcement_idx = rng.random_range(0..announcements.len());
+            Some(announcements[announcement_idx].clone())
         } else {
             None
         }

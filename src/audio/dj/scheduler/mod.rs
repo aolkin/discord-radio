@@ -4,7 +4,7 @@ use crate::audio::dj::config::{
 use crate::audio::dj::manager::DJStateType;
 use crate::audio::dj::weighted_choice::WeightedSelector;
 use rand::RngExt;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
 #[derive(Clone, strum::Display)]
 pub enum DJStateEntry {
@@ -14,7 +14,7 @@ pub enum DJStateEntry {
 }
 
 pub struct WeightedScheduler {
-    config: DJConfig,
+    config: Arc<DJConfig>,
     track_selector: WeightedSelector,
     hex_message_selector: WeightedSelector,
     noise_selector: WeightedSelector,
@@ -22,7 +22,7 @@ pub struct WeightedScheduler {
 }
 
 impl WeightedScheduler {
-    pub fn new(config: DJConfig) -> Self {
+    pub fn new(config: Arc<DJConfig>) -> Self {
         let track_selector = WeightedSelector::new(
             config.recent_history_size,
             config.duplicate_penalty_multiplier,
@@ -114,7 +114,7 @@ impl WeightedScheduler {
         DJStateType::Noise
     }
 
-    pub fn config(&self) -> &DJConfig {
+    pub fn config(&self) -> &Arc<DJConfig> {
         &self.config
     }
 }

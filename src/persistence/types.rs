@@ -25,12 +25,6 @@ pub struct MultiTrackPlaybackState {
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct DjSettings {
     #[serde(default)]
-    pub tracks: Option<String>,
-    #[serde(default)]
-    pub hex_messages: Option<String>,
-    #[serde(default)]
-    pub config: Option<String>,
-    #[serde(default)]
     pub channel_status_disabled: bool,
 }
 

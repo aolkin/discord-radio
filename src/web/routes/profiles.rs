@@ -17,7 +17,7 @@ pub async fn get_profiles(State(bot_state): State<Data>) -> AxumJson<ProfilesRes
 }
 
 #[derive(Debug, Deserialize)]
-pub struct GetProfileParams {
+pub struct RefreshParams {
     #[serde(default)]
     pub refresh: bool,
 }
@@ -25,7 +25,7 @@ pub struct GetProfileParams {
 pub async fn get_profile(
     State(bot_state): State<Data>,
     Path(name): Path<String>,
-    Query(params): Query<GetProfileParams>,
+    Query(params): Query<RefreshParams>,
 ) -> Result<AxumJson<SignalProfile>, ApiError> {
     if params.refresh {
         return bot_state

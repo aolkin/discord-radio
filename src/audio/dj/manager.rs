@@ -98,7 +98,7 @@ impl DJManager {
 
     pub async fn start(
         guild_id: GuildId,
-        config: DJConfig,
+        config: Arc<DJConfig>,
         saved: Option<crate::persistence::DJState>,
         bot_state: Data,
     ) -> Self {
@@ -150,21 +150,17 @@ impl DJManager {
     }
 }
 
-pub async fn load_dj_config(
+pub fn load_dj_config(
     bot_state: &Data,
-    guild_id: GuildId,
     config_name: Option<&str>,
-) -> anyhow::Result<DJConfig> {
-    let mut config = match config_name {
-        Some(name) => DJConfig::load_from_file(&bot_state.dj_config_path(name))
-            .with_context(|| format!("loading DJ config '{name}'"))?,
-        None => DJConfig::default(),
-    };
-    let settings = bot_state.dj_settings.get(guild_id).await;
-    config
-        .apply_dj_settings(&settings, &bot_state.file_resolver)
-        .await?;
-    Ok(config)
+) -> anyhow::Result<Arc<DJConfig>> {
+    match config_name {
+        Some(name) => bot_state
+            .dj_config_manager
+            .get(name)
+            .with_context(|| format!("no DJ config {name:?}")),
+        None => Ok(Arc::default()),
+    }
 }
 
 /// Starts the guild's DJ if it is not running, resuming its saved state when
@@ -183,12 +179,10 @@ pub async fn start_dj(bot_state: Data, guild_id: GuildId) -> anyhow::Result<()> 
         .remove(&guild_id);
 
     let config_name = saved.as_ref().and_then(|s| s.config_name.as_deref());
-    let config = load_dj_config(&bot_state, guild_id, config_name)
-        .await
-        .unwrap_or_else(|e| {
-            tracing::warn!("Starting DJ with an empty config in guild {guild_id}: {e:#}");
-            DJConfig::default()
-        });
+    let config = load_dj_config(&bot_state, config_name).unwrap_or_else(|e| {
+        tracing::warn!("Starting DJ with an empty config in guild {guild_id}: {e:#}");
+        Arc::default()
+    });
 
     tracing::info!("Starting DJ for guild {}", guild_id);
     let manager = DJManager::start(guild_id, config, saved, bot_state).await;
@@ -203,7 +197,7 @@ pub async fn restart_dj_with_config(
     guild_id: GuildId,
     config_name: String,
 ) -> anyhow::Result<()> {
-    let config = load_dj_config(&bot_state, guild_id, Some(&config_name)).await?;
+    let config = load_dj_config(&bot_state, Some(&config_name))?;
 
     let mut dj_managers = bot_state.dj_managers.write().await;
     let Some(manager) = dj_managers.remove(&guild_id) else {

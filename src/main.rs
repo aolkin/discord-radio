@@ -12,6 +12,7 @@ mod startup;
 mod state;
 mod web;
 
+use crate::audio::dj::config::storage::DjConfigManager;
 use crate::audio::profiles::ProfileManager;
 use crate::state::{BotState, Data};
 use anyhow::Context;
@@ -309,12 +310,19 @@ async fn main() -> anyhow::Result<()> {
     let profile_manager =
         ProfileManager::from_storage(signal_profiles_path, file_resolver.clone()).await;
 
+    let dj_configs_path =
+        std::env::var("DJ_CONFIGS_PATH").unwrap_or_else(|_| "dj_configs/".to_string());
+    tracing::info!("Using DJ configs path: {}", dj_configs_path);
+    let dj_config_manager =
+        DjConfigManager::from_storage(dj_configs_path, file_resolver.clone()).await;
+
     let songbird = songbird::Songbird::serenity();
     let data: Data = Box::leak(Box::new(BotState::new(
         file_resolver,
         state_store,
         dj_settings_store,
         profile_manager,
+        dj_config_manager,
         bot_user_id,
         songbird.clone(),
     )));

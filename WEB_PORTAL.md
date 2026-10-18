@@ -75,6 +75,10 @@ The DJ plays the profile override if set, else the current segment's forced prof
 
 The Signal Profiles panel lists every profile by name. Saving a new or edited profile writes it to object storage; a DJ picks up the new parameters the next time it transitions to that profile.
 
+### DJ Configs
+
+The bot loads DJ configs from the `DJ_CONFIGS_PATH` directory (default `dj_configs/`; the value must end with a slash), under both the content root and the object storage bucket root. A config in object storage replaces a local config of the same name. Saving a config through the API writes it to object storage; a running DJ using that config switches to the saved copy the next time it advances to a new segment.
+
 ### Audio File Browser
 
 The Audio Files panel opens a browser over the `tracks/` folder of object storage. Dropping or choosing files uploads them to the current folder one after another, with a progress bar per file and the server's message when a file is rejected. Breadcrumbs and Up move between folders, and each file shows its full key, size and last modified time. The same browser opens in a mode that picks a file or a folder and hands the choice back to the section that opened it.
@@ -107,6 +111,9 @@ Each guild card's Bot Profile button opens the bot's current nickname, avatar an
 - `GET /api/profiles` - List available signal profiles
 - `GET /api/profiles/:name` - Get a signal profile's parameters. With `?refresh=true`, re-fetch the profile from object storage first and keep the fetched copy; returns 404 when object storage has no such profile
 - `PUT /api/profiles/:name` - Create or replace a signal profile in object storage. The body holds the profile's parameters; the name comes from `:name`, which may contain only letters, digits, `-` and `_`. Returns 503 when object storage is not configured
+- `GET /api/dj-configs` - List available DJ configs (`{"configs": [...]}`)
+- `GET /api/dj-configs/:name` - Get a DJ config. With `?refresh=true`, re-fetch the config from object storage first and keep the fetched copy; returns 404 when object storage has no such config
+- `PUT /api/dj-configs/:name` - Create or replace a DJ config in object storage. The body holds the config in the same JSON form as the files under `DJ_CONFIGS_PATH`; the name comes from `:name`, which may contain only letters, digits, `-` and `_`. Returns 422 with the reason when the body is not a valid DJ config, and 503 when object storage is not configured
 - `GET /api/files` - Browse object storage one folder level at a time. `?prefix=` selects the folder; returns `{"prefix", "folders", "files"}`, where `folders` are the sub-folder prefixes and each file has `key`, `size` and `last_modified`. Returns 503 when object storage is not configured
 - `POST /api/files/upload` - Upload a file to object storage as `{prefix}{filename}`. `?prefix=` must be a folder under `tracks/` or `images/`. The body is `multipart/form-data` with the file in a `file` field, at most 100 MiB. Under `tracks/` it must be .mp3, .ogg or .wav at 48kHz; under `images/` it must be .png, .jpg or .gif. Returns `{"key"}`; 400 for a bad prefix, name or type, 422 for a wrong sample rate or undecodable audio file, 503 when object storage is not configured
 - `POST /api/files/folders` - Create a folder under `tracks/` or `images/` in object storage (`{"prefix": "tracks/", "name": "my-folder"}`). The name may contain only letters, digits, `-` and `_`. Returns `{"key"}` of the folder marker
