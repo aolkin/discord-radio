@@ -200,8 +200,7 @@ pub fn start_gauge_update_task(metrics: &'static BotMetrics, bot_state: crate::s
         loop {
             interval.tick().await;
 
-            let voice_connections = bot_state.voice_connections.read().await;
-            let guild_count = voice_connections.len() as u64;
+            let guild_count = bot_state.voice_connection_count().await as u64;
             metrics.update_active_voice_connections(guild_count);
         }
     });

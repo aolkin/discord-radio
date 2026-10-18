@@ -11,7 +11,7 @@ use crate::persistence::{DjSettingsStore, StateStore};
 use serde::Serialize;
 use serenity::all::{ChannelId, UserId};
 use serenity::model::id::GuildId;
-use songbird::Call;
+use songbird::Songbird;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
@@ -20,7 +20,7 @@ use tokio::sync::{Mutex, RwLock};
 pub type Data = &'static BotState;
 
 pub struct BotState {
-    pub voice_connections: Arc<RwLock<HashMap<GuildId, Arc<Mutex<Call>>>>>,
+    pub songbird: Arc<Songbird>,
     pub track_managers: RwLock<HashMap<GuildId, Arc<Mutex<TrackManager>>>>,
     pub state_store: Arc<dyn StateStore>,
     pub dj_settings: DjSettingsStore,
@@ -40,11 +40,10 @@ impl BotState {
         dj_settings: DjSettingsStore,
         profile_manager: ProfileManager,
         bot_user_id: UserId,
+        songbird: Arc<Songbird>,
     ) -> Self {
-        let voice_connections = Arc::new(RwLock::new(HashMap::new()));
-
         Self {
-            voice_connections: voice_connections.clone(),
+            songbird,
             track_managers: RwLock::new(HashMap::new()),
             duration_cache: DurationCache::new(file_resolver.clone()),
             state_store: state_store.clone(),
@@ -103,13 +102,20 @@ impl BotState {
 
     /// Get the current voice channel ID for a guild
     pub async fn get_voice_channel_id(&self, guild_id: GuildId) -> Option<ChannelId> {
-        let voice_connections = self.voice_connections.read().await;
-        if let Some(call_lock) = voice_connections.get(&guild_id) {
-            let call = call_lock.lock().await;
-            call.current_channel().map(|id| ChannelId::new(id.0.get()))
-        } else {
-            None
+        let call_lock = self.songbird.get(guild_id)?;
+        let call = call_lock.lock().await;
+        call.current_channel().map(|id| ChannelId::new(id.0.get()))
+    }
+
+    /// Count the guilds with a Call that is in a voice channel
+    pub async fn voice_connection_count(&self) -> usize {
+        let mut count = 0;
+        for (_, call_lock) in self.songbird.iter() {
+            if call_lock.lock().await.current_channel().is_some() {
+                count += 1;
+            }
         }
+        count
     }
 
     /// Log a member activity event

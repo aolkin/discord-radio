@@ -12,10 +12,9 @@ pub async fn setup_shutdown_handler(data: Data) {
         tracing::info!("Cleaning up...");
 
         // Clear voice connections (they will be cleaned up automatically)
-        let voice_connections = data.voice_connections.read().await;
         tracing::info!(
             "Cleaning up {} voice connection(s)",
-            voice_connections.len()
+            data.voice_connection_count().await
         );
 
         tracing::info!("Cleanup completed");

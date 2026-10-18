@@ -1,4 +1,4 @@
-use crate::audio::connection::setup_voice_connection;
+use crate::audio::connection::connect_voice_channel;
 use crate::audio::dj::manager::start_dj;
 use crate::audio::tracks::{StartTrackArgs, get_or_create_track_manager};
 use crate::state::Data;
@@ -28,15 +28,14 @@ pub async fn restore_voice_channels(
         .clone();
 
     for (guild_id, channel_id) in saved_channels {
-        match manager.join(guild_id, channel_id).await {
-            Ok(handle_lock) => {
+        match connect_voice_channel(&manager, guild_id, channel_id, bot_state).await {
+            Ok(_) => {
                 tracing::info!(
                     "Rejoined voice channel {} in guild {}",
                     channel_id,
                     guild_id
                 );
 
-                setup_voice_connection(handle_lock.clone(), guild_id, bot_state).await;
                 if let Err(e) = start_dj(bot_state, guild_id).await {
                     tracing::error!("Failed to start DJ for guild {}: {e:#}", guild_id);
                 }

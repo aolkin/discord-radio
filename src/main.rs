@@ -98,11 +98,9 @@ impl serenity::EventHandler for Handler {
             None => return,
         };
 
-        let voice_connections = self.data.voice_connections.read().await;
-        if !voice_connections.contains_key(&guild_id) {
+        if self.data.get_voice_channel_id(guild_id).await.is_none() {
             return;
         }
-        drop(voice_connections);
 
         let user_id = new.user_id;
         if user_id == ctx.cache.current_user().id {
@@ -311,12 +309,14 @@ async fn main() -> anyhow::Result<()> {
     let profile_manager =
         ProfileManager::from_storage(signal_profiles_path, file_resolver.clone()).await;
 
+    let songbird = songbird::Songbird::serenity();
     let data: Data = Box::leak(Box::new(BotState::new(
         file_resolver,
         state_store,
         dj_settings_store,
         profile_manager,
         bot_user_id,
+        songbird.clone(),
     )));
 
     // Start gauge update task if metrics are configured
@@ -364,7 +364,7 @@ async fn main() -> anyhow::Result<()> {
     let mut client = serenity::Client::builder(&discord_token, intents)
         .framework(framework)
         .event_handler(Handler { data })
-        .register_songbird()
+        .register_songbird_with(songbird)
         .await?;
 
     // Set up graceful shutdown handling
