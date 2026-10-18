@@ -84,15 +84,12 @@ pub async fn run_web_server(bot_state: Data, port: u16) -> anyhow::Result<()> {
             "/api/profiles/{name}",
             get(routes::get_profile).put(routes::put_profile),
         )
-        .route("/api/audio-files", get(routes::browse_audio_files))
+        .route("/api/files", get(routes::browse_files))
         .route(
-            "/api/audio-files/upload",
-            post(routes::upload_audio_file).layer(DefaultBodyLimit::max(routes::MAX_UPLOAD_BYTES)),
+            "/api/files/upload",
+            post(routes::upload_file).layer(DefaultBodyLimit::max(routes::MAX_UPLOAD_BYTES)),
         )
-        .route(
-            "/api/audio-files/folders",
-            post(routes::create_audio_folder),
-        )
+        .route("/api/files/folders", post(routes::create_folder))
         .route("/api/activity/set", post(routes::set_bot_activity))
         .route(
             "/api/guilds/{guild_id}/audio-stream",

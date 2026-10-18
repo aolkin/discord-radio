@@ -702,6 +702,13 @@
                     </div>
 
                     <div class="section">
+                        <div class="section-title">Bot Profile</div>
+                        <button class="btn btn-secondary" style="width: 100%;" @click="openBotProfileModal(guild.guild_id)">
+                            Edit Nickname, Avatar &amp; Banner
+                        </button>
+                    </div>
+
+                    <div class="section">
                         <div class="section-title">Voice Channel Status</div>
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                             <input type="checkbox" :checked="guild.channel_status_enabled" @change="setChannelStatusEnabled(guild.guild_id, $event.target.checked)">
@@ -983,6 +990,52 @@
                         <button type="button" class="btn btn-secondary" @click="closeSignalProfileModal()">Cancel</button>
                         <button type="submit" class="btn btn-primary" :disabled="profileSaving">
                             <span x-text="profileSaving ? 'Applying...' : 'Apply Profile'"></span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showBotProfileModal"
+         x-transition.opacity
+         class="modal-overlay"
+         @click.self="closeBotProfileModal()"
+         @keydown.escape.window="!fileBrowser.open && closeBotProfileModal()">
+        <div class="modal-content" x-show="showBotProfileModal" x-transition>
+            <div class="modal-header">
+                <div class="modal-title">Bot Profile</div>
+                <button class="close" @click="closeBotProfileModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div x-show="botProfileMessage.text"
+                     :class="botProfileMessage.type === 'error' ? 'error-message' : 'success-message'"
+                     x-text="botProfileMessage.text"></div>
+
+                <div class="loading" x-show="botProfileLoading">Loading...</div>
+
+                <form @submit.prevent="saveBotProfile()" x-show="!botProfileLoading">
+                    <div class="form-group">
+                        <label class="form-label">Nickname</label>
+                        <input type="text" class="form-input" x-model="botProfileForm.nick" maxlength="32"
+                               placeholder="Empty uses the bot's username">
+                    </div>
+                    <template x-for="field in ['avatar', 'banner']" :key="field">
+                        <div class="form-group">
+                            <label class="form-label" x-text="field === 'avatar' ? 'Avatar' : 'Banner'"></label>
+                            <div class="track-details" x-show="!botProfileCurrent[field + '_url']">Not set for this server</div>
+                            <img :src="botProfileCurrent[field + '_url']" x-show="botProfileCurrent[field + '_url']"
+                                 :style="field === 'avatar' ? 'width: 80px; height: 80px; border-radius: 50%;' : 'width: 100%; max-height: 120px; object-fit: cover; border-radius: 6px;'">
+                            <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px;">
+                                <button type="button" class="btn btn-secondary" @click="pickBotProfileImage(field)">Choose Image</button>
+                                <span class="track-details" x-text="botProfileForm[field] || 'Unchanged'"></span>
+                            </div>
+                        </div>
+                    </template>
+                    <div class="button-group">
+                        <button type="button" class="btn btn-secondary" @click="closeBotProfileModal()">Close</button>
+                        <button type="submit" class="btn btn-primary" :disabled="botProfileSaving">
+                            <span x-text="botProfileSaving ? 'Saving...' : 'Save'"></span>
                         </button>
                     </div>
                 </form>
@@ -1412,7 +1465,7 @@
          @keydown.escape.window="closeFileBrowser()">
         <div class="modal-content" x-show="fileBrowser.open" x-transition>
             <div class="modal-header">
-                <div class="modal-title" x-text="fileBrowser.mode === 'file' ? 'Select Audio File' : fileBrowser.mode === 'folder' ? 'Select Folder' : 'Audio Files'"></div>
+                <div class="modal-title" x-text="fileBrowser.mode === 'file' ? 'Select ' + fileBrowserKind().noun : fileBrowser.mode === 'folder' ? 'Select Folder' : fileBrowserKind().noun + 's'"></div>
                 <button class="close" @click="closeFileBrowser()">&times;</button>
             </div>
             <div class="modal-body">
@@ -1469,10 +1522,10 @@
                 <label class="file-browser-drop" :class="{ dragging: fileBrowser.dragging }"
                        @dragover.prevent="fileBrowser.dragging = true"
                        @dragleave="fileBrowser.dragging = false"
-                       @drop.prevent="fileBrowser.dragging = false; uploadAudioFiles($event.dataTransfer.files)">
-                    <span>Drop audio files here or click to choose (.mp3, .ogg, .wav at 48kHz)</span>
-                    <input type="file" multiple accept=".mp3,.ogg,.wav" style="display: none;"
-                           @change="uploadAudioFiles($event.target.files); $event.target.value = ''">
+                       @drop.prevent="fileBrowser.dragging = false; uploadFiles($event.dataTransfer.files)">
+                    <span x-text="'Drop files here or click to choose (' + fileBrowserKind().hint + ')'"></span>
+                    <input type="file" multiple :accept="fileBrowserKind().accept" style="display: none;"
+                           @change="uploadFiles($event.target.files); $event.target.value = ''">
                 </label>
 
                 <template x-for="upload in fileBrowser.uploads" :key="upload.id">
@@ -1557,6 +1610,17 @@
                     uploads: [],
                 },
                 nextUploadId: 0,
+                fileKinds: {
+                    tracks: { noun: 'Audio File', extensions: '.mp3, .ogg and .wav', hint: '.mp3, .ogg, .wav at 48kHz', accept: '.mp3,.ogg,.wav', pattern: /\.(mp3|ogg|wav)$/i },
+                    images: { noun: 'Image', extensions: '.png, .jpg and .gif', hint: '.png, .jpg, .gif', accept: '.png,.jpg,.jpeg,.gif', pattern: /\.(png|jpe?g|gif)$/i },
+                },
+                // Bot Profile Modal state
+                showBotProfileModal: false,
+                botProfileLoading: false,
+                botProfileSaving: false,
+                botProfileMessage: { text: '', type: '' },
+                botProfileCurrent: { nick: null, avatar_url: null, banner_url: null },
+                botProfileForm: { nick: '', avatar: '', banner: '' },
                 // Signal Profile Editor state
                 showProfileEditor: false,
                 profileEditorIsNew: false,
@@ -1658,7 +1722,7 @@
 
                 async loadAudioFiles() {
                     try {
-                        const response = await fetch('/api/audio-files');
+                        const response = await fetch('/api/files?prefix=tracks/');
                         if (response.ok) {
                             const data = await response.json();
                             this.audioFiles = data.files.map(file => 's3://' + file.key);
@@ -1702,6 +1766,10 @@
                     if (onSelect) onSelect(value);
                 },
 
+                fileBrowserKind() {
+                    return this.fileKinds[this.fileBrowser.prefix.split('/')[0]] || this.fileKinds.tracks;
+                },
+
                 fileBrowserCrumbs() {
                     const names = this.fileBrowser.prefix.split('/').filter(Boolean);
                     return names.map((name, index) => ({
@@ -1714,7 +1782,7 @@
                     this.fileBrowser.loading = true;
                     this.fileBrowser.message = { text: '', type: '' };
                     try {
-                        const response = await fetch(`/api/audio-files?prefix=${encodeURIComponent(prefix)}`);
+                        const response = await fetch(`/api/files?prefix=${encodeURIComponent(prefix)}`);
                         if (!response.ok) {
                             throw new Error((await response.text()) || `HTTP ${response.status}`);
                         }
@@ -1723,7 +1791,7 @@
                         this.fileBrowser.folders = listing.folders;
                         this.fileBrowser.files = listing.files;
                     } catch (error) {
-                        console.error('Failed to load audio files:', error);
+                        console.error('Failed to load files:', error);
                         this.fileBrowser.message = { text: `Failed to load files: ${error.message}`, type: 'error' };
                     } finally {
                         this.fileBrowser.loading = false;
@@ -1734,7 +1802,7 @@
                     this.fileBrowser.creatingFolder = true;
                     this.fileBrowser.message = { text: '', type: '' };
                     try {
-                        const response = await fetch('/api/audio-files/folders', {
+                        const response = await fetch('/api/files/folders', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ prefix: this.fileBrowser.prefix, name: this.fileBrowser.newFolderName }),
@@ -1752,25 +1820,26 @@
                     }
                 },
 
-                async uploadAudioFiles(fileList) {
+                async uploadFiles(fileList) {
                     const prefix = this.fileBrowser.prefix;
+                    const kind = this.fileBrowserKind();
                     let uploaded = false;
                     for (const file of Array.from(fileList)) {
                         this.fileBrowser.uploads.push({
                             id: this.nextUploadId++, name: file.name, progress: 0, status: 'uploading', detail: '',
                         });
                         const upload = this.fileBrowser.uploads.at(-1);
-                        if (!/\.(mp3|ogg|wav)$/i.test(file.name)) {
+                        if (!kind.pattern.test(file.name)) {
                             upload.status = 'error';
-                            upload.detail = 'Only .mp3, .ogg and .wav files are accepted';
+                            upload.detail = `Only ${kind.extensions} files are accepted`;
                             continue;
                         }
                         try {
-                            upload.detail = await this.sendAudioFile(file, prefix, (percent) => { upload.progress = percent; });
+                            upload.detail = await this.sendFile(file, prefix, (percent) => { upload.progress = percent; });
                             upload.status = 'done';
                             uploaded = true;
                         } catch (error) {
-                            console.error('Failed to upload audio file:', error);
+                            console.error('Failed to upload file:', error);
                             upload.status = 'error';
                             upload.detail = error.message;
                         }
@@ -1781,10 +1850,10 @@
                 },
 
                 // Resolves with the uploaded key. XMLHttpRequest rather than fetch because fetch reports no upload progress.
-                sendAudioFile(file, prefix, onProgress) {
+                sendFile(file, prefix, onProgress) {
                     return new Promise((resolve, reject) => {
                         const xhr = new XMLHttpRequest();
-                        xhr.open('POST', `/api/audio-files/upload?prefix=${encodeURIComponent(prefix)}`);
+                        xhr.open('POST', `/api/files/upload?prefix=${encodeURIComponent(prefix)}`);
                         xhr.upload.onprogress = (event) => {
                             if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
                         };
@@ -2259,6 +2328,77 @@
                         };
                     } finally {
                         this.profileSaving = false;
+                    }
+                },
+
+                openBotProfileModal(guildId) {
+                    this.currentGuildId = guildId;
+                    this.showBotProfileModal = true;
+                    this.botProfileMessage = { text: '', type: '' };
+                    this.botProfileForm = { nick: '', avatar: '', banner: '' };
+                    return this.loadBotProfile();
+                },
+
+                closeBotProfileModal() {
+                    this.showBotProfileModal = false;
+                    this.currentGuildId = null;
+                },
+
+                async loadBotProfile() {
+                    this.botProfileLoading = true;
+                    try {
+                        const response = await fetch(`/api/guilds/${this.currentGuildId}/bot-profile`);
+                        if (!response.ok) {
+                            throw new Error((await response.text()) || `HTTP ${response.status}`);
+                        }
+                        this.botProfileCurrent = await response.json();
+                        this.botProfileForm.nick = this.botProfileCurrent.nick || '';
+                    } catch (error) {
+                        console.error('Failed to load bot profile:', error);
+                        this.botProfileMessage = { text: `Failed to load the current profile: ${error.message}`, type: 'error' };
+                    } finally {
+                        this.botProfileLoading = false;
+                    }
+                },
+
+                pickBotProfileImage(field) {
+                    this.openFileBrowser({
+                        mode: 'file',
+                        prefix: 'images/',
+                        onSelect: (key) => { this.botProfileForm[field] = 's3://' + key; },
+                    });
+                },
+
+                async saveBotProfile() {
+                    const body = {};
+                    if (this.botProfileForm.nick !== (this.botProfileCurrent.nick || '')) body.nick = this.botProfileForm.nick;
+                    if (this.botProfileForm.avatar) body.avatar = this.botProfileForm.avatar;
+                    if (this.botProfileForm.banner) body.banner = this.botProfileForm.banner;
+                    if (Object.keys(body).length === 0) {
+                        this.botProfileMessage = { text: 'Nothing changed', type: 'error' };
+                        return;
+                    }
+
+                    this.botProfileSaving = true;
+                    this.botProfileMessage = { text: '', type: '' };
+                    try {
+                        const response = await fetch(`/api/guilds/${this.currentGuildId}/bot-profile`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(body),
+                        });
+                        if (!response.ok) {
+                            throw new Error((await response.text()) || `HTTP ${response.status}`);
+                        }
+                        this.botProfileMessage = { text: 'Profile saved', type: 'success' };
+                        this.botProfileForm.avatar = '';
+                        this.botProfileForm.banner = '';
+                        await this.loadBotProfile();
+                    } catch (error) {
+                        console.error('Failed to save bot profile:', error);
+                        this.botProfileMessage = { text: `Failed to save the profile: ${error.message}`, type: 'error' };
+                    } finally {
+                        this.botProfileSaving = false;
                     }
                 },
 
