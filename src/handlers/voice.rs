@@ -26,12 +26,6 @@ impl EventHandler for ConnectionEventHandler {
 
                 let guild_id = GuildId::new(data.guild_id.0.into());
 
-                // Note: We no longer clean up TrackManager, audio_processor, hex playback, etc.
-                // since they are now fully decoupled from voice connections.
-                // DJ and other audio features can continue operating in the background.
-                // They won't actually produce audio without Songbird consuming from the processor,
-                // but their state machines and timers continue to run independently.
-
                 tracing::info!(
                     "Voice disconnected for guild {}, audio state preserved",
                     guild_id
