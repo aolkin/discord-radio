@@ -1025,7 +1025,7 @@
 
                 <!-- Set Activity Form -->
                 <div class="modal-section">
-                    <div class="modal-section-title">Set New Activity (Clears Stack)</div>
+                    <div class="modal-section-title">Set New Activity</div>
                     <form @submit.prevent="setActivity()">
                         <div class="form-group">
                             <label class="form-label">Activity Type</label>
@@ -1044,58 +1044,6 @@
                         <div class="button-group">
                             <button type="submit" class="btn btn-primary" :disabled="activitySaving">
                                 <span x-text="activitySaving ? 'Setting...' : 'Set Activity'"></span>
-                            </button>
-                        </div>
-                    </form>
-                </div>
-
-                <!-- Push Activity Form -->
-                <div class="modal-section">
-                    <div class="modal-section-title">Push Activity (Adds to Stack)</div>
-                    <form @submit.prevent="pushActivity()">
-                        <div class="form-group">
-                            <label class="form-label">Activity Type</label>
-                            <select class="form-input" x-model="pushActivityType" required>
-                                <option value="playing">🎮 Playing</option>
-                                <option value="listening">🎵 Listening</option>
-                                <option value="streaming">📡 Streaming</option>
-                                <option value="custom">✨ Custom</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Status Text</label>
-                            <input type="text" class="form-input" x-model="pushActivityStatus" 
-                                   placeholder="Enter activity status..." required>
-                        </div>
-                        <div class="button-group">
-                            <button type="submit" class="btn btn-primary" :disabled="activitySaving">
-                                <span x-text="activitySaving ? 'Pushing...' : 'Push Activity'"></span>
-                            </button>
-                        </div>
-                    </form>
-                </div>
-
-                <!-- Remove Activity Form -->
-                <div class="modal-section">
-                    <div class="modal-section-title">Remove Activity from Stack</div>
-                    <form @submit.prevent="removeActivity()">
-                        <div class="form-group">
-                            <label class="form-label">Activity Type</label>
-                            <select class="form-input" x-model="removeActivityType" required>
-                                <option value="playing">🎮 Playing</option>
-                                <option value="listening">🎵 Listening</option>
-                                <option value="streaming">📡 Streaming</option>
-                                <option value="custom">✨ Custom</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Status Text</label>
-                            <input type="text" class="form-input" x-model="removeActivityStatus" 
-                                   placeholder="Enter activity status to remove..." required>
-                        </div>
-                        <div class="button-group">
-                            <button type="submit" class="btn btn-primary" :disabled="activitySaving">
-                                <span x-text="activitySaving ? 'Removing...' : 'Remove Activity'"></span>
                             </button>
                         </div>
                     </form>
@@ -1636,10 +1584,6 @@
                 currentActivity: { activity_type: null, status: null },
                 newActivityType: 'playing',
                 newActivityStatus: '',
-                pushActivityType: 'playing',
-                pushActivityStatus: '',
-                removeActivityType: 'playing',
-                removeActivityStatus: '',
                 activitySaving: false,
                 activityMessage: { text: '', type: '' },
                 // DJ Config state
@@ -2343,8 +2287,6 @@
                 closeActivityModal() {
                     this.showActivityModal = false;
                     this.newActivityStatus = '';
-                    this.pushActivityStatus = '';
-                    this.removeActivityStatus = '';
                     this.activityMessage = { text: '', type: '' };
                 },
 
@@ -2362,12 +2304,7 @@
                             }),
                         });
 
-                        if (response.status === 404 && endpoint === '/api/activity/remove') {
-                            this.activityMessage = {
-                                text: 'Activity not found in stack.',
-                                type: 'error'
-                            };
-                        } else if (!response.ok) {
+                        if (!response.ok) {
                             throw new Error('Failed to perform activity action');
                         } else {
                             this.activityMessage = {
@@ -2400,30 +2337,12 @@
                         '/api/activity/set',
                         this.newActivityType,
                         this.newActivityStatus,
-                        'Activity set successfully! Stack cleared.',
+                        'Activity set successfully!',
                         'newActivityStatus'
                     );
                 },
 
-                async pushActivity() {
-                    await this.performActivityAction(
-                        '/api/activity/push',
-                        this.pushActivityType,
-                        this.pushActivityStatus,
-                        'Activity pushed successfully!',
-                        'pushActivityStatus'
-                    );
-                },
 
-                async removeActivity() {
-                    await this.performActivityAction(
-                        '/api/activity/remove',
-                        this.removeActivityType,
-                        this.removeActivityStatus,
-                        'Activity removed successfully!',
-                        'removeActivityStatus'
-                    );
-                },
 
                 // DJ Config Override Functions
                 async openDJConfigModal(guildId) {
