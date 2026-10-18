@@ -97,38 +97,6 @@ pub async fn run_web_server(bot_state: Data, port: u16) -> anyhow::Result<()> {
             get(audio_stream::audio_stream),
         )
         .route(
-            "/api/guilds/{guild_id}/dj-config/overrides",
-            get(routes::get_dj_config_overrides),
-        )
-        .route(
-            "/api/guilds/{guild_id}/dj-config/overrides/hex-messages",
-            post(routes::set_hex_message_override),
-        )
-        .route(
-            "/api/guilds/{guild_id}/dj-config/overrides/hex-messages/{index}",
-            axum::routing::delete(routes::delete_hex_message_override),
-        )
-        .route(
-            "/api/guilds/{guild_id}/dj-config/overrides/announcements",
-            post(routes::set_announcement_override),
-        )
-        .route(
-            "/api/guilds/{guild_id}/dj-config/overrides/announcements/{index}",
-            axum::routing::delete(routes::delete_announcement_override),
-        )
-        .route(
-            "/api/guilds/{guild_id}/dj-config/overrides/toggle",
-            post(routes::toggle_override_category),
-        )
-        .route(
-            "/api/guilds/{guild_id}/dj-config/overrides/state-weights",
-            post(routes::set_state_weights_override),
-        )
-        .route(
-            "/api/dj-config/default-state-weights",
-            get(routes::get_default_state_weights),
-        )
-        .route(
             "/api/guilds/{guild_id}/logs/{log_type}",
             get(routes::get_logs),
         )

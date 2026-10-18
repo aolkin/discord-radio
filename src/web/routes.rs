@@ -1,12 +1,10 @@
 use crate::audio::codec::decoder::check_sample_rate;
-use crate::audio::dj::config::{DJConfig, HexMessageEntry, StateWeights};
 use crate::audio::dj::manager::{DJCommand, DJStateType, IdleRequest, TrackRequest};
 use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
 use crate::audio::profiles::{ProfileStorageError, SignalProfile, is_valid_name};
 use crate::bot_profile::ProfileEdit;
 use crate::bucket::cache::ObjectInfo;
-use crate::persistence::{DJConfigOverrideCategory, DJConfigOverrideSingle};
 use crate::state::Data;
 use crate::web::error::{ApiError, WithStatus};
 use crate::web::state_snapshot::BotSnapshot;
@@ -70,10 +68,6 @@ pub async fn static_file(Path(path): Path<String>) -> Result<impl IntoResponse, 
         "js/connection.js" => (
             "text/javascript; charset=utf-8",
             include_str!("../../static/js/connection.js"),
-        ),
-        "js/dj-config.js" => (
-            "text/javascript; charset=utf-8",
-            include_str!("../../static/js/dj-config.js"),
         ),
         "js/dj.js" => (
             "text/javascript; charset=utf-8",
@@ -621,196 +615,6 @@ pub async fn set_bot_activity(
         .await;
 
     Ok(StatusCode::OK)
-}
-
-// DJ Config Override management endpoints
-
-#[derive(Debug, Serialize)]
-pub struct DJConfigOverridesResponse {
-    pub hex_messages: DJConfigOverrideCategory<HexMessageEntry>,
-    pub hex_message_announcements: DJConfigOverrideCategory<String>,
-    pub state_weights: DJConfigOverrideSingle<StateWeights>,
-}
-
-pub async fn get_dj_config_overrides(
-    State(bot_state): State<Data>,
-    Path(guild_id): Path<GuildId>,
-) -> AxumJson<DJConfigOverridesResponse> {
-    let settings = bot_state.dj_settings.get(guild_id).await;
-    AxumJson(DJConfigOverridesResponse {
-        hex_messages: settings.hex_message_overrides,
-        hex_message_announcements: settings.hex_message_announcement_overrides,
-        state_weights: settings.state_weight_overrides,
-    })
-}
-
-fn ensure_text(text: &str) -> Result<(), ApiError> {
-    if text.trim().is_empty() {
-        return Err(ApiError::bad_request("text must not be empty"));
-    }
-    Ok(())
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SetHexMessageRequest {
-    pub index: Option<usize>,
-    pub text: String,
-    pub weight: u32,
-    pub signal_profile: Option<String>,
-    pub loop_min: Option<u32>,
-    pub loop_max: Option<u32>,
-    pub announcement: Option<String>,
-}
-
-pub async fn set_hex_message_override(
-    State(bot_state): State<Data>,
-    Path(guild_id): Path<GuildId>,
-    AxumJson(request): AxumJson<SetHexMessageRequest>,
-) -> Result<StatusCode, ApiError> {
-    ensure_text(&request.text)?;
-
-    let hex_message = HexMessageEntry {
-        text: request.text,
-        weight: request.weight,
-        signal_profile: request.signal_profile,
-        loop_min: request.loop_min,
-        loop_max: request.loop_max,
-        announcement: request.announcement,
-    };
-
-    bot_state
-        .dj_settings
-        .update(guild_id, |settings| {
-            settings
-                .hex_message_overrides
-                .set(request.index, hex_message)
-        })
-        .await?;
-
-    Ok(StatusCode::OK)
-}
-
-pub async fn delete_hex_message_override(
-    State(bot_state): State<Data>,
-    Path((guild_id, index)): Path<(GuildId, usize)>,
-) -> Result<StatusCode, ApiError> {
-    bot_state
-        .dj_settings
-        .update(guild_id, |settings| {
-            settings.hex_message_overrides.remove(index)
-        })
-        .await
-        .status(StatusCode::NOT_FOUND)?;
-
-    Ok(StatusCode::OK)
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SetAnnouncementRequest {
-    pub index: Option<usize>,
-    pub text: String,
-}
-
-pub async fn set_announcement_override(
-    State(bot_state): State<Data>,
-    Path(guild_id): Path<GuildId>,
-    AxumJson(request): AxumJson<SetAnnouncementRequest>,
-) -> Result<StatusCode, ApiError> {
-    ensure_text(&request.text)?;
-
-    bot_state
-        .dj_settings
-        .update(guild_id, |settings| {
-            settings
-                .hex_message_announcement_overrides
-                .set(request.index, request.text)
-        })
-        .await?;
-
-    Ok(StatusCode::OK)
-}
-
-pub async fn delete_announcement_override(
-    State(bot_state): State<Data>,
-    Path((guild_id, index)): Path<(GuildId, usize)>,
-) -> Result<StatusCode, ApiError> {
-    bot_state
-        .dj_settings
-        .update(guild_id, |settings| {
-            settings.hex_message_announcement_overrides.remove(index)
-        })
-        .await
-        .status(StatusCode::NOT_FOUND)?;
-
-    Ok(StatusCode::OK)
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ToggleOverrideCategoryRequest {
-    pub category: String,
-    pub enabled: bool,
-}
-
-pub async fn toggle_override_category(
-    State(bot_state): State<Data>,
-    Path(guild_id): Path<GuildId>,
-    AxumJson(request): AxumJson<ToggleOverrideCategoryRequest>,
-) -> Result<StatusCode, ApiError> {
-    bot_state
-        .dj_settings
-        .update(guild_id, |settings| {
-            let enabled = match request.category.as_str() {
-                "hex_messages" => &mut settings.hex_message_overrides.enabled,
-                "hex_message_announcements" => {
-                    &mut settings.hex_message_announcement_overrides.enabled
-                }
-                "state_weights" => &mut settings.state_weight_overrides.enabled,
-                _ => anyhow::bail!("Unknown category {:?}", request.category),
-            };
-            *enabled = request.enabled;
-            Ok(())
-        })
-        .await
-        .status(StatusCode::BAD_REQUEST)?;
-
-    Ok(StatusCode::OK)
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SetStateWeightsRequest {
-    pub track: u32,
-    pub hex_message: u32,
-    pub noise: u32,
-}
-
-pub async fn set_state_weights_override(
-    State(bot_state): State<Data>,
-    Path(guild_id): Path<GuildId>,
-    AxumJson(request): AxumJson<SetStateWeightsRequest>,
-) -> Result<StatusCode, ApiError> {
-    let weights = StateWeights {
-        track: request.track,
-        hex_message: request.hex_message,
-        noise: request.noise,
-    };
-
-    bot_state
-        .dj_settings
-        .update(guild_id, |settings| {
-            settings.state_weight_overrides.value = Some(weights);
-            Ok(())
-        })
-        .await?;
-
-    Ok(StatusCode::OK)
-}
-
-pub async fn get_default_state_weights(
-    State(bot_state): State<Data>,
-) -> Result<AxumJson<StateWeights>, ApiError> {
-    let config = DJConfig::load_from_file(&bot_state.dj_config_path("default"))
-        .context("Failed to load the default DJ config")?;
-    Ok(AxumJson(config.state_weights))
 }
 
 // Log retrieval endpoints

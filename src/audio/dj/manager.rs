@@ -155,13 +155,12 @@ pub async fn load_dj_config(
     guild_id: GuildId,
     config_name: Option<&str>,
 ) -> anyhow::Result<DJConfig> {
-    let base = match config_name {
+    let mut config = match config_name {
         Some(name) => DJConfig::load_from_file(&bot_state.dj_config_path(name))
             .with_context(|| format!("loading DJ config '{name}'"))?,
         None => DJConfig::default(),
     };
     let settings = bot_state.dj_settings.get(guild_id).await;
-    let mut config = base.with_overrides(&settings);
     config
         .apply_dj_settings(&settings, &bot_state.file_resolver)
         .await?;

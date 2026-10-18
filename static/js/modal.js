@@ -13,7 +13,6 @@ function setFlag(state, flag, value) {
 // template's content in the body, or in the form when there is one.
 // Open state comes from `modals[name]`; the other settings are
 // data attributes:
-//   data-wide          wider modal that scrolls
 //   data-overlay-class extra class on the overlay
 //   data-title         header text
 //   data-title-expression  expression for the header text, instead
@@ -55,11 +54,7 @@ document.addEventListener('alpine:init', () => {
             },
             `modal-overlay ${config.overlayClass || ''}`.trim(),
         );
-        const content = element(
-            'div',
-            { 'x-show': flag, 'x-transition': '' },
-            config.wide !== undefined ? 'modal-content modal-wide' : 'modal-content',
-        );
+        const content = element('div', { 'x-show': flag, 'x-transition': '' }, 'modal-content');
         overlay.append(content);
 
         const header = element('div', {}, 'modal-header');

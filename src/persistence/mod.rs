@@ -6,8 +6,7 @@ mod utils;
 pub use dj::DjSettingsStore;
 pub use file_store::FileStore;
 pub use types::{
-    ActivityState, DJConfigOverrideCategory, DJConfigOverrideSingle, DJState, DjSettings,
-    MultiTrackPlaybackState, RegisteredChannel, TrackState,
+    ActivityState, DJState, DjSettings, MultiTrackPlaybackState, RegisteredChannel, TrackState,
 };
 
 pub(crate) use crate::persistence::types::DJStateSnapshot;
