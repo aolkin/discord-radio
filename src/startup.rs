@@ -42,9 +42,10 @@ pub async fn restore_voice_channels(
             }
             Err(e) => {
                 tracing::error!(
-                    "Failed to rejoin voice channel {} in guild {}: {e:#}",
+                    "Failed to rejoin voice channel {} in guild {}: {:?}",
                     channel_id,
-                    guild_id
+                    guild_id,
+                    e
                 );
                 let _ = bot_state.state_store.remove_voice_channel(guild_id).await;
             }
