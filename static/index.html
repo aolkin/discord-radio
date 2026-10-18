@@ -19,14 +19,14 @@
             </div>
             <div class="header-right">
                 <!-- Current Activity Display -->
-                <div class="activity-display" x-show="currentActivity.status" @click="openActivityModal()">
+                <div class="activity-display" x-show="currentActivity.status" @click="openModal('activity')">
                     <div class="activity-icon" x-text="getActivityIcon(currentActivity.activity_type)"></div>
                     <div class="activity-info">
                         <div class="activity-type" x-text="currentActivity.activity_type || 'No Activity'"></div>
                         <div class="activity-status" x-text="currentActivity.status || 'Not set'"></div>
                     </div>
                 </div>
-                <button class="btn btn-primary" style="padding: 8px 16px;" @click="openActivityModal()">
+                <button class="btn btn-primary" style="padding: 8px 16px;" @click="openModal('activity')">
                     Manage Activity
                 </button>
                 <div class="status-indicator">
@@ -81,13 +81,13 @@
                                 <div class="dj-details" x-text="guild.dj_state.details"></div>
                             </div>
                             <div class="button-group" style="margin-top: 12px;">
-                                <button class="btn btn-secondary" @click="openAdvanceDJModal(guild.guild_id)">
+                                <button class="btn btn-secondary" @click="openModal('advanceDJ', guild.guild_id)">
                                     Advance DJ State
                                 </button>
-                                <button class="btn btn-secondary" @click="openPlayHexModal(guild.guild_id)">
+                                <button class="btn btn-secondary" @click="openModal('playHex', guild.guild_id)">
                                     Play Hex Message
                                 </button>
-                                <button class="btn btn-secondary" @click="openPlayTrackModal(guild.guild_id)">
+                                <button class="btn btn-secondary" @click="openModal('playTrack', guild.guild_id)">
                                     Play Track
                                 </button>
                             </div>
@@ -219,134 +219,68 @@
     </div>
 
     <!-- Advance DJ State Modal -->
-    <div x-show="showAdvanceDJModal"
-         x-transition.opacity
-         class="modal-overlay"
-         @click.self="closeAdvanceDJModal()"
-         @keydown.escape.window="closeAdvanceDJModal()">
-        <div class="modal-content" x-show="showAdvanceDJModal" x-transition>
-            <div class="modal-header">
-                <div class="modal-title">Advance DJ State</div>
-                <button class="close" @click="closeAdvanceDJModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div x-show="djMessage.text"
-                     :class="djMessage.type === 'error' ? 'error-message' : 'success-message'"
-                     x-text="djMessage.text"></div>
-
-                <form @submit.prevent="advanceDJState()">
-                    <div class="form-group">
-                        <label class="form-label">State Type (Optional)</label>
-                        <select class="form-input" x-model="djStateType">
-                            <option value="">Any (default)</option>
-                            <option value="track">Track</option>
-                            <option value="hex">Hex Message</option>
-                            <option value="noise">Noise</option>
-                        </select>
-                        <small style="color: #666; font-size: 0.85rem;">
-                            Leave as "Any" to advance to the next state, or select a specific state type to force.
-                        </small>
-                    </div>
-                    <div class="button-group">
-                        <button type="button" class="btn btn-secondary" @click="closeAdvanceDJModal()">Cancel</button>
-                        <button type="submit" class="btn btn-primary" :disabled="djSaving">
-                            <span x-text="djSaving ? 'Advancing...' : 'Advance State'"></span>
-                        </button>
-                    </div>
-                </form>
-            </div>
+    <template x-modal data-modal="advanceDJ" data-title="Advance DJ State" data-message="djMessage"
+              data-submit="advanceDJState()" data-saving="djSaving"
+              data-submit-label="Advance State" data-busy-label="Advancing...">
+        <div class="form-group">
+            <label class="form-label">State Type (Optional)</label>
+            <select class="form-input" x-model="djStateType">
+                <option value="">Any (default)</option>
+                <option value="track">Track</option>
+                <option value="hex">Hex Message</option>
+                <option value="noise">Noise</option>
+            </select>
+            <small style="color: #666; font-size: 0.85rem;">
+                Leave as "Any" to advance to the next state, or select a specific state type to force.
+            </small>
         </div>
-    </div>
+    </template>
 
     <!-- Play Hex Message Modal -->
-    <div x-show="showPlayHexModal"
-         x-transition.opacity
-         class="modal-overlay"
-         @click.self="closePlayHexModal()"
-         @keydown.escape.window="closePlayHexModal()">
-        <div class="modal-content" x-show="showPlayHexModal" x-transition>
-            <div class="modal-header">
-                <div class="modal-title">Play Hex Message via DJ</div>
-                <button class="close" @click="closePlayHexModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div x-show="hexMessage.text"
-                     :class="hexMessage.type === 'error' ? 'error-message' : 'success-message'"
-                     x-text="hexMessage.text"></div>
-
-                <form @submit.prevent="playHexMessage()">
-                    <div class="form-group">
-                        <label class="form-label">Message</label>
-                        <input type="text" class="form-input" x-model="hexMessageText" 
-                               placeholder="Enter message to play..." required>
-                        <small style="color: #666; font-size: 0.85rem;">
-                            Message will be played using the DJ with default settings.
-                        </small>
-                    </div>
-                    <div class="button-group">
-                        <button type="button" class="btn btn-secondary" @click="closePlayHexModal()">Cancel</button>
-                        <button type="submit" class="btn btn-primary" :disabled="hexSaving">
-                            <span x-text="hexSaving ? 'Playing...' : 'Play Message'"></span>
-                        </button>
-                    </div>
-                </form>
-            </div>
+    <template x-modal data-modal="playHex" data-title="Play Hex Message via DJ" data-message="hexMessage"
+              data-submit="playHexMessage()" data-saving="hexSaving"
+              data-submit-label="Play Message" data-busy-label="Playing...">
+        <div class="form-group">
+            <label class="form-label">Message</label>
+            <input type="text" class="form-input" x-model="hexMessageText" 
+                   placeholder="Enter message to play..." required>
+            <small style="color: #666; font-size: 0.85rem;">
+                Message will be played using the DJ with default settings.
+            </small>
         </div>
-    </div>
+    </template>
 
     <!-- Play Track Modal -->
-    <div x-show="showPlayTrackModal"
-         x-transition.opacity
-         class="modal-overlay"
-         @click.self="closePlayTrackModal()"
-         @keydown.escape.window="closePlayTrackModal()">
-        <div class="modal-content" x-show="showPlayTrackModal" x-transition>
-            <div class="modal-header">
-                <div class="modal-title">Play Track via DJ</div>
-                <button class="close" @click="closePlayTrackModal()">&times;</button>
+    <template x-modal data-modal="playTrack" data-title="Play Track via DJ" data-message="playTrackMessage"
+              data-submit="playTrack()" data-saving="playTrackSaving"
+              data-submit-label="Play Track" data-busy-label="Playing...">
+        <div class="form-group">
+            <label class="form-label">Audio File</label>
+            <select class="form-input" x-model="playTrackFilename" required>
+                <option value="">Select audio file...</option>
+                <template x-for="file in audioFiles" :key="file">
+                    <option :value="file" x-text="file"></option>
+                </template>
+            </select>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Volume</label>
+                <input type="number" class="form-input" x-model.number="playTrackVolume"
+                       min="0" max="2" step="0.1" placeholder="0.0-2.0">
             </div>
-            <div class="modal-body">
-                <div x-show="playTrackMessage.text"
-                     :class="playTrackMessage.type === 'error' ? 'error-message' : 'success-message'"
-                     x-text="playTrackMessage.text"></div>
-
-                <form @submit.prevent="playTrack()">
-                    <div class="form-group">
-                        <label class="form-label">Audio File</label>
-                        <select class="form-input" x-model="playTrackFilename" required>
-                            <option value="">Select audio file...</option>
-                            <template x-for="file in audioFiles" :key="file">
-                                <option :value="file" x-text="file"></option>
-                            </template>
-                        </select>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label class="form-label">Volume</label>
-                            <input type="number" class="form-input" x-model.number="playTrackVolume"
-                                   min="0" max="2" step="0.1" placeholder="0.0-2.0">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Start (seconds)</label>
-                            <input type="number" class="form-input" x-model.number="playTrackStart"
-                                   min="0" step="0.1">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Duration (seconds)</label>
-                            <input type="number" class="form-input" x-model.number="playTrackDuration"
-                                   min="0" step="0.1">
-                        </div>
-                    </div>
-                    <div class="button-group">
-                        <button type="button" class="btn btn-secondary" @click="closePlayTrackModal()">Cancel</button>
-                        <button type="submit" class="btn btn-primary" :disabled="playTrackSaving">
-                            <span x-text="playTrackSaving ? 'Playing...' : 'Play Track'"></span>
-                        </button>
-                    </div>
-                </form>
+            <div class="form-group">
+                <label class="form-label">Start (seconds)</label>
+                <input type="number" class="form-input" x-model.number="playTrackStart"
+                       min="0" step="0.1">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Duration (seconds)</label>
+                <input type="number" class="form-input" x-model.number="playTrackDuration"
+                       min="0" step="0.1">
             </div>
         </div>
-    </div>
+    </template>
 
     <!-- Track State Management Modal -->
     <div x-show="showTrackStateModal"
@@ -471,113 +405,74 @@
         </div>
     </div>
 
-    <div x-show="showBotProfileModal"
-         x-transition.opacity
-         class="modal-overlay"
-         @click.self="closeBotProfileModal()"
-         @keydown.escape.window="!fileBrowser.open && closeBotProfileModal()">
-        <div class="modal-content" x-show="showBotProfileModal" x-transition>
-            <div class="modal-header">
-                <div class="modal-title">Bot Profile</div>
-                <button class="close" @click="closeBotProfileModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div x-show="botProfileMessage.text"
-                     :class="botProfileMessage.type === 'error' ? 'error-message' : 'success-message'"
-                     x-text="botProfileMessage.text"></div>
-
-                <div class="loading" x-show="botProfileLoading">Loading...</div>
-
-                <form @submit.prevent="saveBotProfile()" x-show="!botProfileLoading">
-                    <div class="form-group">
-                        <label class="form-label">Nickname</label>
-                        <input type="text" class="form-input" x-model="botProfileForm.nick" maxlength="32"
-                               placeholder="Empty uses the bot's username">
-                    </div>
-                    <template x-for="field in ['avatar', 'banner']" :key="field">
-                        <div class="form-group">
-                            <label class="form-label" x-text="field === 'avatar' ? 'Avatar' : 'Banner'"></label>
-                            <div class="track-details" x-show="!botProfileCurrent[field + '_url']">Not set for this server</div>
-                            <img :src="botProfileCurrent[field + '_url']" x-show="botProfileCurrent[field + '_url']"
-                                 :style="field === 'avatar' ? 'width: 80px; height: 80px; border-radius: 50%;' : 'width: 100%; max-height: 120px; object-fit: cover; border-radius: 6px;'">
-                            <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px;">
-                                <button type="button" class="btn btn-secondary" @click="pickBotProfileImage(field)">Choose Image</button>
-                                <span class="track-details" x-text="botProfileForm[field] || 'Unchanged'"></span>
-                            </div>
-                        </div>
-                    </template>
-                    <div class="button-group">
-                        <button type="button" class="btn btn-secondary" @click="closeBotProfileModal()">Close</button>
-                        <button type="submit" class="btn btn-primary" :disabled="botProfileSaving">
-                            <span x-text="botProfileSaving ? 'Saving...' : 'Save'"></span>
-                        </button>
-                    </div>
-                </form>
-            </div>
+    <template x-modal data-modal="botProfile" data-title="Bot Profile" data-message="botProfileMessage"
+              data-loading="botProfileLoading" data-submit="saveBotProfile()" data-saving="botProfileSaving"
+              data-submit-label="Save" data-busy-label="Saving..." data-cancel-label="Close"
+              data-escape-unless="fileBrowser.open">
+        <div class="form-group">
+            <label class="form-label">Nickname</label>
+            <input type="text" class="form-input" x-model="botProfileForm.nick" maxlength="32"
+                   placeholder="Empty uses the bot's username">
         </div>
-    </div>
+        <template x-for="field in ['avatar', 'banner']" :key="field">
+            <div class="form-group">
+                <label class="form-label" x-text="field === 'avatar' ? 'Avatar' : 'Banner'"></label>
+                <div class="track-details" x-show="!botProfileCurrent[field + '_url']">Not set for this server</div>
+                <img :src="botProfileCurrent[field + '_url']" x-show="botProfileCurrent[field + '_url']"
+                     :style="field === 'avatar' ? 'width: 80px; height: 80px; border-radius: 50%;' : 'width: 100%; max-height: 120px; object-fit: cover; border-radius: 6px;'">
+                <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px;">
+                    <button type="button" class="btn btn-secondary" @click="pickBotProfileImage(field)">Choose Image</button>
+                    <span class="track-details" x-text="botProfileForm[field] || 'Unchanged'"></span>
+                </div>
+            </div>
+        </template>
+    </template>
 
     <!-- Activity Management Modal -->
-    <div x-show="showActivityModal"
-         x-transition.opacity
-         class="modal-overlay"
-         @click.self="closeActivityModal()"
-         @keydown.escape.window="closeActivityModal()">
-        <div class="modal-content" x-show="showActivityModal" x-transition>
-            <div class="modal-header">
-                <div class="modal-title">Manage Bot Activity</div>
-                <button class="close" @click="closeActivityModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div x-show="activityMessage.text"
-                     :class="activityMessage.type === 'error' ? 'error-message' : 'success-message'"
-                     x-text="activityMessage.text"></div>
-
-                <!-- Current Activity Section -->
-                <div class="modal-section">
-                    <div class="modal-section-title">Current Activity</div>
-                    <template x-if="currentActivity.status">
-                        <div class="info-item" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
-                            <div style="flex: 1;">
-                                <div style="font-size: 2rem; margin-bottom: 5px;" x-text="getActivityIcon(currentActivity.activity_type)"></div>
-                                <div style="font-size: 0.85rem; text-transform: uppercase; opacity: 0.9;" x-text="currentActivity.activity_type"></div>
-                                <div style="font-size: 1.1rem; font-weight: 600; margin-top: 4px;" x-text="currentActivity.status"></div>
-                            </div>
-                        </div>
-                    </template>
-                    <template x-if="!currentActivity.status">
-                        <div class="empty-state">No activity set</div>
-                    </template>
+    <template x-modal data-modal="activity" data-title="Manage Bot Activity" data-message="activityMessage">
+        <!-- Current Activity Section -->
+        <div class="modal-section">
+            <div class="modal-section-title">Current Activity</div>
+            <template x-if="currentActivity.status">
+                <div class="info-item" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                    <div style="flex: 1;">
+                        <div style="font-size: 2rem; margin-bottom: 5px;" x-text="getActivityIcon(currentActivity.activity_type)"></div>
+                        <div style="font-size: 0.85rem; text-transform: uppercase; opacity: 0.9;" x-text="currentActivity.activity_type"></div>
+                        <div style="font-size: 1.1rem; font-weight: 600; margin-top: 4px;" x-text="currentActivity.status"></div>
+                    </div>
                 </div>
-
-                <!-- Set Activity Form -->
-                <div class="modal-section">
-                    <div class="modal-section-title">Set New Activity</div>
-                    <form @submit.prevent="setActivity()">
-                        <div class="form-group">
-                            <label class="form-label">Activity Type</label>
-                            <select class="form-input" x-model="newActivityType" required>
-                                <option value="playing">🎮 Playing</option>
-                                <option value="listening">🎵 Listening</option>
-                                <option value="streaming">📡 Streaming</option>
-                                <option value="custom">✨ Custom</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Status Text</label>
-                            <input type="text" class="form-input" x-model="newActivityStatus" 
-                                   placeholder="Enter activity status..." required>
-                        </div>
-                        <div class="button-group">
-                            <button type="submit" class="btn btn-primary" :disabled="activitySaving">
-                                <span x-text="activitySaving ? 'Setting...' : 'Set Activity'"></span>
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
+            </template>
+            <template x-if="!currentActivity.status">
+                <div class="empty-state">No activity set</div>
+            </template>
         </div>
-    </div>
+
+        <!-- Set Activity Form -->
+        <div class="modal-section">
+            <div class="modal-section-title">Set New Activity</div>
+            <form @submit.prevent="setActivity()">
+                <div class="form-group">
+                    <label class="form-label">Activity Type</label>
+                    <select class="form-input" x-model="newActivityType" required>
+                        <option value="playing">🎮 Playing</option>
+                        <option value="listening">🎵 Listening</option>
+                        <option value="streaming">📡 Streaming</option>
+                        <option value="custom">✨ Custom</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Status Text</label>
+                    <input type="text" class="form-input" x-model="newActivityStatus" 
+                           placeholder="Enter activity status..." required>
+                </div>
+                <div class="button-group">
+                    <button type="submit" class="btn btn-primary" :disabled="activitySaving">
+                        <span x-text="activitySaving ? 'Setting...' : 'Set Activity'"></span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </template>
 
     <!-- DJ Config Overrides Modal -->
     <div x-show="showDJConfigModal"
