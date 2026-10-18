@@ -174,6 +174,7 @@
 
                     <div class="section">
                         <div class="section-title">Voice Channel Status</div>
+                        <!-- biome-ignore lint/a11y/noLabelWithoutControl: the checkbox is nested and the text comes from x-text -->
                         <label class="checkbox-label">
                             <input type="checkbox" :checked="guild.channel_status_enabled" @change="setChannelStatusEnabled(guild.guild_id, $event.target.checked)">
                             <span x-text="guild.channel_status_enabled ? 'Managed by the DJ' : 'Not managed (left as it is)'"></span>
@@ -213,8 +214,8 @@
               data-submit="advanceDJState()" data-saving="djSaving"
               data-submit-label="Advance State" data-busy-label="Advancing...">
         <div class="form-group">
-            <label class="form-label">State Type (Optional)</label>
-            <select class="form-input" x-model="djStateType">
+            <label class="form-label" for="advance-state-type">State Type (Optional)</label>
+            <select id="advance-state-type" class="form-input" x-model="djStateType">
                 <option value="">Any (default)</option>
                 <option value="track">Track</option>
                 <option value="hex">Hex Message</option>
@@ -231,8 +232,8 @@
               data-submit="playHexMessage()" data-saving="hexSaving"
               data-submit-label="Play Message" data-busy-label="Playing...">
         <div class="form-group">
-            <label class="form-label">Message</label>
-            <input type="text" class="form-input" x-model="hexMessageText" 
+            <label class="form-label" for="hex-message">Message</label>
+            <input id="hex-message" type="text" class="form-input" x-model="hexMessageText" 
                    placeholder="Enter message to play..." required>
             <small class="hint">
                 Message will be played using the DJ with default settings.
@@ -245,8 +246,8 @@
               data-submit="playTrack()" data-saving="playTrackSaving"
               data-submit-label="Play Track" data-busy-label="Playing...">
         <div class="form-group">
-            <label class="form-label">Audio File</label>
-            <select class="form-input" x-model="playTrackFilename" required>
+            <label class="form-label" for="play-track-file">Audio File</label>
+            <select id="play-track-file" class="form-input" x-model="playTrackFilename" required>
                 <option value="">Select audio file...</option>
                 <template x-for="file in audioFiles" :key="file">
                     <option :value="file" x-text="file"></option>
@@ -255,18 +256,18 @@
         </div>
         <div class="form-row">
             <div class="form-group">
-                <label class="form-label">Volume</label>
-                <input type="number" class="form-input" x-model.number="playTrackVolume"
+                <label class="form-label" for="play-track-volume">Volume</label>
+                <input id="play-track-volume" type="number" class="form-input" x-model.number="playTrackVolume"
                        min="0" max="2" step="0.1" placeholder="0.0-2.0">
             </div>
             <div class="form-group">
-                <label class="form-label">Start (seconds)</label>
-                <input type="number" class="form-input" x-model.number="playTrackStart"
+                <label class="form-label" for="play-track-start">Start (seconds)</label>
+                <input id="play-track-start" type="number" class="form-input" x-model.number="playTrackStart"
                        min="0" step="0.1">
             </div>
             <div class="form-group">
-                <label class="form-label">Duration (seconds)</label>
-                <input type="number" class="form-input" x-model.number="playTrackDuration"
+                <label class="form-label" for="play-track-duration">Duration (seconds)</label>
+                <input id="play-track-duration" type="number" class="form-input" x-model.number="playTrackDuration"
                        min="0" step="0.1">
             </div>
         </div>
@@ -277,13 +278,13 @@
               data-submit="changeTrackState()" data-saving="trackSaving"
               data-submit-label="Apply" data-busy-label="Saving...">
         <div class="form-group">
-            <label class="form-label">Track Name</label>
-            <input type="text" class="form-input" x-model="trackName"
+            <label class="form-label" for="track-state-name">Track Name</label>
+            <input id="track-state-name" type="text" class="form-input" x-model="trackName"
                    placeholder="Track identifier..." required>
         </div>
         <div class="form-group">
-            <label class="form-label">Action</label>
-            <select class="form-input" x-model="trackState" @change="trackStateChanged()">
+            <label class="form-label" for="track-state-action">Action</label>
+            <select id="track-state-action" class="form-input" x-model="trackState" @change="trackStateChanged()">
                 <option value="">Update Existing Track</option>
                 <option value="start">Start New Track</option>
                 <option value="stop">Stop Track</option>
@@ -291,8 +292,8 @@
         </div>
         <template x-if="trackState === 'start'">
             <div class="form-group">
-                <label class="form-label">Audio File</label>
-                <select class="form-input" x-model="trackFilename" required>
+                <label class="form-label" for="track-state-file">Audio File</label>
+                <select id="track-state-file" class="form-input" x-model="trackFilename" required>
                     <option value="">Select audio file...</option>
                     <template x-for="file in audioFiles" :key="file">
                         <option :value="file" x-text="file"></option>
@@ -303,13 +304,13 @@
         <template x-if="trackState !== 'stop'">
             <div class="form-row">
                 <div class="form-group">
-                    <label class="form-label">Volume</label>
-                    <input type="number" class="form-input" x-model.number="trackVolume"
+                    <label class="form-label" for="track-state-volume">Volume</label>
+                    <input id="track-state-volume" type="number" class="form-input" x-model.number="trackVolume"
                            min="0" max="2" step="0.1" placeholder="0.0-2.0">
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Loop</label>
-                    <select class="form-input" x-model="trackLoops">
+                    <label class="form-label" for="track-state-loop">Loop</label>
+                    <select id="track-state-loop" class="form-input" x-model="trackLoops">
                         <option value="">Default</option>
                         <option value="true">Yes</option>
                         <option value="false">No</option>
@@ -318,8 +319,8 @@
             </div>
         </template>
         <div class="form-group">
-            <label class="form-label">Fade Time (seconds)</label>
-            <input type="number" class="form-input" x-model.number="trackFadeTime"
+            <label class="form-label" for="track-state-fade">Fade Time (seconds)</label>
+            <input id="track-state-fade" type="number" class="form-input" x-model.number="trackFadeTime"
                    min="0" step="0.1" placeholder="1.0">
         </div>
     </template>
@@ -329,15 +330,15 @@
               data-submit="changeSignalProfile()" data-saving="profileSaving"
               data-submit-label="Apply Profile" data-busy-label="Applying...">
         <div class="form-group">
-            <label class="form-label">Setting</label>
-            <select class="form-input" x-model="profileSetting">
+            <label class="form-label" for="signal-profile-setting">Setting</label>
+            <select id="signal-profile-setting" class="form-input" x-model="profileSetting">
                 <option value="profile">Background (replaces rotation)</option>
                 <option value="profile-override">Override (beats everything)</option>
             </select>
         </div>
         <div class="form-group">
-            <label class="form-label">Profile</label>
-            <select class="form-input" x-model="selectedProfile">
+            <label class="form-label" for="signal-profile-profile">Profile</label>
+            <select id="signal-profile-profile" class="form-input" x-model="selectedProfile">
                 <option value="">None (clear)</option>
                 <template x-for="profile in profiles" :key="profile">
                     <option :value="profile" x-text="profile"></option>
@@ -345,8 +346,8 @@
             </select>
         </div>
         <div class="form-group" x-show="selectedProfile">
-            <label class="form-label">Fade Duration (seconds)</label>
-            <input type="number" class="form-input" x-model.number="profileFadeDuration"
+            <label class="form-label" for="signal-profile-fade">Fade Duration (seconds)</label>
+            <input id="signal-profile-fade" type="number" class="form-input" x-model.number="profileFadeDuration"
                    min="0" step="0.1" :placeholder="profileSetting === 'profile-override' ? '2.0' : 'default'">
         </div>
     </template>
@@ -356,12 +357,13 @@
               data-submit-label="Save" data-busy-label="Saving..." data-cancel-label="Close"
               data-escape-unless="fileBrowser.open">
         <div class="form-group">
-            <label class="form-label">Nickname</label>
-            <input type="text" class="form-input" x-model="botProfileForm.nick" maxlength="32"
+            <label class="form-label" for="bot-profile-nick">Nickname</label>
+            <input id="bot-profile-nick" type="text" class="form-input" x-model="botProfileForm.nick" maxlength="32"
                    placeholder="Empty uses the bot's username">
         </div>
         <template x-for="field in ['avatar', 'banner']" :key="field">
             <div class="form-group">
+                <!-- biome-ignore lint/a11y/noLabelWithoutControl: labels an image and a button, not a single control -->
                 <label class="form-label" x-text="field === 'avatar' ? 'Avatar' : 'Banner'"></label>
                 <div class="track-details" x-show="!botProfileCurrent[field + '_url']">Not set for this server</div>
                 <img :src="botProfileCurrent[field + '_url']" x-show="botProfileCurrent[field + '_url']"
@@ -398,8 +400,8 @@
             <div class="modal-section-title">Set New Activity</div>
             <form @submit.prevent="setActivity()">
                 <div class="form-group">
-                    <label class="form-label">Activity Type</label>
-                    <select class="form-input" x-model="newActivityType" required>
+                    <label class="form-label" for="activity-type">Activity Type</label>
+                    <select id="activity-type" class="form-input" x-model="newActivityType" required>
                         <option value="playing">🎮 Playing</option>
                         <option value="listening">🎵 Listening</option>
                         <option value="streaming">📡 Streaming</option>
@@ -407,8 +409,8 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Status Text</label>
-                    <input type="text" class="form-input" x-model="newActivityStatus" 
+                    <label class="form-label" for="activity-status">Status Text</label>
+                    <input id="activity-status" type="text" class="form-input" x-model="newActivityStatus" 
                            placeholder="Enter activity status..." required>
                 </div>
                 <div class="button-group">
@@ -427,8 +429,8 @@
               data-disabled-when="!selectedChannelId"
               data-submit-label="Send Message" data-busy-label="Sending...">
         <div class="form-group">
-            <label class="form-label">Channel *</label>
-            <select class="form-input" x-model="selectedChannelId" required>
+            <label class="form-label" for="channel-message-channel">Channel *</label>
+            <select id="channel-message-channel" class="form-input" x-model="selectedChannelId" required>
                 <option value="">Select a channel...</option>
                 <template x-for="channel in registeredChannels" :key="channel.channel_id">
                     <option :value="channel.channel_id"
@@ -439,20 +441,20 @@
         </div>
 
         <div class="form-group">
-            <label class="form-label">Message</label>
-            <textarea class="form-input" x-model="channelMessageText" rows="3"
+            <label class="form-label" for="channel-message-text">Message</label>
+            <textarea id="channel-message-text" class="form-input" x-model="channelMessageText" rows="3"
                       placeholder="Optional plain text message"></textarea>
         </div>
 
         <div class="form-group">
-            <label class="form-label">Embed Title (Optional)</label>
-            <input type="text" class="form-input" x-model="channelMessageTitle"
+            <label class="form-label" for="channel-message-title">Embed Title (Optional)</label>
+            <input id="channel-message-title" type="text" class="form-input" x-model="channelMessageTitle"
                    placeholder="Optional embed title">
         </div>
 
         <div class="form-group">
-            <label class="form-label">Embed Description (Optional)</label>
-            <textarea class="form-input" x-model="channelMessageDescription" rows="4"
+            <label class="form-label" for="channel-message-description">Embed Description (Optional)</label>
+            <textarea id="channel-message-description" class="form-input" x-model="channelMessageDescription" rows="4"
                       placeholder="Optional embed description"></textarea>
         </div>
     </template>
@@ -462,28 +464,29 @@
               data-submit="saveProfile()" data-saving="profileEditorSaving"
               data-submit-label="Save Profile" data-busy-label="Saving..." data-cancel-label="Close">
         <div class="form-group">
-            <label class="form-label">Name</label>
-            <input type="text" class="form-input" x-model="profileForm.name"
+            <label class="form-label" for="profile-editor-name">Name</label>
+            <input id="profile-editor-name" type="text" class="form-input" x-model="profileForm.name"
                    :readonly="!profileEditorIsNew" required pattern="[A-Za-z0-9_\-]+"
                    title="Letters, digits, - and _ only">
         </div>
         <div class="form-row">
             <template x-for="field in profileFields" :key="field.key">
                 <div class="form-group">
-                    <label class="form-label" x-text="field.label"></label>
-                    <input type="number" class="form-input" x-model.number="profileForm[field.key]"
+                    <!-- biome-ignore lint/a11y/noLabelWithoutControl: the label text comes from x-text -->
+                    <label class="form-label" :for="'profile-field-' + field.key" x-text="field.label"></label>
+                    <input :id="'profile-field-' + field.key" type="number" class="form-input" x-model.number="profileForm[field.key]"
                            :step="field.step" :min="field.min" :max="field.max"
                            :required="!field.optional" :placeholder="field.optional ? 'Off' : ''">
                 </div>
             </template>
             <div class="form-group">
-                <label class="form-label">Dropout Min Duration (ms)</label>
-                <input type="number" class="form-input" x-model.number="profileForm.dropout_duration_ms[0]"
+                <label class="form-label" for="profile-editor-dropout-min">Dropout Min Duration (ms)</label>
+                <input id="profile-editor-dropout-min" type="number" class="form-input" x-model.number="profileForm.dropout_duration_ms[0]"
                        step="any" min="0" required>
             </div>
             <div class="form-group">
-                <label class="form-label">Dropout Max Duration (ms)</label>
-                <input type="number" class="form-input" x-model.number="profileForm.dropout_duration_ms[1]"
+                <label class="form-label" for="profile-editor-dropout-max">Dropout Max Duration (ms)</label>
+                <input id="profile-editor-dropout-max" type="number" class="form-input" x-model.number="profileForm.dropout_duration_ms[1]"
                        step="any" min="0" required>
             </div>
         </div>
@@ -537,6 +540,7 @@
             </button>
         </form>
 
+        <!-- biome-ignore lint/a11y/noLabelWithoutControl: the file input is nested and the text comes from x-text -->
         <label class="file-browser-drop" :class="{ dragging: fileBrowser.dragging }"
                @dragover.prevent="fileBrowser.dragging = true"
                @dragleave="fileBrowser.dragging = false"
