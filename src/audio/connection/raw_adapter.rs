@@ -1,9 +1,9 @@
 use crate::audio::processing::processor::AudioProcessor;
 use songbird::input::RawAdapter;
+use songbird::input::core::io::MediaSource;
 use std::io::{Read, Seek, SeekFrom};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use symphonia::core::io::MediaSource;
 use tokio::sync::RwLock;
 
 const SAMPLE_RATE: u32 = 48000;
