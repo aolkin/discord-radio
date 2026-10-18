@@ -318,7 +318,7 @@ async fn main() -> anyhow::Result<()> {
     .id;
 
     let signal_profiles_path =
-        std::env::var("SIGNAL_PROFILES_PATH").unwrap_or_else(|_| "audio_profiles".to_string());
+        std::env::var("SIGNAL_PROFILES_PATH").unwrap_or_else(|_| "audio_profiles/".to_string());
     tracing::info!("Using signal profiles path: {}", signal_profiles_path);
     let profile_manager =
         ProfileManager::from_storage(signal_profiles_path, file_resolver.clone()).await;

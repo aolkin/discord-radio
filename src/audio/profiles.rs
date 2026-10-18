@@ -97,7 +97,7 @@ impl ProfileManager {
     pub async fn from_storage(profiles_path: String, file_resolver: FileResolver) -> Self {
         let mut profiles = HashMap::new();
 
-        let filenames = file_resolver.list(&format!("{profiles_path}/")).await;
+        let filenames = file_resolver.list(&profiles_path).await;
         for filename in filenames.iter().filter(|f| f.ends_with(".json")) {
             let parsed = file_resolver
                 .resolve_contents(filename)
@@ -131,7 +131,7 @@ impl ProfileManager {
         if !is_valid_name(name) {
             return Err(ProfileStorageError::InvalidName);
         }
-        Ok(format!("{}/{name}.json", self.profiles_path))
+        Ok(format!("{}{name}.json", self.profiles_path))
     }
 
     pub fn get_profile(&self, name: &str) -> Option<SignalProfile> {

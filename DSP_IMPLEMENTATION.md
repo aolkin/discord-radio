@@ -76,7 +76,7 @@ Noise levels use perceptual (dB-based) scaling for natural-sounding volume contr
 JSON-based effect presets with smooth transitions.
 
 - **SignalProfile**: Complete effect parameter set
-- **ProfileManager**: Loads profiles from the `SIGNAL_PROFILES_PATH` directory (default `audio_profiles`), under both the content root and the object storage bucket root
+- **ProfileManager**: Loads profiles from the `SIGNAL_PROFILES_PATH` directory (default `audio_profiles/`; the value must end with a slash), under both the content root and the object storage bucket root
 - **Profile Interpolation**: Smooth transitions between profiles
 
 ### 6. Audio Processing Thread (`audio/processing_thread.rs`)
