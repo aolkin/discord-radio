@@ -431,150 +431,132 @@
     </template>
 
     <!-- DJ Config Overrides Modal -->
-    <div x-show="showDJConfigModal"
-         x-transition.opacity
-         class="modal-overlay"
-         @click.self="closeDJConfigModal()"
-         @keydown.escape.window="closeDJConfigModal()">
-        <div class="modal-content" style="max-width: 1000px; max-height: 90vh; overflow-y: auto;" x-show="showDJConfigModal" x-transition>
-            <div class="modal-header">
-                <div class="modal-title">DJ Config Overrides</div>
-                <button class="close" @click="closeDJConfigModal()">&times;</button>
+    <template x-modal data-modal="djConfig" data-title="DJ Config Overrides" data-message="djConfigMessage" data-wide>
+        <!-- Loading State -->
+        <div x-show="djConfigLoading" style="text-align: center; padding: 40px;">
+            <div style="font-size: 2rem; margin-bottom: 10px;">⏳</div>
+            <div>Loading DJ config...</div>
+        </div>
+
+        <!-- Error Message -->
+        <div x-show="djConfigError" style="background: #fee; border: 1px solid #fcc; border-radius: 6px; padding: 15px; margin-bottom: 20px; color: #c33;">
+            <strong>Error:</strong> <span x-text="djConfigError"></span>
+        </div>
+
+        <!-- Hex Messages Section -->
+        <div x-show="!djConfigLoading" style="margin-bottom: 30px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h3 style="color: #667eea; margin: 0;">Hex Messages</h3>
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" x-model="djConfigData.hex_messages.enabled" @change="toggleDJConfigCategory('hex_messages')">
+                        <span x-text="djConfigData.hex_messages.enabled ? 'Enabled' : 'Disabled'"></span>
+                    </label>
+                    <button @click="openHexMessageForm()" class="btn btn-primary" style="padding: 8px 16px;">+ Add Message</button>
+                </div>
             </div>
             
-            <div class="modal-body">
-                <!-- Loading State -->
-                <div x-show="djConfigLoading" style="text-align: center; padding: 40px;">
-                    <div style="font-size: 2rem; margin-bottom: 10px;">⏳</div>
-                    <div>Loading DJ config...</div>
-                </div>
-
-                <!-- Error Message -->
-                <div x-show="djConfigError" style="background: #fee; border: 1px solid #fcc; border-radius: 6px; padding: 15px; margin-bottom: 20px; color: #c33;">
-                    <strong>Error:</strong> <span x-text="djConfigError"></span>
-                </div>
-
-                <!-- Success Message -->
-                <div x-show="djConfigMessage.text" :class="djConfigMessage.type === 'success' ? 'alert-success' : 'alert-error'" style="margin-bottom: 20px; padding: 15px; border-radius: 6px;">
-                    <span x-text="djConfigMessage.text"></span>
-                </div>
-
-                <!-- Hex Messages Section -->
-                <div x-show="!djConfigLoading" style="margin-bottom: 30px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                        <h3 style="color: #667eea; margin: 0;">Hex Messages</h3>
-                        <div style="display: flex; align-items: center; gap: 15px;">
-                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                <input type="checkbox" x-model="djConfigData.hex_messages.enabled" @change="toggleDJConfigCategory('hex_messages')">
-                                <span x-text="djConfigData.hex_messages.enabled ? 'Enabled' : 'Disabled'"></span>
-                            </label>
-                            <button @click="openHexMessageForm()" class="btn btn-primary" style="padding: 8px 16px;">+ Add Message</button>
-                        </div>
-                    </div>
-                    
-                    <div x-show="djConfigData.hex_messages.items.length === 0" style="text-align: center; padding: 30px; background: #f8f9fa; border-radius: 6px; color: #666;">
-                        No hex messages configured
-                    </div>
-                    
-                    <div style="display: grid; gap: 10px;">
-                        <template x-for="(msg, index) in djConfigData.hex_messages.items" :key="index">
-                            <div style="background: #f8f9fa; border-radius: 6px; padding: 15px; display: flex; justify-content: space-between; align-items: start;">
-                                <div style="flex: 1;">
-                                    <div style="font-weight: 600; margin-bottom: 5px;" x-text="msg.text"></div>
-                                    <div style="display: flex; gap: 15px; font-size: 0.9rem; color: #666;">
-                                        <span>Weight: <strong x-text="msg.weight"></strong></span>
-                                        <span x-show="msg.signal_profile">Profile: <strong x-text="msg.signal_profile"></strong></span>
-                                        <span x-show="msg.loop_min || msg.loop_max">Loops: <strong x-text="(msg.loop_min || 1) + '-' + (msg.loop_max || msg.loop_min || 1)"></strong></span>
-                                        <span x-show="msg.announcement">Announcement: <strong x-text="msg.announcement"></strong></span>
-                                    </div>
-                                </div>
-                                <div style="display: flex; gap: 8px;">
-                                    <button @click="editHexMessage(index)" class="btn btn-secondary" style="padding: 5px 10px; font-size: 0.85rem;">✏️ Edit</button>
-                                    <button @click="deleteHexMessage(index)" class="btn btn-danger" style="padding: 5px 10px; font-size: 0.85rem;">🗑️ Delete</button>
-                                </div>
-                            </div>
-                        </template>
-                    </div>
-                </div>
-
-                <!-- Hex Message Announcements Section -->
-                <div x-show="!djConfigLoading">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                        <h3 style="color: #667eea; margin: 0;">Hex Message Announcements</h3>
-                        <div style="display: flex; align-items: center; gap: 15px;">
-                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                <input type="checkbox" x-model="djConfigData.hex_message_announcements.enabled" @change="toggleDJConfigCategory('hex_message_announcements')">
-                                <span x-text="djConfigData.hex_message_announcements.enabled ? 'Enabled' : 'Disabled'"></span>
-                            </label>
-                            <button @click="openAnnouncementForm()" class="btn btn-primary" style="padding: 8px 16px;">+ Add Announcement</button>
-                        </div>
-                    </div>
-                    
-                    <div x-show="djConfigData.hex_message_announcements.items.length === 0" style="text-align: center; padding: 30px; background: #f8f9fa; border-radius: 6px; color: #666;">
-                        No announcements configured
-                    </div>
-                    
-                    <div style="display: grid; gap: 10px;">
-                        <template x-for="(announcement, index) in djConfigData.hex_message_announcements.items" :key="index">
-                            <div style="background: #f8f9fa; border-radius: 6px; padding: 15px; display: flex; justify-content: space-between; align-items: center;">
-                                <div style="flex: 1;" x-text="announcement"></div>
-                                <div style="display: flex; gap: 8px;">
-                                    <button @click="editAnnouncement(index)" class="btn btn-secondary" style="padding: 5px 10px; font-size: 0.85rem;">✏️ Edit</button>
-                                    <button @click="deleteAnnouncement(index)" class="btn btn-danger" style="padding: 5px 10px; font-size: 0.85rem;">🗑️ Delete</button>
-                                </div>
-                            </div>
-                        </template>
-                    </div>
-                </div>
-
-                <!-- State Weights Section -->
-                <div x-show="!djConfigLoading" style="margin-top: 30px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                        <h3 style="color: #667eea; margin: 0;">State Weights</h3>
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                            <input type="checkbox" x-model="djConfigData.state_weights.enabled" @change="toggleDJConfigCategory('state_weights')">
-                            <span x-text="djConfigData.state_weights.enabled ? 'Enabled' : 'Disabled'"></span>
-                        </label>
-                    </div>
-                    
-                    <div style="background: #f8f9fa; border-radius: 6px; padding: 20px;">
-                        <div style="margin-bottom: 15px; padding: 10px; background: #e3f2fd; border-radius: 6px; border-left: 4px solid #2196f3;">
-                            <strong>Default Values:</strong>
-                            <div style="display: flex; gap: 20px; margin-top: 8px; font-size: 0.95rem;">
-                                <span>Track: <strong x-text="defaultStateWeights.track"></strong></span>
-                                <span>Hex Message: <strong x-text="defaultStateWeights.hex_message"></strong></span>
-                                <span>Noise: <strong x-text="defaultStateWeights.noise"></strong></span>
+            <div x-show="djConfigData.hex_messages.items.length === 0" style="text-align: center; padding: 30px; background: #f8f9fa; border-radius: 6px; color: #666;">
+                No hex messages configured
+            </div>
+            
+            <div style="display: grid; gap: 10px;">
+                <template x-for="(msg, index) in djConfigData.hex_messages.items" :key="index">
+                    <div style="background: #f8f9fa; border-radius: 6px; padding: 15px; display: flex; justify-content: space-between; align-items: start;">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 600; margin-bottom: 5px;" x-text="msg.text"></div>
+                            <div style="display: flex; gap: 15px; font-size: 0.9rem; color: #666;">
+                                <span>Weight: <strong x-text="msg.weight"></strong></span>
+                                <span x-show="msg.signal_profile">Profile: <strong x-text="msg.signal_profile"></strong></span>
+                                <span x-show="msg.loop_min || msg.loop_max">Loops: <strong x-text="(msg.loop_min || 1) + '-' + (msg.loop_max || msg.loop_min || 1)"></strong></span>
+                                <span x-show="msg.announcement">Announcement: <strong x-text="msg.announcement"></strong></span>
                             </div>
                         </div>
-                        
-                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
-                            <div>
-                                <label style="display: block; margin-bottom: 5px; font-weight: 500;">Track Weight</label>
-                                <input type="number" x-model.number="djConfigData.state_weights.value.track" min="0" 
-                                       style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
-                            </div>
-                            <div>
-                                <label style="display: block; margin-bottom: 5px; font-weight: 500;">Hex Message Weight</label>
-                                <input type="number" x-model.number="djConfigData.state_weights.value.hex_message" min="0" 
-                                       style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
-                            </div>
-                            <div>
-                                <label style="display: block; margin-bottom: 5px; font-weight: 500;">Noise Weight</label>
-                                <input type="number" x-model.number="djConfigData.state_weights.value.noise" min="0" 
-                                       style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
-                            </div>
-                        </div>
-                        
-                        <div style="margin-top: 15px;">
-                            <button @click="saveStateWeights()" class="btn btn-primary" style="padding: 10px 20px;">
-                                💾 Save State Weights
-                            </button>
+                        <div style="display: flex; gap: 8px;">
+                            <button @click="editHexMessage(index)" class="btn btn-secondary" style="padding: 5px 10px; font-size: 0.85rem;">✏️ Edit</button>
+                            <button @click="deleteHexMessage(index)" class="btn btn-danger" style="padding: 5px 10px; font-size: 0.85rem;">🗑️ Delete</button>
                         </div>
                     </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- Hex Message Announcements Section -->
+        <div x-show="!djConfigLoading">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h3 style="color: #667eea; margin: 0;">Hex Message Announcements</h3>
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" x-model="djConfigData.hex_message_announcements.enabled" @change="toggleDJConfigCategory('hex_message_announcements')">
+                        <span x-text="djConfigData.hex_message_announcements.enabled ? 'Enabled' : 'Disabled'"></span>
+                    </label>
+                    <button @click="openAnnouncementForm()" class="btn btn-primary" style="padding: 8px 16px;">+ Add Announcement</button>
+                </div>
+            </div>
+            
+            <div x-show="djConfigData.hex_message_announcements.items.length === 0" style="text-align: center; padding: 30px; background: #f8f9fa; border-radius: 6px; color: #666;">
+                No announcements configured
+            </div>
+            
+            <div style="display: grid; gap: 10px;">
+                <template x-for="(announcement, index) in djConfigData.hex_message_announcements.items" :key="index">
+                    <div style="background: #f8f9fa; border-radius: 6px; padding: 15px; display: flex; justify-content: space-between; align-items: center;">
+                        <div style="flex: 1;" x-text="announcement"></div>
+                        <div style="display: flex; gap: 8px;">
+                            <button @click="editAnnouncement(index)" class="btn btn-secondary" style="padding: 5px 10px; font-size: 0.85rem;">✏️ Edit</button>
+                            <button @click="deleteAnnouncement(index)" class="btn btn-danger" style="padding: 5px 10px; font-size: 0.85rem;">🗑️ Delete</button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- State Weights Section -->
+        <div x-show="!djConfigLoading" style="margin-top: 30px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h3 style="color: #667eea; margin: 0;">State Weights</h3>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" x-model="djConfigData.state_weights.enabled" @change="toggleDJConfigCategory('state_weights')">
+                    <span x-text="djConfigData.state_weights.enabled ? 'Enabled' : 'Disabled'"></span>
+                </label>
+            </div>
+            
+            <div style="background: #f8f9fa; border-radius: 6px; padding: 20px;">
+                <div style="margin-bottom: 15px; padding: 10px; background: #e3f2fd; border-radius: 6px; border-left: 4px solid #2196f3;">
+                    <strong>Default Values:</strong>
+                    <div style="display: flex; gap: 20px; margin-top: 8px; font-size: 0.95rem;">
+                        <span>Track: <strong x-text="defaultStateWeights.track"></strong></span>
+                        <span>Hex Message: <strong x-text="defaultStateWeights.hex_message"></strong></span>
+                        <span>Noise: <strong x-text="defaultStateWeights.noise"></strong></span>
+                    </div>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; font-weight: 500;">Track Weight</label>
+                        <input type="number" x-model.number="djConfigData.state_weights.value.track" min="0" 
+                               style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; font-weight: 500;">Hex Message Weight</label>
+                        <input type="number" x-model.number="djConfigData.state_weights.value.hex_message" min="0" 
+                               style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; font-weight: 500;">Noise Weight</label>
+                        <input type="number" x-model.number="djConfigData.state_weights.value.noise" min="0" 
+                               style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                    </div>
+                </div>
+                
+                <div style="margin-top: 15px;">
+                    <button @click="saveStateWeights()" class="btn btn-primary" style="padding: 10px 20px;">
+                        💾 Save State Weights
+                    </button>
                 </div>
             </div>
         </div>
-    </div>
+    </template>
 
     <!-- Hex Message Form Modal -->
     <template x-modal data-modal="hexMessageForm"
@@ -657,148 +639,110 @@
         </div>
     </template>
 
-    <div x-show="showProfileEditor"
-         x-transition.opacity
-         class="modal-overlay"
-         @click.self="closeProfileEditor()"
-         @keydown.escape.window="closeProfileEditor()">
-        <div class="modal-content" x-show="showProfileEditor" x-transition>
-            <div class="modal-header">
-                <div class="modal-title" x-text="profileEditorIsNew ? 'New Signal Profile' : 'Edit Signal Profile'"></div>
-                <button class="close" @click="closeProfileEditor()">&times;</button>
+    <template x-modal data-modal="profileEditor" data-title-expression="profileEditorIsNew ? 'New Signal Profile' : 'Edit Signal Profile'"
+              data-message="profileEditorMessage" data-loading="profileEditorLoading"
+              data-submit="saveProfile()" data-saving="profileEditorSaving"
+              data-submit-label="Save Profile" data-busy-label="Saving..." data-cancel-label="Close">
+        <div class="form-group">
+            <label class="form-label">Name</label>
+            <input type="text" class="form-input" x-model="profileForm.name"
+                   :readonly="!profileEditorIsNew" required pattern="[A-Za-z0-9_\-]+"
+                   title="Letters, digits, - and _ only">
+        </div>
+        <div class="form-row">
+            <template x-for="field in profileFields" :key="field.key">
+                <div class="form-group">
+                    <label class="form-label" x-text="field.label"></label>
+                    <input type="number" class="form-input" x-model.number="profileForm[field.key]"
+                           :step="field.step" :min="field.min" :max="field.max"
+                           :required="!field.optional" :placeholder="field.optional ? 'Off' : ''">
+                </div>
+            </template>
+            <div class="form-group">
+                <label class="form-label">Dropout Min Duration (ms)</label>
+                <input type="number" class="form-input" x-model.number="profileForm.dropout_duration_ms[0]"
+                       step="any" min="0" required>
             </div>
-            <div class="modal-body">
-                <div x-show="profileEditorMessage.text"
-                     :class="profileEditorMessage.type === 'error' ? 'error-message' : 'success-message'"
-                     x-text="profileEditorMessage.text"></div>
-
-                <div class="loading" x-show="profileEditorLoading">Loading...</div>
-
-                <form x-show="!profileEditorLoading" @submit.prevent="saveProfile()">
-                    <div class="form-group">
-                        <label class="form-label">Name</label>
-                        <input type="text" class="form-input" x-model="profileForm.name"
-                               :readonly="!profileEditorIsNew" required pattern="[A-Za-z0-9_\-]+"
-                               title="Letters, digits, - and _ only">
-                    </div>
-                    <div class="form-row">
-                        <template x-for="field in profileFields" :key="field.key">
-                            <div class="form-group">
-                                <label class="form-label" x-text="field.label"></label>
-                                <input type="number" class="form-input" x-model.number="profileForm[field.key]"
-                                       :step="field.step" :min="field.min" :max="field.max"
-                                       :required="!field.optional" :placeholder="field.optional ? 'Off' : ''">
-                            </div>
-                        </template>
-                        <div class="form-group">
-                            <label class="form-label">Dropout Min Duration (ms)</label>
-                            <input type="number" class="form-input" x-model.number="profileForm.dropout_duration_ms[0]"
-                                   step="any" min="0" required>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Dropout Max Duration (ms)</label>
-                            <input type="number" class="form-input" x-model.number="profileForm.dropout_duration_ms[1]"
-                                   step="any" min="0" required>
-                        </div>
-                    </div>
-                    <div class="button-group">
-                        <button type="button" class="btn btn-secondary" @click="closeProfileEditor()">Close</button>
-                        <button type="submit" class="btn btn-primary" :disabled="profileEditorSaving">
-                            <span x-text="profileEditorSaving ? 'Saving...' : 'Save Profile'"></span>
-                        </button>
-                    </div>
-                </form>
+            <div class="form-group">
+                <label class="form-label">Dropout Max Duration (ms)</label>
+                <input type="number" class="form-input" x-model.number="profileForm.dropout_duration_ms[1]"
+                       step="any" min="0" required>
             </div>
         </div>
-    </div>
+    </template>
 
-    <div x-show="fileBrowser.open"
-         x-transition.opacity
-         class="modal-overlay file-browser-overlay"
-         @click.self="closeFileBrowser()"
-         @keydown.escape.window="closeFileBrowser()">
-        <div class="modal-content" x-show="fileBrowser.open" x-transition>
-            <div class="modal-header">
-                <div class="modal-title" x-text="fileBrowser.mode === 'file' ? 'Select ' + fileBrowserKind().noun : fileBrowser.mode === 'folder' ? 'Select Folder' : fileBrowserKind().noun + 's'"></div>
-                <button class="close" @click="closeFileBrowser()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div x-show="fileBrowser.message.text"
-                     :class="fileBrowser.message.type === 'error' ? 'error-message' : 'success-message'"
-                     x-text="fileBrowser.message.text"></div>
-
-                <div class="file-browser-crumbs">
-                    <button class="btn btn-secondary" :disabled="fileBrowserCrumbs().length < 2"
-                            @click="loadFileBrowser(fileBrowserCrumbs().at(-2).prefix)">&uarr; Up</button>
-                    <template x-for="(crumb, index) in fileBrowserCrumbs()" :key="crumb.prefix">
-                        <span>
-                            <span x-show="index > 0">/</span>
-                            <button class="btn btn-secondary" @click="loadFileBrowser(crumb.prefix)" x-text="crumb.name"></button>
-                        </span>
-                    </template>
-                </div>
-
-                <div class="loading" x-show="fileBrowser.loading">Loading...</div>
-
-                <div x-show="!fileBrowser.loading">
-                    <template x-for="folder in fileBrowser.folders" :key="folder">
-                        <div class="file-browser-row">
-                            <button class="btn btn-secondary" @click="loadFileBrowser(folder)"
-                                    x-text="'📁 ' + folder.slice(fileBrowser.prefix.length)"></button>
-                            <button class="btn btn-primary" x-show="fileBrowser.mode === 'folder'"
-                                    @click="selectFileBrowserEntry(folder)">Select</button>
-                        </div>
-                    </template>
-                    <template x-for="file in fileBrowser.files" :key="file.key">
-                        <div class="file-browser-row">
-                            <div>
-                                <div class="file-browser-row-name" x-text="file.key.slice(fileBrowser.prefix.length)"></div>
-                                <div class="file-browser-row-meta"
-                                     x-text="file.key + ' · ' + formatBytes(file.size) + ' · ' + formatDate(file.last_modified)"></div>
-                            </div>
-                            <button class="btn btn-primary" x-show="fileBrowser.mode === 'file'"
-                                    @click="selectFileBrowserEntry(file.key)">Select</button>
-                        </div>
-                    </template>
-                    <div class="empty-state"
-                         x-show="fileBrowser.folders.length === 0 && fileBrowser.files.length === 0">This folder is empty</div>
-                </div>
-
-                <form class="file-browser-new-folder" @submit.prevent="createFileBrowserFolder()">
-                    <input type="text" class="form-input" placeholder="New folder name"
-                           x-model="fileBrowser.newFolderName" required pattern="[A-Za-z0-9_\-]+"
-                           title="Letters, digits, - and _ only">
-                    <button type="submit" class="btn btn-secondary" :disabled="fileBrowser.creatingFolder">
-                        <span x-text="fileBrowser.creatingFolder ? 'Creating...' : 'New Folder'"></span>
-                    </button>
-                </form>
-
-                <label class="file-browser-drop" :class="{ dragging: fileBrowser.dragging }"
-                       @dragover.prevent="fileBrowser.dragging = true"
-                       @dragleave="fileBrowser.dragging = false"
-                       @drop.prevent="fileBrowser.dragging = false; uploadFiles($event.dataTransfer.files)">
-                    <span x-text="'Drop files here or click to choose (' + fileBrowserKind().hint + ')'"></span>
-                    <input type="file" multiple :accept="fileBrowserKind().accept" style="display: none;"
-                           @change="uploadFiles($event.target.files); $event.target.value = ''">
-                </label>
-
-                <template x-for="upload in fileBrowser.uploads" :key="upload.id">
-                    <div class="file-browser-upload">
-                        <div class="file-browser-row-name" x-text="upload.name"></div>
-                        <progress max="100" :value="upload.progress" x-show="upload.status === 'uploading'"></progress>
-                        <div class="file-browser-row-meta" x-show="upload.status === 'done'"
-                             x-text="'Uploaded as ' + upload.detail"></div>
-                        <div class="error-message" x-show="upload.status === 'error'" x-text="upload.detail"></div>
-                    </div>
-                </template>
-
-                <div class="button-group" x-show="fileBrowser.mode === 'folder'">
-                    <button type="button" class="btn btn-primary"
-                            @click="selectFileBrowserEntry(fileBrowser.prefix)">Select This Folder</button>
-                </div>
-            </div>
+    <template x-modal data-modal="fileBrowser" data-message="fileBrowser.message" data-overlay-class="file-browser-overlay"
+              data-title-expression="fileBrowser.mode === 'file' ? 'Select ' + fileBrowserKind().noun : fileBrowser.mode === 'folder' ? 'Select Folder' : fileBrowserKind().noun + 's'">
+        <div class="file-browser-crumbs">
+            <button class="btn btn-secondary" :disabled="fileBrowserCrumbs().length < 2"
+                    @click="loadFileBrowser(fileBrowserCrumbs().at(-2).prefix)">&uarr; Up</button>
+            <template x-for="(crumb, index) in fileBrowserCrumbs()" :key="crumb.prefix">
+                <span>
+                    <span x-show="index > 0">/</span>
+                    <button class="btn btn-secondary" @click="loadFileBrowser(crumb.prefix)" x-text="crumb.name"></button>
+                </span>
+            </template>
         </div>
-    </div>
+
+        <div class="loading" x-show="fileBrowser.loading">Loading...</div>
+
+        <div x-show="!fileBrowser.loading">
+            <template x-for="folder in fileBrowser.folders" :key="folder">
+                <div class="file-browser-row">
+                    <button class="btn btn-secondary" @click="loadFileBrowser(folder)"
+                            x-text="'📁 ' + folder.slice(fileBrowser.prefix.length)"></button>
+                    <button class="btn btn-primary" x-show="fileBrowser.mode === 'folder'"
+                            @click="selectFileBrowserEntry(folder)">Select</button>
+                </div>
+            </template>
+            <template x-for="file in fileBrowser.files" :key="file.key">
+                <div class="file-browser-row">
+                    <div>
+                        <div class="file-browser-row-name" x-text="file.key.slice(fileBrowser.prefix.length)"></div>
+                        <div class="file-browser-row-meta"
+                             x-text="file.key + ' · ' + formatBytes(file.size) + ' · ' + formatDate(file.last_modified)"></div>
+                    </div>
+                    <button class="btn btn-primary" x-show="fileBrowser.mode === 'file'"
+                            @click="selectFileBrowserEntry(file.key)">Select</button>
+                </div>
+            </template>
+            <div class="empty-state"
+                 x-show="fileBrowser.folders.length === 0 && fileBrowser.files.length === 0">This folder is empty</div>
+        </div>
+
+        <form class="file-browser-new-folder" @submit.prevent="createFileBrowserFolder()">
+            <input type="text" class="form-input" placeholder="New folder name"
+                   x-model="fileBrowser.newFolderName" required pattern="[A-Za-z0-9_\-]+"
+                   title="Letters, digits, - and _ only">
+            <button type="submit" class="btn btn-secondary" :disabled="fileBrowser.creatingFolder">
+                <span x-text="fileBrowser.creatingFolder ? 'Creating...' : 'New Folder'"></span>
+            </button>
+        </form>
+
+        <label class="file-browser-drop" :class="{ dragging: fileBrowser.dragging }"
+               @dragover.prevent="fileBrowser.dragging = true"
+               @dragleave="fileBrowser.dragging = false"
+               @drop.prevent="fileBrowser.dragging = false; uploadFiles($event.dataTransfer.files)">
+            <span x-text="'Drop files here or click to choose (' + fileBrowserKind().hint + ')'"></span>
+            <input type="file" multiple :accept="fileBrowserKind().accept" style="display: none;"
+                   @change="uploadFiles($event.target.files); $event.target.value = ''">
+        </label>
+
+        <template x-for="upload in fileBrowser.uploads" :key="upload.id">
+            <div class="file-browser-upload">
+                <div class="file-browser-row-name" x-text="upload.name"></div>
+                <progress max="100" :value="upload.progress" x-show="upload.status === 'uploading'"></progress>
+                <div class="file-browser-row-meta" x-show="upload.status === 'done'"
+                     x-text="'Uploaded as ' + upload.detail"></div>
+                <div class="error-message" x-show="upload.status === 'error'" x-text="upload.detail"></div>
+            </div>
+        </template>
+
+        <div class="button-group" x-show="fileBrowser.mode === 'folder'">
+            <button type="button" class="btn btn-primary"
+                    @click="selectFileBrowserEntry(fileBrowser.prefix)">Select This Folder</button>
+        </div>
+    </template>
 
     <script src="/static/index.js"></script>
 </body>

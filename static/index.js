@@ -115,7 +115,29 @@
                     channelMessage: emptyMessage(),
                 }),
             },
+            djConfig: {
+                flag: 'showDJConfigModal',
+                perGuild: true,
+                reset: () => ({ djConfigError: null, djConfigMessage: emptyMessage() }),
+            },
+            profileEditor: {
+                flag: 'showProfileEditor',
+                perGuild: false,
+                reset: () => ({ profileEditorMessage: emptyMessage() }),
+            },
+            fileBrowser: {
+                flag: 'fileBrowser.open',
+                perGuild: false,
+                reset: () => ({ fileBrowserOnSelect: null }),
+            },
         };
+
+        // Sets a visibility property, which may be nested ('fileBrowser.open').
+        function setFlag(state, flag, value) {
+            const path = flag.split('.');
+            const last = path.pop();
+            path.reduce((object, key) => object[key], state)[last] = value;
+        }
 
         // `<template x-modal data-modal="name" ...>` renders the shared modal
         // shell (overlay, header, close button, message area, and for modals
@@ -123,6 +145,8 @@
         // template's content in the body, or in the form when there is one.
         // Open state comes from `modals[name]`; the other settings are
         // data attributes:
+        //   data-wide          wider modal that scrolls
+        //   data-overlay-class extra class on the overlay
         //   data-title         header text
         //   data-title-expression  expression for the header text, instead
         //                      of data-title
@@ -158,8 +182,9 @@
                     'x-transition.opacity': '',
                     'x-on:click.self': close,
                     'x-on:keydown.escape.window': escapeHandler,
-                }, 'modal-overlay');
-                const content = element('div', { 'x-show': flag, 'x-transition': '' }, 'modal-content');
+                }, `modal-overlay ${config.overlayClass || ''}`.trim());
+                const content = element('div', { 'x-show': flag, 'x-transition': '' },
+                    config.wide !== undefined ? 'modal-content modal-wide' : 'modal-content');
                 overlay.append(content);
 
                 const header = element('div', {}, 'modal-header');
@@ -262,7 +287,6 @@
                 fileBrowser: {
                     open: false,
                     mode: 'browse',
-                    onSelect: null,
                     prefix: 'tracks/',
                     folders: [],
                     files: [],
@@ -273,6 +297,7 @@
                     dragging: false,
                     uploads: [],
                 },
+                fileBrowserOnSelect: null,
                 nextUploadId: 0,
                 fileKinds: {
                     tracks: { noun: 'Audio File', extensions: '.mp3, .ogg and .wav', hint: '.mp3, .ogg, .wav at 48kHz', accept: '.mp3,.ogg,.wav', pattern: /\.(mp3|ogg|wav)$/i },
@@ -431,21 +456,16 @@
                 // mode calls onSelect with the chosen object key or folder prefix.
                 openFileBrowser({ mode = 'browse', prefix = 'tracks/', onSelect = null } = {}) {
                     this.fileBrowser.mode = mode;
-                    this.fileBrowser.onSelect = onSelect;
                     this.fileBrowser.newFolderName = '';
                     this.fileBrowser.uploads = [];
-                    this.fileBrowser.open = true;
+                    this.openModal('fileBrowser');
+                    this.fileBrowserOnSelect = onSelect;
                     return this.loadFileBrowser(prefix);
                 },
 
-                closeFileBrowser() {
-                    this.fileBrowser.open = false;
-                    this.fileBrowser.onSelect = null;
-                },
-
                 selectFileBrowserEntry(value) {
-                    const onSelect = this.fileBrowser.onSelect;
-                    this.closeFileBrowser();
+                    const onSelect = this.fileBrowserOnSelect;
+                    this.closeModal('fileBrowser');
                     if (onSelect) onSelect(value);
                 },
 
@@ -568,8 +588,7 @@
 
                 async openProfileEditor(name) {
                     this.profileEditorIsNew = name === null;
-                    this.profileEditorMessage = { text: '', type: '' };
-                    this.showProfileEditor = true;
+                    this.openModal('profileEditor');
 
                     if (this.profileEditorIsNew) {
                         this.profileForm = {
@@ -600,11 +619,6 @@
                     } finally {
                         this.profileEditorLoading = false;
                     }
-                },
-
-                closeProfileEditor() {
-                    this.showProfileEditor = false;
-                    this.profileEditorMessage = { text: '', type: '' };
                 },
 
                 async saveProfile() {
@@ -702,12 +716,12 @@
                     const modal = modals[name];
                     if (modal.perGuild) this.currentGuildId = guildId;
                     Object.assign(this, modal.reset());
-                    this[modal.flag] = true;
+                    setFlag(this, modal.flag, true);
                 },
 
                 closeModal(name) {
                     const modal = modals[name];
-                    this[modal.flag] = false;
+                    setFlag(this, modal.flag, false);
                     if (modal.perGuild) this.currentGuildId = null;
                     Object.assign(this, modal.reset());
                 },
@@ -957,8 +971,7 @@
 
                 // DJ Config Override Functions
                 async openDJConfigModal(guildId) {
-                    this.currentGuildId = guildId;
-                    this.showDJConfigModal = true;
+                    this.openModal('djConfig', guildId);
                     await this.loadDJConfigOverrides();
                 },
 
@@ -995,13 +1008,6 @@
                     } finally {
                         this.djConfigLoading = false;
                     }
-                },
-
-                closeDJConfigModal() {
-                    this.showDJConfigModal = false;
-                    this.currentGuildId = null;
-                    this.djConfigError = null;
-                    this.djConfigMessage = { text: '', type: '' };
                 },
 
                 async toggleDJConfigCategory(category) {

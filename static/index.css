@@ -281,6 +281,11 @@
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
         }
 
+        .modal-wide {
+            max-width: 1000px;
+            overflow-y: auto;
+        }
+
         .modal-header {
             padding: 20px 30px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
