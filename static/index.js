@@ -28,6 +28,132 @@
             return response;
         }
 
+        const emptyMessage = () => ({ text: '', type: '' });
+
+        // State behind each `<template x-modal data-modal="name">` in
+        // index.html: `flag` is the visibility property, `perGuild` makes
+        // openModal/closeModal set and clear `currentGuildId`, and `reset`
+        // returns the field values restored on every open and close.
+        const modals = {
+            advanceDJ: {
+                flag: 'showAdvanceDJModal',
+                perGuild: true,
+                reset: () => ({ djStateType: '', djMessage: emptyMessage() }),
+            },
+            playHex: {
+                flag: 'showPlayHexModal',
+                perGuild: true,
+                reset: () => ({ hexMessageText: '', hexMessage: emptyMessage() }),
+            },
+            playTrack: {
+                flag: 'showPlayTrackModal',
+                perGuild: true,
+                reset: () => ({
+                    playTrackFilename: '',
+                    playTrackVolume: null,
+                    playTrackStart: null,
+                    playTrackDuration: null,
+                    playTrackMessage: emptyMessage(),
+                }),
+            },
+            botProfile: {
+                flag: 'showBotProfileModal',
+                perGuild: true,
+                reset: () => ({
+                    botProfileMessage: emptyMessage(),
+                    botProfileForm: { nick: '', avatar: '', banner: '' },
+                }),
+            },
+            activity: {
+                flag: 'showActivityModal',
+                perGuild: false,
+                reset: () => ({ newActivityStatus: '', activityMessage: emptyMessage() }),
+            },
+        };
+
+        // `<template x-modal data-modal="name" ...>` renders the shared modal
+        // shell (overlay, header, close button, message area, and for modals
+        // with data-submit a form with a Cancel/Submit row) and puts the
+        // template's content in the body, or in the form when there is one.
+        // Open state comes from `modals[name]`; the other settings are
+        // data attributes:
+        //   data-title         header text
+        //   data-message       property holding the { text, type } message
+        //   data-submit        expression run on form submit
+        //   data-saving        property that is true while submitting
+        //   data-submit-label  Submit button text
+        //   data-busy-label    Submit button text while saving
+        //   data-cancel-label  Cancel button text (default "Cancel")
+        //   data-loading       property; while true, shows "Loading..." and
+        //                      hides the form
+        //   data-escape-unless expression; Escape does not close while true
+        document.addEventListener('alpine:init', () => {
+            Alpine.directive('modal', (template) => {
+                const config = template.dataset;
+                const { flag } = modals[config.modal];
+                const close = `closeModal(${JSON.stringify(config.modal)})`;
+
+                const element = (tag, attributes = {}, className = '') => {
+                    const node = document.createElement(tag);
+                    if (className) node.className = className;
+                    for (const [name, value] of Object.entries(attributes)) {
+                        node.setAttribute(name, value);
+                    }
+                    return node;
+                };
+
+                const escapeHandler = config.escapeUnless ? `!(${config.escapeUnless}) && ${close}` : close;
+                const overlay = element('div', {
+                    'x-show': flag,
+                    'x-transition.opacity': '',
+                    'x-on:click.self': close,
+                    'x-on:keydown.escape.window': escapeHandler,
+                }, 'modal-overlay');
+                const content = element('div', { 'x-show': flag, 'x-transition': '' }, 'modal-content');
+                overlay.append(content);
+
+                const header = element('div', {}, 'modal-header');
+                const title = element('div', {}, 'modal-title');
+                title.textContent = config.title;
+                const closeButton = element('button', { 'x-on:click': close }, 'close');
+                closeButton.innerHTML = '&times;';
+                header.append(title, closeButton);
+
+                const body = element('div', {}, 'modal-body');
+                body.append(element('div', {
+                    'x-show': `${config.message}.text`,
+                    ':class': `${config.message}.type === 'error' ? 'error-message' : 'success-message'`,
+                    'x-text': `${config.message}.text`,
+                }));
+                content.append(header, body);
+
+                if (config.loading) {
+                    const loading = element('div', { 'x-show': config.loading }, 'loading');
+                    loading.textContent = 'Loading...';
+                    body.append(loading);
+                }
+                if (config.submit) {
+                    const form = element('form', { 'x-on:submit.prevent': config.submit });
+                    if (config.loading) form.setAttribute('x-show', `!${config.loading}`);
+                    const cancel = element('button', { type: 'button', 'x-on:click': close }, 'btn btn-secondary');
+                    cancel.textContent = config.cancelLabel || 'Cancel';
+                    const submit = element('button', { type: 'submit', ':disabled': config.saving }, 'btn btn-primary');
+                    submit.append(element('span', {
+                        'x-text': `${config.saving} ? ${JSON.stringify(config.busyLabel)} : ${JSON.stringify(config.submitLabel)}`,
+                    }));
+                    const buttons = element('div', {}, 'button-group');
+                    buttons.append(cancel, submit);
+                    form.append(template.content.cloneNode(true), buttons);
+                    body.append(form);
+                } else {
+                    body.append(template.content.cloneNode(true));
+                }
+
+                template.after(overlay);
+                Alpine.initTree(overlay);
+            });
+        });
+
         function botPortal() {
             return {
                 ws: null,
@@ -514,19 +640,25 @@
                         this.reconnectTimeout = setTimeout(() => this.connect(), 3000);
                     };
                 },
-                // DJ Modal Functions
-                openAdvanceDJModal(guildId) {
-                    this.currentGuildId = guildId;
-                    this.showAdvanceDJModal = true;
-                    this.djStateType = '';
-                    this.djMessage = { text: '', type: '' };
+                // Modals named in `modals` (see above) open and close here.
+                // Both reset the modal's fields.
+                openModal(name, guildId) {
+                    const modal = modals[name];
+                    if (modal.perGuild) this.currentGuildId = guildId;
+                    Object.assign(this, modal.reset());
+                    this[modal.flag] = true;
                 },
 
-                closeAdvanceDJModal() {
-                    this.showAdvanceDJModal = false;
-                    this.currentGuildId = null;
-                    this.djStateType = '';
-                    this.djMessage = { text: '', type: '' };
+                closeModal(name) {
+                    const modal = modals[name];
+                    this[modal.flag] = false;
+                    if (modal.perGuild) this.currentGuildId = null;
+                    Object.assign(this, modal.reset());
+                },
+
+                openBotProfileModal(guildId) {
+                    this.openModal('botProfile', guildId);
+                    return this.loadBotProfile();
                 },
 
                 async advanceDJState() {
@@ -540,26 +672,12 @@
                         }),
                         success: 'DJ state advanced successfully!',
                         failure: 'Failed to advance DJ state. Please try again.',
-                        afterFn: () => this.closeAdvanceDJModal(),
+                        afterFn: () => this.closeModal('advanceDJ'),
                         afterMs: 1500,
                     });
                 },
 
                 // Hex Message Modal Functions
-                openPlayHexModal(guildId) {
-                    this.currentGuildId = guildId;
-                    this.showPlayHexModal = true;
-                    this.hexMessageText = '';
-                    this.hexMessage = { text: '', type: '' };
-                },
-
-                closePlayHexModal() {
-                    this.showPlayHexModal = false;
-                    this.currentGuildId = null;
-                    this.hexMessageText = '';
-                    this.hexMessage = { text: '', type: '' };
-                },
-
                 async playHexMessage() {
                     await this.runAction({
                         saving: 'hexSaving',
@@ -571,32 +689,12 @@
                         }),
                         success: 'Hex message queued successfully!',
                         failure: 'Failed to play hex message. Please try again.',
-                        afterFn: () => this.closePlayHexModal(),
+                        afterFn: () => this.closeModal('playHex'),
                         afterMs: 1500,
                     });
                 },
 
                 // Play Track Modal Functions
-                openPlayTrackModal(guildId) {
-                    this.currentGuildId = guildId;
-                    this.showPlayTrackModal = true;
-                    this.resetPlayTrackForm();
-                },
-
-                closePlayTrackModal() {
-                    this.showPlayTrackModal = false;
-                    this.currentGuildId = null;
-                    this.resetPlayTrackForm();
-                },
-
-                resetPlayTrackForm() {
-                    this.playTrackFilename = '';
-                    this.playTrackVolume = null;
-                    this.playTrackStart = null;
-                    this.playTrackDuration = null;
-                    this.playTrackMessage = { text: '', type: '' };
-                },
-
                 async playTrack() {
                     const body = { filename: this.playTrackFilename };
 
@@ -622,7 +720,7 @@
                         }),
                         success: 'Track started successfully!',
                         failure: 'Failed to play track. Please try again.',
-                        afterFn: () => this.closePlayTrackModal(),
+                        afterFn: () => this.closeModal('playTrack'),
                         afterMs: 1500,
                     });
                 },
@@ -740,19 +838,6 @@
                     });
                 },
 
-                openBotProfileModal(guildId) {
-                    this.currentGuildId = guildId;
-                    this.showBotProfileModal = true;
-                    this.botProfileMessage = { text: '', type: '' };
-                    this.botProfileForm = { nick: '', avatar: '', banner: '' };
-                    return this.loadBotProfile();
-                },
-
-                closeBotProfileModal() {
-                    this.showBotProfileModal = false;
-                    this.currentGuildId = null;
-                },
-
                 async loadBotProfile() {
                     this.botProfileLoading = true;
                     try {
@@ -820,17 +905,6 @@
                 },
 
                 // Activity Management Functions
-                openActivityModal() {
-                    this.showActivityModal = true;
-                    this.activityMessage = { text: '', type: '' };
-                },
-
-                closeActivityModal() {
-                    this.showActivityModal = false;
-                    this.newActivityStatus = '';
-                    this.activityMessage = { text: '', type: '' };
-                },
-
                 async performActivityAction(endpoint, activityType, status, successMessage, statusField) {
                     await this.runAction({
                         saving: 'activitySaving',
