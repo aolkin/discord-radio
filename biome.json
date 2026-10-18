@@ -4,6 +4,7 @@
     "includes": [
       "static/**/*.js",
       "static/**/*.css",
+      "static/**/*.html",
       "!static/alpine.min.js"
     ]
   },
@@ -19,6 +20,11 @@
     "globals": [
       "Alpine"
     ]
+  },
+  "html": {
+    "formatter": {
+      "enabled": true
+    }
   },
   "linter": {
     "rules": {
