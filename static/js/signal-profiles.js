@@ -89,11 +89,13 @@ export function signalProfiles() {
             this.profileEditorLoading = true;
             try {
                 const response = await apiRequest(`/api/profiles/${encodeURIComponent(name)}`, {
-                    errorMessage: (response) => `HTTP ${response.status}`,
+                    errorMessage: (failed) => `HTTP ${failed.status}`,
                 });
                 const profile = await response.json();
                 for (const field of this.profileFields) {
-                    if (profile[field.key] === null) profile[field.key] = '';
+                    if (profile[field.key] === null) {
+                        profile[field.key] = '';
+                    }
                 }
                 this.profileForm = profile;
             } catch (error) {
@@ -113,7 +115,9 @@ export function signalProfiles() {
 
             const { name: _, ...body } = this.profileForm;
             for (const field of this.profileFields) {
-                if (field.optional && body[field.key] === '') body[field.key] = null;
+                if (field.optional && body[field.key] === '') {
+                    body[field.key] = null;
+                }
             }
 
             this.profileEditorSaving = true;
@@ -142,7 +146,7 @@ export function signalProfiles() {
             };
 
             if (body.profile && this.profileFadeDuration !== null && this.profileFadeDuration !== '') {
-                body.fade_duration = parseFloat(this.profileFadeDuration);
+                body.fade_duration = Number.parseFloat(this.profileFadeDuration);
             }
 
             await this.runAction({

@@ -39,7 +39,7 @@ export function activity() {
                         method: 'POST',
                         body: {
                             activity_type: activityType,
-                            status: status,
+                            status,
                         },
                     }),
                 onSuccess: () => {

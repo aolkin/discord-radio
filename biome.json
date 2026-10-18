@@ -1,13 +1,36 @@
 {
-    "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
-    "files": {
-        "includes": ["static/**/*.js", "static/**/*.css", "!static/alpine.min.js"]
-    },
+  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+  "files": {
+    "includes": [
+      "static/**/*.js",
+      "static/**/*.css",
+      "!static/alpine.min.js"
+    ]
+  },
+  "formatter": {
+    "indentStyle": "space",
+    "indentWidth": 4,
+    "lineWidth": 120
+  },
+  "javascript": {
     "formatter": {
-        "indentStyle": "space",
-        "indentWidth": 4,
-        "lineWidth": 120,
-        "includes": ["**", "!static/index.css", "!static/logs.css"]
+      "quoteStyle": "single"
     },
-    "javascript": { "formatter": { "quoteStyle": "single" } }
+    "globals": [
+      "Alpine"
+    ]
+  },
+  "linter": {
+    "rules": {
+      "correctness": "error",
+      "suspicious": {
+        "noShadow": "error"
+      },
+      "style": {
+        "useBlockStatements": "error",
+        "useConsistentObjectDefinitions": "error",
+        "useNumberNamespace": "error"
+      }
+    }
+  }
 }

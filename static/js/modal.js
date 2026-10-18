@@ -36,7 +36,9 @@ document.addEventListener('alpine:init', () => {
 
         const element = (tag, attributes = {}, className = '') => {
             const node = document.createElement(tag);
-            if (className) node.className = className;
+            if (className) {
+                node.className = className;
+            }
             for (const [name, value] of Object.entries(attributes)) {
                 node.setAttribute(name, value);
             }
@@ -87,7 +89,9 @@ document.addEventListener('alpine:init', () => {
         }
         if (config.submit) {
             const form = element('form', { 'x-on:submit.prevent': config.submit });
-            if (config.loading) form.setAttribute('x-show', `!${config.loading}`);
+            if (config.loading) {
+                form.setAttribute('x-show', `!${config.loading}`);
+            }
             const cancel = element('button', { type: 'button', 'x-on:click': close }, 'btn btn-secondary');
             cancel.textContent = config.cancelLabel || 'Cancel';
             const disabled = config.disabledWhen ? `${config.saving} || (${config.disabledWhen})` : config.saving;
@@ -115,7 +119,9 @@ export const modalMethods = {
     // Both reset the modal's fields.
     openModal(name, guildId) {
         const modal = modals[name];
-        if (modal.perGuild) this.currentGuildId = guildId;
+        if (modal.perGuild) {
+            this.currentGuildId = guildId;
+        }
         Object.assign(this, modal.reset());
         setFlag(this, modal.flag, true);
     },
@@ -123,7 +129,9 @@ export const modalMethods = {
     closeModal(name) {
         const modal = modals[name];
         setFlag(this, modal.flag, false);
-        if (modal.perGuild) this.currentGuildId = null;
+        if (modal.perGuild) {
+            this.currentGuildId = null;
+        }
         Object.assign(this, modal.reset());
     },
 };

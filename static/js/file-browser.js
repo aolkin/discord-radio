@@ -56,7 +56,9 @@ export function fileBrowser() {
         selectFileBrowserEntry(value) {
             const onSelect = this.fileBrowserOnSelect;
             this.closeModal('fileBrowser');
-            if (onSelect) onSelect(value);
+            if (onSelect) {
+                onSelect(value);
+            }
         },
 
         fileBrowserKind() {
@@ -67,7 +69,7 @@ export function fileBrowser() {
             const names = this.fileBrowser.prefix.split('/').filter(Boolean);
             return names.map((name, index) => ({
                 name,
-                prefix: names.slice(0, index + 1).join('/') + '/',
+                prefix: `${names.slice(0, index + 1).join('/')}/`,
             }));
         },
 
@@ -150,7 +152,9 @@ export function fileBrowser() {
                 const xhr = new XMLHttpRequest();
                 xhr.open('POST', `/api/files/upload?prefix=${encodeURIComponent(prefix)}`);
                 xhr.upload.onprogress = (event) => {
-                    if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
+                    if (event.lengthComputable) {
+                        onProgress(Math.round((event.loaded / event.total) * 100));
+                    }
                 };
                 xhr.onload = () => {
                     if (xhr.status >= 200 && xhr.status < 300) {
@@ -179,7 +183,7 @@ export function fileBrowser() {
 
         formatDate(value) {
             const date = new Date(value);
-            return isNaN(date) ? value : date.toLocaleString();
+            return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
         },
     };
 }
