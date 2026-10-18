@@ -7,7 +7,7 @@ use serenity::model::id::{ChannelId, GuildId};
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::marker::PhantomData;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 
@@ -124,8 +124,8 @@ impl FileStore {
 
 #[async_trait]
 impl StateStore for FileStore {
-    fn base_path(&self) -> &Path {
-        &self.base_path
+    fn guild_logs_dir(&self, guild_id: u64) -> PathBuf {
+        crate::logging::guild_logs_dir(&self.base_path, guild_id)
     }
 
     async fn save_voice_channel(&self, guild_id: GuildId, channel_id: ChannelId) -> Result<()> {

@@ -1,6 +1,7 @@
 use super::*;
 use crate::logging::JsonLogger;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use tempfile::TempDir;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -93,28 +94,6 @@ async fn test_read_after() {
         let id = entry.content.get("id").unwrap().as_u64().unwrap();
         assert_eq!(id, i as u64);
     }
-}
-
-#[tokio::test]
-async fn test_validate_path() {
-    let temp_dir = TempDir::new().unwrap();
-    let allowed_dir = temp_dir.path();
-    let log_path = allowed_dir.join("logs").join("test.jsonl");
-
-    // Create the directory structure
-    std::fs::create_dir_all(allowed_dir.join("logs")).unwrap();
-
-    let reader = LogReader::new(log_path);
-
-    // Should succeed - path is within allowed directory
-    assert!(reader.validate_path(allowed_dir).is_ok());
-
-    // Test with a path outside the allowed directory
-    let outside_path = PathBuf::from("/tmp/outside.jsonl");
-    let outside_reader = LogReader::new(outside_path);
-
-    // Should fail - path is outside allowed directory
-    assert!(outside_reader.validate_path(allowed_dir).is_err());
 }
 
 #[tokio::test]

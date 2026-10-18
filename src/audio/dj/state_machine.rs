@@ -584,7 +584,7 @@ impl DJStateMachine {
         }
     }
 
-    async fn log_state_transition(&self, bot_state: &Data) -> bool {
+    async fn log_state_transition(&self, bot_state: &Data) {
         let state = self.state.read().await;
         let event_type = state.segment.state_name().to_string();
         let details = state.segment.loggable_properties();

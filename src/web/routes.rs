@@ -620,7 +620,7 @@ pub async fn set_bot_activity(
 // Log retrieval endpoints
 
 use crate::audio::tracks::get_or_create_track_manager;
-use crate::logging::{LogReader, guild_logs_dir};
+use crate::logging::LogReader;
 
 #[derive(Debug, Deserialize)]
 pub struct LogQueryParams {
@@ -658,15 +658,11 @@ pub async fn get_logs(
         }
     };
 
-    let log_path = guild_logs_dir(&bot_state.logs_base_path, guild_id.get()).join(log_filename);
-    let reader = LogReader::new(log_path.clone());
-
-    // Validate that the path is within the logs directory (security check)
-    let logs_dir = crate::logging::logs_dir(&bot_state.logs_base_path);
-    reader
-        .validate_path(&logs_dir)
-        .with_context(|| format!("Log {log_path:?} is outside the logs directory"))
-        .status(StatusCode::FORBIDDEN)?;
+    let log_path = bot_state
+        .state_store
+        .guild_logs_dir(guild_id.get())
+        .join(log_filename);
+    let reader = LogReader::new(log_path);
 
     let result = match (params.offset, params.direction.as_str()) {
         (None, _) => reader.tail(params.limit).await,

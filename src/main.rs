@@ -124,8 +124,7 @@ impl serenity::EventHandler for Handler {
                 );
 
                 // Log the join event
-                if let Err(e) = self
-                    .data
+                self.data
                     .log_member_activity(
                         guild_id.get(),
                         user_id.get(),
@@ -134,10 +133,7 @@ impl serenity::EventHandler for Handler {
                         "joined",
                         Some(channel_id.get()),
                     )
-                    .await
-                {
-                    tracing::error!("Failed to log member join: {}", e);
-                }
+                    .await;
             }
             (Some(old_channel), None) => {
                 tracing::info!(
@@ -148,8 +144,7 @@ impl serenity::EventHandler for Handler {
                 );
 
                 // Log the leave event
-                if let Err(e) = self
-                    .data
+                self.data
                     .log_member_activity(
                         guild_id.get(),
                         user_id.get(),
@@ -158,10 +153,7 @@ impl serenity::EventHandler for Handler {
                         "left",
                         Some(old_channel.get()),
                     )
-                    .await
-                {
-                    tracing::error!("Failed to log member leave: {}", e);
-                }
+                    .await;
             }
             (Some(old_channel), Some(new_channel)) if old_channel != new_channel => {
                 tracing::info!(
@@ -173,8 +165,7 @@ impl serenity::EventHandler for Handler {
                 );
 
                 // Log the move event
-                if let Err(e) = self
-                    .data
+                self.data
                     .log_member_activity(
                         guild_id.get(),
                         user_id.get(),
@@ -183,10 +174,7 @@ impl serenity::EventHandler for Handler {
                         "moved",
                         Some(new_channel.get()),
                     )
-                    .await
-                {
-                    tracing::error!("Failed to log member move: {}", e);
-                }
+                    .await;
             }
             _ => {}
         }

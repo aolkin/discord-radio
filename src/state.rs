@@ -6,7 +6,7 @@ use crate::audio::processing::processor::{AudioProcessor, ProcessorRef};
 use crate::audio::profiles::ProfileManager;
 use crate::audio::tracks::TrackManager;
 use crate::bucket::FileResolver;
-use crate::logging::{JsonLogger, guild_logs_dir};
+use crate::logging::JsonLogger;
 use crate::persistence::{DjSettingsStore, StateStore};
 use serde::Serialize;
 use serenity::all::{ChannelId, UserId};
@@ -14,7 +14,6 @@ use serenity::model::id::GuildId;
 use songbird::Call;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
-use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
@@ -30,7 +29,6 @@ pub struct BotState {
     pub profile_manager: ProfileManager,
     pub dj_managers: RwLock<HashMap<GuildId, Arc<Mutex<DJManager>>>>,
     pub activity_manager: ActivityManager,
-    pub logs_base_path: PathBuf,
     pub file_resolver: FileResolver,
     pub bot_user_id: UserId,
 }
@@ -45,9 +43,6 @@ impl BotState {
     ) -> Self {
         let voice_connections = Arc::new(RwLock::new(HashMap::new()));
 
-        // Get logs base path from state store path
-        let logs_base_path = state_store.base_path().to_path_buf();
-
         Self {
             voice_connections: voice_connections.clone(),
             track_managers: RwLock::new(HashMap::new()),
@@ -58,7 +53,6 @@ impl BotState {
             profile_manager,
             dj_managers: RwLock::new(HashMap::new()),
             activity_manager: ActivityManager::new(state_store),
-            logs_base_path,
             file_resolver,
             bot_user_id,
         }
@@ -127,7 +121,7 @@ impl BotState {
         nickname: Option<&str>,
         action: &str,
         channel_id: Option<u64>,
-    ) -> anyhow::Result<()> {
+    ) {
         #[derive(Serialize)]
         struct MemberActivityEntry {
             timestamp: String,
@@ -140,7 +134,10 @@ impl BotState {
             channel_id: Option<u64>,
         }
 
-        let log_path = guild_logs_dir(&self.logs_base_path, guild_id).join("members.jsonl");
+        let log_path = self
+            .state_store
+            .guild_logs_dir(guild_id)
+            .join("members.jsonl");
         let logger = JsonLogger::new(log_path);
 
         let entry = MemberActivityEntry {
@@ -152,7 +149,9 @@ impl BotState {
             channel_id,
         };
 
-        logger.log(&entry).await
+        if let Err(e) = logger.log(&entry).await {
+            tracing::error!("{e:#}");
+        }
     }
 
     /// Log a DJ state transition event
@@ -161,7 +160,7 @@ impl BotState {
         guild_id: u64,
         event_type: String,
         details: serde_json::Value,
-    ) -> bool {
+    ) {
         #[derive(Serialize)]
         struct DJActivityEntry {
             timestamp: String,
@@ -169,7 +168,7 @@ impl BotState {
             details: serde_json::Value,
         }
 
-        let log_path = guild_logs_dir(&self.logs_base_path, guild_id).join("dj.jsonl");
+        let log_path = self.state_store.guild_logs_dir(guild_id).join("dj.jsonl");
         let logger = JsonLogger::new(log_path);
 
         let entry = DJActivityEntry {
@@ -178,13 +177,9 @@ impl BotState {
             details,
         };
 
-        logger
-            .log(&entry)
-            .await
-            .inspect_err(|e| {
-                tracing::error!("Failed to log DJ state transition: {}", e);
-            })
-            .is_ok()
+        if let Err(e) = logger.log(&entry).await {
+            tracing::error!("{e:#}");
+        }
     }
 }
 

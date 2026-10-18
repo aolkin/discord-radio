@@ -14,12 +14,11 @@ use anyhow::Result;
 use async_trait::async_trait;
 use serenity::model::id::{ChannelId, GuildId};
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::PathBuf;
 
 #[async_trait]
 pub trait StateStore: Send + Sync {
-    /// Get the base path for this state store
-    fn base_path(&self) -> &Path;
+    fn guild_logs_dir(&self, guild_id: u64) -> PathBuf;
 
     async fn save_voice_channel(&self, guild_id: GuildId, channel_id: ChannelId) -> Result<()>;
     async fn load_voice_channels(&self) -> Result<HashMap<GuildId, ChannelId>>;

@@ -1,7 +1,7 @@
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use std::io::SeekFrom;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, AsyncSeekExt, BufReader};
 
@@ -49,32 +49,6 @@ impl LogReader {
     /// Create a new LogReader for the specified file
     pub fn new(file_path: PathBuf) -> Self {
         Self { file_path }
-    }
-
-    /// Validate that the file path is within an allowed directory (security check)
-    pub fn validate_path(&self, allowed_dir: &Path) -> Result<(), std::io::Error> {
-        let canonical_file = self.file_path.canonicalize().or_else(|_| {
-            // If file doesn't exist yet, check the parent directory
-            if let Some(parent) = self.file_path.parent() {
-                parent.canonicalize()
-            } else {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    "Invalid path",
-                ))
-            }
-        })?;
-
-        let canonical_allowed = allowed_dir.canonicalize()?;
-
-        if canonical_file.starts_with(canonical_allowed) {
-            Ok(())
-        } else {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::PermissionDenied,
-                "Path outside allowed directory",
-            ))
-        }
     }
 
     /// Helper function to return empty result
