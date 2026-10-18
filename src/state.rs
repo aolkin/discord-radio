@@ -16,18 +16,22 @@ use serenity::model::id::GuildId;
 use songbird::Songbird;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 use tokio::sync::{Mutex, RwLock};
 
 pub type Data = &'static BotState;
 
+pub struct GuildRadio {
+    pub audio_processor: ProcessorRef,
+    pub track_manager: Arc<Mutex<TrackManager>>,
+}
+
 pub struct BotState {
     pub songbird: Arc<Songbird>,
-    pub track_managers: RwLock<HashMap<GuildId, Arc<Mutex<TrackManager>>>>,
     pub state_store: Arc<dyn StateStore>,
     pub dj_settings: DjSettingsStore,
     pub duration_cache: DurationCache,
-    pub audio_processors: RwLock<HashMap<GuildId, Arc<RwLock<AudioProcessor>>>>,
+    pub guilds: StdMutex<HashMap<GuildId, Arc<GuildRadio>>>,
     pub profile_manager: JsonRegistry<SignalProfile>,
     pub dj_config_manager: JsonRegistry<DJConfig>,
     pub dj_managers: RwLock<HashMap<GuildId, Arc<Mutex<DJManager>>>>,
@@ -48,11 +52,10 @@ impl BotState {
     ) -> Self {
         Self {
             songbird,
-            track_managers: RwLock::new(HashMap::new()),
             duration_cache: DurationCache::new(file_resolver.clone()),
             state_store: state_store.clone(),
             dj_settings,
-            audio_processors: RwLock::new(HashMap::new()),
+            guilds: StdMutex::new(HashMap::new()),
             profile_manager,
             dj_config_manager,
             dj_managers: RwLock::new(HashMap::new()),
@@ -62,22 +65,35 @@ impl BotState {
         }
     }
 
-    pub async fn audio_processor(&self, guild_id: GuildId) -> ProcessorRef {
-        let processors = self.audio_processors.read().await;
-        if let Some(processor) = processors.get(&guild_id) {
-            return processor.clone();
-        }
-        drop(processors);
 
-        let mut processors = self.audio_processors.write().await;
-        // Double-check in case another task created it while we were waiting
-        processors
+    pub fn guild(&self, guild_id: GuildId) -> Option<Arc<GuildRadio>> {
+        self.guilds.lock().unwrap().get(&guild_id).cloned()
+    }
+
+    pub fn guild_or_create(&'static self, guild_id: GuildId) -> Arc<GuildRadio> {
+        self.guilds
+            .lock()
+            .unwrap()
             .entry(guild_id)
             .or_insert_with(|| {
-                let initial_profile = self.profile_manager.default_profile();
-                Arc::new(RwLock::new(AudioProcessor::new(initial_profile)))
+                let audio_processor = Arc::new(RwLock::new(AudioProcessor::new(
+                    self.profile_manager.default_profile(),
+                )));
+                let track_manager = Arc::new(Mutex::new(TrackManager::new(
+                    guild_id,
+                    self,
+                    audio_processor.clone(),
+                )));
+                Arc::new(GuildRadio {
+                    audio_processor,
+                    track_manager,
+                })
             })
             .clone()
+    }
+
+    pub async fn audio_processor(&'static self, guild_id: GuildId) -> ProcessorRef {
+        self.guild_or_create(guild_id).audio_processor.clone()
     }
 
     pub async fn dj_state(&self, guild_id: GuildId) -> Option<Arc<RwLock<DJState>>> {

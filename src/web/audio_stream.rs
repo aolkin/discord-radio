@@ -148,14 +148,11 @@ pub async fn audio_stream(
     Path(guild_id): Path<GuildId>,
 ) -> Result<Response, ApiError> {
     // Get the audio processor for this guild
-    let processors = bot_state.audio_processors.read().await;
-    let processor = processors
-        .get(&guild_id)
+    let guild = bot_state
+        .guild(guild_id)
         .ok_or_else(|| ApiError::not_found(format!("No audio stream for guild {guild_id}")))?;
 
-    let receiver = processor.read().await.stream_opus();
-
-    drop(processors);
+    let receiver = guild.audio_processor.read().await.stream_opus();
 
     // Create the streaming response with Ogg-wrapped Opus packets
     let stream = OpusOggStream::new(receiver);

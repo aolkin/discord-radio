@@ -113,14 +113,13 @@ impl TrackManager {
                 StopReason::Lost
             });
             tracing::debug!("Track '{name}' left the mixer in guild {guild_id}: {reason:?}");
-            let manager_arc = bot_state
-                .track_managers
-                .read()
-                .await
-                .get(&guild_id)
-                .cloned();
-            if let Some(manager_arc) = manager_arc {
-                manager_arc.lock().await.remove_handle(ended_track.id).await;
+            if let Some(guild) = bot_state.guild(guild_id) {
+                guild
+                    .track_manager
+                    .lock()
+                    .await
+                    .remove_handle(ended_track.id)
+                    .await;
             }
         });
 
@@ -331,18 +330,5 @@ pub async fn get_or_create_track_manager(
     bot_state: &Data,
     guild_id: GuildId,
 ) -> Arc<tokio::sync::Mutex<TrackManager>> {
-    if let Some(manager) = bot_state.track_managers.read().await.get(&guild_id) {
-        return manager.clone();
-    }
-
-    let processor = bot_state.audio_processor(guild_id).await;
-
-    let mut track_managers = bot_state.track_managers.write().await;
-    track_managers
-        .entry(guild_id)
-        .or_insert_with(|| {
-            let manager = TrackManager::new(guild_id, bot_state, processor);
-            Arc::new(tokio::sync::Mutex::new(manager))
-        })
-        .clone()
+    bot_state.guild_or_create(guild_id).track_manager.clone()
 }

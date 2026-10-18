@@ -446,13 +446,8 @@ pub async fn change_track_state(
 pub async fn get_current_tracks(ctx: Context<'_>) -> anyhow::Result<()> {
     let guild_id = require_guild(ctx)?;
 
-    let track_managers = ctx.data().track_managers.read().await;
-
-    let tracks = match track_managers.get(&guild_id) {
-        Some(manager_arc) => {
-            let manager = manager_arc.lock().await;
-            manager.get_all_tracks().await
-        }
+    let tracks = match ctx.data().guild(guild_id) {
+        Some(guild) => guild.track_manager.lock().await.get_all_tracks().await,
         None => Vec::new(),
     };
 

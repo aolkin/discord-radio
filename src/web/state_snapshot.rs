@@ -53,13 +53,8 @@ impl BotSnapshot {
     pub async fn capture(bot_state: &Data) -> Self {
         let mut guilds = Vec::new();
 
-        let mut guild_ids: Vec<GuildId> = bot_state
-            .audio_processors
-            .read()
-            .await
-            .keys()
-            .copied()
-            .collect();
+        let mut guild_ids: Vec<GuildId> =
+            bot_state.guilds.lock().unwrap().keys().copied().collect();
         guild_ids.sort_unstable();
 
         for guild_id in guild_ids {
@@ -80,10 +75,9 @@ impl BotSnapshot {
             };
 
             // Get track info
-            let track_managers = bot_state.track_managers.read().await;
-            if let Some(manager_arc) = track_managers.get(&guild_id) {
-                let manager = manager_arc.lock().await;
-                let track_snapshots = manager.get_all_tracks().await;
+            let guild = bot_state.guild(guild_id);
+            if let Some(guild) = &guild {
+                let track_snapshots = guild.track_manager.lock().await.get_all_tracks().await;
                 guild_state.tracks = track_snapshots
                     .iter()
                     .map(|t| TrackInfo {
@@ -96,7 +90,6 @@ impl BotSnapshot {
                     })
                     .collect();
             }
-            drop(track_managers);
 
             // Get DJ state
             if let Some(state_arc) = bot_state.dj_state(guild_id).await {
@@ -105,9 +98,8 @@ impl BotSnapshot {
             }
 
             // Get audio profile info
-            let audio_processors = bot_state.audio_processors.read().await;
-            if let Some(processor_arc) = audio_processors.get(&guild_id) {
-                let processor = processor_arc.read().await;
+            if let Some(guild) = &guild {
+                let processor = guild.audio_processor.read().await;
                 let profile_name = processor.current_profile_name().to_string();
 
                 let source = if let Some(state_arc) = bot_state.dj_state(guild_id).await {
@@ -122,7 +114,6 @@ impl BotSnapshot {
                     source,
                 });
             }
-            drop(audio_processors);
 
             guilds.push(guild_state);
         }
