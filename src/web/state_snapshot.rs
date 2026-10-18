@@ -132,10 +132,10 @@ impl BotSnapshot {
         // Get current bot activity
         let current_activity = bot_state.activity_manager.current().await.map(|entry| {
             let activity_type = match entry.activity_type {
-                crate::voice_status::ActivityType::Listening => "listening",
-                crate::voice_status::ActivityType::Playing => "playing",
-                crate::voice_status::ActivityType::Streaming => "streaming",
-                crate::voice_status::ActivityType::Custom => "custom",
+                crate::activity::ActivityType::Listening => "listening",
+                crate::activity::ActivityType::Playing => "playing",
+                crate::activity::ActivityType::Streaming => "streaming",
+                crate::activity::ActivityType::Custom => "custom",
             };
             CurrentActivity {
                 activity_type: activity_type.to_string(),

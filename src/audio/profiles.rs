@@ -1,9 +1,7 @@
 use crate::bucket::FileResolver;
 use anyhow::Context;
-use futures_util::{StreamExt, stream};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::Path;
 use std::sync::RwLock;
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -76,8 +74,6 @@ impl SignalProfile {
     }
 }
 
-const REMOTE_PREFIX: &str = "profiles/";
-
 #[derive(Debug, thiserror::Error)]
 pub enum ProfileStorageError {
     #[error("profile names may only contain letters, digits, '-' and '_'")]
@@ -90,61 +86,31 @@ pub enum ProfileStorageError {
 
 pub struct ProfileManager {
     profiles: RwLock<HashMap<String, SignalProfile>>,
+    profiles_path: String,
     file_resolver: FileResolver,
 }
 
 impl ProfileManager {
-    /// Loads every profile in `profiles_dir` and under `profiles/` in object
+    /// Loads every profile under `profiles_path` locally and in object
     /// storage. A profile in object storage replaces a local profile of the
     /// same name.
-    pub async fn from_storage(profiles_dir: &Path, file_resolver: FileResolver) -> Self {
+    pub async fn from_storage(profiles_path: String, file_resolver: FileResolver) -> Self {
         let mut profiles = HashMap::new();
 
-        let local_paths = match std::fs::read_dir(profiles_dir) {
-            Ok(entries) => entries
-                .filter_map(Result::ok)
-                .map(|entry| entry.path())
-                .collect(),
-            Err(e) => {
-                tracing::warn!(
-                    "Failed to read signal profiles from {}: {e}",
-                    profiles_dir.display()
-                );
-                Vec::new()
-            }
-        };
-        let local = local_paths
-            .into_iter()
-            .filter(|path| path.extension().and_then(|s| s.to_str()) == Some("json"))
-            .map(|path| {
-                let bytes = std::fs::read(&path).context("reading file");
-                (path.display().to_string(), bytes)
-            });
-
-        let remote: Vec<_> = match file_resolver.bucket() {
-            Ok(bucket) => {
-                stream::iter(bucket.list_remote(REMOTE_PREFIX).await)
-                    .filter(|key| std::future::ready(key.ends_with(".json")))
-                    .then(|key| async {
-                        let bytes = bucket.fetch_bytes(&key).await.context("fetching");
-                        (key, bytes)
-                    })
-                    .collect()
-                    .await
-            }
-            Err(_) => Vec::new(),
-        };
-
-        for (source, bytes) in local.chain(remote) {
-            let parsed = bytes.and_then(|bytes| {
-                serde_json::from_slice::<SignalProfile>(&bytes).context("parsing JSON")
-            });
+        let filenames = file_resolver.list(&profiles_path).await;
+        for filename in filenames.iter().filter(|f| f.ends_with(".json")) {
+            let parsed = file_resolver
+                .resolve_contents(filename)
+                .await
+                .and_then(|bytes| {
+                    serde_json::from_slice::<SignalProfile>(&bytes).context("parsing JSON")
+                });
             match parsed {
                 Ok(profile) => {
-                    tracing::info!("Loaded signal profile {} from {source}", profile.name);
+                    tracing::info!("Loaded signal profile {} from {filename}", profile.name);
                     profiles.insert(profile.name.clone(), profile);
                 }
-                Err(e) => tracing::warn!("Failed to load signal profile from {source}: {e:#}"),
+                Err(e) => tracing::warn!("Failed to load signal profile from {filename}: {e:#}"),
             }
         }
 
@@ -156,8 +122,16 @@ impl ProfileManager {
 
         Self {
             profiles: RwLock::new(profiles),
+            profiles_path,
             file_resolver,
         }
+    }
+
+    fn remote_key(&self, name: &str) -> Result<String, ProfileStorageError> {
+        if !is_valid_name(name) {
+            return Err(ProfileStorageError::InvalidName);
+        }
+        Ok(format!("{}{name}.json", self.profiles_path))
     }
 
     pub fn get_profile(&self, name: &str) -> Option<SignalProfile> {
@@ -197,7 +171,7 @@ impl ProfileManager {
     /// Writes `profile` to object storage under its name, replacing any
     /// profile of the same name.
     pub async fn save(&self, profile: SignalProfile) -> Result<(), ProfileStorageError> {
-        let key = remote_key(&profile.name)?;
+        let key = self.remote_key(&profile.name)?;
         let bytes = serde_json::to_vec_pretty(&profile).expect("a SignalProfile always serializes");
         self.file_resolver
             .bucket()?
@@ -214,7 +188,7 @@ impl ProfileManager {
     /// Re-fetches the profile named `name` from object storage and replaces
     /// the in-memory copy with it.
     pub async fn refresh(&self, name: &str) -> Result<SignalProfile, ProfileStorageError> {
-        let key = remote_key(name)?;
+        let key = self.remote_key(name)?;
         let bytes = self.file_resolver.bucket()?.fetch_bytes(&key).await?;
         let profile: SignalProfile = serde_json::from_slice(&bytes)?;
         self.profiles
@@ -230,11 +204,4 @@ pub fn is_valid_name(name: &str) -> bool {
         && name
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-}
-
-fn remote_key(name: &str) -> Result<String, ProfileStorageError> {
-    if !is_valid_name(name) {
-        return Err(ProfileStorageError::InvalidName);
-    }
-    Ok(format!("{REMOTE_PREFIX}{name}.json"))
 }

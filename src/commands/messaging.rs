@@ -91,10 +91,10 @@ pub async fn set_status(
 
     // Parse the activity type
     let activity_type_enum = match activity_type.as_deref() {
-        Some("listening") => crate::voice_status::ActivityType::Listening,
-        Some("playing") => crate::voice_status::ActivityType::Playing,
-        Some("streaming") => crate::voice_status::ActivityType::Streaming,
-        Some("custom") | None => crate::voice_status::ActivityType::Custom,
+        Some("listening") => crate::activity::ActivityType::Listening,
+        Some("playing") => crate::activity::ActivityType::Playing,
+        Some("streaming") => crate::activity::ActivityType::Streaming,
+        Some("custom") | None => crate::activity::ActivityType::Custom,
         Some(invalid) => {
             ctx.say(format!(
                 "Invalid activity type '{}'. Valid types: listening, playing, streaming, custom",
@@ -105,7 +105,6 @@ pub async fn set_status(
         }
     };
 
-    // Clear the stack and set the new activity
     ctx.data()
         .activity_manager
         .set_activity(activity_type_enum, status.clone())

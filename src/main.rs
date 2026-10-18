@@ -1,3 +1,4 @@
+mod activity;
 mod audio;
 mod bot_profile;
 mod bucket;
@@ -9,11 +10,10 @@ mod persistence;
 mod shutdown;
 mod startup;
 mod state;
-mod voice_status;
 mod web;
 
 use crate::audio::profiles::ProfileManager;
-use crate::state::{BotState, Data, signal_profiles_dir};
+use crate::state::{BotState, Data};
 use anyhow::Context;
 use poise::serenity_prelude::{self as serenity, GatewayIntents};
 use songbird::SerenityInit;
@@ -317,11 +317,11 @@ async fn main() -> anyhow::Result<()> {
     )?
     .id;
 
-    let profile_manager = ProfileManager::from_storage(
-        &signal_profiles_dir(file_resolver.content_path()),
-        file_resolver.clone(),
-    )
-    .await;
+    let signal_profiles_path =
+        std::env::var("SIGNAL_PROFILES_PATH").unwrap_or_else(|_| "audio_profiles/".to_string());
+    tracing::info!("Using signal profiles path: {}", signal_profiles_path);
+    let profile_manager =
+        ProfileManager::from_storage(signal_profiles_path, file_resolver.clone()).await;
 
     let data: Data = Box::leak(Box::new(BotState::new(
         file_resolver,

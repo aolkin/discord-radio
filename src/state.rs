@@ -1,3 +1,4 @@
+use crate::activity::ActivityManager;
 use crate::audio::dj::manager::{DJCommand, DJManager};
 use crate::audio::dj::state_machine::DJState;
 use crate::audio::duration::DurationCache;
@@ -7,7 +8,6 @@ use crate::audio::tracks::TrackManager;
 use crate::bucket::FileResolver;
 use crate::logging::{JsonLogger, guild_logs_dir};
 use crate::persistence::{DjSettingsStore, StateStore};
-use crate::voice_status::ActivityManager;
 use serde::Serialize;
 use serenity::all::{ChannelId, UserId};
 use serenity::model::id::GuildId;
@@ -17,10 +17,6 @@ use std::fmt::{Debug, Formatter};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
-
-pub fn signal_profiles_dir(content_path: &str) -> PathBuf {
-    PathBuf::from(content_path).join("audio_profiles")
-}
 
 pub type Data = &'static BotState;
 

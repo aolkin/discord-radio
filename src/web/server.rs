@@ -91,8 +91,6 @@ pub async fn run_web_server(bot_state: Data, port: u16) -> anyhow::Result<()> {
         )
         .route("/api/files/folders", post(routes::create_folder))
         .route("/api/activity/set", post(routes::set_bot_activity))
-        .route("/api/activity/push", post(routes::push_bot_activity))
-        .route("/api/activity/remove", post(routes::remove_bot_activity))
         .route(
             "/api/guilds/{guild_id}/audio-stream",
             get(audio_stream::audio_stream),
