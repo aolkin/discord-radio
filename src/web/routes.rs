@@ -43,6 +43,54 @@ pub async fn static_file(Path(path): Path<String>) -> Result<impl IntoResponse, 
             "text/javascript; charset=utf-8",
             include_str!("../../static/index.js"),
         ),
+        "js/activity.js" => (
+            "text/javascript; charset=utf-8",
+            include_str!("../../static/js/activity.js"),
+        ),
+        "js/api.js" => (
+            "text/javascript; charset=utf-8",
+            include_str!("../../static/js/api.js"),
+        ),
+        "js/bot-profile.js" => (
+            "text/javascript; charset=utf-8",
+            include_str!("../../static/js/bot-profile.js"),
+        ),
+        "js/channels.js" => (
+            "text/javascript; charset=utf-8",
+            include_str!("../../static/js/channels.js"),
+        ),
+        "js/connection.js" => (
+            "text/javascript; charset=utf-8",
+            include_str!("../../static/js/connection.js"),
+        ),
+        "js/dj-config.js" => (
+            "text/javascript; charset=utf-8",
+            include_str!("../../static/js/dj-config.js"),
+        ),
+        "js/dj.js" => (
+            "text/javascript; charset=utf-8",
+            include_str!("../../static/js/dj.js"),
+        ),
+        "js/file-browser.js" => (
+            "text/javascript; charset=utf-8",
+            include_str!("../../static/js/file-browser.js"),
+        ),
+        "js/modal.js" => (
+            "text/javascript; charset=utf-8",
+            include_str!("../../static/js/modal.js"),
+        ),
+        "js/run-action.js" => (
+            "text/javascript; charset=utf-8",
+            include_str!("../../static/js/run-action.js"),
+        ),
+        "js/signal-profiles.js" => (
+            "text/javascript; charset=utf-8",
+            include_str!("../../static/js/signal-profiles.js"),
+        ),
+        "js/tracks.js" => (
+            "text/javascript; charset=utf-8",
+            include_str!("../../static/js/tracks.js"),
+        ),
         _ => return Err(StatusCode::NOT_FOUND),
     };
     Ok(([(CONTENT_TYPE, content_type)], body))
