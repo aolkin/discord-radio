@@ -124,19 +124,18 @@ impl serenity::EventHandler for Handler {
                 );
 
                 // Log the join event
-                if let Err(e) = self
-                    .data
-                    .log_member_activity(
-                        guild_id.get(),
-                        user_id.get(),
-                        &username,
-                        nickname.as_deref(),
-                        "joined",
-                        Some(channel_id.get()),
-                    )
-                    .await
+                if let Err(e) = crate::logging::log_member_activity(
+                    self.data.state_store.base_path(),
+                    guild_id.get(),
+                    user_id.get(),
+                    &username,
+                    nickname.as_deref(),
+                    "joined",
+                    Some(channel_id.get()),
+                )
+                .await
                 {
-                    tracing::error!("Failed to log member join: {}", e);
+                    tracing::error!("{e:#}");
                 }
             }
             (Some(old_channel), None) => {
@@ -148,19 +147,18 @@ impl serenity::EventHandler for Handler {
                 );
 
                 // Log the leave event
-                if let Err(e) = self
-                    .data
-                    .log_member_activity(
-                        guild_id.get(),
-                        user_id.get(),
-                        &username,
-                        nickname.as_deref(),
-                        "left",
-                        Some(old_channel.get()),
-                    )
-                    .await
+                if let Err(e) = crate::logging::log_member_activity(
+                    self.data.state_store.base_path(),
+                    guild_id.get(),
+                    user_id.get(),
+                    &username,
+                    nickname.as_deref(),
+                    "left",
+                    Some(old_channel.get()),
+                )
+                .await
                 {
-                    tracing::error!("Failed to log member leave: {}", e);
+                    tracing::error!("{e:#}");
                 }
             }
             (Some(old_channel), Some(new_channel)) if old_channel != new_channel => {
@@ -173,19 +171,18 @@ impl serenity::EventHandler for Handler {
                 );
 
                 // Log the move event
-                if let Err(e) = self
-                    .data
-                    .log_member_activity(
-                        guild_id.get(),
-                        user_id.get(),
-                        &username,
-                        nickname.as_deref(),
-                        "moved",
-                        Some(new_channel.get()),
-                    )
-                    .await
+                if let Err(e) = crate::logging::log_member_activity(
+                    self.data.state_store.base_path(),
+                    guild_id.get(),
+                    user_id.get(),
+                    &username,
+                    nickname.as_deref(),
+                    "moved",
+                    Some(new_channel.get()),
+                )
+                .await
                 {
-                    tracing::error!("Failed to log member move: {}", e);
+                    tracing::error!("{e:#}");
                 }
             }
             _ => {}

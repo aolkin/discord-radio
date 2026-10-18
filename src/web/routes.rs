@@ -854,11 +854,12 @@ pub async fn get_logs(
         }
     };
 
-    let log_path = guild_logs_dir(&bot_state.logs_base_path, guild_id.get()).join(log_filename);
+    let log_path =
+        guild_logs_dir(bot_state.state_store.base_path(), guild_id.get()).join(log_filename);
     let reader = LogReader::new(log_path.clone());
 
     // Validate that the path is within the logs directory (security check)
-    let logs_dir = crate::logging::logs_dir(&bot_state.logs_base_path);
+    let logs_dir = crate::logging::logs_dir(bot_state.state_store.base_path());
     reader
         .validate_path(&logs_dir)
         .with_context(|| format!("Log {log_path:?} is outside the logs directory"))
