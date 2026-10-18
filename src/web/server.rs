@@ -41,6 +41,7 @@ pub async fn run_web_server(bot_state: Data, port: u16) -> anyhow::Result<()> {
     let app = Router::new()
         .route("/", get(routes::index))
         .route("/logs.html", get(routes::logs))
+        .route("/static/{*path}", get(routes::static_file))
         .route("/api/status", get(routes::get_status))
         .route("/api/health", get(routes::health))
         .route(
