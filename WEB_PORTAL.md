@@ -56,25 +56,6 @@ When the bot is in a guild's voice channel, you can control that guild's DJ dire
 
 - **Play Track**: Force the DJ to play a chosen audio file now, with optional volume, start position, and duration
 
-### DJ Config Overrides
-
-Customize DJ behavior by overriding configuration values from the web portal:
-
-- **Hex Messages**: Add, edit, or remove hex messages that the DJ can play
-  - Set custom text, weight, signal profile, loop count, and announcements
-  - Enable/disable the override to switch between custom and default messages
-  
-- **Hex Message Announcements**: Manage announcement text that can be used with hex messages
-  - Add or remove custom announcements
-  - Enable/disable the override independently
-  
-- **State Weights**: Adjust the probability of different DJ states
-  - View default weights from the configuration file
-  - Set custom weights for Track, Hex Message, and Noise states
-  - Enable/disable the override to switch between custom and default weights
-
-**Note**: All override changes are persisted to storage and take effect the next time the DJ starts.
-
 ### Audio Track Management
 
 Control audio tracks for any guild through the "Manage Tracks" button:
@@ -129,12 +110,4 @@ Each guild card's Bot Profile button opens the bot's current nickname, avatar an
 - `GET /api/files` - Browse object storage one folder level at a time. `?prefix=` selects the folder; returns `{"prefix", "folders", "files"}`, where `folders` are the sub-folder prefixes and each file has `key`, `size` and `last_modified`. Returns 503 when object storage is not configured
 - `POST /api/files/upload` - Upload a file to object storage as `{prefix}{filename}`. `?prefix=` must be a folder under `tracks/` or `images/`. The body is `multipart/form-data` with the file in a `file` field, at most 100 MiB. Under `tracks/` it must be .mp3, .ogg or .wav at 48kHz; under `images/` it must be .png, .jpg or .gif. Returns `{"key"}`; 400 for a bad prefix, name or type, 422 for a wrong sample rate or undecodable audio file, 503 when object storage is not configured
 - `POST /api/files/folders` - Create a folder under `tracks/` or `images/` in object storage (`{"prefix": "tracks/", "name": "my-folder"}`). The name may contain only letters, digits, `-` and `_`. Returns `{"key"}` of the folder marker
-- `GET /api/dj-config/overrides` - Get all DJ config overrides (hex messages, announcements, state weights)
-- `GET /api/dj-config/default-state-weights` - Get default state weights from config file
-- `POST /api/dj-config/overrides/hex-messages` - Add or update a hex message override
-- `DELETE /api/dj-config/overrides/hex-messages/{index}` - Delete a hex message override
-- `POST /api/dj-config/overrides/announcements` - Add or update an announcement override
-- `DELETE /api/dj-config/overrides/announcements/{index}` - Delete an announcement override
-- `POST /api/dj-config/overrides/state-weights` - Set state weights override
-- `POST /api/dj-config/overrides/toggle` - Enable/disable a specific override category
 - `GET /ws` - WebSocket endpoint for live updates (includes version tracking)
