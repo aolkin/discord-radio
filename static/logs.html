@@ -59,7 +59,7 @@
         document.getElementById('logInfo').textContent = `Guild: ${guildId}`;
 
         async function loadLogs(offset = null, direction = 'backward') {
-            const limit = parseInt(document.getElementById('limitInput').value) || 50;
+            const limit = Number.parseInt(document.getElementById('limitInput').value, 10) || 50;
 
             document.getElementById('loadingState').style.display = 'block';
             document.getElementById('errorState').style.display = 'none';
@@ -196,14 +196,16 @@
             element.appendChild(detail);
         }
 
+        // biome-ignore lint/correctness/noUnusedVariables: called from the onclick attribute
         function loadPreviousLogs() {
-            if (currentResult && currentResult.has_previous) {
+            if (currentResult?.has_previous) {
                 loadLogs(currentResult.start_offset, 'backward');
             }
         }
 
+        // biome-ignore lint/correctness/noUnusedVariables: called from the onclick attribute
         function loadNextLogs() {
-            if (currentResult && currentResult.has_next) {
+            if (currentResult?.has_next) {
                 loadLogs(currentResult.end_offset, 'forward');
             }
         }
