@@ -7,7 +7,7 @@
         "indentStyle": "space",
         "indentWidth": 4,
         "lineWidth": 120,
-        "includes": ["**", "!static/index.css", "!static/logs.css"]
+        "includes": ["**"]
     },
     "javascript": { "formatter": { "quoteStyle": "single" } }
 }
