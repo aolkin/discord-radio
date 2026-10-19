@@ -85,6 +85,11 @@ pub async fn run_web_server(bot_state: Data, port: u16) -> anyhow::Result<()> {
             "/api/profiles/{name}",
             get(routes::profiles::get_profile).put(routes::profiles::put_profile),
         )
+        .route("/api/dj-configs", get(routes::dj_configs::get_dj_configs))
+        .route(
+            "/api/dj-configs/{name}",
+            get(routes::dj_configs::get_dj_config).put(routes::dj_configs::put_dj_config),
+        )
         .route("/api/files", get(routes::files::browse_files))
         .route(
             "/api/files/upload",

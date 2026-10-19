@@ -1,11 +1,13 @@
 use crate::activity::ActivityManager;
+use crate::audio::dj::config::DJConfig;
 use crate::audio::dj::manager::{DJCommand, DJManager};
 use crate::audio::dj::state_machine::DJState;
 use crate::audio::duration::DurationCache;
 use crate::audio::processing::processor::{AudioProcessor, ProcessorRef};
-use crate::audio::profiles::ProfileManager;
+use crate::audio::profiles::SignalProfile;
 use crate::audio::tracks::TrackManager;
 use crate::bucket::FileResolver;
+use crate::bucket::registry::JsonRegistry;
 use crate::logging::JsonLogger;
 use crate::persistence::{DjSettingsStore, StateStore};
 use serde::Serialize;
@@ -26,7 +28,8 @@ pub struct BotState {
     pub dj_settings: DjSettingsStore,
     pub duration_cache: DurationCache,
     pub audio_processors: RwLock<HashMap<GuildId, Arc<RwLock<AudioProcessor>>>>,
-    pub profile_manager: ProfileManager,
+    pub profile_manager: JsonRegistry<SignalProfile>,
+    pub dj_config_manager: JsonRegistry<DJConfig>,
     pub dj_managers: RwLock<HashMap<GuildId, Arc<Mutex<DJManager>>>>,
     pub activity_manager: ActivityManager,
     pub file_resolver: FileResolver,
@@ -38,7 +41,8 @@ impl BotState {
         file_resolver: FileResolver,
         state_store: Arc<dyn StateStore>,
         dj_settings: DjSettingsStore,
-        profile_manager: ProfileManager,
+        profile_manager: JsonRegistry<SignalProfile>,
+        dj_config_manager: JsonRegistry<DJConfig>,
         bot_user_id: UserId,
         songbird: Arc<Songbird>,
     ) -> Self {
@@ -50,18 +54,12 @@ impl BotState {
             dj_settings,
             audio_processors: RwLock::new(HashMap::new()),
             profile_manager,
+            dj_config_manager,
             dj_managers: RwLock::new(HashMap::new()),
             activity_manager: ActivityManager::new(state_store),
             file_resolver,
             bot_user_id,
         }
-    }
-
-    pub fn dj_config_path(&self, name: &str) -> String {
-        format!(
-            "{}/dj_configs/{name}.json",
-            self.file_resolver.content_path()
-        )
     }
 
     pub async fn audio_processor(&self, guild_id: GuildId) -> ProcessorRef {

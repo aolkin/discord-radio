@@ -61,7 +61,7 @@ async fn send_dj_command(
 
 fn ensure_profile_exists(bot_state: &Data, profile: Option<&str>) -> Result<(), ApiError> {
     if let Some(profile) = profile
-        && bot_state.profile_manager.get_profile(profile).is_none()
+        && bot_state.profile_manager.get(profile).is_none()
     {
         return Err(ApiError::not_found(format!(
             "No signal profile {profile:?}"

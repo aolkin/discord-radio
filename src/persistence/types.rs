@@ -25,12 +25,6 @@ pub struct MultiTrackPlaybackState {
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct DjSettings {
     #[serde(default)]
-    pub tracks: Option<String>,
-    #[serde(default)]
-    pub hex_messages: Option<String>,
-    #[serde(default)]
-    pub config: Option<String>,
-    #[serde(default)]
     pub channel_status_disabled: bool,
 }
 
@@ -45,7 +39,7 @@ pub struct DJState {
 
 #[derive(Serialize, Debug)]
 pub struct DJStateSnapshot<'a> {
-    pub config_name: Option<&'a str>,
+    pub config_name: &'a str,
     pub announcement_channel_id: Option<u64>,
     pub state_machine: &'a crate::audio::dj::state_machine::DJState,
 }

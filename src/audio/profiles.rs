@@ -1,8 +1,5 @@
-use crate::bucket::FileResolver;
-use anyhow::Context;
+use crate::bucket::registry::{JsonRegistry, RegistryEntry};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::RwLock;
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct SignalProfile {
@@ -74,78 +71,19 @@ impl SignalProfile {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum ProfileStorageError {
-    #[error("profile names may only contain letters, digits, '-' and '_'")]
-    InvalidName,
-    #[error(transparent)]
-    Storage(#[from] anyhow::Error),
-    #[error("parsing JSON: {0}")]
-    Parse(#[from] serde_json::Error),
+impl RegistryEntry for SignalProfile {
+    const KIND: &'static str = "signal profile";
+
+    fn name(&self) -> &str {
+        &self.name
+    }
 }
 
-pub struct ProfileManager {
-    profiles: RwLock<HashMap<String, SignalProfile>>,
-    profiles_path: String,
-    file_resolver: FileResolver,
-}
-
-impl ProfileManager {
-    /// Loads every profile under `profiles_path` locally and in object
-    /// storage. A profile in object storage replaces a local profile of the
-    /// same name.
-    pub async fn from_storage(profiles_path: String, file_resolver: FileResolver) -> Self {
-        let mut profiles = HashMap::new();
-
-        let filenames = file_resolver.list(&profiles_path).await;
-        for filename in filenames.iter().filter(|f| f.ends_with(".json")) {
-            let parsed = file_resolver
-                .resolve_contents(filename)
-                .await
-                .and_then(|bytes| {
-                    serde_json::from_slice::<SignalProfile>(&bytes).context("parsing JSON")
-                });
-            match parsed {
-                Ok(profile) => {
-                    tracing::info!("Loaded signal profile {} from {filename}", profile.name);
-                    profiles.insert(profile.name.clone(), profile);
-                }
-                Err(e) => tracing::warn!("Failed to load signal profile from {filename}: {e:#}"),
-            }
-        }
-
-        if profiles.is_empty() {
-            tracing::warn!("No signal profiles loaded");
-        } else {
-            tracing::info!("Loaded {} signal profiles", profiles.len());
-        }
-
-        Self {
-            profiles: RwLock::new(profiles),
-            profiles_path,
-            file_resolver,
-        }
-    }
-
-    fn remote_key(&self, name: &str) -> Result<String, ProfileStorageError> {
-        if !is_valid_name(name) {
-            return Err(ProfileStorageError::InvalidName);
-        }
-        Ok(format!("{}{name}.json", self.profiles_path))
-    }
-
-    pub fn get_profile(&self, name: &str) -> Option<SignalProfile> {
-        self.profiles.read().unwrap().get(name).cloned()
-    }
-
-    pub fn list_profiles(&self) -> Vec<String> {
-        self.profiles.read().unwrap().keys().cloned().collect()
-    }
-
+impl JsonRegistry<SignalProfile> {
     /// The "clear" profile, or a built-in equivalent when none is loaded.
     pub fn default_profile(&self) -> SignalProfile {
-        if let Some(profile) = self.get_profile("clear") {
-            return profile;
+        if let Some(profile) = self.get("clear") {
+            return (*profile).clone();
         }
 
         tracing::debug!("Default 'clear' profile not found, using fallback");
@@ -167,41 +105,4 @@ impl ProfileManager {
             frequency_warble_hz: None,
         }
     }
-
-    /// Writes `profile` to object storage under its name, replacing any
-    /// profile of the same name.
-    pub async fn save(&self, profile: SignalProfile) -> Result<(), ProfileStorageError> {
-        let key = self.remote_key(&profile.name)?;
-        let bytes = serde_json::to_vec_pretty(&profile).expect("a SignalProfile always serializes");
-        self.file_resolver
-            .bucket()?
-            .upload(&key, &bytes, "application/json")
-            .await?;
-
-        self.profiles
-            .write()
-            .unwrap()
-            .insert(profile.name.clone(), profile);
-        Ok(())
-    }
-
-    /// Re-fetches the profile named `name` from object storage and replaces
-    /// the in-memory copy with it.
-    pub async fn refresh(&self, name: &str) -> Result<SignalProfile, ProfileStorageError> {
-        let key = self.remote_key(name)?;
-        let bytes = self.file_resolver.bucket()?.fetch_bytes(&key).await?;
-        let profile: SignalProfile = serde_json::from_slice(&bytes)?;
-        self.profiles
-            .write()
-            .unwrap()
-            .insert(profile.name.clone(), profile.clone());
-        Ok(profile)
-    }
-}
-
-pub fn is_valid_name(name: &str) -> bool {
-    !name.is_empty()
-        && name
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }

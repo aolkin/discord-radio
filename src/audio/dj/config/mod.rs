@@ -1,5 +1,6 @@
 use crate::audio::dj::weighted_choice::Weighted;
-use anyhow::Context;
+use crate::bucket::registry::RegistryEntry;
+use anyhow::bail;
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]
@@ -154,96 +155,64 @@ impl Default for StateWeights {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug, Default)]
-pub struct HexComponent {
-    #[serde(default)]
-    pub defaults: HexMessageDefaults,
-    #[serde(default)]
-    pub announcements: Vec<String>,
-    #[serde(default)]
-    pub messages: Vec<HexMessageEntry>,
-}
+impl RegistryEntry for DJConfig {
+    const KIND: &'static str = "DJ config";
 
-#[derive(Deserialize, Serialize, Clone, Debug, Default)]
-pub struct ConfigComponent {
-    #[serde(default)]
-    pub noise_periods: Vec<NoisePeriodEntry>,
-    #[serde(default)]
-    pub state_weights: StateWeights,
-    #[serde(default)]
-    pub playback: PlaybackSettings,
-    #[serde(default)]
-    pub signal_profiles: Vec<SignalProfileEntry>,
-    #[serde(default)]
-    pub channel_status: Option<String>,
-}
+    fn name(&self) -> &str {
+        &self.name
+    }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct PlaybackSettings {
-    pub recent_history_size: usize,
-    pub duplicate_penalty_multiplier: f32,
-}
-
-impl Default for PlaybackSettings {
-    fn default() -> Self {
-        Self {
-            recent_history_size: 12,
-            duplicate_penalty_multiplier: 0.5,
+    /// Rejects values that would make the DJ panic when it picks them.
+    fn validate(&self) -> anyhow::Result<()> {
+        for track in &self.track_pool {
+            if let Some(seconds) = track.max_duration_seconds {
+                ensure_seconds(seconds, || format!("track {:?}", track.filename))?;
+            }
         }
-    }
-}
-
-impl DJConfig {
-    pub fn load_from_file(path: &str) -> anyhow::Result<Self> {
-        let content = std::fs::read_to_string(path).with_context(|| format!("reading {path}"))?;
-        let config: DJConfig =
-            serde_json::from_str(&content).with_context(|| format!("parsing {path}"))?;
-        Ok(config)
-    }
-
-    pub async fn apply_dj_settings(
-        &mut self,
-        settings: &crate::persistence::DjSettings,
-        resolver: &crate::bucket::FileResolver,
-    ) -> anyhow::Result<()> {
-        self.track_pool = match &settings.tracks {
-            Some(uri) => load_component::<Vec<TrackEntry>>(uri, resolver).await?,
-            None => Vec::new(),
-        };
-
-        let hex = match &settings.hex_messages {
-            Some(uri) => load_component::<HexComponent>(uri, resolver).await?,
-            None => HexComponent::default(),
-        };
-        self.hex_messages = hex.messages;
-        self.hex_message_defaults = hex.defaults;
-        self.hex_message_announcements = Some(hex.announcements);
-
-        let orchestration = match &settings.config {
-            Some(uri) => load_component::<ConfigComponent>(uri, resolver).await?,
-            None => ConfigComponent::default(),
-        };
-        self.noise_periods = orchestration.noise_periods;
-        self.state_weights = orchestration.state_weights;
-        self.recent_history_size = orchestration.playback.recent_history_size;
-        self.duplicate_penalty_multiplier = orchestration.playback.duplicate_penalty_multiplier;
-        self.signal_profiles = orchestration.signal_profiles;
-        self.channel_status = orchestration.channel_status;
-
+        let defaults = &self.hex_message_defaults;
+        ensure_loops(defaults.loop_min, defaults.loop_max, || {
+            "hex_message_defaults".to_string()
+        })?;
+        for message in &self.hex_messages {
+            ensure_loops(
+                message.loop_min.unwrap_or(defaults.loop_min),
+                message.loop_max.unwrap_or(defaults.loop_max),
+                || format!("hex message {:?}", message.text),
+            )?;
+        }
+        for noise in &self.noise_periods {
+            let context = || format!("noise period {:?}", noise.noise_profile);
+            ensure_seconds(noise.min_duration_seconds, context)?;
+            ensure_seconds(noise.max_duration_seconds, context)?;
+        }
+        for profile in &self.signal_profiles {
+            let context = || format!("signal profile {:?}", profile.profile_name);
+            ensure_seconds(profile.fade_duration_seconds, context)?;
+            ensure_seconds(profile.min_time_seconds, context)?;
+            if profile.min_time_seconds >= profile.max_time_seconds {
+                bail!(
+                    "{}: min_time_seconds must be less than max_time_seconds",
+                    context()
+                );
+            }
+        }
         Ok(())
     }
 }
 
-async fn load_component<T: serde::de::DeserializeOwned>(
-    uri: &str,
-    resolver: &crate::bucket::FileResolver,
-) -> anyhow::Result<T> {
-    let bytes = resolver
-        .resolve_contents(uri)
-        .await
-        .with_context(|| format!("resolving DJ component '{uri}'"))?;
-    serde_json::from_slice(&bytes).with_context(|| format!("parsing DJ component '{uri}'"))
+fn ensure_seconds(seconds: f32, context: impl Fn() -> String) -> anyhow::Result<()> {
+    if !(seconds.is_finite() && seconds >= 0.0) {
+        bail!(
+            "{}: {seconds} is not a non-negative number of seconds",
+            context()
+        );
+    }
+    Ok(())
 }
 
-#[cfg(test)]
-mod tests;
+fn ensure_loops(min: u32, max: u32, context: impl Fn() -> String) -> anyhow::Result<()> {
+    if min > max {
+        bail!("{}: loop_min must not exceed loop_max", context());
+    }
+    Ok(())
+}

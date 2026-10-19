@@ -12,7 +12,7 @@ mod startup;
 mod state;
 mod web;
 
-use crate::audio::profiles::ProfileManager;
+use crate::bucket::registry::JsonRegistry;
 use crate::state::{BotState, Data};
 use anyhow::Context;
 use poise::serenity_prelude::{self as serenity, GatewayIntents};
@@ -307,7 +307,13 @@ async fn main() -> anyhow::Result<()> {
         std::env::var("SIGNAL_PROFILES_PATH").unwrap_or_else(|_| "audio_profiles/".to_string());
     tracing::info!("Using signal profiles path: {}", signal_profiles_path);
     let profile_manager =
-        ProfileManager::from_storage(signal_profiles_path, file_resolver.clone()).await;
+        JsonRegistry::from_storage(signal_profiles_path, file_resolver.clone()).await;
+
+    let dj_configs_path =
+        std::env::var("DJ_CONFIGS_PATH").unwrap_or_else(|_| "dj_configs/".to_string());
+    tracing::info!("Using DJ configs path: {}", dj_configs_path);
+    let dj_config_manager =
+        JsonRegistry::from_storage(dj_configs_path, file_resolver.clone()).await;
 
     let songbird = songbird::Songbird::serenity();
     let data: Data = Box::leak(Box::new(BotState::new(
@@ -315,6 +321,7 @@ async fn main() -> anyhow::Result<()> {
         state_store,
         dj_settings_store,
         profile_manager,
+        dj_config_manager,
         bot_user_id,
         songbird.clone(),
     )));

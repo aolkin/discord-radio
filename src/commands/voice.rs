@@ -261,7 +261,7 @@ pub async fn idle(
     }
 
     if let Some(profile) = &noise_profile
-        && ctx.data().profile_manager.get_profile(profile).is_none()
+        && ctx.data().profile_manager.get(profile).is_none()
     {
         ctx.say(format!("Profile '{profile}' not found")).await?;
         return Ok(());
@@ -506,7 +506,7 @@ async fn autocomplete_profile(ctx: Context<'_>, partial: &'_ str) -> CreateAutoc
     let mut profiles: Vec<String> = ctx
         .data()
         .profile_manager
-        .list_profiles()
+        .list()
         .into_iter()
         .filter(|name| name.starts_with(partial))
         .collect();
@@ -542,7 +542,7 @@ async fn set_dj_profile(
     };
 
     if let Some(profile) = &profile
-        && ctx.data().profile_manager.get_profile(profile).is_none()
+        && ctx.data().profile_manager.get(profile).is_none()
     {
         ctx.say(format!("Profile '{profile}' not found")).await?;
         return Ok(());

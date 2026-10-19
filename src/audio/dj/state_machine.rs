@@ -1,6 +1,7 @@
 use crate::audio::dj::config::DJConfig;
 use crate::audio::dj::manager::{
-    ADVANCE_RETRY_DELAY, DJCommand, DJStateType, HexMessageRequest, IdleRequest, TrackRequest,
+    ADVANCE_RETRY_DELAY, DEFAULT_DJ_CONFIG, DJCommand, DJStateType, HexMessageRequest, IdleRequest,
+    TrackRequest, load_dj_config,
 };
 use crate::audio::dj::scheduler::{DJStateEntry, WeightedScheduler};
 use crate::audio::dj::segments::{
@@ -151,9 +152,9 @@ pub struct DJStateMachine {
     scheduler: WeightedScheduler,
     guild_id: GuildId,
     announcement_channel: Option<ChannelId>,
-    hex_message_announcements: Vec<String>,
     bot_state: Data,
-    config_name: Option<String>,
+    config_name: String,
+    config: Arc<DJConfig>,
     applied_profile: Option<(SignalProfilePlayback, ProfileSource)>,
     /// An empty status is how Discord clears it.
     applied_channel_status: Option<String>,
@@ -161,7 +162,6 @@ pub struct DJStateMachine {
 
 impl DJStateMachine {
     pub async fn new(
-        config: DJConfig,
         guild_id: GuildId,
         saved: Option<crate::persistence::DJState>,
         state: Arc<RwLock<DJState>>,
@@ -175,15 +175,17 @@ impl DJStateMachine {
             ),
             None => (None, None, None),
         };
+        let config_name = config_name.unwrap_or_else(|| DEFAULT_DJ_CONFIG.to_string());
+        let config = load_dj_config(&bot_state, &config_name).unwrap_or_else(|e| {
+            tracing::warn!("Starting DJ with an empty config in guild {guild_id}: {e:#}");
+            Arc::default()
+        });
 
         tracing::info!(
             "Starting DJ task for guild {} with config {:?}",
             guild_id,
             config_name
         );
-
-        let hex_message_announcements =
-            config.hex_message_announcements.clone().unwrap_or_default();
 
         let initial_state = restored_state.unwrap_or_default();
 
@@ -197,12 +199,12 @@ impl DJStateMachine {
 
         Self {
             state,
-            scheduler: WeightedScheduler::new(config),
+            scheduler: WeightedScheduler::new(config.clone()),
             guild_id,
             announcement_channel,
-            hex_message_announcements,
             bot_state,
             config_name,
+            config,
             applied_profile: None,
             applied_channel_status: None,
         }
@@ -267,9 +269,10 @@ impl DJStateMachine {
                 Some((previous, _)) => previous.fade_out(),
             };
             let processor_arc = self.bot_state.audio_processor(self.guild_id).await;
-            if let Some(new_profile) = self.bot_state.profile_manager.get_profile(&target.name) {
+            if let Some(new_profile) = self.bot_state.profile_manager.get(&target.name) {
                 let mut processor = processor_arc.write().await;
-                processor.start_profile_transition(new_profile, fade.as_secs_f32() * 1000.0);
+                processor
+                    .start_profile_transition((*new_profile).clone(), fade.as_secs_f32() * 1000.0);
 
                 tracing::info!(
                     "DJ transitioning to profile '{}' over {:.1}s in guild {}",
@@ -296,7 +299,7 @@ impl DJStateMachine {
             self.applied_channel_status = None;
             return;
         }
-        let config_status = self.scheduler.config().channel_status.as_deref();
+        let config_status = self.config.channel_status.as_deref();
         let target = self
             .state
             .read()
@@ -338,7 +341,7 @@ impl DJStateMachine {
     async fn persist_state(&self) {
         let current_state = self.current_state().await;
         let persist_state = crate::persistence::DJStateSnapshot {
-            config_name: self.config_name.as_deref(),
+            config_name: &self.config_name,
             announcement_channel_id: self.announcement_channel.map(|id| id.get()),
             state_machine: &current_state,
         };
@@ -392,6 +395,7 @@ impl DJStateMachine {
         bot_state: &Data,
         state_type_filter: Option<DJStateType>,
     ) -> anyhow::Result<()> {
+        self.reload_config();
         let Self { scheduler, .. } = self;
         let next_state_type = scheduler.next_state(state_type_filter);
         tracing::info!("DJ transitioning to state: {next_state_type}");
@@ -402,7 +406,7 @@ impl DJStateMachine {
                     .into()
             }
             DJStateEntry::HexMessage(entry) => {
-                HexSegment::from_entry(entry, &self.scheduler.config().hex_message_defaults, || {
+                HexSegment::from_entry(entry, &self.config.hex_message_defaults, || {
                     self.pick_random_announcement()
                 })
                 .into()
@@ -410,6 +414,23 @@ impl DJStateMachine {
             DJStateEntry::Noise(entry) => NoiseSegment::from(entry).into(),
         };
         self.enter_state(next_state, bot_state).await
+    }
+
+    /// Switches to the latest saved copy of the DJ's named config. A new
+    /// scheduler starts with an empty recent history.
+    fn reload_config(&mut self) {
+        let Some(config) = self.bot_state.dj_config_manager.get(&self.config_name) else {
+            return;
+        };
+        if !Arc::ptr_eq(&config, &self.config) {
+            tracing::info!(
+                "DJ reloading config {:?} in guild {}",
+                self.config_name,
+                self.guild_id
+            );
+            self.scheduler = WeightedScheduler::new(config.clone());
+            self.config = config;
+        }
     }
 
     pub async fn force_hex_message(
@@ -421,7 +442,7 @@ impl DJStateMachine {
             "DJ force transitioning to hex message with custom text: {}",
             request.message
         );
-        let defaults = &self.scheduler.config().hex_message_defaults;
+        let defaults = &self.config.hex_message_defaults;
         let loops = request
             .loops
             .unwrap_or_else(|| rand::rng().random_range(defaults.loop_min..=defaults.loop_max))
@@ -575,10 +596,15 @@ impl DJStateMachine {
     }
 
     fn pick_random_announcement(&self) -> Option<String> {
-        if !self.hex_message_announcements.is_empty() {
+        let announcements = self
+            .config
+            .hex_message_announcements
+            .as_deref()
+            .unwrap_or_default();
+        if !announcements.is_empty() {
             let mut rng = rand::rng();
-            let announcement_idx = rng.random_range(0..self.hex_message_announcements.len());
-            Some(self.hex_message_announcements[announcement_idx].clone())
+            let announcement_idx = rng.random_range(0..announcements.len());
+            Some(announcements[announcement_idx].clone())
         } else {
             None
         }
