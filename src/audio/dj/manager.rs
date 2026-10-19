@@ -5,7 +5,7 @@ use crate::state::Data;
 use anyhow::{Context, bail};
 use serde::Deserialize;
 use serenity::model::id::{ChannelId, GuildId};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock, mpsc};
 use tokio::task::JoinHandle;
@@ -158,11 +158,31 @@ pub fn load_dj_config(bot_state: &Data, name: &str) -> anyhow::Result<Arc<DJConf
         .with_context(|| format!("no DJ config {name:?}"))
 }
 
+/// The guild's DJ, if one is running. A start or stop holds `lifecycle`
+/// before touching `manager`, so they run one at a time per guild while
+/// readers only take `manager`.
+#[derive(Default)]
+pub struct GuildDj {
+    lifecycle: Mutex<()>,
+    manager: StdMutex<Option<Arc<Mutex<DJManager>>>>,
+}
+
+impl GuildDj {
+    pub fn manager(&self) -> Option<Arc<Mutex<DJManager>>> {
+        self.manager.lock().unwrap().clone()
+    }
+
+    fn set_manager(&self, manager: Option<DJManager>) {
+        *self.manager.lock().unwrap() = manager.map(|m| Arc::new(Mutex::new(m)));
+    }
+}
+
 /// Starts the guild's DJ if it is not running, resuming its saved state when
 /// there is one.
 pub async fn start_dj(bot_state: Data, guild_id: GuildId) -> anyhow::Result<()> {
-    let mut dj_managers = bot_state.dj_managers.write().await;
-    if dj_managers.contains_key(&guild_id) {
+    let dj = bot_state.guild_dj(guild_id);
+    let _lifecycle = dj.lifecycle.lock().await;
+    if dj.manager().is_some() {
         return Ok(());
     }
 
@@ -175,7 +195,7 @@ pub async fn start_dj(bot_state: Data, guild_id: GuildId) -> anyhow::Result<()> 
 
     tracing::info!("Starting DJ for guild {}", guild_id);
     let manager = DJManager::start(guild_id, saved, bot_state).await;
-    dj_managers.insert(guild_id, Arc::new(Mutex::new(manager)));
+    dj.set_manager(Some(manager));
     Ok(())
 }
 
@@ -188,8 +208,11 @@ pub async fn restart_dj_with_config(
 ) -> anyhow::Result<()> {
     load_dj_config(&bot_state, &config_name)?;
 
-    let mut dj_managers = bot_state.dj_managers.write().await;
-    let Some(manager) = dj_managers.remove(&guild_id) else {
+    let Some(dj) = bot_state.existing_guild_dj(guild_id) else {
+        anyhow::bail!("Not in a voice channel");
+    };
+    let _lifecycle = dj.lifecycle.lock().await;
+    let Some(manager) = dj.manager() else {
         anyhow::bail!("Not in a voice channel");
     };
 
@@ -202,6 +225,7 @@ pub async fn restart_dj_with_config(
         .and_then(|saved| saved.announcement_channel_id);
 
     manager.lock().await.stop(&bot_state).await;
+    dj.set_manager(None);
 
     let saved = crate::persistence::DJState {
         config_name: Some(config_name),
@@ -210,12 +234,16 @@ pub async fn restart_dj_with_config(
     };
     tracing::info!("Restarting DJ for guild {}", guild_id);
     let manager = DJManager::start(guild_id, Some(saved), bot_state).await;
-    dj_managers.insert(guild_id, Arc::new(Mutex::new(manager)));
+    dj.set_manager(Some(manager));
     Ok(())
 }
 
 pub async fn stop_dj(bot_state: Data, guild_id: GuildId) {
-    let manager = bot_state.dj_managers.write().await.remove(&guild_id);
+    let Some(dj) = bot_state.existing_guild_dj(guild_id) else {
+        return;
+    };
+    let _lifecycle = dj.lifecycle.lock().await;
+    let manager = dj.manager.lock().unwrap().take();
     if let Some(manager) = manager {
         manager.lock().await.stop(&bot_state).await;
     }

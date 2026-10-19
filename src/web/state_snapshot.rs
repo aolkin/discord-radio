@@ -52,16 +52,7 @@ impl BotSnapshot {
     pub async fn capture(bot_state: &Data) -> Self {
         let mut guilds = Vec::new();
 
-        let mut active_guilds: Vec<_> = bot_state
-            .guilds
-            .lock()
-            .unwrap()
-            .iter()
-            .map(|(id, radio)| (*id, radio.clone()))
-            .collect();
-        active_guilds.sort_by_key(|(id, _)| *id);
-
-        for (guild_id, guild) in active_guilds {
+        for (guild_id, guild) in bot_state.guild_radios() {
             // Check if guild is actually in voice
             let in_voice = bot_state.get_voice_channel_id(guild_id).await.is_some();
 
