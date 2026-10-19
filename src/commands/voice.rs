@@ -763,7 +763,7 @@ pub async fn status(ctx: Context<'_>) -> anyhow::Result<()> {
 
     ctx.defer_ephemeral().await?;
 
-    let Some(state_arc) = ctx.data().dj_state(guild_id).await else {
+    let Some(state_arc) = ctx.data().dj_state(guild_id) else {
         ctx.say("DJ state not available").await?;
         return Ok(());
     };

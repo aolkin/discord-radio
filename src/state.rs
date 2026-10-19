@@ -1,6 +1,6 @@
 use crate::activity::ActivityManager;
 use crate::audio::dj::config::DJConfig;
-use crate::audio::dj::manager::{DJCommand, GuildDj};
+use crate::audio::dj::manager::{DJCommand, DJManager};
 use crate::audio::dj::state_machine::DJState;
 use crate::audio::duration::DurationCache;
 use crate::audio::processing::processor::{AudioProcessor, ProcessorRef};
@@ -26,7 +26,7 @@ pub type Data = &'static BotState;
 pub struct GuildRadio {
     pub audio_processor: ProcessorRef,
     pub track_manager: Arc<TrackManager>,
-    dj: Arc<GuildDj>,
+    dj_manager: Arc<DJManager>,
 }
 
 pub struct BotState {
@@ -80,7 +80,7 @@ impl BotState {
                 GuildRadio {
                     audio_processor,
                     track_manager,
-                    dj: Arc::default(),
+                    dj_manager: Arc::new(DJManager::new(guild_id, self)),
                 }
             })
             .clone()
@@ -103,12 +103,12 @@ impl BotState {
         guilds
     }
 
-    pub fn guild_dj(&'static self, guild_id: GuildId) -> Arc<GuildDj> {
-        self.guild_radio(guild_id).dj
+    pub fn dj_manager(&'static self, guild_id: GuildId) -> Arc<DJManager> {
+        self.guild_radio(guild_id).dj_manager
     }
 
-    pub fn existing_guild_dj(&self, guild_id: GuildId) -> Option<Arc<GuildDj>> {
-        Some(self.existing_guild_radio(guild_id)?.dj)
+    pub fn existing_dj_manager(&self, guild_id: GuildId) -> Option<Arc<DJManager>> {
+        Some(self.existing_guild_radio(guild_id)?.dj_manager)
     }
 
     pub async fn audio_processor(&'static self, guild_id: GuildId) -> ProcessorRef {
@@ -125,10 +125,8 @@ impl BotState {
         Some(receiver)
     }
 
-    pub async fn dj_state(&self, guild_id: GuildId) -> Option<Arc<RwLock<DJState>>> {
-        let manager = self.existing_guild_dj(guild_id)?.manager()?;
-        let state = manager.lock().await.state.clone();
-        Some(state)
+    pub fn dj_state(&self, guild_id: GuildId) -> Option<Arc<RwLock<DJState>>> {
+        self.existing_dj_manager(guild_id)?.state()
     }
 
     pub async fn send_dj_command(
@@ -136,11 +134,10 @@ impl BotState {
         guild_id: GuildId,
         command: DJCommand,
     ) -> anyhow::Result<bool> {
-        let Some(manager) = self.existing_guild_dj(guild_id).and_then(|dj| dj.manager()) else {
+        let Some(manager) = self.existing_dj_manager(guild_id) else {
             return Ok(false);
         };
-        manager.lock().await.send(command).await?;
-        Ok(true)
+        manager.send(command).await
     }
 
     /// Get the current voice channel ID for a guild

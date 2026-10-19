@@ -85,42 +85,63 @@ pub enum DJStateType {
 }
 
 pub struct DJManager {
-    pub state: Arc<RwLock<DJState>>,
-    task_handle: JoinHandle<()>,
-    command_tx: mpsc::Sender<DJCommand>,
+    state: Arc<RwLock<DJState>>,
+    /// `command_tx` changes only while this is locked, and is `Some` exactly
+    /// when this is.
+    task: Mutex<Option<JoinHandle<()>>>,
+    command_tx: StdMutex<Option<mpsc::Sender<DJCommand>>>,
     guild_id: GuildId,
+    bot_state: Data,
 }
 
 impl DJManager {
-    pub async fn send(&self, command: DJCommand) -> anyhow::Result<()> {
-        Ok(self.command_tx.send(command).await?)
+    pub fn new(guild_id: GuildId, bot_state: Data) -> Self {
+        Self {
+            state: Arc::default(),
+            task: Mutex::new(None),
+            command_tx: StdMutex::new(None),
+            guild_id,
+            bot_state,
+        }
     }
 
-    pub async fn start(
-        guild_id: GuildId,
-        saved: Option<crate::persistence::DJState>,
-        bot_state: Data,
-    ) -> Self {
+    /// The DJ's state while its task is running.
+    pub fn state(&self) -> Option<Arc<RwLock<DJState>>> {
+        let running = self.command_tx.lock().unwrap().is_some();
+        running.then(|| self.state.clone())
+    }
+
+    /// Sends `command` to the running task, returning false when none is running.
+    pub async fn send(&self, command: DJCommand) -> anyhow::Result<bool> {
+        let Some(command_tx) = self.command_tx.lock().unwrap().clone() else {
+            return Ok(false);
+        };
+        command_tx.send(command).await?;
+        Ok(true)
+    }
+
+    fn spawn(&self, task: &mut Option<JoinHandle<()>>, saved: Option<crate::persistence::DJState>) {
         let (command_tx, command_rx) = mpsc::channel(10);
-        let state = Arc::new(RwLock::new(DJState::default()));
-        let task_state = state.clone();
-        let task_handle = tokio::spawn(async move {
+        let guild_id = self.guild_id;
+        let task_state = self.state.clone();
+        let bot_state = self.bot_state;
+        *task = Some(tokio::spawn(async move {
             DJStateMachine::new(guild_id, saved, task_state, bot_state)
                 .await
                 .run(command_rx)
                 .await;
-        });
-
-        Self {
-            state,
-            task_handle,
-            command_tx,
-            guild_id,
-        }
+        }));
+        *self.command_tx.lock().unwrap() = Some(command_tx);
     }
 
-    pub async fn stop(&mut self, bot_state: &Data) {
-        if let Err(e) = self.send(DJCommand::Stop).await {
+    async fn stop_task(&self, task: &mut Option<JoinHandle<()>>) {
+        let command_tx = self.command_tx.lock().unwrap().take();
+        let Some(mut task_handle) = task.take() else {
+            return;
+        };
+        if let Some(command_tx) = command_tx
+            && let Err(e) = command_tx.send(DJCommand::Stop).await
+        {
             tracing::warn!("Failed to send stop command to DJ task: {}", e);
         }
 
@@ -129,23 +150,83 @@ impl DJManager {
             self.guild_id
         );
         tokio::select! {
-            _ = &mut self.task_handle => {
+            _ = &mut task_handle => {
                 tracing::info!("DJ gracefully stopped for guild {}", self.guild_id);
             }
             _ = tokio::time::sleep(Duration::from_secs(5)) => {
-                self.task_handle.abort();
-                let _ = (&mut self.task_handle).await;
+                task_handle.abort();
+                let _ = (&mut task_handle).await;
                 tracing::warn!("DJ shutdown timeout for guild {}, aborted the task", self.guild_id);
             }
         }
 
-        if let Err(e) = bot_state.state_store.remove_dj_state(self.guild_id).await {
+        if let Err(e) = self
+            .bot_state
+            .state_store
+            .remove_dj_state(self.guild_id)
+            .await
+        {
             tracing::warn!(
                 "Failed to remove DJ state for guild {}: {}",
                 self.guild_id,
                 e
             );
         }
+    }
+
+    /// Starts the DJ task if it is not running, resuming its saved state when
+    /// there is one.
+    pub async fn start(&self) -> anyhow::Result<()> {
+        let mut task = self.task.lock().await;
+        if task.is_some() {
+            return Ok(());
+        }
+
+        let saved = self
+            .bot_state
+            .state_store
+            .load_dj_states()
+            .await
+            .context("loading saved DJ state")?
+            .remove(&self.guild_id);
+
+        tracing::info!("Starting DJ for guild {}", self.guild_id);
+        self.spawn(&mut task, saved);
+        Ok(())
+    }
+
+    /// Stops the running DJ task and starts a new one with the named config,
+    /// keeping the announcement channel. The new task begins idle.
+    pub async fn restart_with_config(&self, config_name: String) -> anyhow::Result<()> {
+        let mut task = self.task.lock().await;
+        if task.is_none() {
+            bail!("Not in a voice channel");
+        }
+
+        let announcement_channel_id = self
+            .bot_state
+            .state_store
+            .load_dj_states()
+            .await
+            .context("loading saved DJ state")?
+            .remove(&self.guild_id)
+            .and_then(|saved| saved.announcement_channel_id);
+
+        self.stop_task(&mut task).await;
+
+        let saved = crate::persistence::DJState {
+            config_name: Some(config_name),
+            announcement_channel_id,
+            state_machine: None,
+        };
+        tracing::info!("Restarting DJ for guild {}", self.guild_id);
+        self.spawn(&mut task, Some(saved));
+        Ok(())
+    }
+
+    pub async fn stop(&self) {
+        let mut task = self.task.lock().await;
+        self.stop_task(&mut task).await;
     }
 }
 
@@ -158,93 +239,24 @@ pub fn load_dj_config(bot_state: &Data, name: &str) -> anyhow::Result<Arc<DJConf
         .with_context(|| format!("no DJ config {name:?}"))
 }
 
-/// The guild's DJ, if one is running. A start or stop holds `lifecycle`
-/// before touching `manager`, so they run one at a time per guild while
-/// readers only take `manager`.
-#[derive(Default)]
-pub struct GuildDj {
-    lifecycle: Mutex<()>,
-    manager: StdMutex<Option<Arc<Mutex<DJManager>>>>,
-}
-
-impl GuildDj {
-    pub fn manager(&self) -> Option<Arc<Mutex<DJManager>>> {
-        self.manager.lock().unwrap().clone()
-    }
-
-    fn set_manager(&self, manager: Option<DJManager>) {
-        *self.manager.lock().unwrap() = manager.map(|m| Arc::new(Mutex::new(m)));
-    }
-}
-
-/// Starts the guild's DJ if it is not running, resuming its saved state when
-/// there is one.
 pub async fn start_dj(bot_state: Data, guild_id: GuildId) -> anyhow::Result<()> {
-    let dj = bot_state.guild_dj(guild_id);
-    let _lifecycle = dj.lifecycle.lock().await;
-    if dj.manager().is_some() {
-        return Ok(());
-    }
-
-    let saved = bot_state
-        .state_store
-        .load_dj_states()
-        .await
-        .context("loading saved DJ state")?
-        .remove(&guild_id);
-
-    tracing::info!("Starting DJ for guild {}", guild_id);
-    let manager = DJManager::start(guild_id, saved, bot_state).await;
-    dj.set_manager(Some(manager));
-    Ok(())
+    bot_state.dj_manager(guild_id).start().await
 }
 
-/// Stops the guild's running DJ and starts a new one with the named config,
-/// keeping the announcement channel. The new DJ begins idle.
 pub async fn restart_dj_with_config(
     bot_state: Data,
     guild_id: GuildId,
     config_name: String,
 ) -> anyhow::Result<()> {
     load_dj_config(&bot_state, &config_name)?;
-
-    let Some(dj) = bot_state.existing_guild_dj(guild_id) else {
-        anyhow::bail!("Not in a voice channel");
+    let Some(manager) = bot_state.existing_dj_manager(guild_id) else {
+        bail!("Not in a voice channel");
     };
-    let _lifecycle = dj.lifecycle.lock().await;
-    let Some(manager) = dj.manager() else {
-        anyhow::bail!("Not in a voice channel");
-    };
-
-    let announcement_channel_id = bot_state
-        .state_store
-        .load_dj_states()
-        .await
-        .context("loading saved DJ state")?
-        .remove(&guild_id)
-        .and_then(|saved| saved.announcement_channel_id);
-
-    manager.lock().await.stop(&bot_state).await;
-    dj.set_manager(None);
-
-    let saved = crate::persistence::DJState {
-        config_name: Some(config_name),
-        announcement_channel_id,
-        state_machine: None,
-    };
-    tracing::info!("Restarting DJ for guild {}", guild_id);
-    let manager = DJManager::start(guild_id, Some(saved), bot_state).await;
-    dj.set_manager(Some(manager));
-    Ok(())
+    manager.restart_with_config(config_name).await
 }
 
 pub async fn stop_dj(bot_state: Data, guild_id: GuildId) {
-    let Some(dj) = bot_state.existing_guild_dj(guild_id) else {
-        return;
-    };
-    let _lifecycle = dj.lifecycle.lock().await;
-    let manager = dj.manager.lock().unwrap().take();
-    if let Some(manager) = manager {
-        manager.lock().await.stop(&bot_state).await;
+    if let Some(manager) = bot_state.existing_dj_manager(guild_id) {
+        manager.stop().await;
     }
 }
