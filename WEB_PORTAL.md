@@ -19,6 +19,8 @@ The Discord bot includes a built-in web portal for monitoring bot status and con
 - **Signal profile management**
   - Set or clear the DJ's background profile and profile override
   - List, create, and edit signal profiles
+- **DJ config editing**
+  - List, create, and edit DJ configs in a form
 - **Audio file browser**
   - Browse the folders and files under `tracks/` in object storage, create folders, and upload audio files by choosing or dropping them
 - **Per-guild bot profile**
@@ -77,7 +79,7 @@ The Signal Profiles panel lists every profile by name. Saving a new or edited pr
 
 ### DJ Configs
 
-The bot loads DJ configs from the `DJ_CONFIGS_PATH` directory (default `dj_configs/`; the value must end with a slash), under both the content root and the object storage bucket root. A config in object storage replaces a local config of the same name. A DJ uses the config named `default` until one is chosen with `/dj configure`. Saving a config through the API writes it to object storage; a running DJ using that config switches to the saved copy the next time it advances to a new segment.
+The bot loads DJ configs from the `DJ_CONFIGS_PATH` directory (default `dj_configs/`; the value must end with a slash), under both the content root and the object storage bucket root. A config in object storage replaces a local config of the same name. A DJ uses the config named `default` until one is chosen with `/dj configure`. The DJ Configs panel lists every config by name and opens a form with every field of the config, showing the server's reason when it rejects a save. Saving a config writes it to object storage; a running DJ using that config switches to the saved copy the next time it advances to a new segment.
 
 ### Audio File Browser
 
