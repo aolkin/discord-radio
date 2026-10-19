@@ -1,4 +1,3 @@
-use crate::audio::tracks::get_or_create_track_manager;
 use crate::state::Data;
 use crate::web::error::ApiError;
 use axum::Json as AxumJson;
@@ -22,7 +21,7 @@ pub async fn change_track_state(
     Path(guild_id): Path<GuildId>,
     AxumJson(request): AxumJson<ChangeTrackStateRequest>,
 ) -> Result<StatusCode, ApiError> {
-    let manager = get_or_create_track_manager(&bot_state, guild_id).await;
+    let manager = bot_state.track_manager(guild_id).await;
     let fade_time = request.fade_time.unwrap_or(1.0);
 
     let state_str = request.state.as_deref().map(|s| s.to_lowercase());

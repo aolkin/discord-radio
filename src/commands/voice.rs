@@ -5,7 +5,6 @@ use crate::audio::dj::manager::{
 use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
 use crate::audio::processing::processor::ProcessorRef;
-use crate::audio::tracks::get_or_create_track_manager;
 use crate::commands::utils;
 use crate::commands::utils::{Context, require_guild};
 use anyhow::bail;
@@ -338,7 +337,7 @@ pub async fn change_track_state(
 
     ctx.defer_ephemeral().await?;
 
-    let manager = get_or_create_track_manager(ctx.data(), guild_id).await;
+    let manager = ctx.data().track_manager(guild_id).await;
     let fade_time = fade_time.unwrap_or(1.0);
 
     let state_str = state.as_deref().map(|s| s.to_lowercase());
@@ -445,10 +444,12 @@ pub async fn change_track_state(
 pub async fn get_current_tracks(ctx: Context<'_>) -> anyhow::Result<()> {
     let guild_id = require_guild(ctx)?;
 
-    let tracks = match ctx.data().guild(guild_id) {
-        Some(guild) => guild.track_manager.get_all_tracks().await,
-        None => Vec::new(),
-    };
+    let tracks = ctx
+        .data()
+        .track_manager(guild_id)
+        .await
+        .get_all_tracks()
+        .await;
 
     ctx.defer_ephemeral().await?;
 

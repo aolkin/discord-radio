@@ -59,7 +59,7 @@ impl TrackManager {
         }
     }
 
-    pub async fn start_track(&self, args: StartTrackArgs) -> anyhow::Result<()> {
+    pub async fn start_track(self: &Arc<Self>, args: StartTrackArgs) -> anyhow::Result<()> {
         let resolved_filename = self.bot_state.file_resolver.resolve(&args.filename).await?;
         let source = open_track_source(&resolved_filename, args.start_position)?;
         let mut tracks = self.tracks.lock().await;
@@ -106,8 +106,7 @@ impl TrackManager {
             ],
         );
 
-        let guild_id = self.guild_id;
-        let bot_state = self.bot_state;
+        let manager = Arc::clone(self);
         let name = args.name.clone();
         let ended_track = mixer_handle.clone();
         tokio::spawn(async move {
@@ -115,10 +114,9 @@ impl TrackManager {
                 tracing::error!("Track '{name}' lost its end signal: {e}");
                 StopReason::Lost
             });
+            let guild_id = manager.guild_id;
             tracing::debug!("Track '{name}' left the mixer in guild {guild_id}: {reason:?}");
-            if let Some(guild) = bot_state.guild(guild_id) {
-                guild.track_manager.remove_handle(ended_track.id).await;
-            }
+            manager.remove_handle(ended_track.id).await;
         });
 
         // If we're starting from a position other than the beginning, adjust start_time
@@ -330,9 +328,4 @@ pub fn open_track_source(
         source.seek(pos)?;
     }
     Ok(Box::new(source))
-}
-
-/// Get or create a TrackManager for a guild, ensuring audio processor exists
-pub async fn get_or_create_track_manager(bot_state: &Data, guild_id: GuildId) -> Arc<TrackManager> {
-    bot_state.guild_or_create(guild_id).track_manager.clone()
 }

@@ -1,6 +1,6 @@
 use crate::audio::connection::connect_voice_channel;
 use crate::audio::dj::manager::start_dj;
-use crate::audio::tracks::{StartTrackArgs, get_or_create_track_manager};
+use crate::audio::tracks::StartTrackArgs;
 use crate::state::Data;
 use anyhow::Context;
 use std::time::Duration;
@@ -83,7 +83,7 @@ async fn restore_multitrack_playback(bot_state: Data) -> anyhow::Result<()> {
             guild_id
         );
 
-        let manager = get_or_create_track_manager(&bot_state, guild_id).await;
+        let manager = bot_state.track_manager(guild_id).await;
 
         for track in multitrack_state.tracks {
             let start_position = if let Some(start_time) = track.start_time {

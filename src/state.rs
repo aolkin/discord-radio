@@ -17,6 +17,7 @@ use songbird::Songbird;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::sync::{Arc, Mutex as StdMutex};
+use tokio::sync::broadcast::Receiver;
 use tokio::sync::{Mutex, RwLock};
 
 pub type Data = &'static BotState;
@@ -66,11 +67,7 @@ impl BotState {
         }
     }
 
-    pub fn guild(&self, guild_id: GuildId) -> Option<GuildRadio> {
-        self.guilds.lock().unwrap().get(&guild_id).cloned()
-    }
-
-    pub fn guild_or_create(&'static self, guild_id: GuildId) -> GuildRadio {
+    fn guild_radio(&'static self, guild_id: GuildId) -> GuildRadio {
         self.guilds
             .lock()
             .unwrap()
@@ -90,7 +87,23 @@ impl BotState {
     }
 
     pub async fn audio_processor(&'static self, guild_id: GuildId) -> ProcessorRef {
-        self.guild_or_create(guild_id).audio_processor.clone()
+        self.guild_radio(guild_id).audio_processor.clone()
+    }
+
+    pub async fn track_manager(&'static self, guild_id: GuildId) -> Arc<TrackManager> {
+        self.guild_radio(guild_id).track_manager.clone()
+    }
+
+    pub async fn opus_stream(&self, guild_id: GuildId) -> Option<Receiver<Vec<u8>>> {
+        let audio_processor = self
+            .guilds
+            .lock()
+            .unwrap()
+            .get(&guild_id)?
+            .audio_processor
+            .clone();
+        let receiver = audio_processor.read().await.stream_opus();
+        Some(receiver)
     }
 
     pub async fn dj_state(&self, guild_id: GuildId) -> Option<Arc<RwLock<DJState>>> {
