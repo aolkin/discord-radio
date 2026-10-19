@@ -22,8 +22,7 @@ pub async fn change_track_state(
     Path(guild_id): Path<GuildId>,
     AxumJson(request): AxumJson<ChangeTrackStateRequest>,
 ) -> Result<StatusCode, ApiError> {
-    let manager_arc = get_or_create_track_manager(&bot_state, guild_id).await;
-    let mut manager = manager_arc.lock().await;
+    let manager = get_or_create_track_manager(&bot_state, guild_id).await;
     let fade_time = request.fade_time.unwrap_or(1.0);
 
     let state_str = request.state.as_deref().map(|s| s.to_lowercase());
@@ -54,7 +53,7 @@ pub async fn change_track_state(
         }
         Some("stop") => manager.stop_track(&request.name, fade_time).await?,
         None => {
-            if !manager.has_track(&request.name) {
+            if !manager.has_track(&request.name).await {
                 return Err(ApiError::not_found(format!("No track {:?}", request.name)));
             }
 

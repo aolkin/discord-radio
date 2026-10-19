@@ -83,8 +83,7 @@ async fn restore_multitrack_playback(bot_state: Data) -> anyhow::Result<()> {
             guild_id
         );
 
-        let manager_arc = get_or_create_track_manager(&bot_state, guild_id).await;
-        let mut manager = manager_arc.lock().await;
+        let manager = get_or_create_track_manager(&bot_state, guild_id).await;
 
         for track in multitrack_state.tracks {
             let start_position = if let Some(start_time) = track.start_time {

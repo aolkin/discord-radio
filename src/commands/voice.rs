@@ -338,8 +338,7 @@ pub async fn change_track_state(
 
     ctx.defer_ephemeral().await?;
 
-    let manager_arc = get_or_create_track_manager(ctx.data(), guild_id).await;
-    let mut manager = manager_arc.lock().await;
+    let manager = get_or_create_track_manager(ctx.data(), guild_id).await;
     let fade_time = fade_time.unwrap_or(1.0);
 
     let state_str = state.as_deref().map(|s| s.to_lowercase());
@@ -391,7 +390,7 @@ pub async fn change_track_state(
             }
         }
         None => {
-            if !manager.has_track(&name) {
+            if !manager.has_track(&name).await {
                 ctx.say(format!(
                     "Track '{}' not found. Use state=start to create a new track.",
                     name
@@ -447,7 +446,7 @@ pub async fn get_current_tracks(ctx: Context<'_>) -> anyhow::Result<()> {
     let guild_id = require_guild(ctx)?;
 
     let tracks = match ctx.data().guild(guild_id) {
-        Some(guild) => guild.track_manager.lock().await.get_all_tracks().await,
+        Some(guild) => guild.track_manager.get_all_tracks().await,
         None => Vec::new(),
     };
 
