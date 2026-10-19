@@ -177,15 +177,11 @@ impl DJStateMachine {
         };
         let config_name = config_name.unwrap_or_else(|| DEFAULT_DJ_CONFIG.to_string());
         let config = load_dj_config(&bot_state, &config_name).unwrap_or_else(|e| {
-            tracing::warn!("Starting DJ with an empty config in guild {guild_id}: {e:#}");
+            tracing::warn!("Starting DJ with an empty config: {e:#}");
             Arc::default()
         });
 
-        tracing::info!(
-            "Starting DJ task for guild {} with config {:?}",
-            guild_id,
-            config_name
-        );
+        tracing::info!("Starting DJ task with config {:?}", config_name);
 
         let initial_state = restored_state.unwrap_or_default();
 
@@ -211,7 +207,6 @@ impl DJStateMachine {
     }
 
     pub async fn run(mut self, mut command_rx: mpsc::Receiver<DJCommand>) {
-        let guild_id = self.guild_id;
         let bot_state = self.bot_state;
 
         'dj: loop {
@@ -224,13 +219,13 @@ impl DJStateMachine {
                 command = command_rx.recv() => {
                     let command = command.unwrap_or(DJCommand::Stop);
                     if self.handle_command(command).await {
-                        tracing::info!("DJ task stopped for guild {}", guild_id);
+                        tracing::info!("DJ task stopped");
                         break 'dj;
                     }
                 }
                 _ = self.state_completed() => {
                     if let Err(e) = self.force_advance(&bot_state, None).await {
-                        tracing::error!("Failed to advance to next state for guild {}: {}", guild_id, e);
+                        tracing::error!("Failed to advance to next state: {}", e);
                         tokio::time::sleep(ADVANCE_RETRY_DELAY).await;
                     }
                 }
@@ -238,7 +233,7 @@ impl DJStateMachine {
             }
         }
 
-        tracing::info!("DJ task terminated for guild {}", guild_id);
+        tracing::info!("DJ task terminated");
     }
 
     async fn rotate_profile(&mut self) {
@@ -275,10 +270,9 @@ impl DJStateMachine {
                     .start_profile_transition((*new_profile).clone(), fade.as_secs_f32() * 1000.0);
 
                 tracing::info!(
-                    "DJ transitioning to profile '{}' over {:.1}s in guild {}",
+                    "DJ transitioning to profile '{}' over {:.1}s",
                     target.name,
                     fade.as_secs_f32(),
-                    self.guild_id
                 );
             }
             self.applied_profile = Some((target, source));
@@ -325,16 +319,10 @@ impl DJStateMachine {
             .await
         {
             Ok(_) => {
-                tracing::debug!(
-                    "Set voice channel status to {target:?} in guild {}",
-                    self.guild_id
-                );
+                tracing::debug!("Set voice channel status to {target:?}");
                 self.applied_channel_status = Some(target)
             }
-            Err(e) => tracing::warn!(
-                "Failed to set voice channel status in guild {}: {e:#}",
-                self.guild_id
-            ),
+            Err(e) => tracing::warn!("Failed to set voice channel status: {e:#}"),
         }
     }
 
@@ -351,11 +339,7 @@ impl DJStateMachine {
             .save_dj_state(self.guild_id, &persist_state)
             .await
         {
-            tracing::warn!(
-                "Failed to persist DJ state for guild {}: {}",
-                self.guild_id,
-                e
-            );
+            tracing::warn!("Failed to persist DJ state: {}", e);
         }
     }
 
@@ -423,11 +407,7 @@ impl DJStateMachine {
             return;
         };
         if !Arc::ptr_eq(&config, &self.config) {
-            tracing::info!(
-                "DJ reloading config {:?} in guild {}",
-                self.config_name,
-                self.guild_id
-            );
+            tracing::info!("DJ reloading config {:?}", self.config_name);
             self.scheduler = WeightedScheduler::new(config.clone());
             self.config = config;
         }
@@ -548,7 +528,7 @@ impl DJStateMachine {
         let cmd_name: &'static str = (&command).into();
         let result = match command {
             DJCommand::ForceAdvance(state_type_filter) => {
-                tracing::info!("Processing force advance for DJ in guild {}", self.guild_id);
+                tracing::info!("Processing force advance for DJ");
                 self.force_advance(&bot_state, state_type_filter).await
             }
             DJCommand::ForceHexMessage(request) => {
@@ -557,23 +537,19 @@ impl DJStateMachine {
             DJCommand::ForceTrack(request) => self.force_track(&bot_state, request).await,
             DJCommand::ForceIdle(request) => self.force_idle(&bot_state, request).await,
             DJCommand::Stop => {
-                tracing::info!("Processing stop command for DJ in guild {}", self.guild_id);
+                tracing::info!("Processing stop command for DJ");
                 self.stop(&bot_state).await;
                 return true;
             }
             DJCommand::SetConfig { name, config } => {
-                tracing::info!("DJ switching to config {name:?} in guild {}", self.guild_id);
+                tracing::info!("DJ switching to config {name:?}");
                 self.scheduler = WeightedScheduler::new(config.clone());
                 self.config = config;
                 self.config_name = name;
                 Ok(())
             }
             DJCommand::SetAnnouncementChannel(new_channel) => {
-                tracing::info!(
-                    "Setting DJ announcement channel to {:?} in guild {}",
-                    new_channel,
-                    self.guild_id
-                );
+                tracing::info!("Setting DJ announcement channel to {:?}", new_channel);
                 self.set_announcement_channel(new_channel);
                 Ok(())
             }
@@ -594,10 +570,7 @@ impl DJStateMachine {
             }
         };
         if let Err(e) = result {
-            tracing::error!(
-                "DJ command {cmd_name} failed in guild {}: {e:#}",
-                self.guild_id
-            );
+            tracing::error!("DJ command {cmd_name} failed: {e:#}");
         }
         false
     }

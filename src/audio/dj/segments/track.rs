@@ -165,10 +165,9 @@ impl Segment for TrackSegment {
             return Err(e);
         }
         tracing::info!(
-            "Restored DJ track '{}' at {:.1}s into the segment in guild {}",
+            "Restored DJ track '{}' at {:.1}s into the segment",
             self.filename,
-            elapsed.as_secs_f32(),
-            ctx.guild_id
+            elapsed.as_secs_f32()
         );
         Ok(())
     }
@@ -177,10 +176,9 @@ impl Segment for TrackSegment {
         self.start_at(ctx, self.start_position, self.duration)
             .await?;
         tracing::info!(
-            "DJ starting track '{}' (duration: {:.1}s) in guild {}",
+            "DJ starting track '{}' (duration: {:.1}s)",
             self.filename,
-            self.duration.as_secs_f32(),
-            ctx.guild_id
+            self.duration.as_secs_f32()
         );
         Ok(())
     }
