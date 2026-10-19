@@ -1,8 +1,11 @@
 use crate::audio::connection::connect_voice_channel;
 use crate::audio::tracks::StartTrackArgs;
+use crate::persistence::MultiTrackPlaybackState;
 use crate::state::Data;
 use anyhow::Context;
+use serenity::model::id::GuildId;
 use std::time::Duration;
+use tracing::Instrument;
 
 pub async fn restore_voice_channels(
     ctx: &poise::serenity_prelude::Context,
@@ -27,28 +30,24 @@ pub async fn restore_voice_channels(
         .clone();
 
     for (guild_id, channel_id) in saved_channels {
-        match connect_voice_channel(&manager, guild_id, channel_id, bot_state).await {
-            Ok(_) => {
-                tracing::info!(
-                    "Rejoined voice channel {} in guild {}",
-                    channel_id,
-                    guild_id
-                );
+        let span = tracing::info_span!("restore_voice", guild_id = %guild_id);
+        async {
+            match connect_voice_channel(&manager, guild_id, channel_id, bot_state).await {
+                Ok(_) => {
+                    tracing::info!("Rejoined voice channel {}", channel_id);
 
-                if let Err(e) = bot_state.dj_manager(guild_id).start().await {
-                    tracing::error!("Failed to start DJ for guild {}: {e:#}", guild_id);
+                    if let Err(e) = bot_state.dj_manager(guild_id).start().await {
+                        tracing::error!("Failed to start DJ: {e:#}");
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Failed to rejoin voice channel {}: {:?}", channel_id, e);
+                    let _ = bot_state.state_store.remove_voice_channel(guild_id).await;
                 }
             }
-            Err(e) => {
-                tracing::error!(
-                    "Failed to rejoin voice channel {} in guild {}: {:?}",
-                    channel_id,
-                    guild_id,
-                    e
-                );
-                let _ = bot_state.state_store.remove_voice_channel(guild_id).await;
-            }
         }
+        .instrument(span)
+        .await;
     }
 
     // Restore these features regardless of whether there are voice channels
@@ -76,77 +75,82 @@ async fn restore_multitrack_playback(bot_state: Data) -> anyhow::Result<()> {
     );
 
     for (guild_id, multitrack_state) in saved_multitrack {
-        tracing::info!(
-            "Restoring {} track(s) for guild {}",
-            multitrack_state.tracks.len(),
-            guild_id
-        );
+        restore_guild_multitrack(bot_state, guild_id, multitrack_state).await;
+    }
 
-        let manager = bot_state.track_manager(guild_id).await;
+    Ok(())
+}
 
-        for track in multitrack_state.tracks {
-            let start_position = if let Some(start_time) = track.start_time {
-                match start_time.elapsed() {
-                    Ok(elapsed) => {
-                        let duration = bot_state.duration_cache.get_duration(&track.filename).await;
+#[tracing::instrument(skip_all, fields(guild_id = %guild_id))]
+async fn restore_guild_multitrack(
+    bot_state: Data,
+    guild_id: GuildId,
+    multitrack_state: MultiTrackPlaybackState,
+) {
+    tracing::info!("Restoring {} track(s)", multitrack_state.tracks.len());
 
-                        let position = if let Some(track_duration) = duration {
-                            if track.loops && track_duration.as_secs() > 0 {
-                                let position_in_loop =
-                                    elapsed.as_secs_f64() % track_duration.as_secs_f64();
-                                let seek_position = Duration::from_secs_f64(position_in_loop);
-                                tracing::info!(
-                                    "Track '{}' was playing for {:.2}s, seeking to {:.2}s (duration: {:.2}s)",
-                                    track.name,
-                                    elapsed.as_secs_f64(),
-                                    position_in_loop,
-                                    track_duration.as_secs_f64()
-                                );
-                                seek_position
-                            } else {
-                                tracing::info!(
-                                    "Track '{}' was playing for {:.2}s before restart",
-                                    track.name,
-                                    elapsed.as_secs_f64()
-                                );
-                                elapsed
-                            }
+    let manager = bot_state.track_manager(guild_id).await;
+
+    for track in multitrack_state.tracks {
+        let start_position = if let Some(start_time) = track.start_time {
+            match start_time.elapsed() {
+                Ok(elapsed) => {
+                    let duration = bot_state.duration_cache.get_duration(&track.filename).await;
+
+                    let position = if let Some(track_duration) = duration {
+                        if track.loops && track_duration.as_secs() > 0 {
+                            let position_in_loop =
+                                elapsed.as_secs_f64() % track_duration.as_secs_f64();
+                            let seek_position = Duration::from_secs_f64(position_in_loop);
+                            tracing::info!(
+                                "Track '{}' was playing for {:.2}s, seeking to {:.2}s (duration: {:.2}s)",
+                                track.name,
+                                elapsed.as_secs_f64(),
+                                position_in_loop,
+                                track_duration.as_secs_f64()
+                            );
+                            seek_position
                         } else {
                             tracing::info!(
-                                "Track '{}' was playing for {:.2}s before restart (duration unknown)",
+                                "Track '{}' was playing for {:.2}s before restart",
                                 track.name,
                                 elapsed.as_secs_f64()
                             );
                             elapsed
-                        };
+                        }
+                    } else {
+                        tracing::info!(
+                            "Track '{}' was playing for {:.2}s before restart (duration unknown)",
+                            track.name,
+                            elapsed.as_secs_f64()
+                        );
+                        elapsed
+                    };
 
-                        Some(position)
-                    }
-                    Err(_) => None,
+                    Some(position)
                 }
-            } else {
-                None
-            };
-
-            let name = track.name.clone();
-            let filename = track.filename;
-            let volume = track.volume;
-            let loops = track.loops;
-            if let Err(e) = manager
-                .start_track(StartTrackArgs {
-                    name,
-                    filename,
-                    volume,
-                    fade_time: 1.0,
-                    loops,
-                    start_position,
-                })
-                .await
-            {
-                tracing::warn!("Failed to restore track '{}': {}", track.name, e);
+                Err(_) => None,
             }
+        } else {
+            None
+        };
+
+        let name = track.name.clone();
+        let filename = track.filename;
+        let volume = track.volume;
+        let loops = track.loops;
+        if let Err(e) = manager
+            .start_track(StartTrackArgs {
+                name,
+                filename,
+                volume,
+                fade_time: 1.0,
+                loops,
+                start_position,
+            })
+            .await
+        {
+            tracing::warn!("Failed to restore track '{}': {}", track.name, e);
         }
     }
-
-    Ok(())
 }

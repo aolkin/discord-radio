@@ -1,4 +1,3 @@
-use serenity::model::id::GuildId;
 use songbird::{Event, EventContext, EventHandler};
 
 #[derive(Clone)]
@@ -6,37 +5,24 @@ pub struct ConnectionEventHandler;
 
 #[async_trait::async_trait]
 impl EventHandler for ConnectionEventHandler {
+    #[tracing::instrument(skip_all, fields(guild_id = tracing::field::Empty))]
     async fn act(&self, ctx: &EventContext<'_>) -> Option<Event> {
         use EventContext as Ctx;
 
         match ctx {
             Ctx::DriverConnect(data) => {
-                tracing::info!(
-                    "Bot connected to voice channel in guild {:?}, channel {:?}",
-                    data.guild_id,
-                    data.channel_id
-                );
+                tracing::Span::current().record("guild_id", data.guild_id.0.get());
+                tracing::info!("Bot connected to voice channel {:?}", data.channel_id);
             }
             Ctx::DriverDisconnect(data) => {
-                tracing::info!(
-                    "Bot disconnected from voice channel in guild {:?}, channel {:?}",
-                    data.guild_id,
-                    data.channel_id
-                );
+                tracing::Span::current().record("guild_id", data.guild_id.0.get());
+                tracing::info!("Bot disconnected from voice channel {:?}", data.channel_id);
 
-                let guild_id = GuildId::new(data.guild_id.0.into());
-
-                tracing::info!(
-                    "Voice disconnected for guild {}, audio state preserved",
-                    guild_id
-                );
+                tracing::info!("Voice disconnected, audio state preserved");
             }
             Ctx::DriverReconnect(data) => {
-                tracing::info!(
-                    "Bot reconnected to voice channel in guild {:?}, channel {:?}",
-                    data.guild_id,
-                    data.channel_id
-                );
+                tracing::Span::current().record("guild_id", data.guild_id.0.get());
+                tracing::info!("Bot reconnected to voice channel {:?}", data.channel_id);
             }
             _ => {}
         }
