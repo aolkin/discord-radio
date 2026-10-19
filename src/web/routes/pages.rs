@@ -13,75 +13,60 @@ pub async fn logs() -> Html<&'static str> {
     Html(include_str!("../../../static/logs.html"))
 }
 
+const STATIC_FILES: &[(&str, &str)] = &[
+    ("base.css", include_str!("../../../static/base.css")),
+    ("logs.css", include_str!("../../../static/logs.css")),
+    ("index.css", include_str!("../../../static/index.css")),
+    (
+        "alpine.min.js",
+        include_str!("../../../static/alpine.min.js"),
+    ),
+    ("index.js", include_str!("../../../static/index.js")),
+    (
+        "js/activity.js",
+        include_str!("../../../static/js/activity.js"),
+    ),
+    ("js/api.js", include_str!("../../../static/js/api.js")),
+    (
+        "js/bot-profile.js",
+        include_str!("../../../static/js/bot-profile.js"),
+    ),
+    (
+        "js/channels.js",
+        include_str!("../../../static/js/channels.js"),
+    ),
+    (
+        "js/connection.js",
+        include_str!("../../../static/js/connection.js"),
+    ),
+    ("js/dj.js", include_str!("../../../static/js/dj.js")),
+    (
+        "js/file-browser.js",
+        include_str!("../../../static/js/file-browser.js"),
+    ),
+    ("js/modal.js", include_str!("../../../static/js/modal.js")),
+    (
+        "js/run-action.js",
+        include_str!("../../../static/js/run-action.js"),
+    ),
+    (
+        "js/signal-profiles.js",
+        include_str!("../../../static/js/signal-profiles.js"),
+    ),
+    ("js/tracks.js", include_str!("../../../static/js/tracks.js")),
+];
+
 pub async fn static_file(Path(path): Path<String>) -> Result<impl IntoResponse, StatusCode> {
-    let (content_type, body) = match path.as_str() {
-        "base.css" => (
-            "text/css; charset=utf-8",
-            include_str!("../../../static/base.css"),
-        ),
-        "logs.css" => (
-            "text/css; charset=utf-8",
-            include_str!("../../../static/logs.css"),
-        ),
-        "index.css" => (
-            "text/css; charset=utf-8",
-            include_str!("../../../static/index.css"),
-        ),
-        "alpine.min.js" => (
-            "text/javascript; charset=utf-8",
-            include_str!("../../../static/alpine.min.js"),
-        ),
-        "index.js" => (
-            "text/javascript; charset=utf-8",
-            include_str!("../../../static/index.js"),
-        ),
-        "js/activity.js" => (
-            "text/javascript; charset=utf-8",
-            include_str!("../../../static/js/activity.js"),
-        ),
-        "js/api.js" => (
-            "text/javascript; charset=utf-8",
-            include_str!("../../../static/js/api.js"),
-        ),
-        "js/bot-profile.js" => (
-            "text/javascript; charset=utf-8",
-            include_str!("../../../static/js/bot-profile.js"),
-        ),
-        "js/channels.js" => (
-            "text/javascript; charset=utf-8",
-            include_str!("../../../static/js/channels.js"),
-        ),
-        "js/connection.js" => (
-            "text/javascript; charset=utf-8",
-            include_str!("../../../static/js/connection.js"),
-        ),
-        "js/dj.js" => (
-            "text/javascript; charset=utf-8",
-            include_str!("../../../static/js/dj.js"),
-        ),
-        "js/file-browser.js" => (
-            "text/javascript; charset=utf-8",
-            include_str!("../../../static/js/file-browser.js"),
-        ),
-        "js/modal.js" => (
-            "text/javascript; charset=utf-8",
-            include_str!("../../../static/js/modal.js"),
-        ),
-        "js/run-action.js" => (
-            "text/javascript; charset=utf-8",
-            include_str!("../../../static/js/run-action.js"),
-        ),
-        "js/signal-profiles.js" => (
-            "text/javascript; charset=utf-8",
-            include_str!("../../../static/js/signal-profiles.js"),
-        ),
-        "js/tracks.js" => (
-            "text/javascript; charset=utf-8",
-            include_str!("../../../static/js/tracks.js"),
-        ),
-        _ => return Err(StatusCode::NOT_FOUND),
+    let (_, body) = STATIC_FILES
+        .iter()
+        .find(|(name, _)| *name == path)
+        .ok_or(StatusCode::NOT_FOUND)?;
+    let content_type = if path.ends_with(".css") {
+        "text/css; charset=utf-8"
+    } else {
+        "text/javascript; charset=utf-8"
     };
-    Ok(([(CONTENT_TYPE, content_type)], body))
+    Ok(([(CONTENT_TYPE, content_type)], *body))
 }
 
 pub async fn get_status(State(bot_state): State<Data>) -> Json<BotSnapshot> {
