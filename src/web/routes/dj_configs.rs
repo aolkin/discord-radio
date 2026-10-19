@@ -1,7 +1,7 @@
 use crate::audio::dj::config::DJConfig;
 use crate::state::Data;
 use crate::web::error::ApiError;
-use crate::web::routes::profiles::{RefreshParams, get_registry_entry, put_registry_entry};
+use crate::web::routes::profiles::{RefreshParams, registry_error};
 use axum::Json as AxumJson;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
@@ -23,7 +23,19 @@ pub async fn get_dj_config(
     Path(name): Path<String>,
     Query(params): Query<RefreshParams>,
 ) -> Result<AxumJson<Arc<DJConfig>>, ApiError> {
-    get_registry_entry(&bot_state.dj_config_manager, &name, params).await
+    if params.refresh {
+        return bot_state
+            .dj_config_manager
+            .refresh(&name)
+            .await
+            .map(AxumJson)
+            .map_err(registry_error);
+    }
+    bot_state
+        .dj_config_manager
+        .get(&name)
+        .map(AxumJson)
+        .ok_or_else(|| ApiError::not_found(format!("No DJ config {name:?}")))
 }
 
 pub async fn put_dj_config(
@@ -31,5 +43,10 @@ pub async fn put_dj_config(
     Path(name): Path<String>,
     AxumJson(body): AxumJson<serde_json::Map<String, serde_json::Value>>,
 ) -> Result<StatusCode, ApiError> {
-    put_registry_entry(&bot_state.dj_config_manager, &name, body).await
+    bot_state
+        .dj_config_manager
+        .save(&name, body)
+        .await
+        .map_err(registry_error)?;
+    Ok(StatusCode::OK)
 }

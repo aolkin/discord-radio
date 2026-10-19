@@ -1,5 +1,5 @@
 use crate::audio::profiles::SignalProfile;
-use crate::bucket::registry::{JsonRegistry, RegistryEntry, RegistryError};
+use crate::bucket::registry::RegistryError;
 use crate::state::Data;
 use crate::web::error::ApiError;
 use axum::Json as AxumJson;
@@ -29,7 +29,19 @@ pub async fn get_profile(
     Path(name): Path<String>,
     Query(params): Query<RefreshParams>,
 ) -> Result<AxumJson<Arc<SignalProfile>>, ApiError> {
-    get_registry_entry(&bot_state.profile_manager, &name, params).await
+    if params.refresh {
+        return bot_state
+            .profile_manager
+            .refresh(&name)
+            .await
+            .map(AxumJson)
+            .map_err(registry_error);
+    }
+    bot_state
+        .profile_manager
+        .get(&name)
+        .map(AxumJson)
+        .ok_or_else(|| ApiError::not_found(format!("No signal profile {name:?}")))
 }
 
 pub async fn put_profile(
@@ -37,37 +49,15 @@ pub async fn put_profile(
     Path(name): Path<String>,
     AxumJson(body): AxumJson<serde_json::Map<String, serde_json::Value>>,
 ) -> Result<StatusCode, ApiError> {
-    put_registry_entry(&bot_state.profile_manager, &name, body).await
-}
-
-pub async fn get_registry_entry<T: RegistryEntry>(
-    registry: &JsonRegistry<T>,
-    name: &str,
-    params: RefreshParams,
-) -> Result<AxumJson<Arc<T>>, ApiError> {
-    if params.refresh {
-        return registry
-            .refresh(name)
-            .await
-            .map(AxumJson)
-            .map_err(registry_error);
-    }
-    registry
-        .get(name)
-        .map(AxumJson)
-        .ok_or_else(|| ApiError::not_found(format!("No {} {name:?}", T::KIND)))
-}
-
-pub async fn put_registry_entry<T: RegistryEntry>(
-    registry: &JsonRegistry<T>,
-    name: &str,
-    body: serde_json::Map<String, serde_json::Value>,
-) -> Result<StatusCode, ApiError> {
-    registry.save(name, body).await.map_err(registry_error)?;
+    bot_state
+        .profile_manager
+        .save(&name, body)
+        .await
+        .map_err(registry_error)?;
     Ok(StatusCode::OK)
 }
 
-fn registry_error(e: RegistryError) -> ApiError {
+pub fn registry_error(e: RegistryError) -> ApiError {
     match e {
         RegistryError::InvalidName => ApiError::new(StatusCode::BAD_REQUEST, e),
         RegistryError::Invalid(e) => ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, e),
