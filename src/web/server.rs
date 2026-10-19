@@ -39,74 +39,78 @@ pub async fn run_web_server(bot_state: Data, port: u16) -> anyhow::Result<()> {
     .allow_headers([CONTENT_TYPE, AUTHORIZATION]);
 
     let app = Router::new()
-        .route("/", get(routes::index))
-        .route("/logs.html", get(routes::logs))
-        .route("/static/{*path}", get(routes::static_file))
-        .route("/api/status", get(routes::get_status))
-        .route("/api/health", get(routes::health))
+        .route("/", get(routes::pages::index))
+        .route("/logs.html", get(routes::pages::logs))
+        .route("/static/{*path}", get(routes::pages::static_file))
+        .route("/api/status", get(routes::pages::get_status))
+        .route("/api/health", get(routes::pages::health))
         .route(
             "/api/guilds/{guild_id}/dj/advance",
-            post(routes::advance_dj_state),
+            post(routes::dj::advance_dj_state),
         )
         .route(
             "/api/guilds/{guild_id}/hex/play",
-            post(routes::play_hex_message),
+            post(routes::dj::play_hex_message),
         )
         .route(
             "/api/guilds/{guild_id}/dj/idle",
-            post(routes::force_dj_idle),
+            post(routes::dj::force_dj_idle),
         )
         .route(
             "/api/guilds/{guild_id}/track/play",
-            post(routes::play_track),
+            post(routes::dj::play_track),
         )
         .route(
             "/api/guilds/{guild_id}/tracks",
-            post(routes::change_track_state),
+            post(routes::tracks::change_track_state),
         )
         .route(
             "/api/guilds/{guild_id}/dj/profile",
-            post(routes::set_dj_background_profile),
+            post(routes::dj::set_dj_background_profile),
         )
         .route(
             "/api/guilds/{guild_id}/dj/profile-override",
-            post(routes::set_dj_override_profile),
+            post(routes::dj::set_dj_override_profile),
         )
         .route(
             "/api/guilds/{guild_id}/dj/channel-status",
-            post(routes::set_dj_channel_status),
+            post(routes::dj::set_dj_channel_status),
         )
         .route(
             "/api/guilds/{guild_id}/bot-profile",
-            get(routes::get_bot_profile).put(routes::set_bot_profile),
+            get(routes::discord::get_bot_profile).put(routes::discord::set_bot_profile),
         )
-        .route("/api/profiles", get(routes::get_profiles))
+        .route("/api/profiles", get(routes::profiles::get_profiles))
         .route(
             "/api/profiles/{name}",
-            get(routes::get_profile).put(routes::put_profile),
+            get(routes::profiles::get_profile).put(routes::profiles::put_profile),
         )
-        .route("/api/files", get(routes::browse_files))
+        .route("/api/files", get(routes::files::browse_files))
         .route(
             "/api/files/upload",
-            post(routes::upload_file).layer(DefaultBodyLimit::max(routes::MAX_UPLOAD_BYTES)),
+            post(routes::files::upload_file)
+                .layer(DefaultBodyLimit::max(routes::files::MAX_UPLOAD_BYTES)),
         )
-        .route("/api/files/folders", post(routes::create_folder))
-        .route("/api/activity/set", post(routes::set_bot_activity))
+        .route("/api/files/folders", post(routes::files::create_folder))
+        .route(
+            "/api/activity/set",
+            post(routes::activity::set_bot_activity),
+        )
         .route(
             "/api/guilds/{guild_id}/audio-stream",
             get(audio_stream::audio_stream),
         )
         .route(
             "/api/guilds/{guild_id}/logs/{log_type}",
-            get(routes::get_logs),
+            get(routes::logs::get_logs),
         )
         .route(
             "/api/registered-channels",
-            get(routes::get_registered_channels),
+            get(routes::discord::get_registered_channels),
         )
         .route(
             "/api/registered-channels/{channel_id}/send",
-            post(routes::send_channel_message),
+            post(routes::discord::send_channel_message),
         )
         .route("/ws", get(websocket::websocket_handler))
         .layer(cors)
