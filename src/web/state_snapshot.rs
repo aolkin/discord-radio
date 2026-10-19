@@ -77,7 +77,7 @@ impl BotSnapshot {
             // Get track info
             let guild = bot_state.guild(guild_id);
             if let Some(guild) = &guild {
-                let track_snapshots = guild.track_manager.lock().await.get_all_tracks().await;
+                let track_snapshots = guild.track_manager.get_all_tracks().await;
                 guild_state.tracks = track_snapshots
                     .iter()
                     .map(|t| TrackInfo {

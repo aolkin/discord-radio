@@ -24,7 +24,7 @@ pub type Data = &'static BotState;
 #[derive(Clone)]
 pub struct GuildRadio {
     pub audio_processor: ProcessorRef,
-    pub track_manager: Arc<Mutex<TrackManager>>,
+    pub track_manager: Arc<TrackManager>,
 }
 
 pub struct BotState {
@@ -79,11 +79,8 @@ impl BotState {
                 let audio_processor = Arc::new(RwLock::new(AudioProcessor::new(
                     self.profile_manager.default_profile(),
                 )));
-                let track_manager = Arc::new(Mutex::new(TrackManager::new(
-                    guild_id,
-                    self,
-                    audio_processor.clone(),
-                )));
+                let track_manager =
+                    Arc::new(TrackManager::new(guild_id, self, audio_processor.clone()));
                 GuildRadio {
                     audio_processor,
                     track_manager,

@@ -9,6 +9,7 @@ use serenity::model::id::GuildId;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
+use tokio::sync::Mutex;
 
 #[derive(Clone, Debug)]
 pub struct TrackSnapshot {
@@ -42,7 +43,7 @@ pub struct StartTrackArgs {
 }
 
 pub struct TrackManager {
-    tracks: HashMap<String, TrackInfo>,
+    tracks: Mutex<HashMap<String, TrackInfo>>,
     guild_id: GuildId,
     bot_state: Data,
     audio_processor: ProcessorRef,
@@ -51,18 +52,20 @@ pub struct TrackManager {
 impl TrackManager {
     pub fn new(guild_id: GuildId, bot_state: Data, processor: ProcessorRef) -> Self {
         Self {
-            tracks: HashMap::new(),
+            tracks: Mutex::new(HashMap::new()),
             guild_id,
             bot_state,
             audio_processor: processor,
         }
     }
 
-    pub async fn start_track(&mut self, args: StartTrackArgs) -> anyhow::Result<()> {
+    pub async fn start_track(&self, args: StartTrackArgs) -> anyhow::Result<()> {
         let resolved_filename = self.bot_state.file_resolver.resolve(&args.filename).await?;
         let source = open_track_source(&resolved_filename, args.start_position)?;
-        if self.tracks.contains_key(&args.name) {
-            self.stop_track(&args.name, args.fade_time).await?;
+        let mut tracks = self.tracks.lock().await;
+        if tracks.contains_key(&args.name) {
+            self.stop_locked(&mut tracks, &args.name, args.fade_time)
+                .await?;
         }
         let duration = self
             .bot_state
@@ -114,12 +117,7 @@ impl TrackManager {
             });
             tracing::debug!("Track '{name}' left the mixer in guild {guild_id}: {reason:?}");
             if let Some(guild) = bot_state.guild(guild_id) {
-                guild
-                    .track_manager
-                    .lock()
-                    .await
-                    .remove_handle(ended_track.id)
-                    .await;
+                guild.track_manager.remove_handle(ended_track.id).await;
             }
         });
 
@@ -140,25 +138,25 @@ impl TrackManager {
             start_time,
         };
 
-        self.tracks.insert(args.name, track);
+        tracks.insert(args.name, track);
 
-        self.persist_state().await;
+        self.persist_locked(&tracks).await;
 
         Ok(())
     }
 
-    pub fn has_track(&self, name: &str) -> bool {
-        self.tracks.contains_key(name)
+    pub async fn has_track(&self, name: &str) -> bool {
+        self.tracks.lock().await.contains_key(name)
     }
 
     pub async fn update_track_volume(
-        &mut self,
+        &self,
         name: &str,
         volume: f32,
         fade_time: f32,
     ) -> anyhow::Result<()> {
-        let track_info = self
-            .tracks
+        let mut tracks = self.tracks.lock().await;
+        let track_info = tracks
             .get_mut(name)
             .with_context(|| format!("Track '{name}' not found"))?;
 
@@ -186,14 +184,14 @@ impl TrackManager {
             bail!("Track '{name}' has ended");
         }
 
-        self.persist_state().await;
+        self.persist_locked(&tracks).await;
 
         Ok(())
     }
 
-    pub async fn update_track_loops(&mut self, name: &str, loops: bool) -> anyhow::Result<()> {
-        let track_info = self
-            .tracks
+    pub async fn update_track_loops(&self, name: &str, loops: bool) -> anyhow::Result<()> {
+        let mut tracks = self.tracks.lock().await;
+        let track_info = tracks
             .get_mut(name)
             .with_context(|| format!("Track '{name}' not found"))?;
 
@@ -220,26 +218,35 @@ impl TrackManager {
             bail!("Track '{name}' has ended");
         }
 
-        self.persist_state().await;
+        self.persist_locked(&tracks).await;
 
         Ok(())
     }
 
-    async fn remove_handle(&mut self, handle: TrackId) {
-        let info = self
-            .tracks
+    async fn remove_handle(&self, handle: TrackId) {
+        let mut tracks = self.tracks.lock().await;
+        let info = tracks
             .extract_if(|_k, info| info.mixer_handle.id == handle)
             .map(|(_, info)| info)
             .next();
         if let Some(info) = info {
             tracing::debug!("Removed track '{}' from guild {}", info.name, self.guild_id);
-            self.persist_state().await;
+            self.persist_locked(&tracks).await;
         }
     }
 
-    pub async fn stop_track(&mut self, name: &str, fade_time: f32) -> anyhow::Result<()> {
-        let track_info = self
-            .tracks
+    pub async fn stop_track(&self, name: &str, fade_time: f32) -> anyhow::Result<()> {
+        let mut tracks = self.tracks.lock().await;
+        self.stop_locked(&mut tracks, name, fade_time).await
+    }
+
+    async fn stop_locked(
+        &self,
+        tracks: &mut HashMap<String, TrackInfo>,
+        name: &str,
+        fade_time: f32,
+    ) -> anyhow::Result<()> {
+        let track_info = tracks
             .get(name)
             .with_context(|| format!("Track '{name}' not found"))?;
 
@@ -262,15 +269,16 @@ impl TrackManager {
             bail!("Track '{name}' has ended");
         }
 
-        self.tracks.remove(name);
-        self.persist_state().await;
+        tracks.remove(name);
+        self.persist_locked(tracks).await;
 
         Ok(())
     }
 
     pub async fn get_all_tracks(&self) -> Vec<TrackSnapshot> {
+        let tracks = self.tracks.lock().await;
         let mut snapshots = Vec::new();
-        for info in self.tracks.values() {
+        for info in tracks.values() {
             let duration = self
                 .bot_state
                 .duration_cache
@@ -288,10 +296,9 @@ impl TrackManager {
         snapshots
     }
 
-    async fn persist_state(&self) {
+    async fn persist_locked(&self, tracks: &HashMap<String, TrackInfo>) {
         let state = crate::persistence::MultiTrackPlaybackState {
-            tracks: self
-                .tracks
+            tracks: tracks
                 .values()
                 .map(|info| crate::persistence::TrackState {
                     name: info.name.clone(),
@@ -326,9 +333,6 @@ pub fn open_track_source(
 }
 
 /// Get or create a TrackManager for a guild, ensuring audio processor exists
-pub async fn get_or_create_track_manager(
-    bot_state: &Data,
-    guild_id: GuildId,
-) -> Arc<tokio::sync::Mutex<TrackManager>> {
+pub async fn get_or_create_track_manager(bot_state: &Data, guild_id: GuildId) -> Arc<TrackManager> {
     bot_state.guild_or_create(guild_id).track_manager.clone()
 }
