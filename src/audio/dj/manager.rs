@@ -159,19 +159,6 @@ impl DJManager {
                 tracing::warn!("DJ shutdown timeout for guild {}, aborted the task", self.guild_id);
             }
         }
-
-        if let Err(e) = self
-            .bot_state
-            .state_store
-            .remove_dj_state(self.guild_id)
-            .await
-        {
-            tracing::warn!(
-                "Failed to remove DJ state for guild {}: {}",
-                self.guild_id,
-                e
-            );
-        }
     }
 
     /// Starts the DJ task if it is not running, resuming its saved state when
