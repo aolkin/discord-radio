@@ -10,7 +10,7 @@ pub use track::TrackSegment;
 use crate::audio::processing::mixer::{TrackCommand, TrackHandle};
 use crate::audio::processing::processor::ProcessorRef;
 use crate::bucket::FileResolver;
-use crate::state::BotState;
+use crate::state::Data;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serenity::model::id::GuildId;
@@ -22,11 +22,11 @@ use std::time::Duration;
 
 pub struct SegmentCtx<'a> {
     pub guild_id: &'a GuildId,
-    bot_state: &'a BotState,
+    bot_state: Data,
 }
 
 impl<'a> SegmentCtx<'a> {
-    pub fn new(guild_id: &'a GuildId, bot_state: &'a BotState) -> Self {
+    pub fn new(guild_id: &'a GuildId, bot_state: Data) -> Self {
         Self {
             guild_id,
             bot_state,
