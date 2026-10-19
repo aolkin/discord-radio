@@ -318,6 +318,7 @@ async fn autocomplete_audio_file(ctx: Context<'_>, partial: &'_ str) -> CreateAu
     guild_only,
     default_member_permissions = "ADMINISTRATOR"
 )]
+#[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
 pub async fn change_track_state(
     ctx: Context<'_>,
     #[description = "Track name identifier"] name: String,

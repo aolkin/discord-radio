@@ -2,12 +2,30 @@ use crate::state::Data;
 use crate::web::{audio_stream, routes, websocket};
 use axum::{
     Router,
-    extract::DefaultBodyLimit,
+    extract::{DefaultBodyLimit, RawPathParams, Request},
+    middleware::{self, Next},
+    response::Response,
     routing::{get, post},
 };
 use http::header::{AUTHORIZATION, CONTENT_TYPE};
 use std::net::SocketAddr;
 use tower_http::cors::{AllowOrigin, CorsLayer};
+use tracing::Instrument;
+
+async fn guild_span(params: RawPathParams, request: Request, next: Next) -> Response {
+    let guild_id = params
+        .iter()
+        .find(|(name, _)| *name == "guild_id")
+        .map(|(_, value)| value.to_string());
+    match guild_id {
+        Some(guild_id) => {
+            next.run(request)
+                .instrument(tracing::info_span!("request", guild_id))
+                .await
+        }
+        None => next.run(request).await,
+    }
+}
 
 pub async fn run_web_server(bot_state: Data, port: u16) -> anyhow::Result<()> {
     // Configure CORS - secure by default (localhost only), configurable via env var
@@ -118,6 +136,7 @@ pub async fn run_web_server(bot_state: Data, port: u16) -> anyhow::Result<()> {
             post(routes::discord::send_channel_message),
         )
         .route("/ws", get(websocket::websocket_handler))
+        .route_layer(middleware::from_fn(guild_span))
         .layer(cors)
         .with_state(bot_state);
 
