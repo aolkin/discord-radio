@@ -1,7 +1,5 @@
 use crate::audio::connection::connect_voice_channel;
-use crate::audio::dj::manager::{
-    DJCommand, DJStateType, restart_dj_with_config, start_dj, stop_dj,
-};
+use crate::audio::dj::manager::{DJCommand, DJStateType};
 use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
 use crate::audio::processing::processor::ProcessorRef;
@@ -12,12 +10,12 @@ use serenity::all::{ChannelId, ChannelType, CreateAutocompleteResponse, GuildId}
 use std::path::Path;
 use std::time::Duration;
 
-async fn send_to_dj(
+fn send_to_dj(
     bot_state: crate::state::Data,
     guild_id: GuildId,
     command: DJCommand,
 ) -> anyhow::Result<()> {
-    if !bot_state.send_dj_command(guild_id, command).await? {
+    if !bot_state.send_dj_command(guild_id, command)? {
         bail!("Not in a voice channel");
     }
     Ok(())
@@ -104,7 +102,9 @@ pub async fn leave_voice_channel(ctx: Context<'_>) -> anyhow::Result<()> {
                 .await?;
         } else {
             let _ = ctx.data().state_store.remove_voice_channel(guild_id).await;
-            stop_dj(ctx.data(), guild_id).await;
+            if let Some(dj_manager) = ctx.data().existing_dj_manager(guild_id) {
+                dj_manager.stop().await;
+            }
             ctx.say("Left voice channel").await?;
         }
     } else {
@@ -146,8 +146,7 @@ pub async fn hex(
         volume,
         loops,
     };
-    let content = match send_to_dj(ctx.data(), guild_id, DJCommand::ForceHexMessage(request)).await
-    {
+    let content = match send_to_dj(ctx.data(), guild_id, DJCommand::ForceHexMessage(request)) {
         Ok(()) => {
             let loops_text = match loops {
                 Some(n) => format!("{n} loops"),
@@ -215,7 +214,7 @@ pub async fn track(
         return Ok(());
     }
 
-    let content = match send_to_dj(ctx.data(), guild_id, DJCommand::ForceTrack(request)).await {
+    let content = match send_to_dj(ctx.data(), guild_id, DJCommand::ForceTrack(request)) {
         Ok(()) => format!(
             "DJ is now playing track: {} (volume {})",
             filename,
@@ -266,7 +265,7 @@ pub async fn idle(
         return Ok(());
     }
 
-    let content = match send_to_dj(ctx.data(), guild_id, DJCommand::ForceIdle(request)).await {
+    let content = match send_to_dj(ctx.data(), guild_id, DJCommand::ForceIdle(request)) {
         Ok(()) => {
             let what = match &noise_profile {
                 Some(profile) => format!("playing noise profile '{profile}'"),
@@ -491,7 +490,9 @@ async fn join_voice_channel_helper(
 
     let processor = connect_voice_channel(&manager, guild_id, channel_id, ctx.data()).await?;
     tracing::info!("Joined voice channel");
-    start_dj(ctx.data(), guild_id)
+    ctx.data()
+        .dj_manager(guild_id)
+        .start()
         .await
         .map_err(|e| e.context("Failed to start DJ"))?;
     Ok(processor)
@@ -552,7 +553,7 @@ async fn set_dj_profile(
         fade_in_duration: fade,
         fade_out_duration: fade,
     });
-    if let Err(e) = send_to_dj(ctx.data(), guild_id, command(playback)).await {
+    if let Err(e) = send_to_dj(ctx.data(), guild_id, command(playback)) {
         ctx.say(format!("Failed to update DJ {label}: {e:#}"))
             .await?;
         return Ok(());
@@ -670,7 +671,12 @@ pub async fn configure(
 
     ctx.defer_ephemeral().await?;
 
-    if let Err(e) = restart_dj_with_config(ctx.data(), guild_id, config.clone()).await {
+    let Some(dj_manager) = ctx.data().existing_dj_manager(guild_id) else {
+        ctx.say("Failed to configure DJ: Not in a voice channel")
+            .await?;
+        return Ok(());
+    };
+    if let Err(e) = dj_manager.restart_with_config(config.clone()).await {
         ctx.say(format!("Failed to configure DJ: {e:#}")).await?;
         return Ok(());
     }
@@ -703,9 +709,7 @@ pub async fn announcements(
         ctx.data(),
         guild_id,
         DJCommand::SetAnnouncementChannel(announcement_channel),
-    )
-    .await
-    {
+    ) {
         ctx.say(format!("Failed to configure DJ: {e:#}")).await?;
         return Ok(());
     }
@@ -738,7 +742,7 @@ pub async fn skip(
 
     ctx.defer_ephemeral().await?;
 
-    if let Err(e) = send_to_dj(ctx.data(), guild_id, DJCommand::ForceAdvance(to_state)).await {
+    if let Err(e) = send_to_dj(ctx.data(), guild_id, DJCommand::ForceAdvance(to_state)) {
         ctx.say(format!("Failed to force DJ state advance: {e:#}"))
             .await?;
         return Ok(());
@@ -763,7 +767,8 @@ pub async fn status(ctx: Context<'_>) -> anyhow::Result<()> {
 
     ctx.defer_ephemeral().await?;
 
-    let Some(state_arc) = ctx.data().dj_state(guild_id).await else {
+    let dj_manager = ctx.data().existing_dj_manager(guild_id);
+    let Some(state_arc) = dj_manager.map(|manager| manager.state()) else {
         ctx.say("DJ state not available").await?;
         return Ok(());
     };

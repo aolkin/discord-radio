@@ -17,8 +17,8 @@ use songbird::Songbird;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::sync::{Arc, Mutex as StdMutex};
+use tokio::sync::RwLock;
 use tokio::sync::broadcast::Receiver;
-use tokio::sync::{Mutex, RwLock};
 
 pub type Data = &'static BotState;
 
@@ -26,6 +26,13 @@ pub type Data = &'static BotState;
 pub struct GuildRadio {
     pub audio_processor: ProcessorRef,
     pub track_manager: Arc<TrackManager>,
+    dj_manager: Arc<DJManager>,
+}
+
+impl GuildRadio {
+    pub fn dj_state(&self) -> Arc<RwLock<DJState>> {
+        self.dj_manager.state()
+    }
 }
 
 pub struct BotState {
@@ -33,10 +40,9 @@ pub struct BotState {
     pub state_store: Arc<dyn StateStore>,
     pub dj_settings: DjSettingsStore,
     pub duration_cache: DurationCache,
-    pub guilds: StdMutex<HashMap<GuildId, GuildRadio>>,
+    guilds: StdMutex<HashMap<GuildId, GuildRadio>>,
     pub profile_manager: JsonRegistry<SignalProfile>,
     pub dj_config_manager: JsonRegistry<DJConfig>,
-    pub dj_managers: RwLock<HashMap<GuildId, Arc<Mutex<DJManager>>>>,
     pub activity_manager: ActivityManager,
     pub file_resolver: FileResolver,
     pub bot_user_id: UserId,
@@ -60,7 +66,6 @@ impl BotState {
             guilds: StdMutex::new(HashMap::new()),
             profile_manager,
             dj_config_manager,
-            dj_managers: RwLock::new(HashMap::new()),
             activity_manager: ActivityManager::new(state_store),
             file_resolver,
             bot_user_id,
@@ -81,9 +86,35 @@ impl BotState {
                 GuildRadio {
                     audio_processor,
                     track_manager,
+                    dj_manager: Arc::new(DJManager::new(guild_id, self)),
                 }
             })
             .clone()
+    }
+
+    fn existing_guild_radio(&self, guild_id: GuildId) -> Option<GuildRadio> {
+        self.guilds.lock().unwrap().get(&guild_id).cloned()
+    }
+
+    /// Every guild that has radio state, ordered by guild id.
+    pub fn guild_radios(&self) -> Vec<(GuildId, GuildRadio)> {
+        let mut guilds: Vec<_> = self
+            .guilds
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(id, radio)| (*id, radio.clone()))
+            .collect();
+        guilds.sort_by_key(|(id, _)| *id);
+        guilds
+    }
+
+    pub fn dj_manager(&'static self, guild_id: GuildId) -> Arc<DJManager> {
+        self.guild_radio(guild_id).dj_manager
+    }
+
+    pub fn existing_dj_manager(&self, guild_id: GuildId) -> Option<Arc<DJManager>> {
+        Some(self.existing_guild_radio(guild_id)?.dj_manager)
     }
 
     pub async fn audio_processor(&'static self, guild_id: GuildId) -> ProcessorRef {
@@ -95,33 +126,16 @@ impl BotState {
     }
 
     pub async fn opus_stream(&self, guild_id: GuildId) -> Option<Receiver<Vec<u8>>> {
-        let audio_processor = self
-            .guilds
-            .lock()
-            .unwrap()
-            .get(&guild_id)?
-            .audio_processor
-            .clone();
+        let audio_processor = self.existing_guild_radio(guild_id)?.audio_processor;
         let receiver = audio_processor.read().await.stream_opus();
         Some(receiver)
     }
 
-    pub async fn dj_state(&self, guild_id: GuildId) -> Option<Arc<RwLock<DJState>>> {
-        let manager = self.dj_managers.read().await.get(&guild_id)?.clone();
-        let state = manager.lock().await.state.clone();
-        Some(state)
-    }
-
-    pub async fn send_dj_command(
-        &self,
-        guild_id: GuildId,
-        command: DJCommand,
-    ) -> anyhow::Result<bool> {
-        let Some(manager) = self.dj_managers.read().await.get(&guild_id).cloned() else {
+    pub fn send_dj_command(&self, guild_id: GuildId, command: DJCommand) -> anyhow::Result<bool> {
+        let Some(manager) = self.existing_dj_manager(guild_id) else {
             return Ok(false);
         };
-        manager.lock().await.send(command).await?;
-        Ok(true)
+        manager.send(command)
     }
 
     /// Get the current voice channel ID for a guild

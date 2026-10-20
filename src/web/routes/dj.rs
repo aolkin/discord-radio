@@ -1,4 +1,4 @@
-use crate::audio::dj::manager::{DJCommand, DJStateType, IdleRequest, TrackRequest};
+use crate::audio::dj::manager::{DJCommand, DJStateType, DjBusy, IdleRequest, TrackRequest};
 use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
 use crate::state::Data;
@@ -41,18 +41,24 @@ pub async fn advance_dj_state(
         guild_id,
         DJCommand::ForceAdvance(state_type_filter),
     )
-    .await
 }
 
-async fn send_dj_command(
+fn send_dj_command(
     bot_state: &Data,
     guild_id: GuildId,
     command: DJCommand,
 ) -> Result<StatusCode, ApiError> {
-    let sent = bot_state
-        .send_dj_command(guild_id, command)
-        .await
-        .with_context(|| format!("Failed to send DJ command for guild {guild_id}"))?;
+    let sent = bot_state.send_dj_command(guild_id, command).map_err(|e| {
+        let status = if e.is::<DjBusy>() {
+            StatusCode::SERVICE_UNAVAILABLE
+        } else {
+            StatusCode::INTERNAL_SERVER_ERROR
+        };
+        ApiError::new(
+            status,
+            e.context(format!("Failed to send DJ command for guild {guild_id}")),
+        )
+    })?;
     if !sent {
         return Err(ApiError::not_found(format!("No DJ in guild {guild_id}")));
     }
@@ -85,7 +91,7 @@ pub async fn play_hex_message(
         volume: None,
         loops: None,
     };
-    send_dj_command(&bot_state, guild_id, DJCommand::ForceHexMessage(request)).await
+    send_dj_command(&bot_state, guild_id, DJCommand::ForceHexMessage(request))
 }
 
 pub async fn play_track(
@@ -100,7 +106,7 @@ pub async fn play_track(
         .await
         .map_err(ApiError::object_store)?;
 
-    send_dj_command(&bot_state, guild_id, DJCommand::ForceTrack(request)).await
+    send_dj_command(&bot_state, guild_id, DJCommand::ForceTrack(request))
 }
 
 pub async fn force_dj_idle(
@@ -111,7 +117,7 @@ pub async fn force_dj_idle(
     request.validate().status(StatusCode::BAD_REQUEST)?;
     ensure_profile_exists(&bot_state, request.noise_profile.as_deref())?;
 
-    send_dj_command(&bot_state, guild_id, DJCommand::ForceIdle(request)).await
+    send_dj_command(&bot_state, guild_id, DJCommand::ForceIdle(request))
 }
 
 /// `profile: null` clears the setting; `fade_duration` (seconds) applies only
@@ -177,7 +183,7 @@ async fn set_dj_profile(
         fade_in_duration: fade,
         fade_out_duration: fade,
     });
-    send_dj_command(bot_state, guild_id, command(playback)).await
+    send_dj_command(bot_state, guild_id, command(playback))
 }
 
 #[derive(Debug, Deserialize)]

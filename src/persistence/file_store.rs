@@ -164,10 +164,6 @@ impl StateStore for FileStore {
         self.dj_states().load_all().await
     }
 
-    async fn remove_dj_state(&self, guild_id: GuildId) -> Result<()> {
-        self.dj_states().remove(&guild_id).await
-    }
-
     async fn save_registered_channel(&self, channel: &RegisteredChannel) -> Result<()> {
         let mut channels = self.load_registered_channels().await?;
 
