@@ -38,8 +38,8 @@ const kinds = {
     },
     hex: {
         label: 'Hex Message',
-        poolFields: [
-            weight,
+        poolFields: [weight],
+        defaultsFields: [
             loops('loop_min', 'Loop Min'),
             loops('loop_max', 'Loop Max'),
             profileText('signal_profile', 'Signal Profile', true),
@@ -65,6 +65,8 @@ const kinds = {
         ],
     },
 };
+
+const poolNameField = { key: 'name', label: 'Name', type: 'text' };
 
 const signalProfileFields = [
     profileText('profile_name', 'Profile'),
@@ -103,6 +105,7 @@ function convertPool(pool, convert) {
     return {
         kind: pool.kind,
         ...convertObject(kind.poolFields, pool, convert),
+        ...(kind.defaultsFields && { defaults: convertObject(kind.defaultsFields, pool.defaults ?? {}, convert) }),
         entries: pool.entries.map((entry) => convertObject(kind.entryFields, entry, convert)),
     };
 }
@@ -111,7 +114,7 @@ function toForm(config) {
     return {
         name: config.name,
         ...convertObject(generalFields, config, fieldFromServer),
-        pools: config.pools.map((pool) => convertPool(pool, fieldFromServer)),
+        pools: Object.entries(config.pools).map(([name, pool]) => ({ name, ...convertPool(pool, fieldFromServer) })),
         signal_profiles: config.signal_profiles.map((row) => convertObject(signalProfileFields, row, fieldFromServer)),
     };
 }
@@ -119,7 +122,7 @@ function toForm(config) {
 function toBody(form) {
     return {
         ...convertObject(generalFields, form, fieldToServer),
-        pools: form.pools.map((pool) => convertPool(pool, fieldToServer)),
+        pools: Object.fromEntries(form.pools.map((pool) => [pool.name, convertPool(pool, fieldToServer)])),
         signal_profiles: form.signal_profiles.map((row) => convertObject(signalProfileFields, row, fieldToServer)),
     };
 }
@@ -171,9 +174,17 @@ export function djConfigs() {
         },
 
         addDjConfigPool(kind) {
+            const names = this.djConfigForm.pools.map((pool) => pool.name);
+            let name = kind;
+            for (let n = 2; names.includes(name); n++) {
+                name = `${kind}-${n}`;
+            }
+            const { poolFields, defaultsFields } = kinds[kind];
             this.djConfigForm.pools.push({
+                name,
                 kind,
-                ...blankRow(kinds[kind].poolFields),
+                ...blankRow(poolFields),
+                ...(defaultsFields && { defaults: blankRow(defaultsFields) }),
                 entries: [],
             });
         },
@@ -181,7 +192,8 @@ export function djConfigs() {
         djConfigPoolBlocks(pool) {
             const kind = kinds[pool.kind];
             return [
-                { row: pool, fields: kind.poolFields },
+                { row: pool, fields: [poolNameField, ...kind.poolFields] },
+                ...(kind.defaultsFields ? [{ row: pool.defaults, fields: kind.defaultsFields }] : []),
                 ...pool.entries.map((entry, index) => ({ row: entry, fields: kind.entryFields, index })),
             ];
         },
@@ -221,6 +233,12 @@ export function djConfigs() {
             const name = this.djConfigForm.name;
             if (this.djConfigEditorIsNew && this.djConfigs.includes(name)) {
                 this.djConfigEditorMessage = { text: `A DJ config named "${name}" already exists`, type: 'error' };
+                return;
+            }
+
+            const poolNames = this.djConfigForm.pools.map((pool) => pool.name);
+            if (new Set(poolNames).size !== poolNames.length) {
+                this.djConfigEditorMessage = { text: 'Pool names must be unique', type: 'error' };
                 return;
             }
 
