@@ -48,7 +48,7 @@ fn send_dj_command(
     guild_id: GuildId,
     command: DJCommand,
 ) -> Result<StatusCode, ApiError> {
-    let sent = bot_state.send_dj_command(guild_id, command).map_err(|e| {
+    let sent = bot_state.dj_manager(guild_id).send(command).map_err(|e| {
         let status = if e.is::<DjBusy>() {
             StatusCode::SERVICE_UNAVAILABLE
         } else {

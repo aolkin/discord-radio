@@ -1,6 +1,6 @@
 use crate::activity::ActivityManager;
 use crate::audio::dj::config::DJConfig;
-use crate::audio::dj::manager::{DJCommand, DJManager};
+use crate::audio::dj::manager::DJManager;
 use crate::audio::dj::state_machine::DJState;
 use crate::audio::duration::DurationCache;
 use crate::audio::processing::processor::{AudioProcessor, ProcessorRef};
@@ -129,13 +129,6 @@ impl BotState {
         let audio_processor = self.existing_guild_radio(guild_id)?.audio_processor;
         let receiver = audio_processor.read().await.stream_opus();
         Some(receiver)
-    }
-
-    pub fn send_dj_command(&self, guild_id: GuildId, command: DJCommand) -> anyhow::Result<bool> {
-        let Some(manager) = self.existing_dj_manager(guild_id) else {
-            return Ok(false);
-        };
-        manager.send(command)
     }
 
     /// Get the current voice channel ID for a guild
