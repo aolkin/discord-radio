@@ -106,9 +106,8 @@ impl DJManager {
     }
 
     /// The DJ's state while its task is running.
-    pub fn state(&self) -> Option<Arc<RwLock<DJState>>> {
-        let running = self.command_tx.lock().unwrap().is_some();
-        running.then(|| self.state.clone())
+    pub fn state(&self) -> Arc<RwLock<DJState>> {
+        self.state.clone()
     }
 
     /// Sends `command` to the running task, returning false when none is running.

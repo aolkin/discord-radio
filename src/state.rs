@@ -126,7 +126,7 @@ impl BotState {
     }
 
     pub fn dj_state(&self, guild_id: GuildId) -> Option<Arc<RwLock<DJState>>> {
-        self.existing_dj_manager(guild_id)?.state()
+        Some(self.existing_dj_manager(guild_id)?.state())
     }
 
     pub async fn send_dj_command(
