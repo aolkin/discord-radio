@@ -95,61 +95,57 @@
 
                         <div class="guild-content">
                             <!-- DJ State -->
-                            <template x-if="guild.dj_state">
-                                <div class="section">
-                                    <div class="section-title">DJ State</div>
-                                    <div class="dj-state">
-                                        <div class="dj-type" x-text="guild.dj_state.state_type"></div>
-                                        <div class="dj-details" x-text="guild.dj_state.details"></div>
-                                    </div>
-                                    <div class="button-group mt-12">
-                                        <button
-                                            type="button"
-                                            class="btn btn-secondary"
-                                            @click="openModal('advanceDJ', guild.guild_id)"
-                                        >
-                                            Advance DJ State
-                                        </button>
-                                        <button
-                                            type="button"
-                                            class="btn btn-secondary"
-                                            @click="openModal('playHex', guild.guild_id)"
-                                        >
-                                            Play Hex Message
-                                        </button>
-                                        <button
-                                            type="button"
-                                            class="btn btn-secondary"
-                                            @click="openModal('playTrack', guild.guild_id)"
-                                        >
-                                            Play Track
-                                        </button>
-                                    </div>
+                            <div class="section">
+                                <div class="section-title">DJ State</div>
+                                <div class="dj-state">
+                                    <div class="dj-type" x-text="guild.dj_state.state_type"></div>
+                                    <div class="dj-details" x-text="guild.dj_state.details"></div>
                                 </div>
-                            </template>
-
-                            <!-- Audio Profile -->
-                            <template x-if="guild.audio_profile">
-                                <div class="section">
-                                    <div class="section-title">Audio Profile</div>
-                                    <div class="info-item">
-                                        <div class="grow">
-                                            <div class="track-name" x-text="guild.audio_profile.name"></div>
-                                            <div
-                                                class="track-details"
-                                                x-text="guild.audio_profile.source ? 'Source: ' + guild.audio_profile.source : 'No DJ'"
-                                            ></div>
-                                        </div>
-                                    </div>
+                                <div class="button-group mt-12">
                                     <button
                                         type="button"
-                                        class="btn btn-secondary mt-12 w-full"
-                                        @click="openModal('signalProfile', guild.guild_id)"
+                                        class="btn btn-secondary"
+                                        @click="openModal('advanceDJ', guild.guild_id)"
                                     >
-                                        Change Signal Profile
+                                        Advance DJ State
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="btn btn-secondary"
+                                        @click="openModal('playHex', guild.guild_id)"
+                                    >
+                                        Play Hex Message
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="btn btn-secondary"
+                                        @click="openModal('playTrack', guild.guild_id)"
+                                    >
+                                        Play Track
                                     </button>
                                 </div>
-                            </template>
+                            </div>
+
+                            <!-- Audio Profile -->
+                            <div class="section">
+                                <div class="section-title">Audio Profile</div>
+                                <div class="info-item">
+                                    <div class="grow">
+                                        <div class="track-name" x-text="guild.audio_profile.name"></div>
+                                        <div
+                                            class="track-details"
+                                            x-text="'Source: ' + guild.audio_profile.source"
+                                        ></div>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    class="btn btn-secondary mt-12 w-full"
+                                    @click="openModal('signalProfile', guild.guild_id)"
+                                >
+                                    Change Signal Profile
+                                </button>
+                            </div>
 
                             <!-- Live Audio Stream -->
                             <template x-if="guild.in_voice">
@@ -273,11 +269,6 @@
                                     </a>
                                 </div>
                             </div>
-
-                            <!-- Empty State -->
-                            <template x-if="!guild.tracks.length && !guild.dj_state && !guild.audio_profile">
-                                <div class="empty-state">No active features</div>
-                            </template>
                         </div>
                     </div>
                 </template>

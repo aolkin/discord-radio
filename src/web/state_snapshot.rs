@@ -21,7 +21,7 @@ pub struct DJStateInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioProfileInfo {
     pub name: String,
-    pub source: Option<String>,
+    pub source: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,8 +29,8 @@ pub struct GuildState {
     pub guild_id: String,
     pub in_voice: bool,
     pub tracks: Vec<TrackInfo>,
-    pub dj_state: Option<DJStateInfo>,
-    pub audio_profile: Option<AudioProfileInfo>,
+    pub dj_state: DJStateInfo,
+    pub audio_profile: AudioProfileInfo,
     pub channel_status_enabled: bool,
 }
 
@@ -79,16 +79,16 @@ impl BotSnapshot {
             let processor = guild.audio_processor.read().await;
             let profile_name = processor.current_profile_name().to_string();
 
-            let audio_profile = Some(AudioProfileInfo {
+            let audio_profile = AudioProfileInfo {
                 name: profile_name,
-                source: Some(source),
-            });
+                source,
+            };
 
             guilds.push(GuildState {
                 guild_id: guild_id.to_string(),
                 in_voice,
                 tracks,
-                dj_state: Some(dj_state),
+                dj_state,
                 audio_profile,
                 channel_status_enabled: !bot_state
                     .dj_settings
