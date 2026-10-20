@@ -18,6 +18,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
+use tracing::Instrument;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct HexProgress {
@@ -76,15 +77,18 @@ impl HexSegment {
 
     async fn start_run(&self, ctx: &SegmentCtx<'_>) {
         let processor = ctx.audio_processor().await;
-        let handle = tokio::spawn(run_hex_message(
-            self.message.clone(),
-            self.volume,
-            self.target_loops,
-            self.progress.clone(),
-            processor,
-            ctx.file_resolver().clone(),
-            self.done.clone(),
-        ));
+        let handle = tokio::spawn(
+            run_hex_message(
+                self.message.clone(),
+                self.volume,
+                self.target_loops,
+                self.progress.clone(),
+                processor,
+                ctx.file_resolver().clone(),
+                self.done.clone(),
+            )
+            .instrument(tracing::Span::current()),
+        );
         *self.run.lock().unwrap() = Some(handle);
     }
 
@@ -115,11 +119,10 @@ impl Segment for HexSegment {
     async fn restore(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
         self.start_run(ctx).await;
         tracing::info!(
-            "Restored DJ hex message '{}' at loop {}/{} in guild {}",
+            "Restored DJ hex message '{}' at loop {}/{}",
             self.message,
             self.progress.loops.load(Ordering::Relaxed),
-            self.target_loops,
-            ctx.guild_id
+            self.target_loops
         );
         Ok(())
     }
@@ -127,10 +130,9 @@ impl Segment for HexSegment {
     async fn enter(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
         self.start_run(ctx).await;
         tracing::info!(
-            "DJ playing hex message '{}' ({} loops) in guild {}",
+            "DJ playing hex message '{}' ({} loops)",
             self.message,
-            self.target_loops,
-            ctx.guild_id
+            self.target_loops
         );
         Ok(())
     }

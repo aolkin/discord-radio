@@ -10,6 +10,7 @@ use std::time::Duration;
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::{RwLock, mpsc};
 use tokio::task::JoinHandle;
+use tracing::Instrument;
 
 pub const ADVANCE_RETRY_DELAY: Duration = Duration::from_millis(100);
 const STOP_SEND_TIMEOUT: Duration = Duration::from_secs(1);
@@ -142,19 +143,25 @@ impl DJManager {
         let guild_id = self.guild_id;
         let task_state = self.state.clone();
         let bot_state = self.bot_state;
-        let task_handle = tokio::spawn(async move {
-            DJStateMachine::new(guild_id, saved, task_state, bot_state)
-                .await
-                .run(command_rx)
-                .await;
-        });
+        let span = tracing::info_span!("dj", guild_id = %guild_id);
+        let task_handle = tokio::spawn(
+            async move {
+                DJStateMachine::new(guild_id, saved, task_state, bot_state)
+                    .await
+                    .run(command_rx)
+                    .await;
+            }
+            .instrument(span),
+        );
         *running = Some(Running {
             task_handle,
             command_tx,
         });
     }
 
-    async fn stop_task(&self, running: &mut Option<Running>) {
+    #[tracing::instrument(skip_all, fields(guild_id = %self.guild_id))]
+    pub async fn stop(&self) {
+        let mut running = self.running.write().await;
         let Some(Running {
             mut task_handle,
             command_tx,
@@ -166,34 +173,28 @@ impl DJManager {
             .send_timeout(DJCommand::Stop, STOP_SEND_TIMEOUT)
             .await
         {
-            tracing::warn!(
-                "Failed to send stop command to DJ task for guild {}, aborting it: {}",
-                self.guild_id,
-                e
-            );
+            tracing::warn!("Failed to send stop command to DJ task, aborting it: {}", e);
             task_handle.abort();
             let _ = task_handle.await;
             return;
         }
 
-        tracing::info!(
-            "Waiting for DJ graceful shutdown for guild {}",
-            self.guild_id
-        );
+        tracing::info!("Waiting for DJ graceful shutdown");
         tokio::select! {
             _ = &mut task_handle => {
-                tracing::info!("DJ gracefully stopped for guild {}", self.guild_id);
+                tracing::info!("DJ gracefully stopped");
             }
             _ = tokio::time::sleep(Duration::from_secs(5)) => {
                 task_handle.abort();
                 let _ = (&mut task_handle).await;
-                tracing::warn!("DJ shutdown timeout for guild {}, aborted the task", self.guild_id);
+                tracing::warn!("DJ shutdown timeout, aborted the task");
             }
         }
     }
 
     /// Starts the DJ task if it is not running, resuming its saved state when
     /// there is one.
+    #[tracing::instrument(skip_all, fields(guild_id = %self.guild_id))]
     pub async fn start(&self) -> anyhow::Result<()> {
         let mut running = self.running.write().await;
         if running.is_some() {
@@ -208,14 +209,9 @@ impl DJManager {
             .context("loading saved DJ state")?
             .remove(&self.guild_id);
 
-        tracing::info!("Starting DJ for guild {}", self.guild_id);
+        tracing::info!("Starting DJ");
         self.spawn(&mut running, saved);
         Ok(())
-    }
-
-    pub async fn stop(&self) {
-        let mut running = self.running.write().await;
-        self.stop_task(&mut running).await;
     }
 }
 
