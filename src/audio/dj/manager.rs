@@ -5,12 +5,14 @@ use crate::state::Data;
 use anyhow::{Context, bail};
 use serde::Deserialize;
 use serenity::model::id::{ChannelId, GuildId};
-use std::sync::{Arc, Mutex as StdMutex};
+use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{Mutex, RwLock, mpsc};
+use tokio::sync::mpsc::error::TrySendError;
+use tokio::sync::{RwLock, mpsc};
 use tokio::task::JoinHandle;
 
 pub const ADVANCE_RETRY_DELAY: Duration = Duration::from_millis(100);
+const STOP_SEND_TIMEOUT: Duration = Duration::from_secs(1);
 
 #[derive(strum::IntoStaticStr)]
 pub enum DJCommand {
@@ -86,20 +88,26 @@ pub enum DJStateType {
 
 pub struct DJManager {
     state: Arc<RwLock<DJState>>,
-    /// `command_tx` changes only while this is locked, and is `Some` exactly
-    /// when this is.
-    task: Mutex<Option<JoinHandle<()>>>,
-    command_tx: StdMutex<Option<mpsc::Sender<DJCommand>>>,
+    running: RwLock<Option<Running>>,
     guild_id: GuildId,
     bot_state: Data,
 }
+
+struct Running {
+    task_handle: JoinHandle<()>,
+    command_tx: mpsc::Sender<DJCommand>,
+}
+
+/// Marks a DJ command that was not sent because the DJ cannot take it right now.
+#[derive(Debug, thiserror::Error)]
+#[error("the DJ is busy")]
+pub struct DjBusy;
 
 impl DJManager {
     pub fn new(guild_id: GuildId, bot_state: Data) -> Self {
         Self {
             state: Arc::default(),
-            task: Mutex::new(None),
-            command_tx: StdMutex::new(None),
+            running: RwLock::new(None),
             guild_id,
             bot_state,
         }
@@ -111,37 +119,61 @@ impl DJManager {
     }
 
     /// Sends `command` to the running task, returning false when none is running.
-    pub async fn send(&self, command: DJCommand) -> anyhow::Result<bool> {
-        let Some(command_tx) = self.command_tx.lock().unwrap().clone() else {
+    /// Fails with [`DjBusy`] instead of waiting when the DJ is starting,
+    /// stopping, or has a full command queue.
+    pub fn send(&self, command: DJCommand) -> anyhow::Result<bool> {
+        let running = self
+            .running
+            .try_read()
+            .map_err(|_| DjBusy)
+            .context("the DJ is starting or stopping")?;
+        let Some(running) = running.as_ref() else {
             return Ok(false);
         };
-        command_tx.send(command).await?;
-        Ok(true)
+        match running.command_tx.try_send(command) {
+            Ok(()) => Ok(true),
+            Err(TrySendError::Full(_)) => Err(DjBusy).context("the DJ command queue is full"),
+            Err(TrySendError::Closed(_)) => bail!("the DJ task has exited"),
+        }
     }
 
-    fn spawn(&self, task: &mut Option<JoinHandle<()>>, saved: Option<crate::persistence::DJState>) {
+    fn spawn(&self, running: &mut Option<Running>, saved: Option<crate::persistence::DJState>) {
         let (command_tx, command_rx) = mpsc::channel(10);
         let guild_id = self.guild_id;
         let task_state = self.state.clone();
         let bot_state = self.bot_state;
-        *task = Some(tokio::spawn(async move {
+        let task_handle = tokio::spawn(async move {
             DJStateMachine::new(guild_id, saved, task_state, bot_state)
                 .await
                 .run(command_rx)
                 .await;
-        }));
-        *self.command_tx.lock().unwrap() = Some(command_tx);
+        });
+        *running = Some(Running {
+            task_handle,
+            command_tx,
+        });
     }
 
-    async fn stop_task(&self, task: &mut Option<JoinHandle<()>>) {
-        let command_tx = self.command_tx.lock().unwrap().take();
-        let Some(mut task_handle) = task.take() else {
+    async fn stop_task(&self, running: &mut Option<Running>) {
+        let Some(Running {
+            mut task_handle,
+            command_tx,
+        }) = running.take()
+        else {
             return;
         };
-        if let Some(command_tx) = command_tx
-            && let Err(e) = command_tx.send(DJCommand::Stop).await
+        if let Err(e) = command_tx
+            .send_timeout(DJCommand::Stop, STOP_SEND_TIMEOUT)
+            .await
         {
-            tracing::warn!("Failed to send stop command to DJ task: {}", e);
+            tracing::warn!(
+                "Failed to send stop command to DJ task for guild {}, aborting it: {}",
+                self.guild_id,
+                e
+            );
+            task_handle.abort();
+            let _ = task_handle.await;
+            return;
         }
 
         tracing::info!(
@@ -163,8 +195,8 @@ impl DJManager {
     /// Starts the DJ task if it is not running, resuming its saved state when
     /// there is one.
     pub async fn start(&self) -> anyhow::Result<()> {
-        let mut task = self.task.lock().await;
-        if task.is_some() {
+        let mut running = self.running.write().await;
+        if running.is_some() {
             return Ok(());
         }
 
@@ -177,15 +209,15 @@ impl DJManager {
             .remove(&self.guild_id);
 
         tracing::info!("Starting DJ for guild {}", self.guild_id);
-        self.spawn(&mut task, saved);
+        self.spawn(&mut running, saved);
         Ok(())
     }
 
     /// Stops the running DJ task and starts a new one with the named config,
     /// keeping the announcement channel. The new task begins idle.
     pub async fn restart_with_config(&self, config_name: String) -> anyhow::Result<()> {
-        let mut task = self.task.lock().await;
-        if task.is_none() {
+        let mut running = self.running.write().await;
+        if running.is_none() {
             bail!("Not in a voice channel");
         }
 
@@ -198,7 +230,7 @@ impl DJManager {
             .remove(&self.guild_id)
             .and_then(|saved| saved.announcement_channel_id);
 
-        self.stop_task(&mut task).await;
+        self.stop_task(&mut running).await;
 
         let saved = crate::persistence::DJState {
             config_name: Some(config_name),
@@ -206,13 +238,13 @@ impl DJManager {
             state_machine: None,
         };
         tracing::info!("Restarting DJ for guild {}", self.guild_id);
-        self.spawn(&mut task, Some(saved));
+        self.spawn(&mut running, Some(saved));
         Ok(())
     }
 
     pub async fn stop(&self) {
-        let mut task = self.task.lock().await;
-        self.stop_task(&mut task).await;
+        let mut running = self.running.write().await;
+        self.stop_task(&mut running).await;
     }
 }
 

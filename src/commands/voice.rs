@@ -12,12 +12,12 @@ use serenity::all::{ChannelId, ChannelType, CreateAutocompleteResponse, GuildId}
 use std::path::Path;
 use std::time::Duration;
 
-async fn send_to_dj(
+fn send_to_dj(
     bot_state: crate::state::Data,
     guild_id: GuildId,
     command: DJCommand,
 ) -> anyhow::Result<()> {
-    if !bot_state.send_dj_command(guild_id, command).await? {
+    if !bot_state.send_dj_command(guild_id, command)? {
         bail!("Not in a voice channel");
     }
     Ok(())
@@ -146,8 +146,7 @@ pub async fn hex(
         volume,
         loops,
     };
-    let content = match send_to_dj(ctx.data(), guild_id, DJCommand::ForceHexMessage(request)).await
-    {
+    let content = match send_to_dj(ctx.data(), guild_id, DJCommand::ForceHexMessage(request)) {
         Ok(()) => {
             let loops_text = match loops {
                 Some(n) => format!("{n} loops"),
@@ -215,7 +214,7 @@ pub async fn track(
         return Ok(());
     }
 
-    let content = match send_to_dj(ctx.data(), guild_id, DJCommand::ForceTrack(request)).await {
+    let content = match send_to_dj(ctx.data(), guild_id, DJCommand::ForceTrack(request)) {
         Ok(()) => format!(
             "DJ is now playing track: {} (volume {})",
             filename,
@@ -266,7 +265,7 @@ pub async fn idle(
         return Ok(());
     }
 
-    let content = match send_to_dj(ctx.data(), guild_id, DJCommand::ForceIdle(request)).await {
+    let content = match send_to_dj(ctx.data(), guild_id, DJCommand::ForceIdle(request)) {
         Ok(()) => {
             let what = match &noise_profile {
                 Some(profile) => format!("playing noise profile '{profile}'"),
@@ -552,7 +551,7 @@ async fn set_dj_profile(
         fade_in_duration: fade,
         fade_out_duration: fade,
     });
-    if let Err(e) = send_to_dj(ctx.data(), guild_id, command(playback)).await {
+    if let Err(e) = send_to_dj(ctx.data(), guild_id, command(playback)) {
         ctx.say(format!("Failed to update DJ {label}: {e:#}"))
             .await?;
         return Ok(());
@@ -703,9 +702,7 @@ pub async fn announcements(
         ctx.data(),
         guild_id,
         DJCommand::SetAnnouncementChannel(announcement_channel),
-    )
-    .await
-    {
+    ) {
         ctx.say(format!("Failed to configure DJ: {e:#}")).await?;
         return Ok(());
     }
@@ -738,7 +735,7 @@ pub async fn skip(
 
     ctx.defer_ephemeral().await?;
 
-    if let Err(e) = send_to_dj(ctx.data(), guild_id, DJCommand::ForceAdvance(to_state)).await {
+    if let Err(e) = send_to_dj(ctx.data(), guild_id, DJCommand::ForceAdvance(to_state)) {
         ctx.say(format!("Failed to force DJ state advance: {e:#}"))
             .await?;
         return Ok(());
