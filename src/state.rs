@@ -131,11 +131,12 @@ impl BotState {
         Some(receiver)
     }
 
-    pub fn send_dj_command(&self, guild_id: GuildId, command: DJCommand) -> anyhow::Result<bool> {
-        let Some(manager) = self.existing_dj_manager(guild_id) else {
-            return Ok(false);
-        };
-        manager.send(command)
+    pub fn send_dj_command(
+        &'static self,
+        guild_id: GuildId,
+        command: DJCommand,
+    ) -> anyhow::Result<bool> {
+        self.dj_manager(guild_id).send(command)
     }
 
     /// Get the current voice channel ID for a guild
