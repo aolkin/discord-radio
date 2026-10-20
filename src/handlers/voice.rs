@@ -9,23 +9,19 @@ impl EventHandler for ConnectionEventHandler {
     async fn act(&self, ctx: &EventContext<'_>) -> Option<Event> {
         use EventContext as Ctx;
 
-        match ctx {
-            Ctx::DriverConnect(data) => {
-                tracing::Span::current().record("guild_id", data.guild_id.0.get());
-                tracing::info!("Bot connected to voice channel {:?}", data.channel_id);
-            }
-            Ctx::DriverDisconnect(data) => {
-                tracing::Span::current().record("guild_id", data.guild_id.0.get());
-                tracing::info!("Bot disconnected from voice channel {:?}", data.channel_id);
-
-                tracing::info!("Voice disconnected, audio state preserved");
-            }
-            Ctx::DriverReconnect(data) => {
-                tracing::Span::current().record("guild_id", data.guild_id.0.get());
-                tracing::info!("Bot reconnected to voice channel {:?}", data.channel_id);
-            }
-            _ => {}
-        }
+        let (verb, note, guild_id, channel_id) = match ctx {
+            Ctx::DriverConnect(data) => ("connected to", "", data.guild_id, data.channel_id),
+            Ctx::DriverDisconnect(data) => (
+                "disconnected from",
+                ", audio state preserved",
+                data.guild_id,
+                data.channel_id,
+            ),
+            Ctx::DriverReconnect(data) => ("reconnected to", "", data.guild_id, data.channel_id),
+            _ => return None,
+        };
+        tracing::Span::current().record("guild_id", guild_id.0.get());
+        tracing::info!("Bot {verb} voice channel {channel_id:?}{note}");
 
         None
     }
