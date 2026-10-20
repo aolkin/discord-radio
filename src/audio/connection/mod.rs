@@ -36,7 +36,7 @@ pub async fn connect_voice_channel(
         let adapter = ProcessedAudioAdapter::new(processor.clone());
         adapter.start(handle_lock.clone()).await;
 
-        tracing::info!("Initialized audio DSP processor for guild {}", guild_id);
+        tracing::info!("Initialized audio DSP processor");
     }
 
     manager

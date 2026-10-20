@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::sync::Mutex;
+use tracing::Instrument;
 
 #[derive(Clone, Debug)]
 pub struct TrackSnapshot {
@@ -80,15 +81,14 @@ impl TrackManager {
         };
 
         tracing::info!(
-            "Starting track '{}' (file: {}, duration: {:.2}s, volume: {}, fade: {}s, loops: {}{}) in guild {}",
+            "Starting track '{}' (file: {}, duration: {:.2}s, volume: {}, fade: {}s, loops: {}{})",
             args.name,
             resolved_filename,
             duration.map(|d| d.as_secs_f64()).unwrap_or(-1.0),
             args.volume,
             args.fade_time,
             args.loops,
-            position_info,
-            self.guild_id
+            position_info
         );
 
         let (ended_tx, ended) = TrackCallback::oneshot();
@@ -109,15 +109,17 @@ impl TrackManager {
         let manager = Arc::clone(self);
         let name = args.name.clone();
         let ended_track = mixer_handle.clone();
-        tokio::spawn(async move {
-            let reason = ended.await.unwrap_or_else(|e| {
-                tracing::error!("Track '{name}' lost its end signal: {e}");
-                StopReason::Lost
-            });
-            let guild_id = manager.guild_id;
-            tracing::debug!("Track '{name}' left the mixer in guild {guild_id}: {reason:?}");
-            manager.remove_handle(ended_track.id).await;
-        });
+        tokio::spawn(
+            async move {
+                let reason = ended.await.unwrap_or_else(|e| {
+                    tracing::error!("Track '{name}' lost its end signal: {e}");
+                    StopReason::Lost
+                });
+                tracing::debug!("Track '{name}' left the mixer: {reason:?}");
+                manager.remove_handle(ended_track.id).await;
+            }
+            .instrument(tracing::Span::current()),
+        );
 
         // If we're starting from a position other than the beginning, adjust start_time
         // backwards so that elapsed time calculations include the seek position
@@ -159,12 +161,11 @@ impl TrackManager {
             .with_context(|| format!("Track '{name}' not found"))?;
 
         tracing::info!(
-            "Updating track '{}' volume from {} to {} (fade: {}s) in guild {}",
+            "Updating track '{}' volume from {} to {} (fade: {}s)",
             name,
             track_info.volume,
             volume,
-            fade_time,
-            self.guild_id
+            fade_time
         );
 
         track_info.volume = volume;
@@ -198,11 +199,10 @@ impl TrackManager {
         }
 
         tracing::info!(
-            "Updating track '{}' loops from {} to {} in guild {}",
+            "Updating track '{}' loops from {} to {}",
             name,
             track_info.loops,
-            loops,
-            self.guild_id
+            loops
         );
 
         track_info.loops = loops;
@@ -228,7 +228,7 @@ impl TrackManager {
             .map(|(_, info)| info)
             .next();
         if let Some(info) = info {
-            tracing::debug!("Removed track '{}' from guild {}", info.name, self.guild_id);
+            tracing::debug!("Removed track '{}'", info.name);
             self.persist_locked(&tracks).await;
         }
     }
@@ -248,12 +248,7 @@ impl TrackManager {
             .get(name)
             .with_context(|| format!("Track '{name}' not found"))?;
 
-        tracing::info!(
-            "Stopping track '{}' (fade: {}s) in guild {}",
-            name,
-            fade_time,
-            self.guild_id
-        );
+        tracing::info!("Stopping track '{}' (fade: {}s)", name, fade_time);
 
         let stop = TrackCommand::Stop {
             fade: Duration::from_secs_f32(fade_time.max(0.0)),
