@@ -113,7 +113,6 @@ impl DJManager {
         }
     }
 
-    /// The DJ's state while its task is running.
     pub fn state(&self) -> Arc<RwLock<DJState>> {
         self.state.clone()
     }
