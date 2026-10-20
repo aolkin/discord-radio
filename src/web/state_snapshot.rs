@@ -21,6 +21,8 @@ pub struct DJStateInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioProfileInfo {
     pub name: String,
+    pub expected_name: String,
+    pub transitioning: bool,
     pub source: String,
 }
 
@@ -69,10 +71,14 @@ impl BotSnapshot {
                 })
                 .collect();
 
-            let (dj_state, source) = {
+            let (dj_state, expected_name, source) = {
                 let dj_state_lock = guild.dj_state();
                 let state = dj_state_lock.read().await;
-                (dj_state_to_info(&state), state.profile_source().to_string())
+                (
+                    dj_state_to_info(&state),
+                    state.effective_profile().name,
+                    state.profile_source().to_string(),
+                )
             };
 
             // Get audio profile info
@@ -81,6 +87,8 @@ impl BotSnapshot {
 
             let audio_profile = AudioProfileInfo {
                 name: profile_name,
+                expected_name,
+                transitioning: processor.is_transitioning(),
                 source,
             };
 
