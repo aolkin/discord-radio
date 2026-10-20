@@ -29,6 +29,12 @@ pub struct GuildRadio {
     dj_manager: Arc<DJManager>,
 }
 
+impl GuildRadio {
+    pub fn dj_state(&self) -> Arc<RwLock<DJState>> {
+        self.dj_manager.state()
+    }
+}
+
 pub struct BotState {
     pub songbird: Arc<Songbird>,
     pub state_store: Arc<dyn StateStore>,
