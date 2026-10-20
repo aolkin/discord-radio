@@ -76,7 +76,6 @@ pub async fn set_status(
     activity_type: Option<String>,
 ) -> anyhow::Result<()> {
     let user_id = ctx.author().id;
-    require_guild(ctx)?;
 
     tracing::info!(
         "User {} executed set_status with type {:?}",
@@ -128,7 +127,6 @@ pub async fn speak(
     #[description = "Description for embed"] description: Option<String>,
 ) -> anyhow::Result<()> {
     let user_id = ctx.author().id;
-    require_guild(ctx)?;
 
     tracing::info!("User {} executed speak", user_id);
 
