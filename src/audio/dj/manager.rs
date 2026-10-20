@@ -21,6 +21,7 @@ pub enum DJCommand {
     ForceTrack(TrackRequest),
     ForceIdle(IdleRequest),
     Stop,
+    SetConfig(String),
     SetAnnouncementChannel(Option<ChannelId>),
     SetBackgroundProfile(Option<SignalProfilePlayback>),
     SetOverrideProfile(Option<SignalProfilePlayback>),
@@ -209,36 +210,6 @@ impl DJManager {
 
         tracing::info!("Starting DJ for guild {}", self.guild_id);
         self.spawn(&mut running, saved);
-        Ok(())
-    }
-
-    /// Stops the running DJ task and starts a new one with the named config,
-    /// keeping the announcement channel. The new task begins idle.
-    pub async fn restart_with_config(&self, config_name: String) -> anyhow::Result<()> {
-        load_dj_config(&self.bot_state, &config_name)?;
-        let mut running = self.running.write().await;
-        if running.is_none() {
-            bail!("Not in a voice channel");
-        }
-
-        let announcement_channel_id = self
-            .bot_state
-            .state_store
-            .load_dj_states()
-            .await
-            .context("loading saved DJ state")?
-            .remove(&self.guild_id)
-            .and_then(|saved| saved.announcement_channel_id);
-
-        self.stop_task(&mut running).await;
-
-        let saved = crate::persistence::DJState {
-            config_name: Some(config_name),
-            announcement_channel_id,
-            state_machine: None,
-        };
-        tracing::info!("Restarting DJ for guild {}", self.guild_id);
-        self.spawn(&mut running, Some(saved));
         Ok(())
     }
 
