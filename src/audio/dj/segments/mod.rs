@@ -124,14 +124,43 @@ pub trait Segment: Send + Sync + Debug + SegmentPlaybackConfig {
     fn state_display(&self) -> StateDisplay;
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Pool<E> {
+    pub weight: u32,
+    pub entries: Vec<E>,
+}
+
+pub trait PoolWeight {
+    fn weight(&self) -> u32;
+    fn is_empty(&self) -> bool;
+}
+
+impl<E> PoolWeight for Pool<E> {
+    fn weight(&self) -> u32 {
+        self.weight
+    }
+
+    fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+}
+
+impl<E, T: Deref<Target = Pool<E>>> PoolWeight for T {
+    fn weight(&self) -> u32 {
+        self.deref().weight()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.deref().is_empty()
+    }
+}
+
 /// A weighted list of entries the DJ builds segments of one kind from.
 #[async_trait]
 #[typetag::serde(tag = "kind")]
-pub trait SegmentPool: Any + Send + Sync + Debug {
-    fn weight(&self) -> u32;
-    fn is_empty(&self) -> bool;
+pub trait SegmentPool: PoolWeight + Any + Send + Sync + Debug {
     fn validate(&self) -> anyhow::Result<()>;
-    async fn pick(
+    async fn next_segment(
         &self,
         history: &mut WeightedSelector,
         bot_state: Data,

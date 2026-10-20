@@ -1,10 +1,11 @@
 use super::{
-    CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, SegmentPool,
+    CommonSegmentPlaybackConfig, Pool, Segment, SegmentCtx, SegmentPlaybackConfig, SegmentPool,
     StateDisplay, TrackSlot,
 };
 use crate::audio::dj::config::ensure_seconds;
 use crate::audio::dj::segments::signals::{Completed, CompletedSignal};
 use crate::audio::dj::weighted_choice::{Weighted, WeightedSelector};
+use crate::audio::duration::DurationCache;
 use crate::audio::processing::mixer::TrackCommand;
 use crate::audio::tracks::open_track_source;
 use crate::state::Data;
@@ -16,13 +17,9 @@ use std::time::Duration;
 
 const FADE_TIME: Duration = Duration::from_secs(1);
 
-#[derive(Deserialize, Serialize, Debug)]
-pub struct TrackPool {
-    pub weight: u32,
-    pub entries: Vec<TrackEntry>,
-}
+pub type TrackPool = Pool<TrackEntry>;
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct TrackEntry {
     pub filename: String,
     pub weight: u32,
@@ -55,14 +52,6 @@ impl Weighted for TrackEntry {
 #[async_trait]
 #[typetag::serde(name = "track")]
 impl SegmentPool for TrackPool {
-    fn weight(&self) -> u32 {
-        self.weight
-    }
-
-    fn is_empty(&self) -> bool {
-        self.entries.is_empty()
-    }
-
     fn validate(&self) -> anyhow::Result<()> {
         for track in &self.entries {
             if let Some(seconds) = track.max_duration_seconds {
@@ -72,54 +61,15 @@ impl SegmentPool for TrackPool {
         Ok(())
     }
 
-    async fn pick(
+    async fn next_segment(
         &self,
         history: &mut WeightedSelector,
         bot_state: Data,
     ) -> Option<Box<dyn Segment>> {
-        let track_entry = history.choose(&self.entries)?;
-        let duration = bot_state
-            .duration_cache
-            .get_duration(&track_entry.filename)
-            .await;
-        let (start_position, play_duration) = if track_entry.allow_subsection.unwrap_or(false) {
-            if let Some(total_duration) = duration {
-                if total_duration.as_secs_f32() > 240.0 {
-                    let mut rng = rand::rng();
-                    let subsection_duration =
-                        Duration::from_secs_f32(rng.random_range(120.0..240.0));
-                    let latest_start =
-                        total_duration.as_secs_f32() - subsection_duration.as_secs_f32();
-                    let start_secs = rng.random_range(0.0..latest_start.max(0.0));
-                    (
-                        Some(Duration::from_secs_f32(start_secs)),
-                        subsection_duration,
-                    )
-                } else {
-                    (None, duration.unwrap_or(Duration::from_secs(60)))
-                }
-            } else {
-                (None, Duration::from_secs(60))
-            }
-        } else {
-            let max_dur = track_entry
-                .max_duration_seconds
-                .map(Duration::from_secs_f32)
-                .or(duration)
-                .unwrap_or(Duration::from_secs(60));
-            (None, max_dur)
-        };
-
-        let volume = track_entry.volume.unwrap_or(1.0);
-
-        Some(Box::new(TrackSegment::new(
-            track_entry.filename.clone(),
-            volume,
-            start_position,
-            play_duration,
-            track_entry.signal_profile.clone(),
-            track_entry.channel_status.as_deref(),
-        )))
+        let entry = history.choose(&self.entries)?.clone();
+        Some(Box::new(
+            TrackSegment::from_entry(entry, &bot_state.duration_cache).await,
+        ))
     }
 }
 
@@ -196,6 +146,48 @@ impl TrackSegment {
         );
         self.track.set(track);
         Ok(())
+    }
+
+    pub async fn from_entry(track_entry: TrackEntry, duration_cache: &DurationCache) -> Self {
+        let duration = duration_cache.get_duration(&track_entry.filename).await;
+        let (start_position, play_duration) = if track_entry.allow_subsection.unwrap_or(false) {
+            if let Some(total_duration) = duration {
+                if total_duration.as_secs_f32() > 240.0 {
+                    let mut rng = rand::rng();
+                    let subsection_duration =
+                        Duration::from_secs_f32(rng.random_range(120.0..240.0));
+                    let latest_start =
+                        total_duration.as_secs_f32() - subsection_duration.as_secs_f32();
+                    let start_secs = rng.random_range(0.0..latest_start.max(0.0));
+                    (
+                        Some(Duration::from_secs_f32(start_secs)),
+                        subsection_duration,
+                    )
+                } else {
+                    (None, duration.unwrap_or(Duration::from_secs(60)))
+                }
+            } else {
+                (None, Duration::from_secs(60))
+            }
+        } else {
+            let max_dur = track_entry
+                .max_duration_seconds
+                .map(Duration::from_secs_f32)
+                .or(duration)
+                .unwrap_or(Duration::from_secs(60));
+            (None, max_dur)
+        };
+
+        let volume = track_entry.volume.unwrap_or(1.0);
+
+        TrackSegment::new(
+            track_entry.filename,
+            volume,
+            start_position,
+            play_duration,
+            track_entry.signal_profile,
+            track_entry.channel_status.as_deref(),
+        )
     }
 }
 

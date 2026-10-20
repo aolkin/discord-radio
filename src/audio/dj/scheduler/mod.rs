@@ -53,7 +53,7 @@ impl WeightedScheduler {
         let picked = match choose_index(&weights) {
             Some(index) => {
                 self.config.pools[index]
-                    .pick(&mut self.pool_selectors[index], bot_state)
+                    .next_segment(&mut self.pool_selectors[index], bot_state)
                     .await
             }
             None => None,
