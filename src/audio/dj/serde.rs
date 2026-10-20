@@ -1,6 +1,8 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::time::{Duration, Instant};
 
+/// Writes the time since `instant` as a `Duration`; `deser_instant` rebuilds
+/// the instant by subtracting that age from now.
 pub fn ser_instant<S>(instant: &Instant, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
