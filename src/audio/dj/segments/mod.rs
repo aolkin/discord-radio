@@ -18,7 +18,7 @@ pub use signals::Completed;
 use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 pub struct SegmentCtx<'a> {
     pub guild_id: &'a GuildId,
@@ -100,7 +100,7 @@ pub struct StateDisplay {
 #[async_trait]
 #[typetag::serde(tag = "type")]
 pub trait Segment: Send + Sync + Debug + SegmentPlaybackConfig {
-    fn completed(&self, started_at: Instant) -> Completed;
+    fn completed(&self, elapsed: Duration) -> Completed;
 
     async fn restore(&self, _ctx: &SegmentCtx, _elapsed: Duration) -> anyhow::Result<()> {
         Ok(())

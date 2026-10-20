@@ -15,7 +15,7 @@ use std::ops::Deref;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tracing::Instrument;
@@ -112,7 +112,7 @@ impl HexSegment {
 #[async_trait]
 #[typetag::serde]
 impl Segment for HexSegment {
-    fn completed(&self, _started_at: Instant) -> Completed {
+    fn completed(&self, _elapsed: Duration) -> Completed {
         self.done.completed()
     }
 

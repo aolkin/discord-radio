@@ -70,9 +70,11 @@ impl Deref for NoiseSegment {
 #[async_trait]
 #[typetag::serde]
 impl Segment for NoiseSegment {
-    fn completed(&self, started_at: Instant) -> Completed {
+    fn completed(&self, elapsed: Duration) -> Completed {
         match self {
-            NoiseSegment::Timed { duration, .. } => Completed::at(started_at + *duration),
+            NoiseSegment::Timed { duration, .. } => {
+                Completed::at(Instant::now() + duration.saturating_sub(elapsed))
+            }
             NoiseSegment::Infinite { .. } => Completed::never(),
         }
     }

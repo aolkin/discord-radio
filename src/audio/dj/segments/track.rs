@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 const FADE_TIME: Duration = Duration::from_secs(1);
 
@@ -136,7 +136,7 @@ impl TrackSegment {
 #[async_trait]
 #[typetag::serde]
 impl Segment for TrackSegment {
-    fn completed(&self, _started_at: Instant) -> Completed {
+    fn completed(&self, _elapsed: Duration) -> Completed {
         self.done.completed()
     }
 

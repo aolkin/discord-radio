@@ -33,7 +33,7 @@ impl SegmentContainer {
     }
 
     pub fn completed(&self) -> Completed {
-        self.segment.completed(self.started_at)
+        self.segment.completed(self.elapsed())
     }
 
     pub async fn restore(&self, ctx: &SegmentCtx<'_>) -> anyhow::Result<()> {
