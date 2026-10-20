@@ -1,7 +1,5 @@
 use crate::audio::connection::connect_voice_channel;
-use crate::audio::dj::manager::{
-    DJCommand, DJStateType, restart_dj_with_config, start_dj, stop_dj,
-};
+use crate::audio::dj::manager::{DJCommand, DJStateType};
 use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
 use crate::audio::processing::processor::ProcessorRef;
@@ -104,7 +102,9 @@ pub async fn leave_voice_channel(ctx: Context<'_>) -> anyhow::Result<()> {
                 .await?;
         } else {
             let _ = ctx.data().state_store.remove_voice_channel(guild_id).await;
-            stop_dj(ctx.data(), guild_id).await;
+            if let Some(dj_manager) = ctx.data().existing_dj_manager(guild_id) {
+                dj_manager.stop().await;
+            }
             ctx.say("Left voice channel").await?;
         }
     } else {
@@ -490,7 +490,9 @@ async fn join_voice_channel_helper(
 
     let processor = connect_voice_channel(&manager, guild_id, channel_id, ctx.data()).await?;
     tracing::info!("Joined voice channel");
-    start_dj(ctx.data(), guild_id)
+    ctx.data()
+        .dj_manager(guild_id)
+        .start()
         .await
         .map_err(|e| e.context("Failed to start DJ"))?;
     Ok(processor)
@@ -669,7 +671,12 @@ pub async fn configure(
 
     ctx.defer_ephemeral().await?;
 
-    if let Err(e) = restart_dj_with_config(ctx.data(), guild_id, config.clone()).await {
+    let Some(dj_manager) = ctx.data().existing_dj_manager(guild_id) else {
+        ctx.say("Failed to configure DJ: Not in a voice channel")
+            .await?;
+        return Ok(());
+    };
+    if let Err(e) = dj_manager.restart_with_config(config.clone()).await {
         ctx.say(format!("Failed to configure DJ: {e:#}")).await?;
         return Ok(());
     }

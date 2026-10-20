@@ -215,6 +215,7 @@ impl DJManager {
     /// Stops the running DJ task and starts a new one with the named config,
     /// keeping the announcement channel. The new task begins idle.
     pub async fn restart_with_config(&self, config_name: String) -> anyhow::Result<()> {
+        load_dj_config(&self.bot_state, &config_name)?;
         let mut running = self.running.write().await;
         if running.is_none() {
             bail!("Not in a voice channel");
@@ -254,26 +255,4 @@ pub fn load_dj_config(bot_state: &Data, name: &str) -> anyhow::Result<Arc<DJConf
         .dj_config_manager
         .get(name)
         .with_context(|| format!("no DJ config {name:?}"))
-}
-
-pub async fn start_dj(bot_state: Data, guild_id: GuildId) -> anyhow::Result<()> {
-    bot_state.dj_manager(guild_id).start().await
-}
-
-pub async fn restart_dj_with_config(
-    bot_state: Data,
-    guild_id: GuildId,
-    config_name: String,
-) -> anyhow::Result<()> {
-    load_dj_config(&bot_state, &config_name)?;
-    let Some(manager) = bot_state.existing_dj_manager(guild_id) else {
-        bail!("Not in a voice channel");
-    };
-    manager.restart_with_config(config_name).await
-}
-
-pub async fn stop_dj(bot_state: Data, guild_id: GuildId) {
-    if let Some(manager) = bot_state.existing_dj_manager(guild_id) {
-        manager.stop().await;
-    }
 }

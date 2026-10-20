@@ -1,5 +1,4 @@
 use crate::audio::connection::connect_voice_channel;
-use crate::audio::dj::manager::start_dj;
 use crate::audio::tracks::StartTrackArgs;
 use crate::state::Data;
 use anyhow::Context;
@@ -36,7 +35,7 @@ pub async fn restore_voice_channels(
                     guild_id
                 );
 
-                if let Err(e) = start_dj(bot_state, guild_id).await {
+                if let Err(e) = bot_state.dj_manager(guild_id).start().await {
                     tracing::error!("Failed to start DJ for guild {}: {e:#}", guild_id);
                 }
             }
