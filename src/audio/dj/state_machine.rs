@@ -433,14 +433,6 @@ impl DJStateMachine {
         }
     }
 
-    /// Switches to the given config; the current segment keeps playing.
-    fn set_config(&mut self, name: String, config: Arc<DJConfig>) {
-        tracing::info!("DJ switching to config {name:?} in guild {}", self.guild_id);
-        self.scheduler = WeightedScheduler::new(config.clone());
-        self.config = config;
-        self.config_name = name;
-    }
-
     pub async fn force_hex_message(
         &self,
         bot_state: &Data,
@@ -570,7 +562,10 @@ impl DJStateMachine {
                 return true;
             }
             DJCommand::SetConfig { name, config } => {
-                self.set_config(name, config);
+                tracing::info!("DJ switching to config {name:?} in guild {}", self.guild_id);
+                self.scheduler = WeightedScheduler::new(config.clone());
+                self.config = config;
+                self.config_name = name;
                 Ok(())
             }
             DJCommand::SetAnnouncementChannel(new_channel) => {
