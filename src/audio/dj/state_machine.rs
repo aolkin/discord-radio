@@ -561,6 +561,13 @@ impl DJStateMachine {
                 self.stop(&bot_state).await;
                 return true;
             }
+            DJCommand::SetConfig { name, config } => {
+                tracing::info!("DJ switching to config {name:?} in guild {}", self.guild_id);
+                self.scheduler = WeightedScheduler::new(config.clone());
+                self.config = config;
+                self.config_name = name;
+                Ok(())
+            }
             DJCommand::SetAnnouncementChannel(new_channel) => {
                 tracing::info!(
                     "Setting DJ announcement channel to {:?} in guild {}",
