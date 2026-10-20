@@ -15,7 +15,7 @@ fn send_to_dj(
     guild_id: GuildId,
     command: DJCommand,
 ) -> anyhow::Result<()> {
-    if !bot_state.send_dj_command(guild_id, command)? {
+    if !bot_state.dj_manager(guild_id).send(command)? {
         bail!("Not in a voice channel");
     }
     Ok(())
