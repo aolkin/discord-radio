@@ -185,6 +185,11 @@ h1 {
     margin-top: 4px;
 }
 
+.track-details.profile-mismatch {
+    color: var(--color-warning);
+    font-weight: 600;
+}
+
 .progress-bar {
     background: var(--color-button-secondary);
     height: 6px;
