@@ -21,7 +21,7 @@ pub enum DJCommand {
     ForceTrack(TrackRequest),
     ForceIdle(IdleRequest),
     Stop,
-    SetConfig(String),
+    SetConfig { name: String, config: Arc<DJConfig> },
     SetAnnouncementChannel(Option<ChannelId>),
     SetBackgroundProfile(Option<SignalProfilePlayback>),
     SetOverrideProfile(Option<SignalProfilePlayback>),

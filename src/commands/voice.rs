@@ -671,9 +671,13 @@ pub async fn configure(
 
     ctx.defer_ephemeral().await?;
 
-    if let Err(e) = load_dj_config(ctx.data(), &config)
-        .and_then(|_| send_to_dj(ctx.data(), guild_id, DJCommand::SetConfig(config.clone())))
-    {
+    if let Err(e) = load_dj_config(ctx.data(), &config).and_then(|loaded| {
+        let command = DJCommand::SetConfig {
+            name: config.clone(),
+            config: loaded,
+        };
+        send_to_dj(ctx.data(), guild_id, command)
+    }) {
         ctx.say(format!("Failed to configure DJ: {e:#}")).await?;
         return Ok(());
     }
