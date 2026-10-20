@@ -138,7 +138,7 @@
                                         ></div>
                                         <div
                                             class="track-details"
-                                            :class="{ 'profile-mismatch': guild.audio_profile.expected_name !== guild.audio_profile.name }"
+                                            :class="{ 'profile-mismatch': !guild.audio_profile.transitioning && guild.audio_profile.expected_name !== guild.audio_profile.name }"
                                             x-text="'DJ expects: ' + guild.audio_profile.expected_name"
                                         ></div>
                                     </div>

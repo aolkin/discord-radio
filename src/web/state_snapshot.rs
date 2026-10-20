@@ -22,6 +22,7 @@ pub struct DJStateInfo {
 pub struct AudioProfileInfo {
     pub name: String,
     pub expected_name: String,
+    pub transitioning: bool,
     pub source: String,
 }
 
@@ -87,6 +88,7 @@ impl BotSnapshot {
             let audio_profile = AudioProfileInfo {
                 name: profile_name,
                 expected_name,
+                transitioning: processor.is_transitioning(),
                 source,
             };
 
