@@ -119,7 +119,8 @@ pub async fn hex(
     #[description = "Message to convert to hex and play"] message: String,
     #[description = "Volume 0.0-2.0 (0=silence, 1.0=unity, 2.0=+18dB boost, default 1.0)"]
     volume: Option<f32>,
-    #[description = "Times to loop the message (default from DJ config)"] loops: Option<u32>,
+    #[description = "Times to loop the message (default from the hex pool)"] loops: Option<u32>,
+    #[description = "Hex pool in the DJ config to take defaults from"] pool: Option<String>,
 ) -> anyhow::Result<()> {
     let guild_id = require_guild(ctx)?;
     let user_id = ctx.author().id;
@@ -142,6 +143,7 @@ pub async fn hex(
         message: message.clone(),
         volume,
         loops,
+        pool,
     };
     let content = match send_to_dj(ctx.data(), guild_id, DJCommand::ForceHexMessage(request)) {
         Ok(()) => {
@@ -727,26 +729,23 @@ pub async fn announcements(
 #[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
 pub async fn skip(
     ctx: Context<'_>,
-    #[description = "Only advance to this kind of state (default: any)"] to_state: Option<String>,
+    #[description = "Only advance to a segment from this pool in the DJ config (default: any)"]
+    pool: Option<String>,
 ) -> anyhow::Result<()> {
     let guild_id = require_guild(ctx)?;
 
-    tracing::info!("User {} executed dj skip {:?}", ctx.author().id, to_state,);
+    tracing::info!("User {} executed dj skip {:?}", ctx.author().id, pool);
 
     ctx.defer_ephemeral().await?;
 
-    if let Err(e) = send_to_dj(
-        ctx.data(),
-        guild_id,
-        DJCommand::ForceAdvance(to_state.clone()),
-    ) {
+    if let Err(e) = send_to_dj(ctx.data(), guild_id, DJCommand::ForceAdvance(pool.clone())) {
         ctx.say(format!("Failed to force DJ state advance: {e:#}"))
             .await?;
         return Ok(());
     }
 
-    let message = match to_state {
-        Some(kind) => format!("DJ advancing to {kind} state"),
+    let message = match pool {
+        Some(pool) => format!("DJ advancing to a segment from pool {pool:?}"),
         None => "DJ state advance triggered".to_string(),
     };
     ctx.say(message).await?;

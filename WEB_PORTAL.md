@@ -48,11 +48,7 @@ The portal uses WebSockets for live status updates, automatically reconnecting i
 
 When the bot is in a guild's voice channel, you can control that guild's DJ directly from the web portal:
 
-- **Advance DJ State**: Force the DJ to advance to the next state, with optional filtering:
-  - Track - Force to play a track
-  - Hex Message - Force to play a hex message
-  - Noise - Force to play noise
-  - Any (default) - Advance to next scheduled state
+- **Advance DJ State**: Force the DJ to advance to the next state, optionally from the DJ config pool named `track`, `hex` or `noise`
 
 - **Play Hex Message**: Queue a custom hex message to play via the DJ with default settings
 
@@ -100,9 +96,9 @@ Each guild card's Bot Profile button opens the bot's current nickname, avatar an
 - `GET /` - Web portal UI
 - `GET /api/status` - JSON snapshot of bot state (includes version and commit hash)
 - `GET /api/health` - Health check endpoint
-- `POST /api/guilds/:guild_id/dj/advance` - Advance DJ state (optionally to specific state type)
+- `POST /api/guilds/:guild_id/dj/advance` - Advance DJ state, optionally to a segment from the DJ config pool named `state_type`
 - `POST /api/guilds/:guild_id/dj/idle` - Make the DJ go idle now, optionally playing a `noise_profile`, for `duration` seconds or, without one, until the DJ is advanced
-- `POST /api/guilds/:guild_id/hex/play` - Play hex message via DJ
+- `POST /api/guilds/:guild_id/hex/play` - Play hex message via DJ, with the defaults of the hex pool named `pool` when set
 - `POST /api/guilds/:guild_id/track/play` - Play audio track via DJ
 - `POST /api/guilds/:guild_id/tracks` - Manage track state (start, stop, update)
 - `POST /api/guilds/:guild_id/dj/profile` - Set the DJ background profile with an optional `fade_duration` in seconds, used to fade in and out of it, or clear it (`{"profile": null}`)

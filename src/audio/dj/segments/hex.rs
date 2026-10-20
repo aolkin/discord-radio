@@ -27,13 +27,8 @@ use tracing::Instrument;
 pub struct HexPool {
     #[serde(flatten)]
     pool: Pool<HexMessageEntry>,
-    #[serde(default = "default_loops")]
-    pub loop_min: u32,
-    #[serde(default = "default_loops")]
-    pub loop_max: u32,
-    pub signal_profile: Option<String>,
     #[serde(default)]
-    pub announcements: Vec<String>,
+    pub defaults: HexMessageDefaults,
 }
 
 impl Deref for HexPool {
@@ -43,13 +38,20 @@ impl Deref for HexPool {
     }
 }
 
-impl Default for HexPool {
+#[derive(Deserialize, Serialize, Debug)]
+pub struct HexMessageDefaults {
+    #[serde(default = "default_loops")]
+    pub loop_min: u32,
+    #[serde(default = "default_loops")]
+    pub loop_max: u32,
+    pub signal_profile: Option<String>,
+    #[serde(default)]
+    pub announcements: Vec<String>,
+}
+
+impl Default for HexMessageDefaults {
     fn default() -> Self {
         Self {
-            pool: Pool {
-                weight: 0,
-                entries: Vec::new(),
-            },
             loop_min: default_loops(),
             loop_max: default_loops(),
             signal_profile: None,
@@ -62,7 +64,7 @@ fn default_loops() -> u32 {
     1
 }
 
-impl HexPool {
+impl HexMessageDefaults {
     pub fn pick_random_announcement(&self) -> Option<String> {
         self.announcements.choose(&mut rand::rng()).cloned()
     }
@@ -92,11 +94,12 @@ impl Weighted for HexMessageEntry {
 #[typetag::serde(name = "hex")]
 impl SegmentPool for HexPool {
     fn validate(&self) -> anyhow::Result<()> {
-        ensure_loops(self.loop_min, self.loop_max)?;
+        let defaults = &self.defaults;
+        ensure_loops(defaults.loop_min, defaults.loop_max).context("defaults")?;
         for message in &self.entries {
             ensure_loops(
-                message.loop_min.unwrap_or(self.loop_min),
-                message.loop_max.unwrap_or(self.loop_max),
+                message.loop_min.unwrap_or(defaults.loop_min),
+                message.loop_max.unwrap_or(defaults.loop_max),
             )
             .with_context(|| format!("hex message {:?}", message.text))?;
         }
@@ -109,7 +112,7 @@ impl SegmentPool for HexPool {
         _bot_state: Data,
     ) -> Option<Box<dyn Segment>> {
         let entry = history.choose(&self.entries)?.clone();
-        Some(Box::new(HexSegment::from_entry(entry, self)))
+        Some(Box::new(HexSegment::from_entry(entry, &self.defaults)))
     }
 }
 
@@ -192,15 +195,15 @@ impl HexSegment {
         *self.run.lock().unwrap() = Some(handle);
     }
 
-    pub fn from_entry(hex_entry: HexMessageEntry, pool: &HexPool) -> Self {
-        let loop_min = hex_entry.loop_min.unwrap_or(pool.loop_min);
-        let loop_max = hex_entry.loop_max.unwrap_or(pool.loop_max);
+    pub fn from_entry(hex_entry: HexMessageEntry, defaults: &HexMessageDefaults) -> Self {
+        let loop_min = hex_entry.loop_min.unwrap_or(defaults.loop_min);
+        let loop_max = hex_entry.loop_max.unwrap_or(defaults.loop_max);
         let signal_profile = hex_entry
             .signal_profile
-            .or_else(|| pool.signal_profile.clone());
+            .or_else(|| defaults.signal_profile.clone());
         let announcement = hex_entry
             .announcement
-            .or_else(|| pool.pick_random_announcement());
+            .or_else(|| defaults.pick_random_announcement());
         let loops = rand::rng().random_range(loop_min..=loop_max) as usize;
 
         Self::new(hex_entry.text, 1.0, loops, announcement, signal_profile)

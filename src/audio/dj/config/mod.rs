@@ -4,11 +4,12 @@ use crate::bucket::registry::RegistryEntry;
 use anyhow::{Context, bail};
 use serde::{Deserialize, Serialize};
 use std::any::Any;
+use std::collections::BTreeMap;
 
 #[derive(Deserialize, Serialize, Debug, Default)]
 pub struct DJConfig {
     pub name: String,
-    pub pools: Vec<Box<dyn SegmentPool>>,
+    pub pools: BTreeMap<String, Box<dyn SegmentPool>>,
     pub signal_profiles: Vec<SignalProfileEntry>,
     pub recent_history_size: usize,
     pub duplicate_penalty_multiplier: f32,
@@ -16,11 +17,14 @@ pub struct DJConfig {
 }
 
 impl DJConfig {
-    pub fn pool<T: SegmentPool>(&self) -> Option<&T> {
-        self.pools.iter().find_map(|pool| {
-            let pool: &dyn Any = pool.as_ref();
-            pool.downcast_ref()
-        })
+    pub fn pool<T: SegmentPool>(&self, name: &str) -> anyhow::Result<&T> {
+        let pool = self
+            .pools
+            .get(name)
+            .with_context(|| format!("no pool named {name:?}"))?;
+        (&**pool as &dyn Any)
+            .downcast_ref()
+            .with_context(|| format!("pool {name:?} is a {} pool", pool.typetag_name()))
     }
 }
 
@@ -52,9 +56,8 @@ impl RegistryEntry for DJConfig {
 
     /// Rejects values that would make the DJ panic when it picks them.
     fn validate(&self) -> anyhow::Result<()> {
-        for (index, pool) in self.pools.iter().enumerate() {
-            pool.validate()
-                .with_context(|| format!("{} pool {index}", pool.typetag_name()))?;
+        for (name, pool) in &self.pools {
+            pool.validate().with_context(|| format!("pool {name:?}"))?;
         }
         for profile in &self.signal_profiles {
             let context = || format!("signal profile {:?}", profile.profile_name);

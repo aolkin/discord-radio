@@ -64,6 +64,7 @@ fn ensure_profile_exists(bot_state: &Data, profile: Option<&str>) -> Result<(), 
 #[derive(Debug, Deserialize)]
 pub struct PlayHexMessageRequest {
     pub message: String,
+    pub pool: Option<String>,
 }
 
 pub async fn play_hex_message(
@@ -75,6 +76,7 @@ pub async fn play_hex_message(
         message: request.message,
         volume: None,
         loops: None,
+        pool: request.pool,
     };
     send_dj_command(&bot_state, guild_id, DJCommand::ForceHexMessage(request))
 }

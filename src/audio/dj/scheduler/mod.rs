@@ -2,6 +2,7 @@ use crate::audio::dj::config::{DJConfig, SignalProfileEntry};
 use crate::audio::dj::segments::{NoisePeriodEntry, NoiseSegment, Segment};
 use crate::audio::dj::weighted_choice::{WeightedSelector, choose_index};
 use crate::state::Data;
+use anyhow::Context;
 use std::sync::{Arc, LazyLock};
 
 pub struct WeightedScheduler {
@@ -36,29 +37,38 @@ impl WeightedScheduler {
             .to_owned()
     }
 
-    /// Picks a segment from a pool chosen by weight, limited to pools of
-    /// `kind` when set. A forced pool with weight 0 counts as weight 1.
-    pub async fn next_segment(&mut self, kind: Option<&str>, bot_state: Data) -> Box<dyn Segment> {
-        let weights: Vec<f32> = self
-            .config
-            .pools
-            .iter()
-            .map(|pool| match kind {
-                _ if pool.is_empty() => 0,
-                None => pool.weight(),
-                Some(kind) if pool.typetag_name() == kind => pool.weight().max(1),
-                Some(_) => 0,
-            } as f32)
-            .collect();
-        let picked = match choose_index(&weights) {
-            Some(index) => {
-                self.config.pools[index]
-                    .next_segment(&mut self.pool_selectors[index], bot_state)
-                    .await
+    /// Picks a segment from the pool named `pool_name`, or else from a pool
+    /// chosen by weight.
+    pub async fn next_segment(
+        &mut self,
+        pool_name: Option<&str>,
+        bot_state: Data,
+    ) -> anyhow::Result<Box<dyn Segment>> {
+        let pools: Vec<_> = self.config.pools.iter().collect();
+        let index = match pool_name {
+            Some(name) => Some(
+                pools
+                    .iter()
+                    .position(|(key, _)| *key == name)
+                    .with_context(|| format!("no pool named {name:?}"))?,
+            ),
+            None => {
+                let weights: Vec<f32> = pools
+                    .iter()
+                    .map(|(_, pool)| if pool.is_empty() { 0 } else { pool.weight() } as f32)
+                    .collect();
+                choose_index(&weights)
             }
-            None => None,
         };
-        picked.unwrap_or_else(|| Box::new(NoiseSegment::from(&*DEFAULT_NOISE_PERIOD)))
+        match index {
+            Some(index) => {
+                let (name, pool) = pools[index];
+                pool.next_segment(&mut self.pool_selectors[index], bot_state)
+                    .await
+                    .with_context(|| format!("pool {name:?} is empty"))
+            }
+            None => Ok(Box::new(NoiseSegment::from(&*DEFAULT_NOISE_PERIOD))),
+        }
     }
 }
 

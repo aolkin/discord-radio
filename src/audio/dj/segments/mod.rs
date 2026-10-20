@@ -3,7 +3,7 @@ mod noise;
 mod signals;
 mod track;
 
-pub use hex::{HexPool, HexSegment};
+pub use hex::{HexMessageDefaults, HexPool, HexSegment};
 pub use noise::{NoisePeriodEntry, NoiseSegment};
 pub use track::TrackSegment;
 
