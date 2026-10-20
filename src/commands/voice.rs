@@ -27,6 +27,7 @@ fn send_to_dj(
     guild_only,
     default_member_permissions = "ADMINISTRATOR"
 )]
+#[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
 pub async fn join_voice_channel(
     ctx: Context<'_>,
     #[description = "Voice channel to join and broadcast audio"] channel: ChannelId,
@@ -35,10 +36,9 @@ pub async fn join_voice_channel(
     let user_id = ctx.author().id;
 
     tracing::info!(
-        "User {} executed join_voice_channel for channel {} in guild {}",
+        "User {} executed join_voice_channel for channel {}",
         user_id,
         channel,
-        guild_id
     );
 
     ctx.defer_ephemeral().await?;
@@ -79,15 +79,12 @@ pub async fn join_voice_channel(
     guild_only,
     default_member_permissions = "ADMINISTRATOR"
 )]
+#[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
 pub async fn leave_voice_channel(ctx: Context<'_>) -> anyhow::Result<()> {
     let guild_id = require_guild(ctx)?;
     let user_id = ctx.author().id;
 
-    tracing::info!(
-        "User {} executed leave_voice_channel in guild {}",
-        user_id,
-        guild_id
-    );
+    tracing::info!("User {} executed leave_voice_channel", user_id,);
 
     ctx.defer_ephemeral().await?;
 
@@ -116,6 +113,7 @@ pub async fn leave_voice_channel(ctx: Context<'_>) -> anyhow::Result<()> {
 
 /// Have the DJ play a text message as hex audio
 #[poise::command(slash_command, guild_only)]
+#[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
 pub async fn hex(
     ctx: Context<'_>,
     #[description = "Message to convert to hex and play"] message: String,
@@ -127,10 +125,9 @@ pub async fn hex(
     let user_id = ctx.author().id;
 
     tracing::info!(
-        "User {} executed dj hex with message '{}' in guild {}",
+        "User {} executed dj hex with message '{}'",
         user_id,
         message,
-        guild_id
     );
 
     let reply = ctx
@@ -175,6 +172,7 @@ pub async fn hex(
 
 /// Have the DJ play an audio track now
 #[poise::command(slash_command, guild_only)]
+#[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
 pub async fn track(
     ctx: Context<'_>,
     #[description = "Audio filename"]
@@ -189,10 +187,9 @@ pub async fn track(
     let user_id = ctx.author().id;
 
     tracing::info!(
-        "User {} executed dj track with file '{}' in guild {}",
+        "User {} executed dj track with file '{}'",
         user_id,
         filename,
-        guild_id
     );
 
     ctx.defer_ephemeral().await?;
@@ -229,6 +226,7 @@ pub async fn track(
 
 /// Have the DJ go idle now, optionally playing a noise profile
 #[poise::command(slash_command, guild_only)]
+#[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
 pub async fn idle(
     ctx: Context<'_>,
     #[description = "Noise profile to play (default: none)"]
@@ -241,10 +239,9 @@ pub async fn idle(
     let guild_id = require_guild(ctx)?;
 
     tracing::info!(
-        "User {} executed dj idle with noise profile {:?} in guild {}",
+        "User {} executed dj idle with noise profile {:?}",
         ctx.author().id,
         noise_profile,
-        guild_id
     );
 
     ctx.defer_ephemeral().await?;
@@ -656,6 +653,7 @@ pub async fn dj(_ctx: Context<'_>) -> anyhow::Result<()> {
 
 /// Restart the DJ with a configuration
 #[poise::command(slash_command, guild_only)]
+#[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
 pub async fn configure(
     ctx: Context<'_>,
     #[description = "DJ configuration name"] config: String,
@@ -663,10 +661,9 @@ pub async fn configure(
     let guild_id = require_guild(ctx)?;
 
     tracing::info!(
-        "User {} executed dj configure with config {:?} in guild {}",
+        "User {} executed dj configure with config {:?}",
         ctx.author().id,
         config,
-        guild_id
     );
 
     ctx.defer_ephemeral().await?;
@@ -690,6 +687,7 @@ pub async fn configure(
 
 /// Choose the announcement channel or turn announcements off
 #[poise::command(slash_command, guild_only)]
+#[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
 pub async fn announcements(
     ctx: Context<'_>,
     #[description = "Text channel for announcements (omit to turn announcements off)"]
@@ -698,10 +696,9 @@ pub async fn announcements(
     let guild_id = require_guild(ctx)?;
 
     tracing::info!(
-        "User {} executed dj announcements with channel {:?} in guild {}",
+        "User {} executed dj announcements with channel {:?}",
         ctx.author().id,
         announcement_channel,
-        guild_id
     );
 
     ctx.defer_ephemeral().await?;
@@ -726,6 +723,7 @@ pub async fn announcements(
 
 /// Skip to the DJ's next state
 #[poise::command(slash_command, guild_only)]
+#[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
 pub async fn skip(
     ctx: Context<'_>,
     #[description = "Only advance to this kind of state (default: any)"] to_state: Option<
@@ -734,12 +732,7 @@ pub async fn skip(
 ) -> anyhow::Result<()> {
     let guild_id = require_guild(ctx)?;
 
-    tracing::info!(
-        "User {} executed dj skip {:?} in guild {}",
-        ctx.author().id,
-        to_state,
-        guild_id
-    );
+    tracing::info!("User {} executed dj skip {:?}", ctx.author().id, to_state,);
 
     ctx.defer_ephemeral().await?;
 
@@ -760,11 +753,12 @@ pub async fn skip(
 
 /// Get the current state of the DJ
 #[poise::command(slash_command, guild_only)]
+#[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
 pub async fn status(ctx: Context<'_>) -> anyhow::Result<()> {
     let guild_id = require_guild(ctx)?;
     let user_id = ctx.author().id;
 
-    tracing::info!("User {} executed dj status in guild {}", user_id, guild_id);
+    tracing::info!("User {} executed dj status", user_id);
 
     ctx.defer_ephemeral().await?;
 
