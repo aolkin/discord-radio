@@ -131,10 +131,6 @@ impl BotState {
         Some(receiver)
     }
 
-    pub fn dj_state(&self, guild_id: GuildId) -> Option<Arc<RwLock<DJState>>> {
-        Some(self.existing_dj_manager(guild_id)?.state())
-    }
-
     pub fn send_dj_command(&self, guild_id: GuildId, command: DJCommand) -> anyhow::Result<bool> {
         let Some(manager) = self.existing_dj_manager(guild_id) else {
             return Ok(false);
