@@ -159,7 +159,9 @@ impl DJManager {
         });
     }
 
-    async fn stop_task(&self, running: &mut Option<Running>) {
+    #[tracing::instrument(skip_all, fields(guild_id = %self.guild_id))]
+    pub async fn stop(&self) {
+        let mut running = self.running.write().await;
         let Some(Running {
             mut task_handle,
             command_tx,
@@ -210,12 +212,6 @@ impl DJManager {
         tracing::info!("Starting DJ");
         self.spawn(&mut running, saved);
         Ok(())
-    }
-
-    #[tracing::instrument(skip_all, fields(guild_id = %self.guild_id))]
-    pub async fn stop(&self) {
-        let mut running = self.running.write().await;
-        self.stop_task(&mut running).await;
     }
 }
 
