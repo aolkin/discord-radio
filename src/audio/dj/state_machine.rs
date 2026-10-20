@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use serenity::model::id::{ChannelId, GuildId};
 use std::ops::Deref;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::{RwLock, RwLockReadGuard, mpsc};
 
 pub const DEFAULT_PROFILE_FADE: Duration = Duration::from_secs(2);
@@ -30,6 +30,14 @@ pub struct SegmentContainer {
 impl SegmentContainer {
     pub fn elapsed(&self) -> Duration {
         self.started_at.elapsed()
+    }
+
+    pub fn completed(&self) -> Completed {
+        self.segment.completed(self.elapsed())
+    }
+
+    pub async fn restore(&self, ctx: &SegmentCtx<'_>) -> anyhow::Result<()> {
+        self.segment.restore(ctx, self.elapsed()).await
     }
 }
 
@@ -113,6 +121,16 @@ impl Default for DJState {
 }
 
 impl DJState {
+    pub fn shift_back(&mut self, by: Duration) {
+        let shift = |instant: &mut Instant| {
+            *instant = instant.checked_sub(by).unwrap_or_else(Instant::now);
+        };
+        shift(&mut self.segment.started_at);
+        if let BackgroundProfile::Rotating { started_at, .. } = &mut self.background_profile {
+            shift(started_at);
+        }
+    }
+
     pub fn effective_channel_status(&self, config_status: Option<&str>) -> Option<String> {
         self.override_channel_status
             .clone()
@@ -168,11 +186,19 @@ impl DJStateMachine {
         bot_state: Data,
     ) -> Self {
         let (config_name, announcement_channel, restored_state) = match saved {
-            Some(saved) => (
-                saved.config_name,
-                saved.announcement_channel_id.map(ChannelId::new),
-                saved.state_machine,
-            ),
+            Some(saved) => {
+                let mut state_machine = saved.state_machine;
+                if !saved.stopped
+                    && let Some(state) = &mut state_machine
+                {
+                    state.shift_back(saved.saved_at.elapsed().unwrap_or_default());
+                }
+                (
+                    saved.config_name,
+                    saved.announcement_channel_id.map(ChannelId::new),
+                    state_machine,
+                )
+            }
             None => (None, None, None),
         };
         let config_name = config_name.unwrap_or_else(|| DEFAULT_DJ_CONFIG.to_string());
@@ -213,7 +239,7 @@ impl DJStateMachine {
             self.update_profile().await;
             self.update_channel_status().await;
             let rotation_due = self.current_state().await.background_profile.completed();
-            self.persist_state().await;
+            self.persist_state(false).await;
 
             tokio::select! {
                 command = command_rx.recv() => {
@@ -326,12 +352,14 @@ impl DJStateMachine {
         }
     }
 
-    async fn persist_state(&self) {
+    async fn persist_state(&self, stopped: bool) {
         let current_state = self.current_state().await;
         let persist_state = crate::persistence::DJStateSnapshot {
             config_name: &self.config_name,
             announcement_channel_id: self.announcement_channel.map(|id| id.get()),
             state_machine: &current_state,
+            saved_at: SystemTime::now(),
+            stopped,
         };
         if let Err(e) = self
             .bot_state
@@ -538,6 +566,7 @@ impl DJStateMachine {
             DJCommand::ForceIdle(request) => self.force_idle(&bot_state, request).await,
             DJCommand::Stop => {
                 tracing::info!("Processing stop command for DJ");
+                self.persist_state(true).await;
                 self.stop(&bot_state).await;
                 return true;
             }

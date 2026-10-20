@@ -1,7 +1,6 @@
 use crate::activity::ActivityManager;
 use crate::audio::dj::config::DJConfig;
 use crate::audio::dj::manager::DJManager;
-use crate::audio::dj::state_machine::DJState;
 use crate::audio::duration::DurationCache;
 use crate::audio::processing::processor::{AudioProcessor, ProcessorRef};
 use crate::audio::profiles::SignalProfile;
@@ -26,13 +25,7 @@ pub type Data = &'static BotState;
 pub struct GuildRadio {
     pub audio_processor: ProcessorRef,
     pub track_manager: Arc<TrackManager>,
-    dj_manager: Arc<DJManager>,
-}
-
-impl GuildRadio {
-    pub fn dj_state(&self) -> Arc<RwLock<DJState>> {
-        self.dj_manager.state()
-    }
+    pub dj_manager: Arc<DJManager>,
 }
 
 pub struct BotState {

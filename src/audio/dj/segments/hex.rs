@@ -112,11 +112,11 @@ impl HexSegment {
 #[async_trait]
 #[typetag::serde]
 impl Segment for HexSegment {
-    fn completed(&self) -> Completed {
+    fn completed(&self, _elapsed: Duration) -> Completed {
         self.done.completed()
     }
 
-    async fn restore(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
+    async fn restore(&self, ctx: &SegmentCtx, _elapsed: Duration) -> anyhow::Result<()> {
         self.start_run(ctx).await;
         tracing::info!(
             "Restored DJ hex message '{}' at loop {}/{}",

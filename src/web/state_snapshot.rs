@@ -72,7 +72,7 @@ impl BotSnapshot {
                 .collect();
 
             let (dj_state, expected_name, source) = {
-                let dj_state_lock = guild.dj_state();
+                let dj_state_lock = guild.dj_manager.state();
                 let state = dj_state_lock.read().await;
                 (
                     dj_state_to_info(&state),

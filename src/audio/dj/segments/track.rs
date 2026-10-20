@@ -4,7 +4,6 @@ use super::{
 };
 use crate::audio::dj::config::TrackEntry;
 use crate::audio::dj::segments::signals::{Completed, CompletedSignal};
-use crate::audio::dj::serde::{deser_instant, ser_instant};
 use crate::audio::duration::DurationCache;
 use crate::audio::processing::mixer::TrackCommand;
 use crate::audio::tracks::open_track_source;
@@ -12,15 +11,13 @@ use async_trait::async_trait;
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 const FADE_TIME: Duration = Duration::from_secs(1);
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TrackSegment {
     config: CommonSegmentPlaybackConfig,
-    #[serde(serialize_with = "ser_instant", deserialize_with = "deser_instant")]
-    started_at: Instant,
     duration: Duration,
     filename: String,
     volume: f32,
@@ -53,7 +50,6 @@ impl TrackSegment {
         };
         Self {
             config,
-            started_at: Instant::now(),
             duration,
             filename,
             volume,
@@ -140,12 +136,11 @@ impl TrackSegment {
 #[async_trait]
 #[typetag::serde]
 impl Segment for TrackSegment {
-    fn completed(&self) -> Completed {
+    fn completed(&self, _elapsed: Duration) -> Completed {
         self.done.completed()
     }
 
-    async fn restore(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
-        let elapsed = self.started_at.elapsed();
+    async fn restore(&self, ctx: &SegmentCtx, elapsed: Duration) -> anyhow::Result<()> {
         if elapsed >= self.duration {
             tracing::info!(
                 "DJ track '{}' has already finished (elapsed: {:.1}s, duration: {:.1}s), will advance to next state",

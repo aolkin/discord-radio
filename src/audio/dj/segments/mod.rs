@@ -100,9 +100,9 @@ pub struct StateDisplay {
 #[async_trait]
 #[typetag::serde(tag = "type")]
 pub trait Segment: Send + Sync + Debug + SegmentPlaybackConfig {
-    fn completed(&self) -> Completed;
+    fn completed(&self, elapsed: Duration) -> Completed;
 
-    async fn restore(&self, _ctx: &SegmentCtx) -> anyhow::Result<()> {
+    async fn restore(&self, _ctx: &SegmentCtx, _elapsed: Duration) -> anyhow::Result<()> {
         Ok(())
     }
     async fn enter(&self, _ctx: &SegmentCtx) -> anyhow::Result<()> {
