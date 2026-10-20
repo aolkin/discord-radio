@@ -17,7 +17,7 @@ const STOP_SEND_TIMEOUT: Duration = Duration::from_secs(1);
 
 #[derive(strum::IntoStaticStr)]
 pub enum DJCommand {
-    ForceAdvance(Option<DJStateType>),
+    ForceAdvance(Option<String>),
     ForceHexMessage(HexMessageRequest),
     ForceTrack(TrackRequest),
     ForceIdle(IdleRequest),
@@ -78,14 +78,6 @@ impl IdleRequest {
         }
         Ok(())
     }
-}
-
-#[derive(Clone, Copy, Debug, poise::ChoiceParameter)]
-pub enum DJStateType {
-    Track,
-    #[name = "hex"]
-    HexMessage,
-    Noise,
 }
 
 pub struct DJManager {

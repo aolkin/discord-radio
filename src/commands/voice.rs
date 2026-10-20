@@ -1,5 +1,5 @@
 use crate::audio::connection::connect_voice_channel;
-use crate::audio::dj::manager::{DJCommand, DJStateType, load_dj_config};
+use crate::audio::dj::manager::{DJCommand, load_dj_config};
 use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
 use crate::audio::processing::processor::ProcessorRef;
@@ -727,9 +727,7 @@ pub async fn announcements(
 #[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
 pub async fn skip(
     ctx: Context<'_>,
-    #[description = "Only advance to this kind of state (default: any)"] to_state: Option<
-        DJStateType,
-    >,
+    #[description = "Only advance to this kind of state (default: any)"] to_state: Option<String>,
 ) -> anyhow::Result<()> {
     let guild_id = require_guild(ctx)?;
 
@@ -737,14 +735,18 @@ pub async fn skip(
 
     ctx.defer_ephemeral().await?;
 
-    if let Err(e) = send_to_dj(ctx.data(), guild_id, DJCommand::ForceAdvance(to_state)) {
+    if let Err(e) = send_to_dj(
+        ctx.data(),
+        guild_id,
+        DJCommand::ForceAdvance(to_state.clone()),
+    ) {
         ctx.say(format!("Failed to force DJ state advance: {e:#}"))
             .await?;
         return Ok(());
     }
 
     let message = match to_state {
-        Some(filter) => format!("DJ advancing to {:?} state", filter),
+        Some(kind) => format!("DJ advancing to {kind} state"),
         None => "DJ state advance triggered".to_string(),
     };
     ctx.say(message).await?;

@@ -1,12 +1,13 @@
 use super::{
-    CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
-    TrackSlot,
+    CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, SegmentPool,
+    StateDisplay, TrackSlot,
 };
-use crate::audio::dj::config::TrackEntry;
+use crate::audio::dj::config::ensure_seconds;
 use crate::audio::dj::segments::signals::{Completed, CompletedSignal};
-use crate::audio::duration::DurationCache;
+use crate::audio::dj::weighted_choice::{Weighted, WeightedSelector};
 use crate::audio::processing::mixer::TrackCommand;
 use crate::audio::tracks::open_track_source;
+use crate::state::Data;
 use async_trait::async_trait;
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
@@ -14,6 +15,113 @@ use std::ops::Deref;
 use std::time::Duration;
 
 const FADE_TIME: Duration = Duration::from_secs(1);
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct TrackPool {
+    pub weight: u32,
+    pub entries: Vec<TrackEntry>,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct TrackEntry {
+    pub filename: String,
+    pub weight: u32,
+    pub max_duration_seconds: Option<f32>,
+    pub allow_subsection: Option<bool>,
+    pub signal_profile: Option<String>,
+    /// Volume level (0.0-2.0).
+    ///
+    /// Uses perceptual (logarithmic) scaling:
+    /// - 0.0 = silence
+    /// - 1.0 = unity gain (0 dB, original volume)
+    /// - 2.0 = maximum boost (+18 dB, ~8x amplitude)
+    ///
+    /// This scaling provides more perceptually uniform volume changes
+    /// compared to linear scaling.
+    pub volume: Option<f32>,
+    pub channel_status: Option<String>,
+}
+
+impl Weighted for TrackEntry {
+    fn weight(&self) -> f32 {
+        self.weight as f32
+    }
+
+    fn key(&self) -> &str {
+        &self.filename
+    }
+}
+
+#[async_trait]
+#[typetag::serde(name = "track")]
+impl SegmentPool for TrackPool {
+    fn weight(&self) -> u32 {
+        self.weight
+    }
+
+    fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    fn validate(&self) -> anyhow::Result<()> {
+        for track in &self.entries {
+            if let Some(seconds) = track.max_duration_seconds {
+                ensure_seconds(seconds, || format!("track {:?}", track.filename))?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn pick(
+        &self,
+        history: &mut WeightedSelector,
+        bot_state: Data,
+    ) -> Option<Box<dyn Segment>> {
+        let track_entry = history.choose(&self.entries)?;
+        let duration = bot_state
+            .duration_cache
+            .get_duration(&track_entry.filename)
+            .await;
+        let (start_position, play_duration) = if track_entry.allow_subsection.unwrap_or(false) {
+            if let Some(total_duration) = duration {
+                if total_duration.as_secs_f32() > 240.0 {
+                    let mut rng = rand::rng();
+                    let subsection_duration =
+                        Duration::from_secs_f32(rng.random_range(120.0..240.0));
+                    let latest_start =
+                        total_duration.as_secs_f32() - subsection_duration.as_secs_f32();
+                    let start_secs = rng.random_range(0.0..latest_start.max(0.0));
+                    (
+                        Some(Duration::from_secs_f32(start_secs)),
+                        subsection_duration,
+                    )
+                } else {
+                    (None, duration.unwrap_or(Duration::from_secs(60)))
+                }
+            } else {
+                (None, Duration::from_secs(60))
+            }
+        } else {
+            let max_dur = track_entry
+                .max_duration_seconds
+                .map(Duration::from_secs_f32)
+                .or(duration)
+                .unwrap_or(Duration::from_secs(60));
+            (None, max_dur)
+        };
+
+        let volume = track_entry.volume.unwrap_or(1.0);
+
+        Some(Box::new(TrackSegment::new(
+            track_entry.filename.clone(),
+            volume,
+            start_position,
+            play_duration,
+            track_entry.signal_profile.clone(),
+            track_entry.channel_status.as_deref(),
+        )))
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TrackSegment {
@@ -88,48 +196,6 @@ impl TrackSegment {
         );
         self.track.set(track);
         Ok(())
-    }
-
-    pub async fn from_entry(track_entry: TrackEntry, duration_cache: &DurationCache) -> Self {
-        let duration = duration_cache.get_duration(&track_entry.filename).await;
-        let (start_position, play_duration) = if track_entry.allow_subsection.unwrap_or(false) {
-            if let Some(total_duration) = duration {
-                if total_duration.as_secs_f32() > 240.0 {
-                    let mut rng = rand::rng();
-                    let subsection_duration =
-                        Duration::from_secs_f32(rng.random_range(120.0..240.0));
-                    let latest_start =
-                        total_duration.as_secs_f32() - subsection_duration.as_secs_f32();
-                    let start_secs = rng.random_range(0.0..latest_start.max(0.0));
-                    (
-                        Some(Duration::from_secs_f32(start_secs)),
-                        subsection_duration,
-                    )
-                } else {
-                    (None, duration.unwrap_or(Duration::from_secs(60)))
-                }
-            } else {
-                (None, Duration::from_secs(60))
-            }
-        } else {
-            let max_dur = track_entry
-                .max_duration_seconds
-                .map(Duration::from_secs_f32)
-                .or(duration)
-                .unwrap_or(Duration::from_secs(60));
-            (None, max_dur)
-        };
-
-        let volume = track_entry.volume.unwrap_or(1.0);
-
-        TrackSegment::new(
-            track_entry.filename,
-            volume,
-            start_position,
-            play_duration,
-            track_entry.signal_profile,
-            track_entry.channel_status.as_deref(),
-        )
     }
 }
 

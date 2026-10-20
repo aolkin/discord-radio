@@ -1,15 +1,18 @@
 use super::{
-    CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
-    TrackSlot,
+    CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, SegmentPool,
+    StateDisplay, TrackSlot,
 };
-use crate::audio::dj::config::{HexMessageDefaults, HexMessageEntry};
 use crate::audio::dj::segments::signals::{Completed, CompletedSignal};
+use crate::audio::dj::weighted_choice::{Weighted, WeightedSelector};
 use crate::audio::processing::mixer::{TrackCallback, TrackCommand};
 use crate::audio::processing::processor::AudioProcessor;
 use crate::audio::tracks::open_track_source;
 use crate::bucket::FileResolver;
+use crate::state::Data;
+use anyhow::{Context, bail};
 use async_trait::async_trait;
 use rand::RngExt;
+use rand::seq::IndexedRandom;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use std::path::Path;
@@ -19,6 +22,120 @@ use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tracing::Instrument;
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct HexPool {
+    pub weight: u32,
+    #[serde(default = "default_loops")]
+    pub loop_min: u32,
+    #[serde(default = "default_loops")]
+    pub loop_max: u32,
+    pub signal_profile: Option<String>,
+    #[serde(default)]
+    pub announcements: Vec<String>,
+    pub entries: Vec<HexMessageEntry>,
+}
+
+impl Default for HexPool {
+    fn default() -> Self {
+        Self {
+            weight: 0,
+            loop_min: default_loops(),
+            loop_max: default_loops(),
+            signal_profile: None,
+            announcements: Vec::new(),
+            entries: Vec::new(),
+        }
+    }
+}
+
+fn default_loops() -> u32 {
+    1
+}
+
+impl HexPool {
+    pub fn pick_random_announcement(&self) -> Option<String> {
+        self.announcements.choose(&mut rand::rng()).cloned()
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct HexMessageEntry {
+    pub text: String,
+    pub weight: u32,
+    pub signal_profile: Option<String>,
+    pub loop_min: Option<u32>,
+    pub loop_max: Option<u32>,
+    pub announcement: Option<String>,
+}
+
+impl Weighted for HexMessageEntry {
+    fn weight(&self) -> f32 {
+        self.weight as f32
+    }
+
+    fn key(&self) -> &str {
+        &self.text
+    }
+}
+
+#[async_trait]
+#[typetag::serde(name = "hex")]
+impl SegmentPool for HexPool {
+    fn weight(&self) -> u32 {
+        self.weight
+    }
+
+    fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    fn validate(&self) -> anyhow::Result<()> {
+        ensure_loops(self.loop_min, self.loop_max)?;
+        for message in &self.entries {
+            ensure_loops(
+                message.loop_min.unwrap_or(self.loop_min),
+                message.loop_max.unwrap_or(self.loop_max),
+            )
+            .with_context(|| format!("hex message {:?}", message.text))?;
+        }
+        Ok(())
+    }
+
+    async fn pick(
+        &self,
+        history: &mut WeightedSelector,
+        _bot_state: Data,
+    ) -> Option<Box<dyn Segment>> {
+        let hex_entry = history.choose(&self.entries)?;
+        let loop_min = hex_entry.loop_min.unwrap_or(self.loop_min);
+        let loop_max = hex_entry.loop_max.unwrap_or(self.loop_max);
+        let signal_profile = hex_entry
+            .signal_profile
+            .clone()
+            .or_else(|| self.signal_profile.clone());
+        let announcement = hex_entry
+            .announcement
+            .clone()
+            .or_else(|| self.pick_random_announcement());
+        let loops = rand::rng().random_range(loop_min..=loop_max) as usize;
+
+        Some(Box::new(HexSegment::new(
+            hex_entry.text.clone(),
+            1.0,
+            loops,
+            announcement,
+            signal_profile,
+        )))
+    }
+}
+
+fn ensure_loops(min: u32, max: u32) -> anyhow::Result<()> {
+    if min > max {
+        bail!("loop_min must not exceed loop_max");
+    }
+    Ok(())
+}
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct HexProgress {
@@ -90,22 +207,6 @@ impl HexSegment {
             .instrument(tracing::Span::current()),
         );
         *self.run.lock().unwrap() = Some(handle);
-    }
-
-    pub fn from_entry(
-        hex_entry: HexMessageEntry,
-        defaults: &HexMessageDefaults,
-        default_announcement: impl FnOnce() -> Option<String>,
-    ) -> Self {
-        let loop_min = hex_entry.loop_min.unwrap_or(defaults.loop_min);
-        let loop_max = hex_entry.loop_max.unwrap_or(defaults.loop_max);
-        let signal_profile = hex_entry
-            .signal_profile
-            .or_else(|| defaults.signal_profile.clone());
-        let announcement = hex_entry.announcement.or_else(default_announcement);
-        let loops = rand::rng().random_range(loop_min..=loop_max) as usize;
-
-        Self::new(hex_entry.text, 1.0, loops, announcement, signal_profile)
     }
 }
 

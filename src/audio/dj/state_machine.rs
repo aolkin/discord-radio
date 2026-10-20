@@ -1,11 +1,11 @@
 use crate::audio::dj::config::DJConfig;
 use crate::audio::dj::manager::{
-    ADVANCE_RETRY_DELAY, DEFAULT_DJ_CONFIG, DJCommand, DJStateType, HexMessageRequest, IdleRequest,
+    ADVANCE_RETRY_DELAY, DEFAULT_DJ_CONFIG, DJCommand, HexMessageRequest, IdleRequest,
     TrackRequest, load_dj_config,
 };
-use crate::audio::dj::scheduler::{DJStateEntry, WeightedScheduler};
+use crate::audio::dj::scheduler::WeightedScheduler;
 use crate::audio::dj::segments::{
-    Completed, HexSegment, Segment, SignalProfilePlayback, TrackSegment,
+    Completed, HexPool, HexSegment, Segment, SignalProfilePlayback, TrackSegment,
 };
 use crate::audio::dj::segments::{NoiseSegment, SegmentCtx};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
@@ -50,8 +50,14 @@ impl Deref for SegmentContainer {
 
 impl<S: Segment + 'static> From<S> for SegmentContainer {
     fn from(segment: S) -> Self {
+        (Box::new(segment) as Box<dyn Segment>).into()
+    }
+}
+
+impl From<Box<dyn Segment>> for SegmentContainer {
+    fn from(segment: Box<dyn Segment>) -> Self {
         SegmentContainer {
-            segment: Box::new(segment),
+            segment,
             started_at: Instant::now(),
         }
     }
@@ -405,27 +411,12 @@ impl DJStateMachine {
     pub async fn force_advance(
         &mut self,
         bot_state: &Data,
-        state_type_filter: Option<DJStateType>,
+        kind: Option<&str>,
     ) -> anyhow::Result<()> {
         self.reload_config();
-        let Self { scheduler, .. } = self;
-        let next_state_type = scheduler.next_state(state_type_filter);
-        tracing::info!("DJ transitioning to state: {next_state_type}");
-        let next_state = match next_state_type {
-            DJStateEntry::Track(entry) => {
-                TrackSegment::from_entry(entry, &bot_state.duration_cache)
-                    .await
-                    .into()
-            }
-            DJStateEntry::HexMessage(entry) => {
-                HexSegment::from_entry(entry, &self.config.hex_message_defaults, || {
-                    self.pick_random_announcement()
-                })
-                .into()
-            }
-            DJStateEntry::Noise(entry) => NoiseSegment::from(entry).into(),
-        };
-        self.enter_state(next_state, bot_state).await
+        let next_state = self.scheduler.next_segment(kind, bot_state).await;
+        tracing::info!("DJ transitioning to state: {}", next_state.state_name());
+        self.enter_state(next_state.into(), bot_state).await
     }
 
     /// Switches to the latest saved copy of the DJ's named config. A new
@@ -450,17 +441,18 @@ impl DJStateMachine {
             "DJ force transitioning to hex message with custom text: {}",
             request.message
         );
-        let defaults = &self.config.hex_message_defaults;
+        let default_pool = HexPool::default();
+        let pool = self.config.pool::<HexPool>().unwrap_or(&default_pool);
         let loops = request
             .loops
-            .unwrap_or_else(|| rand::rng().random_range(defaults.loop_min..=defaults.loop_max))
+            .unwrap_or_else(|| rand::rng().random_range(pool.loop_min..=pool.loop_max))
             as usize;
         let next_state = HexSegment::new(
             request.message,
             request.volume.unwrap_or(1.0),
             loops,
-            self.pick_random_announcement(),
-            defaults.signal_profile.clone(),
+            pool.pick_random_announcement(),
+            pool.signal_profile.clone(),
         )
         .into();
         self.enter_state(next_state, bot_state).await
@@ -555,9 +547,9 @@ impl DJStateMachine {
         let bot_state = self.bot_state;
         let cmd_name: &'static str = (&command).into();
         let result = match command {
-            DJCommand::ForceAdvance(state_type_filter) => {
+            DJCommand::ForceAdvance(kind) => {
                 tracing::info!("Processing force advance for DJ");
-                self.force_advance(&bot_state, state_type_filter).await
+                self.force_advance(&bot_state, kind.as_deref()).await
             }
             DJCommand::ForceHexMessage(request) => {
                 self.force_hex_message(&bot_state, request).await
@@ -602,21 +594,6 @@ impl DJStateMachine {
             tracing::error!("DJ command {cmd_name} failed: {e:#}");
         }
         false
-    }
-
-    fn pick_random_announcement(&self) -> Option<String> {
-        let announcements = self
-            .config
-            .hex_message_announcements
-            .as_deref()
-            .unwrap_or_default();
-        if !announcements.is_empty() {
-            let mut rng = rand::rng();
-            let announcement_idx = rng.random_range(0..announcements.len());
-            Some(announcements[announcement_idx].clone())
-        } else {
-            None
-        }
     }
 
     async fn log_state_transition(&self, bot_state: &Data) {

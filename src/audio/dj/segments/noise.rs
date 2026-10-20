@@ -1,15 +1,71 @@
-use crate::audio::dj::config::NoisePeriodEntry;
+use crate::audio::dj::config::ensure_seconds;
 use crate::audio::dj::segments::signals::Completed;
 use crate::audio::dj::segments::{
-    CommonSegmentPlaybackConfig, Segment, SegmentPlaybackConfig, SignalProfilePlayback,
-    StateDisplay,
+    CommonSegmentPlaybackConfig, Segment, SegmentPlaybackConfig, SegmentPool,
+    SignalProfilePlayback, StateDisplay,
 };
+use crate::audio::dj::weighted_choice::{Weighted, WeightedSelector};
+use crate::state::Data;
 use async_trait::async_trait;
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
-
 use std::time::{Duration, Instant};
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct NoisePool {
+    pub weight: u32,
+    pub entries: Vec<NoisePeriodEntry>,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct NoisePeriodEntry {
+    pub noise_profile: String,
+    pub min_duration_seconds: f32,
+    pub max_duration_seconds: f32,
+    pub weight: u32,
+}
+
+impl Weighted for NoisePeriodEntry {
+    fn weight(&self) -> f32 {
+        self.weight as f32
+    }
+
+    fn key(&self) -> &str {
+        &self.noise_profile
+    }
+}
+
+#[async_trait]
+#[typetag::serde(name = "noise")]
+impl SegmentPool for NoisePool {
+    fn weight(&self) -> u32 {
+        self.weight
+    }
+
+    fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    fn validate(&self) -> anyhow::Result<()> {
+        for noise in &self.entries {
+            let context = || format!("noise period {:?}", noise.noise_profile);
+            ensure_seconds(noise.min_duration_seconds, context)?;
+            ensure_seconds(noise.max_duration_seconds, context)?;
+        }
+        Ok(())
+    }
+
+    async fn pick(
+        &self,
+        history: &mut WeightedSelector,
+        _bot_state: Data,
+    ) -> Option<Box<dyn Segment>> {
+        let entry = history.choose(&self.entries)?;
+        Some(Box::new(NoiseSegment::from(entry)))
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub enum NoiseSegment {
     Timed {
@@ -104,8 +160,8 @@ impl Segment for NoiseSegment {
     }
 }
 
-impl From<NoisePeriodEntry> for NoiseSegment {
-    fn from(noise_entry: NoisePeriodEntry) -> Self {
+impl From<&NoisePeriodEntry> for NoiseSegment {
+    fn from(noise_entry: &NoisePeriodEntry) -> Self {
         let duration_secs = if noise_entry.min_duration_seconds >= noise_entry.max_duration_seconds
         {
             noise_entry.min_duration_seconds
@@ -115,7 +171,7 @@ impl From<NoisePeriodEntry> for NoiseSegment {
         };
 
         Self::new(
-            noise_entry.noise_profile,
+            noise_entry.noise_profile.clone(),
             Some(Duration::from_secs_f32(duration_secs)),
         )
     }

@@ -1,52 +1,65 @@
 {
   "name": "default",
-  "track_pool": [
+  "pools": [
     {
-      "filename": "audio/example.mp3",
-      "weight": 1
-    }
-  ],
-  "hex_messages": [
-    {
-      "text": "hello world",
-      "weight": 1
-    }
-  ],
-  "hex_message_defaults": {
-    "loop_min": 2,
-    "loop_max": 3,
-    "signal_profile": "locked"
-  },
-  "noise_periods": [
-    {
-      "noise_profile": "noise_pink",
-      "min_duration_seconds": 0.5,
-      "max_duration_seconds": 1.5,
-      "weight": 20
+      "kind": "track",
+      "weight": 100,
+      "entries": [
+        {
+          "filename": "audio/example.mp3",
+          "weight": 1
+        }
+      ]
     },
     {
-      "noise_profile": "noise_pink",
-      "min_duration_seconds": 1.0,
-      "max_duration_seconds": 3.0,
-      "weight": 5
+      "kind": "hex",
+      "weight": 2,
+      "loop_min": 2,
+      "loop_max": 3,
+      "signal_profile": "locked",
+      "announcements": [],
+      "entries": [
+        {
+          "text": "hello world",
+          "weight": 1
+        }
+      ]
     },
     {
-      "noise_profile": "noise_brown",
-      "min_duration_seconds": 2.0,
-      "max_duration_seconds": 4.0,
-      "weight": 2
-    },
-    {
-      "noise_profile": "noise_brown",
-      "min_duration_seconds": 0.5,
-      "max_duration_seconds": 1.5,
-      "weight": 8
-    },
-    {
-      "noise_profile": "noise_white",
-      "min_duration_seconds": 0.5,
-      "max_duration_seconds": 1.0,
-      "weight": 2
+      "kind": "noise",
+      "weight": 50,
+      "entries": [
+        {
+          "noise_profile": "noise_pink",
+          "min_duration_seconds": 0.5,
+          "max_duration_seconds": 1.5,
+          "weight": 20
+        },
+        {
+          "noise_profile": "noise_pink",
+          "min_duration_seconds": 1.0,
+          "max_duration_seconds": 3.0,
+          "weight": 5
+        },
+        {
+          "noise_profile": "noise_brown",
+          "min_duration_seconds": 2.0,
+          "max_duration_seconds": 4.0,
+          "weight": 2
+        },
+        {
+          "noise_profile": "noise_brown",
+          "min_duration_seconds": 0.5,
+          "max_duration_seconds": 1.5,
+          "weight": 8
+        },
+        {
+          "noise_profile": "noise_white",
+          "min_duration_seconds": 0.5,
+          "max_duration_seconds": 1.0,
+          "weight": 2
+        }
+      ]
     }
   ],
   "signal_profiles": [
@@ -79,11 +92,6 @@
       "max_time_seconds": 20.0
     }
   ],
-  "state_weights": {
-    "track": 100,
-    "hex_message": 2,
-    "noise": 50
-  },
   "recent_history_size": 12,
   "duplicate_penalty_multiplier": 0.5
 }

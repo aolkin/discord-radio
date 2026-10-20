@@ -1,4 +1,4 @@
-use crate::audio::dj::manager::{DJCommand, DJStateType, DjBusy, IdleRequest, TrackRequest};
+use crate::audio::dj::manager::{DJCommand, DjBusy, IdleRequest, TrackRequest};
 use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
 use crate::state::Data;
@@ -21,25 +21,10 @@ pub async fn advance_dj_state(
     Path(guild_id): Path<GuildId>,
     AxumJson(request): AxumJson<AdvanceDjStateRequest>,
 ) -> Result<StatusCode, ApiError> {
-    let state_type_filter = if let Some(type_str) = request.state_type {
-        match type_str.to_lowercase().as_str() {
-            "track" => Some(DJStateType::Track),
-            "hex" | "hex_message" | "hexmessage" => Some(DJStateType::HexMessage),
-            "noise" => Some(DJStateType::Noise),
-            _ => {
-                return Err(ApiError::bad_request(format!(
-                    "Unknown state_type {type_str:?}"
-                )));
-            }
-        }
-    } else {
-        None
-    };
-
     send_dj_command(
         &bot_state,
         guild_id,
-        DJCommand::ForceAdvance(state_type_filter),
+        DJCommand::ForceAdvance(request.state_type),
     )
 }
 

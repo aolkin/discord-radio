@@ -1,45 +1,30 @@
-use crate::audio::dj::config::{
-    DJConfig, HexMessageEntry, NoisePeriodEntry, SignalProfileEntry, TrackEntry,
-};
-use crate::audio::dj::manager::DJStateType;
-use crate::audio::dj::weighted_choice::WeightedSelector;
-use rand::RngExt;
+use crate::audio::dj::config::{DJConfig, SignalProfileEntry};
+use crate::audio::dj::segments::{NoisePeriodEntry, NoiseSegment, Segment};
+use crate::audio::dj::weighted_choice::{WeightedSelector, choose_index};
+use crate::state::Data;
 use std::sync::{Arc, LazyLock};
-
-#[derive(Clone, strum::Display)]
-pub enum DJStateEntry {
-    Track(TrackEntry),
-    HexMessage(HexMessageEntry),
-    Noise(NoisePeriodEntry),
-}
 
 pub struct WeightedScheduler {
     config: Arc<DJConfig>,
-    track_selector: WeightedSelector,
-    hex_message_selector: WeightedSelector,
-    noise_selector: WeightedSelector,
+    pool_selectors: Vec<WeightedSelector>,
     signal_profile_selector: WeightedSelector,
 }
 
 impl WeightedScheduler {
     pub fn new(config: Arc<DJConfig>) -> Self {
-        let track_selector = WeightedSelector::new(
-            config.recent_history_size,
-            config.duplicate_penalty_multiplier,
-        );
-        let hex_message_selector = WeightedSelector::new(
-            config.recent_history_size,
-            config.duplicate_penalty_multiplier,
-        );
-        let noise_selector = WeightedSelector::new(
-            config.recent_history_size,
-            config.duplicate_penalty_multiplier,
-        );
+        let pool_selectors = config
+            .pools
+            .iter()
+            .map(|_| {
+                WeightedSelector::new(
+                    config.recent_history_size,
+                    config.duplicate_penalty_multiplier,
+                )
+            })
+            .collect();
         Self {
             config,
-            track_selector,
-            hex_message_selector,
-            noise_selector,
+            pool_selectors,
             signal_profile_selector: WeightedSelector::new(5, 0.3),
         }
     }
@@ -51,67 +36,29 @@ impl WeightedScheduler {
             .to_owned()
     }
 
-    pub fn next_state(&mut self, filter: Option<DJStateType>) -> DJStateEntry {
-        match filter.unwrap_or_else(|| self.choose_state_type()) {
-            DJStateType::Track => {
-                let track = self.track_selector.choose(&self.config.track_pool);
-                track.map(|track| DJStateEntry::Track(track.to_owned()))
-            }
-            DJStateType::HexMessage => {
-                let message = self.hex_message_selector.choose(&self.config.hex_messages);
-                message.map(|message| DJStateEntry::HexMessage(message.to_owned()))
-            }
-            DJStateType::Noise => {
-                let noise = self.noise_selector.choose(&self.config.noise_periods);
-                noise.map(|noise| DJStateEntry::Noise(noise.to_owned()))
-            }
-        }
-        .unwrap_or_else(|| DJStateEntry::Noise(DEFAULT_NOISE_PERIOD.to_owned()))
-    }
-
-    fn choose_state_type(&self) -> DJStateType {
-        let weights = &self.config.state_weights;
-        let categories = [
-            (
-                DJStateType::Track,
-                weights.track,
-                self.config.track_pool.is_empty(),
-            ),
-            (
-                DJStateType::HexMessage,
-                weights.hex_message,
-                self.config.hex_messages.is_empty(),
-            ),
-            (
-                DJStateType::Noise,
-                weights.noise,
-                self.config.noise_periods.is_empty(),
-            ),
-        ];
-
-        let total: u32 = categories
+    /// Picks a segment from a pool chosen by weight, limited to pools of
+    /// `kind` when set. A forced pool with weight 0 counts as weight 1.
+    pub async fn next_segment(&mut self, kind: Option<&str>, bot_state: Data) -> Box<dyn Segment> {
+        let weights: Vec<f32> = self
+            .config
+            .pools
             .iter()
-            .filter(|(_, _, empty)| !empty)
-            .map(|(_, weight, _)| weight)
-            .sum();
-        if total == 0 {
-            return DJStateType::Noise;
-        }
-
-        let mut rng = rand::rng();
-        let roll: u32 = rng.random_range(0..total);
-
-        let mut cumulative = 0;
-        for (category, weight, empty) in categories {
-            if empty {
-                continue;
+            .map(|pool| match kind {
+                _ if pool.is_empty() => 0,
+                None => pool.weight(),
+                Some(kind) if pool.typetag_name() == kind => pool.weight().max(1),
+                Some(_) => 0,
+            } as f32)
+            .collect();
+        let picked = match choose_index(&weights) {
+            Some(index) => {
+                self.config.pools[index]
+                    .pick(&mut self.pool_selectors[index], bot_state)
+                    .await
             }
-            cumulative += weight;
-            if roll < cumulative {
-                return category;
-            }
-        }
-        DJStateType::Noise
+            None => None,
+        };
+        picked.unwrap_or_else(|| Box::new(NoiseSegment::from(&*DEFAULT_NOISE_PERIOD)))
     }
 }
 
@@ -130,6 +77,3 @@ static DEFAULT_SIGNAL_PROFILE: LazyLock<SignalProfileEntry> =
         min_time_seconds: 60.0,
         max_time_seconds: 120.0,
     });
-
-#[cfg(test)]
-mod tests;
