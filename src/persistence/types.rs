@@ -35,6 +35,8 @@ pub struct DJState {
     pub announcement_channel_id: Option<u64>,
     #[serde(default)]
     pub state_machine: Option<crate::audio::dj::state_machine::DJState>,
+    pub saved_at: SystemTime,
+    pub stopped: bool,
 }
 
 #[derive(Serialize, Debug)]
@@ -42,6 +44,8 @@ pub struct DJStateSnapshot<'a> {
     pub config_name: &'a str,
     pub announcement_channel_id: Option<u64>,
     pub state_machine: &'a crate::audio::dj::state_machine::DJState,
+    pub saved_at: SystemTime,
+    pub stopped: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

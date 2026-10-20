@@ -26,7 +26,7 @@ pub type Data = &'static BotState;
 pub struct GuildRadio {
     pub audio_processor: ProcessorRef,
     pub track_manager: Arc<TrackManager>,
-    dj_manager: Arc<DJManager>,
+    pub dj_manager: Arc<DJManager>,
 }
 
 impl GuildRadio {

@@ -15,7 +15,7 @@ use std::ops::Deref;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tracing::Instrument;
@@ -112,11 +112,11 @@ impl HexSegment {
 #[async_trait]
 #[typetag::serde]
 impl Segment for HexSegment {
-    fn completed(&self) -> Completed {
+    fn completed(&self, _started_at: Instant) -> Completed {
         self.done.completed()
     }
 
-    async fn restore(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
+    async fn restore(&self, ctx: &SegmentCtx, _elapsed: Duration) -> anyhow::Result<()> {
         self.start_run(ctx).await;
         tracing::info!(
             "Restored DJ hex message '{}' at loop {}/{}",

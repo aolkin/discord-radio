@@ -4,7 +4,6 @@ use crate::audio::dj::segments::{
     CommonSegmentPlaybackConfig, Segment, SegmentPlaybackConfig, SignalProfilePlayback,
     StateDisplay,
 };
-use crate::audio::dj::serde::{deser_instant, ser_instant};
 use async_trait::async_trait;
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
@@ -15,8 +14,6 @@ use std::time::{Duration, Instant};
 pub enum NoiseSegment {
     Timed {
         config: CommonSegmentPlaybackConfig,
-        #[serde(serialize_with = "ser_instant", deserialize_with = "deser_instant")]
-        started_at: Instant,
         duration: Duration,
     },
     Infinite {
@@ -35,11 +32,7 @@ impl NoiseSegment {
             channel_status: None,
         };
         match duration {
-            Some(duration) => Self::Timed {
-                config,
-                started_at: Instant::now(),
-                duration,
-            },
+            Some(duration) => Self::Timed { config, duration },
             None => Self::Infinite { config },
         }
     }
@@ -47,7 +40,6 @@ impl NoiseSegment {
     pub fn quiet(duration: Duration) -> Self {
         Self::Timed {
             config: Default::default(),
-            started_at: Instant::now(),
             duration,
         }
     }
@@ -78,13 +70,9 @@ impl Deref for NoiseSegment {
 #[async_trait]
 #[typetag::serde]
 impl Segment for NoiseSegment {
-    fn completed(&self) -> Completed {
+    fn completed(&self, started_at: Instant) -> Completed {
         match self {
-            NoiseSegment::Timed {
-                started_at,
-                duration,
-                ..
-            } => Completed::at(*started_at + *duration),
+            NoiseSegment::Timed { duration, .. } => Completed::at(started_at + *duration),
             NoiseSegment::Infinite { .. } => Completed::never(),
         }
     }
