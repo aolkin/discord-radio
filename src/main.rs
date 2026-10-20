@@ -86,6 +86,7 @@ impl serenity::EventHandler for Handler {
         }
     }
 
+    #[tracing::instrument(skip_all, fields(guild_id = new.guild_id.map(|id| id.get())))]
     async fn voice_state_update(
         &self,
         ctx: serenity::Context,
@@ -114,12 +115,7 @@ impl serenity::EventHandler for Handler {
 
         match (old.and_then(|o| o.channel_id), new.channel_id) {
             (None, Some(channel_id)) => {
-                tracing::info!(
-                    "User {} joined voice channel {} in guild {}",
-                    user_id,
-                    channel_id,
-                    guild_id
-                );
+                tracing::info!("User {} joined voice channel {}", user_id, channel_id);
 
                 // Log the join event
                 self.data
@@ -134,12 +130,7 @@ impl serenity::EventHandler for Handler {
                     .await;
             }
             (Some(old_channel), None) => {
-                tracing::info!(
-                    "User {} left voice channel {} in guild {}",
-                    user_id,
-                    old_channel,
-                    guild_id
-                );
+                tracing::info!("User {} left voice channel {}", user_id, old_channel);
 
                 // Log the leave event
                 self.data
@@ -155,11 +146,10 @@ impl serenity::EventHandler for Handler {
             }
             (Some(old_channel), Some(new_channel)) if old_channel != new_channel => {
                 tracing::info!(
-                    "User {} moved from voice channel {} to {} in guild {}",
+                    "User {} moved from voice channel {} to {}",
                     user_id,
                     old_channel,
-                    new_channel,
-                    guild_id
+                    new_channel
                 );
 
                 // Log the move event
