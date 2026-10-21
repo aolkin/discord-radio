@@ -1,5 +1,5 @@
 use crate::audio::dj::config::DJConfig;
-use crate::audio::dj::segments::SignalProfilePlayback;
+use crate::audio::dj::segments::{HexPool, SignalProfilePlayback};
 use crate::audio::dj::state_machine::{DJState, DJStateMachine};
 use crate::state::Data;
 use anyhow::{Context, bail};
@@ -84,6 +84,7 @@ impl IdleRequest {
 pub struct DJManager {
     state: Arc<RwLock<DJState>>,
     running: RwLock<Option<Running>>,
+    config_name: Arc<std::sync::RwLock<String>>,
     guild_id: GuildId,
     bot_state: Data,
 }
@@ -103,6 +104,7 @@ impl DJManager {
         Self {
             state: Arc::default(),
             running: RwLock::new(None),
+            config_name: Arc::new(std::sync::RwLock::new(DEFAULT_DJ_CONFIG.to_string())),
             guild_id,
             bot_state,
         }
@@ -110,6 +112,29 @@ impl DJManager {
 
     pub fn state(&self) -> Arc<RwLock<DJState>> {
         self.state.clone()
+    }
+
+    /// The latest saved copy of the config the DJ is using.
+    pub fn config(&self) -> anyhow::Result<Arc<DJConfig>> {
+        let name = self.config_name.read().unwrap_or_else(|e| e.into_inner());
+        load_dj_config(&self.bot_state, &name)
+    }
+
+    /// Checks that a forced advance can pick a segment from the pool `name`.
+    pub fn check_advance_pool(&self, name: &str) -> anyhow::Result<()> {
+        let config = self.config()?;
+        let pool = config
+            .pools
+            .get(name)
+            .with_context(|| format!("no pool named {name:?}"))?;
+        if pool.is_empty() {
+            bail!("pool {name:?} is empty");
+        }
+        Ok(())
+    }
+
+    pub fn check_hex_pool(&self, name: &str) -> anyhow::Result<()> {
+        self.config()?.pool::<HexPool>(name).map(|_| ())
     }
 
     /// Sends `command` to the running task, returning false when none is running.
@@ -135,11 +160,12 @@ impl DJManager {
         let (command_tx, command_rx) = mpsc::channel(10);
         let guild_id = self.guild_id;
         let task_state = self.state.clone();
+        let config_name = self.config_name.clone();
         let bot_state = self.bot_state;
         let span = tracing::info_span!("dj", guild_id = %guild_id);
         let task_handle = tokio::spawn(
             async move {
-                DJStateMachine::new(guild_id, saved, task_state, bot_state)
+                DJStateMachine::new(guild_id, saved, task_state, config_name, bot_state)
                     .await
                     .run(command_rx)
                     .await;

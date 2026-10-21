@@ -132,6 +132,14 @@ pub async fn hex(
         message,
     );
 
+    if let Some(pool) = &pool
+        && let Err(e) = ctx.data().dj_manager(guild_id).check_hex_pool(pool)
+    {
+        ctx.say(format!("Failed to use DJ for message playback: {e:#}"))
+            .await?;
+        return Ok(());
+    }
+
     let reply = ctx
         .send(
             poise::CreateReply::default()
@@ -739,7 +747,13 @@ pub async fn skip(
 
     ctx.defer_ephemeral().await?;
 
-    if let Err(e) = send_to_dj(ctx.data(), guild_id, DJCommand::ForceAdvance(pool.clone())) {
+    if let Err(e) = pool
+        .as_deref()
+        .map_or(Ok(()), |pool| {
+            ctx.data().dj_manager(guild_id).check_advance_pool(pool)
+        })
+        .and_then(|()| send_to_dj(ctx.data(), guild_id, DJCommand::ForceAdvance(pool.clone())))
+    {
         ctx.say(format!("Failed to force DJ state advance: {e:#}"))
             .await?;
         return Ok(());
