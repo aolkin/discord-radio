@@ -1,6 +1,5 @@
 pub mod config;
 pub mod manager;
-pub mod scheduler;
 pub mod segments;
 pub mod serde;
 pub mod state_machine;
