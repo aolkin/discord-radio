@@ -1,7 +1,7 @@
 use crate::audio::dj::config::ensure_seconds;
 use crate::audio::dj::segments::signals::Completed;
 use crate::audio::dj::segments::{
-    CommonSegmentPlaybackConfig, Segment, SegmentPlaybackConfig, SegmentPool,
+    CommonSegmentPlaybackConfig, PoolEntries, Segment, SegmentPlaybackConfig,
     SignalProfilePlayback, StateDisplay,
 };
 use crate::audio::dj::weighted_choice::{Weighted, WeightedSelector};
@@ -13,7 +13,7 @@ use std::ops::Deref;
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct NoisePool {
+pub struct NoiseEntries {
     pub entries: Vec<NoisePeriodEntry>,
 }
 
@@ -37,7 +37,7 @@ impl Weighted for NoisePeriodEntry {
 
 #[async_trait]
 #[typetag::serde(name = "noise")]
-impl SegmentPool for NoisePool {
+impl PoolEntries for NoiseEntries {
     fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }

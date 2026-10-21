@@ -3,7 +3,7 @@ mod noise;
 mod signals;
 mod track;
 
-pub use hex::{HexMessageDefaults, HexPool, HexSegment};
+pub use hex::{HexEntries, HexMessageDefaults, HexSegment};
 pub use noise::{NoisePeriodEntry, NoiseSegment};
 pub use track::TrackSegment;
 
@@ -124,10 +124,10 @@ pub trait Segment: Send + Sync + Debug + SegmentPlaybackConfig {
     fn state_display(&self) -> StateDisplay;
 }
 
-/// A weighted list of entries the DJ builds segments of one kind from.
+/// The entries of a pool; the DJ builds segments of one kind from them.
 #[async_trait]
 #[typetag::serde(tag = "kind")]
-pub trait SegmentPool: Any + Send + Sync + Debug {
+pub trait PoolEntries: Any + Send + Sync + Debug {
     fn is_empty(&self) -> bool;
     fn validate(&self) -> anyhow::Result<()>;
     async fn next_segment(

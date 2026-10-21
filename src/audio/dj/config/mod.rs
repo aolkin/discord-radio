@@ -1,4 +1,4 @@
-use crate::audio::dj::segments::SegmentPool;
+use crate::audio::dj::segments::PoolEntries;
 use crate::audio::dj::weighted_choice::Weighted;
 use crate::bucket::registry::RegistryEntry;
 use anyhow::{Context, bail};
@@ -8,7 +8,7 @@ use std::any::Any;
 #[derive(Deserialize, Serialize, Debug, Default)]
 pub struct DJConfig {
     pub name: String,
-    pub pools: Vec<PoolEntry>,
+    pub pools: Vec<Pool>,
     pub signal_profiles: Vec<SignalProfileEntry>,
     pub recent_history_size: usize,
     pub duplicate_penalty_multiplier: f32,
@@ -16,30 +16,30 @@ pub struct DJConfig {
 }
 
 impl DJConfig {
-    pub fn pool<T: SegmentPool>(&self, name: &str) -> anyhow::Result<&T> {
-        let entry = self
+    pub fn pool<T: PoolEntries>(&self, name: &str) -> anyhow::Result<&T> {
+        let pool = self
             .pools
             .iter()
-            .find(|entry| entry.name == name)
+            .find(|pool| pool.name == name)
             .with_context(|| format!("no pool named {name:?}"))?;
-        let pool = &*entry.pool;
-        (pool as &dyn Any)
+        let entries = &*pool.entries;
+        (entries as &dyn Any)
             .downcast_ref()
-            .with_context(|| format!("pool {name:?} is a {} pool", pool.typetag_name()))
+            .with_context(|| format!("pool {name:?} is a {} pool", entries.typetag_name()))
     }
 }
 
 #[derive(Deserialize, Serialize, Debug)]
-pub struct PoolEntry {
+pub struct Pool {
     pub name: String,
     pub weight: u32,
     #[serde(flatten)]
-    pub pool: Box<dyn SegmentPool>,
+    pub entries: Box<dyn PoolEntries>,
 }
 
-impl Weighted for PoolEntry {
+impl Weighted for Pool {
     fn weight(&self) -> f32 {
-        if self.pool.is_empty() {
+        if self.entries.is_empty() {
             0.0
         } else {
             self.weight as f32
@@ -79,11 +79,10 @@ impl RegistryEntry for DJConfig {
 
     /// Rejects values that would make the DJ panic when it picks them.
     fn validate(&self) -> anyhow::Result<()> {
-        for entry in &self.pools {
-            entry
-                .pool
+        for pool in &self.pools {
+            pool.entries
                 .validate()
-                .with_context(|| format!("pool {:?}", entry.name))?;
+                .with_context(|| format!("pool {:?}", pool.name))?;
         }
         for profile in &self.signal_profiles {
             let context = || format!("signal profile {:?}", profile.profile_name);

@@ -1,5 +1,5 @@
 use super::{
-    CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, SegmentPool,
+    CommonSegmentPlaybackConfig, PoolEntries, Segment, SegmentCtx, SegmentPlaybackConfig,
     StateDisplay, TrackSlot,
 };
 use crate::audio::dj::segments::signals::{Completed, CompletedSignal};
@@ -24,7 +24,7 @@ use tokio::task::JoinHandle;
 use tracing::Instrument;
 
 #[derive(Deserialize, Serialize, Debug)]
-pub struct HexPool {
+pub struct HexEntries {
     pub entries: Vec<HexMessageEntry>,
     #[serde(default)]
     pub defaults: HexMessageDefaults,
@@ -84,7 +84,7 @@ impl Weighted for HexMessageEntry {
 
 #[async_trait]
 #[typetag::serde(name = "hex")]
-impl SegmentPool for HexPool {
+impl PoolEntries for HexEntries {
     fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
