@@ -1,18 +1,13 @@
-use crate::audio::dj::config::ensure_seconds;
 use crate::audio::dj::segments::signals::Completed;
 use crate::audio::dj::segments::{
-    CommonSegmentPlaybackConfig, Pool, Segment, SegmentPlaybackConfig, SegmentPool,
-    SignalProfilePlayback, StateDisplay,
+    CommonSegmentPlaybackConfig, Segment, SegmentPlaybackConfig, SignalProfilePlayback,
+    StateDisplay,
 };
-use crate::audio::dj::weighted_choice::{Weighted, WeightedSelector};
-use crate::state::Data;
 use async_trait::async_trait;
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use std::time::{Duration, Instant};
-
-pub type NoisePool = Pool<NoisePeriodEntry>;
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct NoisePeriodEntry {
@@ -20,38 +15,6 @@ pub struct NoisePeriodEntry {
     pub min_duration_seconds: f32,
     pub max_duration_seconds: f32,
     pub weight: u32,
-}
-
-impl Weighted for NoisePeriodEntry {
-    fn weight(&self) -> f32 {
-        self.weight as f32
-    }
-
-    fn key(&self) -> &str {
-        &self.noise_profile
-    }
-}
-
-#[async_trait]
-#[typetag::serde(name = "noise")]
-impl SegmentPool for NoisePool {
-    fn validate(&self) -> anyhow::Result<()> {
-        for noise in &self.entries {
-            let context = || format!("noise period {:?}", noise.noise_profile);
-            ensure_seconds(noise.min_duration_seconds, context)?;
-            ensure_seconds(noise.max_duration_seconds, context)?;
-        }
-        Ok(())
-    }
-
-    async fn next_segment(
-        &self,
-        history: &mut WeightedSelector,
-        _bot_state: Data,
-    ) -> Option<Box<dyn Segment>> {
-        let entry = history.choose(&self.entries)?;
-        Some(Box::new(NoiseSegment::from(entry)))
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

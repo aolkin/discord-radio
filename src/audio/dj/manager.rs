@@ -28,7 +28,7 @@ pub enum DJCommand {
     SetOverrideProfile(Option<SignalProfilePlayback>),
 }
 
-/// A hex message for the DJ to play, with defaults from the hex pool named
+/// A hex message for the DJ to play, with hex defaults from the pool named
 /// `pool` when set. `volume` and `loops` replace the defaults when set.
 pub struct HexMessageRequest {
     pub message: String,

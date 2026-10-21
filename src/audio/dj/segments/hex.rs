@@ -1,15 +1,13 @@
 use super::{
-    CommonSegmentPlaybackConfig, Pool, Segment, SegmentCtx, SegmentPlaybackConfig, SegmentPool,
-    StateDisplay, TrackSlot,
+    CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
+    TrackSlot,
 };
 use crate::audio::dj::segments::signals::{Completed, CompletedSignal};
-use crate::audio::dj::weighted_choice::{Weighted, WeightedSelector};
 use crate::audio::processing::mixer::{TrackCallback, TrackCommand};
 use crate::audio::processing::processor::AudioProcessor;
 use crate::audio::tracks::open_track_source;
 use crate::bucket::FileResolver;
-use crate::state::Data;
-use anyhow::{Context, bail};
+use anyhow::bail;
 use async_trait::async_trait;
 use rand::RngExt;
 use rand::seq::IndexedRandom;
@@ -22,21 +20,6 @@ use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tracing::Instrument;
-
-#[derive(Deserialize, Serialize, Debug)]
-pub struct HexPool {
-    #[serde(flatten)]
-    pool: Pool<HexMessageEntry>,
-    #[serde(default)]
-    pub defaults: HexMessageDefaults,
-}
-
-impl Deref for HexPool {
-    type Target = Pool<HexMessageEntry>;
-    fn deref(&self) -> &Self::Target {
-        &self.pool
-    }
-}
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct HexMessageDefaults {
@@ -80,43 +63,7 @@ pub struct HexMessageEntry {
     pub announcement: Option<String>,
 }
 
-impl Weighted for HexMessageEntry {
-    fn weight(&self) -> f32 {
-        self.weight as f32
-    }
-
-    fn key(&self) -> &str {
-        &self.text
-    }
-}
-
-#[async_trait]
-#[typetag::serde(name = "hex")]
-impl SegmentPool for HexPool {
-    fn validate(&self) -> anyhow::Result<()> {
-        let defaults = &self.defaults;
-        ensure_loops(defaults.loop_min, defaults.loop_max).context("defaults")?;
-        for message in &self.entries {
-            ensure_loops(
-                message.loop_min.unwrap_or(defaults.loop_min),
-                message.loop_max.unwrap_or(defaults.loop_max),
-            )
-            .with_context(|| format!("hex message {:?}", message.text))?;
-        }
-        Ok(())
-    }
-
-    async fn next_segment(
-        &self,
-        history: &mut WeightedSelector,
-        _bot_state: Data,
-    ) -> Option<Box<dyn Segment>> {
-        let entry = history.choose(&self.entries)?.clone();
-        Some(Box::new(HexSegment::from_entry(entry, &self.defaults)))
-    }
-}
-
-fn ensure_loops(min: u32, max: u32) -> anyhow::Result<()> {
+pub fn ensure_loops(min: u32, max: u32) -> anyhow::Result<()> {
     if min > max {
         bail!("loop_min must not exceed loop_max");
     }

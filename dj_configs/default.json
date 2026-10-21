@@ -1,8 +1,8 @@
 {
   "name": "default",
-  "pools": {
-    "track": {
-      "kind": "track",
+  "pools": [
+    {
+      "name": "track",
       "weight": 100,
       "entries": [
         {
@@ -11,10 +11,10 @@
         }
       ]
     },
-    "hex": {
-      "kind": "hex",
+    {
+      "name": "hex",
       "weight": 2,
-      "defaults": {
+      "hex_defaults": {
         "loop_min": 2,
         "loop_max": 3,
         "signal_profile": "locked",
@@ -27,8 +27,8 @@
         }
       ]
     },
-    "noise": {
-      "kind": "noise",
+    {
+      "name": "noise",
       "weight": 50,
       "entries": [
         {
@@ -63,7 +63,7 @@
         }
       ]
     }
-  },
+  ],
   "signal_profiles": [
     {
       "profile_name": "clear",
