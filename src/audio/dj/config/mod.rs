@@ -25,7 +25,7 @@ pub struct Pool {
     pub name: String,
     pub weight: u32,
     pub hex_defaults: Option<HexMessageDefaults>,
-    pub entries: Vec<Entry>,
+    pub entries: Vec<PoolEntry>,
 }
 
 static BUILT_IN_HEX_DEFAULTS: LazyLock<HexMessageDefaults> = LazyLock::new(Default::default);
@@ -61,26 +61,26 @@ impl Weighted for Pool {
 /// The kind is inferred from which fields are present.
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(untagged)]
-pub enum Entry {
+pub enum PoolEntry {
     Track(TrackEntry),
     Hex(HexMessageEntry),
     Noise(NoisePeriodEntry),
 }
 
-impl Entry {
+impl PoolEntry {
     fn validate(&self, hex_defaults: &HexMessageDefaults) -> anyhow::Result<()> {
         match self {
-            Entry::Track(track) => {
+            PoolEntry::Track(track) => {
                 if let Some(seconds) = track.max_duration_seconds {
                     ensure_seconds(seconds, || format!("track {:?}", track.filename))?;
                 }
             }
-            Entry::Hex(message) => ensure_loops(
+            PoolEntry::Hex(message) => ensure_loops(
                 message.loop_min.unwrap_or(hex_defaults.loop_min),
                 message.loop_max.unwrap_or(hex_defaults.loop_max),
             )
             .with_context(|| format!("hex message {:?}", message.text))?,
-            Entry::Noise(noise) => {
+            PoolEntry::Noise(noise) => {
                 let context = || format!("noise period {:?}", noise.noise_profile);
                 ensure_seconds(noise.min_duration_seconds, context)?;
                 ensure_seconds(noise.max_duration_seconds, context)?;
@@ -95,29 +95,29 @@ impl Entry {
         bot_state: &Data,
     ) -> Box<dyn Segment> {
         match self {
-            Entry::Track(track) => {
+            PoolEntry::Track(track) => {
                 Box::new(TrackSegment::from_entry(track.clone(), &bot_state.duration_cache).await)
             }
-            Entry::Hex(message) => Box::new(HexSegment::from_entry(message.clone(), hex_defaults)),
-            Entry::Noise(noise) => Box::new(NoiseSegment::from(noise)),
+            PoolEntry::Hex(message) => Box::new(HexSegment::from_entry(message.clone(), hex_defaults)),
+            PoolEntry::Noise(noise) => Box::new(NoiseSegment::from(noise)),
         }
     }
 }
 
-impl Weighted for Entry {
+impl Weighted for PoolEntry {
     fn weight(&self) -> f32 {
         match self {
-            Entry::Track(track) => track.weight as f32,
-            Entry::Hex(message) => message.weight as f32,
-            Entry::Noise(noise) => noise.weight as f32,
+            PoolEntry::Track(track) => track.weight as f32,
+            PoolEntry::Hex(message) => message.weight as f32,
+            PoolEntry::Noise(noise) => noise.weight as f32,
         }
     }
 
     fn key(&self) -> Cow<'_, str> {
         match self {
-            Entry::Track(track) => Cow::Owned(format!("track:{}", track.filename)),
-            Entry::Hex(message) => Cow::Owned(format!("hex:{}", message.text)),
-            Entry::Noise(noise) => Cow::Owned(format!("noise:{}", noise.noise_profile)),
+            PoolEntry::Track(track) => Cow::Owned(format!("track:{}", track.filename)),
+            PoolEntry::Hex(message) => Cow::Owned(format!("hex:{}", message.text)),
+            PoolEntry::Noise(noise) => Cow::Owned(format!("noise:{}", noise.noise_profile)),
         }
     }
 }
