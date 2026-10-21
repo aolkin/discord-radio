@@ -1,5 +1,5 @@
 use super::{
-    CommonSegmentPlaybackConfig, Pool, Segment, SegmentCtx, SegmentPlaybackConfig, SegmentPool,
+    CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, SegmentPool,
     StateDisplay, TrackSlot,
 };
 use crate::audio::dj::config::ensure_seconds;
@@ -17,7 +17,10 @@ use std::time::Duration;
 
 const FADE_TIME: Duration = Duration::from_secs(1);
 
-pub type TrackPool = Pool<TrackEntry>;
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TrackPool {
+    pub entries: Vec<TrackEntry>,
+}
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct TrackEntry {

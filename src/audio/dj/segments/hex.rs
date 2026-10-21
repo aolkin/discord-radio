@@ -1,5 +1,5 @@
 use super::{
-    CommonSegmentPlaybackConfig, Pool, Segment, SegmentCtx, SegmentPlaybackConfig, SegmentPool,
+    CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, SegmentPool,
     StateDisplay, TrackSlot,
 };
 use crate::audio::dj::segments::signals::{Completed, CompletedSignal};
@@ -25,17 +25,9 @@ use tracing::Instrument;
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct HexPool {
-    #[serde(flatten)]
-    pool: Pool<HexMessageEntry>,
+    pub entries: Vec<HexMessageEntry>,
     #[serde(default)]
     pub defaults: HexMessageDefaults,
-}
-
-impl Deref for HexPool {
-    type Target = Pool<HexMessageEntry>;
-    fn deref(&self) -> &Self::Target {
-        &self.pool
-    }
 }
 
 #[derive(Deserialize, Serialize, Debug)]

@@ -124,11 +124,6 @@ pub trait Segment: Send + Sync + Debug + SegmentPlaybackConfig {
     fn state_display(&self) -> StateDisplay;
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Pool<E> {
-    pub entries: Vec<E>,
-}
-
 /// A weighted list of entries the DJ builds segments of one kind from.
 #[async_trait]
 #[typetag::serde(tag = "kind")]
