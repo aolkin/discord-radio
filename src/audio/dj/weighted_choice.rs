@@ -9,6 +9,26 @@ pub trait Weighted {
     fn key(&self) -> &str;
 }
 
+/// Picks an index at random in proportion to `weights`, or `None` when they
+/// sum to zero.
+pub fn choose_index(weights: &[f32]) -> Option<usize> {
+    let total: f32 = weights.iter().sum();
+    if total <= 0.0 {
+        return None;
+    }
+
+    let roll = rand::rng().random::<f32>() * total;
+    let mut cumulative = 0.0;
+    let idx = weights
+        .iter()
+        .position(|weight| {
+            cumulative += weight;
+            roll < cumulative
+        })
+        .unwrap_or(weights.len() - 1);
+    Some(idx)
+}
+
 /// A weighted random selector with history-based penalty to avoid repetition
 pub struct WeightedSelector {
     recent_history: VecDeque<String>,
@@ -31,22 +51,9 @@ impl WeightedSelector {
             .map(|item| item.weight() * self.get_penalty_for_key(item.key()))
             .collect();
 
-        let total: f32 = effective_weights.iter().sum();
-        if total == 0.0 {
+        let Some(idx) = choose_index(&effective_weights) else {
             return items.first();
-        }
-
-        let mut rng = rand::rng();
-        let roll: f32 = rng.random::<f32>() * total;
-
-        let mut cumulative = 0.0;
-        let idx = effective_weights
-            .iter()
-            .position(|weight| {
-                cumulative += weight;
-                roll < cumulative
-            })
-            .unwrap_or(items.len() - 1);
+        };
         let item = &items[idx];
         self.add_to_history(item);
         Some(item)

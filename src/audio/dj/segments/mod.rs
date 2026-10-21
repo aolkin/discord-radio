@@ -3,10 +3,11 @@ mod noise;
 mod signals;
 mod track;
 
-pub use hex::HexSegment;
-pub use noise::NoiseSegment;
+pub use hex::{HexMessageDefaults, HexPool, HexSegment};
+pub use noise::{NoisePeriodEntry, NoiseSegment};
 pub use track::TrackSegment;
 
+use crate::audio::dj::weighted_choice::WeightedSelector;
 use crate::audio::processing::mixer::{TrackCommand, TrackHandle};
 use crate::audio::processing::processor::ProcessorRef;
 use crate::bucket::FileResolver;
@@ -15,6 +16,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serenity::model::id::GuildId;
 pub use signals::Completed;
+use std::any::Any;
 use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::Mutex;
@@ -120,6 +122,49 @@ pub trait Segment: Send + Sync + Debug + SegmentPlaybackConfig {
 
     fn state_name(&self) -> &'static str;
     fn state_display(&self) -> StateDisplay;
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Pool<E> {
+    pub weight: u32,
+    pub entries: Vec<E>,
+}
+
+pub trait PoolWeight {
+    fn weight(&self) -> u32;
+    fn is_empty(&self) -> bool;
+}
+
+impl<E> PoolWeight for Pool<E> {
+    fn weight(&self) -> u32 {
+        self.weight
+    }
+
+    fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+}
+
+impl<E, T: Deref<Target = Pool<E>>> PoolWeight for T {
+    fn weight(&self) -> u32 {
+        self.deref().weight()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.deref().is_empty()
+    }
+}
+
+/// A weighted list of entries the DJ builds segments of one kind from.
+#[async_trait]
+#[typetag::serde(tag = "kind")]
+pub trait SegmentPool: PoolWeight + Any + Send + Sync + Debug {
+    fn validate(&self) -> anyhow::Result<()>;
+    async fn next_segment(
+        &self,
+        history: &mut WeightedSelector,
+        bot_state: Data,
+    ) -> Option<Box<dyn Segment>>;
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]

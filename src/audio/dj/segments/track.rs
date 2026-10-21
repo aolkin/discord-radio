@@ -1,12 +1,14 @@
 use super::{
-    CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
-    TrackSlot,
+    CommonSegmentPlaybackConfig, Pool, Segment, SegmentCtx, SegmentPlaybackConfig, SegmentPool,
+    StateDisplay, TrackSlot,
 };
-use crate::audio::dj::config::TrackEntry;
+use crate::audio::dj::config::ensure_seconds;
 use crate::audio::dj::segments::signals::{Completed, CompletedSignal};
+use crate::audio::dj::weighted_choice::{Weighted, WeightedSelector};
 use crate::audio::duration::DurationCache;
 use crate::audio::processing::mixer::TrackCommand;
 use crate::audio::tracks::open_track_source;
+use crate::state::Data;
 use async_trait::async_trait;
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
@@ -14,6 +16,62 @@ use std::ops::Deref;
 use std::time::Duration;
 
 const FADE_TIME: Duration = Duration::from_secs(1);
+
+pub type TrackPool = Pool<TrackEntry>;
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct TrackEntry {
+    pub filename: String,
+    pub weight: u32,
+    pub max_duration_seconds: Option<f32>,
+    pub allow_subsection: Option<bool>,
+    pub signal_profile: Option<String>,
+    /// Volume level (0.0-2.0).
+    ///
+    /// Uses perceptual (logarithmic) scaling:
+    /// - 0.0 = silence
+    /// - 1.0 = unity gain (0 dB, original volume)
+    /// - 2.0 = maximum boost (+18 dB, ~8x amplitude)
+    ///
+    /// This scaling provides more perceptually uniform volume changes
+    /// compared to linear scaling.
+    pub volume: Option<f32>,
+    pub channel_status: Option<String>,
+}
+
+impl Weighted for TrackEntry {
+    fn weight(&self) -> f32 {
+        self.weight as f32
+    }
+
+    fn key(&self) -> &str {
+        &self.filename
+    }
+}
+
+#[async_trait]
+#[typetag::serde(name = "track")]
+impl SegmentPool for TrackPool {
+    fn validate(&self) -> anyhow::Result<()> {
+        for track in &self.entries {
+            if let Some(seconds) = track.max_duration_seconds {
+                ensure_seconds(seconds, || format!("track {:?}", track.filename))?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn next_segment(
+        &self,
+        history: &mut WeightedSelector,
+        bot_state: Data,
+    ) -> Option<Box<dyn Segment>> {
+        let entry = history.choose(&self.entries)?.clone();
+        Some(Box::new(
+            TrackSegment::from_entry(entry, &bot_state.duration_cache).await,
+        ))
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TrackSegment {
