@@ -819,9 +819,10 @@
                 <template x-for="(pool, poolIndex) in djConfigForm.pools" :key="poolIndex">
                     <div class="list-row">
                         <div>
-                            <div class="modal-section-title" x-text="djConfigKinds[pool.kind].label + ' Pool'"></div>
+                            <div class="modal-section-title" x-text="'Pool ' + pool.name"></div>
                             <template x-for="(block, blockIndex) in djConfigPoolBlocks(pool)" :key="blockIndex">
                                 <div class="list-row">
+                                    <div class="form-label" x-show="block.label" x-text="block.label"></div>
                                     <div class="form-row">
                                         <template x-for="field in block.fields" :key="field.key">
                                             <div class="form-group">
@@ -903,9 +904,26 @@
                                 </div>
                             </template>
                             <div class="empty-state" x-show="pool.entries.length === 0">No entries</div>
-                            <button type="button" class="btn btn-secondary" @click="addDjConfigEntry(pool)">
-                                + Add Entry
-                            </button>
+                            <div class="list-row">
+                                <select class="form-input" aria-label="Entry kind" x-model="djConfigNewEntryKind">
+                                    <template x-for="(kind, kindName) in djConfigKinds" :key="kindName">
+                                        <option :value="kindName" x-text="kind.label"></option>
+                                    </template>
+                                </select>
+                                <button
+                                    type="button"
+                                    class="btn btn-secondary"
+                                    @click="addDjConfigEntry(pool, djConfigNewEntryKind)"
+                                >
+                                    + Add Entry
+                                </button>
+                                <button
+                                    type="button"
+                                    class="btn btn-secondary"
+                                    @click="toggleDjConfigHexDefaults(pool)"
+                                    x-text="pool.hex_defaults ? 'Remove Hex Defaults' : '+ Add Hex Defaults'"
+                                ></button>
+                            </div>
                         </div>
                         <button
                             type="button"
@@ -917,16 +935,7 @@
                     </div>
                 </template>
                 <div class="empty-state" x-show="djConfigForm.pools.length === 0">No pools</div>
-                <div class="list-row">
-                    <select class="form-input" aria-label="Pool kind" x-model="djConfigNewPoolKind">
-                        <template x-for="(kind, kindName) in djConfigKinds" :key="kindName">
-                            <option :value="kindName" x-text="kind.label"></option>
-                        </template>
-                    </select>
-                    <button type="button" class="btn btn-secondary" @click="addDjConfigPool(djConfigNewPoolKind)">
-                        + Add Pool
-                    </button>
-                </div>
+                <button type="button" class="btn btn-secondary" @click="addDjConfigPool()">+ Add Pool</button>
             </div>
 
             <div class="modal-section">

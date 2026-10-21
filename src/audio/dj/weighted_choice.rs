@@ -1,4 +1,5 @@
 use rand::RngExt;
+use std::borrow::Cow;
 use std::collections::VecDeque;
 
 /// A weight an item contributes to weighted random selection.
@@ -6,7 +7,7 @@ pub trait Weighted {
     fn weight(&self) -> f32;
 
     /// Identifies the item in recent-history across list changes.
-    fn key(&self) -> &str;
+    fn key(&self) -> Cow<'_, str>;
 }
 
 /// Picks an index at random in proportion to `weights`, or `None` when they
@@ -48,7 +49,7 @@ impl WeightedSelector {
     pub fn choose<'a, T: Weighted>(&mut self, items: &'a [T]) -> Option<&'a T> {
         let effective_weights: Vec<f32> = items
             .iter()
-            .map(|item| item.weight() * self.get_penalty_for_key(item.key()))
+            .map(|item| item.weight() * self.get_penalty_for_key(&item.key()))
             .collect();
 
         let Some(idx) = choose_index(&effective_weights) else {
@@ -75,6 +76,6 @@ impl WeightedSelector {
         if self.recent_history.len() >= self.history_size {
             self.recent_history.pop_front();
         }
-        self.recent_history.push_back(item.key().to_owned());
+        self.recent_history.push_back(item.key().into_owned());
     }
 }

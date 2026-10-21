@@ -3,11 +3,10 @@ mod noise;
 mod signals;
 mod track;
 
-pub use hex::{HexEntries, HexMessageDefaults, HexSegment};
+pub use hex::{HexMessageDefaults, HexMessageEntry, HexSegment, ensure_loops};
 pub use noise::{NoisePeriodEntry, NoiseSegment};
-pub use track::TrackSegment;
+pub use track::{TrackEntry, TrackSegment};
 
-use crate::audio::dj::weighted_choice::WeightedSelector;
 use crate::audio::processing::mixer::{TrackCommand, TrackHandle};
 use crate::audio::processing::processor::ProcessorRef;
 use crate::bucket::FileResolver;
@@ -16,7 +15,6 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serenity::model::id::GuildId;
 pub use signals::Completed;
-use std::any::Any;
 use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::Mutex;
@@ -122,19 +120,6 @@ pub trait Segment: Send + Sync + Debug + SegmentPlaybackConfig {
 
     fn state_name(&self) -> &'static str;
     fn state_display(&self) -> StateDisplay;
-}
-
-/// The entries of a pool; the DJ builds segments of one kind from them.
-#[async_trait]
-#[typetag::serde(tag = "kind")]
-pub trait PoolEntries: Any + Send + Sync + Debug {
-    fn is_empty(&self) -> bool;
-    fn validate(&self) -> anyhow::Result<()>;
-    async fn next_segment(
-        &self,
-        history: &mut WeightedSelector,
-        bot_state: Data,
-    ) -> Option<Box<dyn Segment>>;
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]

@@ -3,7 +3,6 @@
   "pools": [
     {
       "name": "track",
-      "kind": "track",
       "weight": 100,
       "entries": [
         {
@@ -14,9 +13,8 @@
     },
     {
       "name": "hex",
-      "kind": "hex",
       "weight": 2,
-      "defaults": {
+      "hex_defaults": {
         "loop_min": 2,
         "loop_max": 3,
         "signal_profile": "locked",
@@ -31,7 +29,6 @@
     },
     {
       "name": "noise",
-      "kind": "noise",
       "weight": 50,
       "entries": [
         {

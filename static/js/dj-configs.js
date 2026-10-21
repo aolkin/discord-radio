@@ -25,7 +25,7 @@ const loops = (key, label) => ({ key, label, type: 'number', step: 1, min: 0, de
 const kinds = {
     track: {
         label: 'Track',
-        poolFields: [weight],
+        identifier: 'filename',
         entryFields: [
             { key: 'filename', label: 'Filename', type: 'text' },
             weight,
@@ -38,13 +38,7 @@ const kinds = {
     },
     hex: {
         label: 'Hex Message',
-        poolFields: [weight],
-        defaultsFields: [
-            loops('loop_min', 'Loop Min'),
-            loops('loop_max', 'Loop Max'),
-            profileText('signal_profile', 'Signal Profile', true),
-            { key: 'announcements', label: 'Announcements', type: 'strings' },
-        ],
+        identifier: 'text',
         entryFields: [
             { key: 'text', label: 'Text', type: 'text' },
             weight,
@@ -56,7 +50,7 @@ const kinds = {
     },
     noise: {
         label: 'Noise',
-        poolFields: [weight],
+        identifier: 'noise_profile',
         entryFields: [
             profileText('noise_profile', 'Noise Profile'),
             seconds('min_duration_seconds', 'Min Duration (s)'),
@@ -66,7 +60,14 @@ const kinds = {
     },
 };
 
-const poolNameField = { key: 'name', label: 'Name', type: 'text' };
+const poolFields = [{ key: 'name', label: 'Name', type: 'text' }, weight];
+
+const hexDefaultsFields = [
+    loops('loop_min', 'Loop Min'),
+    loops('loop_max', 'Loop Max'),
+    profileText('signal_profile', 'Signal Profile', true),
+    { key: 'announcements', label: 'Announcements', type: 'strings' },
+];
 
 const signalProfileFields = [
     profileText('profile_name', 'Profile'),
@@ -100,14 +101,22 @@ function convertObject(fields, source, convert) {
     return Object.fromEntries(fields.map((field) => [field.key, convert(field, source[field.key])]));
 }
 
-function convertPool(pool, convert) {
-    const kind = kinds[pool.kind];
+function poolFromServer(pool) {
     return {
-        name: pool.name,
-        kind: pool.kind,
-        ...convertObject(kind.poolFields, pool, convert),
-        ...(kind.defaultsFields && { defaults: convertObject(kind.defaultsFields, pool.defaults ?? {}, convert) }),
-        entries: pool.entries.map((entry) => convertObject(kind.entryFields, entry, convert)),
+        ...convertObject(poolFields, pool, fieldFromServer),
+        hex_defaults: pool.hex_defaults && convertObject(hexDefaultsFields, pool.hex_defaults, fieldFromServer),
+        entries: pool.entries.map((entry) => {
+            const kind = Object.keys(kinds).find((name) => kinds[name].identifier in entry);
+            return { kind, ...convertObject(kinds[kind].entryFields, entry, fieldFromServer) };
+        }),
+    };
+}
+
+function poolToServer(pool) {
+    return {
+        ...convertObject(poolFields, pool, fieldToServer),
+        hex_defaults: pool.hex_defaults && convertObject(hexDefaultsFields, pool.hex_defaults, fieldToServer),
+        entries: pool.entries.map((entry) => convertObject(kinds[entry.kind].entryFields, entry, fieldToServer)),
     };
 }
 
@@ -115,7 +124,7 @@ function toForm(config) {
     return {
         name: config.name,
         ...convertObject(generalFields, config, fieldFromServer),
-        pools: config.pools.map((pool) => convertPool(pool, fieldFromServer)),
+        pools: config.pools.map(poolFromServer),
         signal_profiles: config.signal_profiles.map((row) => convertObject(signalProfileFields, row, fieldFromServer)),
     };
 }
@@ -123,7 +132,7 @@ function toForm(config) {
 function toBody(form) {
     return {
         ...convertObject(generalFields, form, fieldToServer),
-        pools: form.pools.map((pool) => convertPool(pool, fieldToServer)),
+        pools: form.pools.map(poolToServer),
         signal_profiles: form.signal_profiles.map((row) => convertObject(signalProfileFields, row, fieldToServer)),
     };
 }
@@ -159,7 +168,7 @@ export function djConfigs() {
         djConfigEditorSaving: false,
         djConfigEditorMessage: { text: '', type: '' },
         djConfigForm: blankForm(),
-        djConfigNewPoolKind: 'track',
+        djConfigNewEntryKind: 'track',
         djConfigGeneralFields: generalFields,
         djConfigKinds: kinds,
         djConfigSignalProfileFields: signalProfileFields,
@@ -174,33 +183,36 @@ export function djConfigs() {
             }
         },
 
-        addDjConfigPool(kind) {
+        addDjConfigPool() {
             const names = this.djConfigForm.pools.map((pool) => pool.name);
-            let name = kind;
+            let name = 'pool';
             for (let n = 2; names.includes(name); n++) {
-                name = `${kind}-${n}`;
+                name = `pool-${n}`;
             }
-            const { poolFields, defaultsFields } = kinds[kind];
-            this.djConfigForm.pools.push({
-                name,
-                kind,
-                ...blankRow(poolFields),
-                ...(defaultsFields && { defaults: blankRow(defaultsFields) }),
-                entries: [],
-            });
+            this.djConfigForm.pools.push({ ...blankRow(poolFields), name, hex_defaults: null, entries: [] });
         },
 
         djConfigPoolBlocks(pool) {
-            const kind = kinds[pool.kind];
             return [
-                { row: pool, fields: [poolNameField, ...kind.poolFields] },
-                ...(kind.defaultsFields ? [{ row: pool.defaults, fields: kind.defaultsFields }] : []),
-                ...pool.entries.map((entry, index) => ({ row: entry, fields: kind.entryFields, index })),
+                { row: pool, fields: poolFields },
+                ...(pool.hex_defaults
+                    ? [{ row: pool.hex_defaults, fields: hexDefaultsFields, label: 'Hex Defaults' }]
+                    : []),
+                ...pool.entries.map((entry, index) => ({
+                    row: entry,
+                    fields: kinds[entry.kind].entryFields,
+                    label: `${kinds[entry.kind].label} Entry`,
+                    index,
+                })),
             ];
         },
 
-        addDjConfigEntry(pool) {
-            pool.entries.push(blankRow(kinds[pool.kind].entryFields));
+        toggleDjConfigHexDefaults(pool) {
+            pool.hex_defaults = pool.hex_defaults ? null : blankRow(hexDefaultsFields);
+        },
+
+        addDjConfigEntry(pool, kind) {
+            pool.entries.push({ kind, ...blankRow(kinds[kind].entryFields) });
         },
 
         addDjConfigSignalProfile() {

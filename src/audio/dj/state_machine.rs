@@ -4,8 +4,7 @@ use crate::audio::dj::manager::{
     TrackRequest, load_dj_config,
 };
 use crate::audio::dj::segments::{
-    Completed, HexEntries, HexMessageDefaults, HexSegment, Segment, SignalProfilePlayback,
-    TrackSegment,
+    Completed, HexMessageDefaults, HexSegment, Segment, SignalProfilePlayback, TrackSegment,
 };
 use crate::audio::dj::segments::{NoisePeriodEntry, NoiseSegment, SegmentCtx};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
@@ -451,10 +450,10 @@ impl DJStateMachine {
         match index {
             Some(index) => {
                 let pool = &pools[index];
-                pool.entries
-                    .next_segment(&mut self.pool_selectors[index], bot_state)
-                    .await
-                    .with_context(|| format!("pool {:?} is empty", pool.name))
+                let entry = self.pool_selectors[index]
+                    .choose(&pool.entries)
+                    .with_context(|| format!("pool {:?} is empty", pool.name))?;
+                Ok(entry.segment(pool.hex_defaults(), &bot_state).await)
             }
             None => Ok(Box::new(NoiseSegment::from(&*DEFAULT_NOISE_PERIOD))),
         }
@@ -488,7 +487,13 @@ impl DJStateMachine {
         );
         let built_in_defaults = HexMessageDefaults::default();
         let defaults = match &request.pool {
-            Some(name) => &self.config.pool::<HexEntries>(name)?.defaults,
+            Some(name) => self
+                .config
+                .pools
+                .iter()
+                .find(|pool| pool.name == *name)
+                .with_context(|| format!("no pool named {name:?}"))?
+                .hex_defaults(),
             None => &built_in_defaults,
         };
         let loops = request
