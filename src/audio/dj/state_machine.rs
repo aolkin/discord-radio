@@ -1,21 +1,22 @@
-use crate::audio::dj::config::DJConfig;
+use crate::audio::dj::config::{DJConfig, SignalProfileEntry};
 use crate::audio::dj::manager::{
     ADVANCE_RETRY_DELAY, DEFAULT_DJ_CONFIG, DJCommand, HexMessageRequest, IdleRequest,
     TrackRequest, load_dj_config,
 };
-use crate::audio::dj::scheduler::WeightedScheduler;
 use crate::audio::dj::segments::{
     Completed, HexMessageDefaults, HexPool, HexSegment, Segment, SignalProfilePlayback,
     TrackSegment,
 };
-use crate::audio::dj::segments::{NoiseSegment, SegmentCtx};
+use crate::audio::dj::segments::{NoisePeriodEntry, NoiseSegment, SegmentCtx};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
+use crate::audio::dj::weighted_choice::{WeightedSelector, choose_index};
 use crate::state::Data;
+use anyhow::Context;
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use serenity::model::id::{ChannelId, GuildId};
 use std::ops::Deref;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::{RwLock, RwLockReadGuard, mpsc};
 
@@ -174,12 +175,13 @@ impl DJState {
 
 pub struct DJStateMachine {
     state: Arc<RwLock<DJState>>,
-    scheduler: WeightedScheduler,
     guild_id: GuildId,
     announcement_channel: Option<ChannelId>,
     bot_state: Data,
     config_name: String,
     config: Arc<DJConfig>,
+    pool_selectors: Vec<WeightedSelector>,
+    signal_profile_selector: WeightedSelector,
     applied_profile: Option<(SignalProfilePlayback, ProfileSource)>,
     /// An empty status is how Discord clears it.
     applied_channel_status: Option<String>,
@@ -226,14 +228,16 @@ impl DJStateMachine {
 
         *state.write().await = initial_state;
 
+        let (pool_selectors, signal_profile_selector) = selectors(&config);
         Self {
             state,
-            scheduler: WeightedScheduler::new(config.clone()),
             guild_id,
             announcement_channel,
             bot_state,
             config_name,
             config,
+            pool_selectors,
+            signal_profile_selector,
             applied_profile: None,
             applied_channel_status: None,
         }
@@ -270,7 +274,11 @@ impl DJStateMachine {
     }
 
     async fn rotate_profile(&mut self) {
-        let entry = self.scheduler.next_signal_profile();
+        let entry = self
+            .signal_profile_selector
+            .choose(&self.config.signal_profiles)
+            .unwrap_or(&DEFAULT_SIGNAL_PROFILE)
+            .to_owned();
         let fade = Duration::from_secs_f32(entry.fade_duration_seconds);
         let hold_secs = rand::rng().random_range(entry.min_time_seconds..entry.max_time_seconds);
         self.state.write().await.background_profile = BackgroundProfile::Rotating {
@@ -415,22 +423,60 @@ impl DJStateMachine {
         pool_name: Option<&str>,
     ) -> anyhow::Result<()> {
         self.reload_config();
-        let next_state = self.scheduler.next_segment(pool_name, bot_state).await?;
+        let next_state = self.next_segment(pool_name, bot_state).await?;
         tracing::info!("DJ transitioning to state: {}", next_state.state_name());
         self.enter_state(next_state.into(), bot_state).await
     }
 
-    /// Switches to the latest saved copy of the DJ's named config. A new
-    /// scheduler starts with an empty recent history.
+    /// Picks a segment from the pool named `pool_name`, or else from a pool
+    /// chosen by weight.
+    async fn next_segment(
+        &mut self,
+        pool_name: Option<&str>,
+        bot_state: Data,
+    ) -> anyhow::Result<Box<dyn Segment>> {
+        let pools: Vec<_> = self.config.pools.iter().collect();
+        let index = match pool_name {
+            Some(name) => Some(
+                pools
+                    .iter()
+                    .position(|(key, _)| *key == name)
+                    .with_context(|| format!("no pool named {name:?}"))?,
+            ),
+            None => {
+                let weights: Vec<f32> = pools
+                    .iter()
+                    .map(|(_, pool)| if pool.is_empty() { 0 } else { pool.weight() } as f32)
+                    .collect();
+                choose_index(&weights)
+            }
+        };
+        match index {
+            Some(index) => {
+                let (name, pool) = pools[index];
+                pool.next_segment(&mut self.pool_selectors[index], bot_state)
+                    .await
+                    .with_context(|| format!("pool {name:?} is empty"))
+            }
+            None => Ok(Box::new(NoiseSegment::from(&*DEFAULT_NOISE_PERIOD))),
+        }
+    }
+
+    /// Switches to the latest saved copy of the DJ's named config.
     fn reload_config(&mut self) {
         let Some(config) = self.bot_state.dj_config_manager.get(&self.config_name) else {
             return;
         };
         if !Arc::ptr_eq(&config, &self.config) {
             tracing::info!("DJ reloading config {:?}", self.config_name);
-            self.scheduler = WeightedScheduler::new(config.clone());
-            self.config = config;
+            self.set_config(config);
         }
+    }
+
+    /// Selection starts with an empty recent history.
+    fn set_config(&mut self, config: Arc<DJConfig>) {
+        (self.pool_selectors, self.signal_profile_selector) = selectors(&config);
+        self.config = config;
     }
 
     pub async fn force_hex_message(
@@ -568,8 +614,7 @@ impl DJStateMachine {
             }
             DJCommand::SetConfig { name, config } => {
                 tracing::info!("DJ switching to config {name:?}");
-                self.scheduler = WeightedScheduler::new(config.clone());
-                self.config = config;
+                self.set_config(config);
                 self.config_name = name;
                 Ok(())
             }
@@ -613,3 +658,33 @@ impl DJStateMachine {
             .await
     }
 }
+
+fn selectors(config: &DJConfig) -> (Vec<WeightedSelector>, WeightedSelector) {
+    let pool_selectors = config
+        .pools
+        .iter()
+        .map(|_| {
+            WeightedSelector::new(
+                config.recent_history_size,
+                config.duplicate_penalty_multiplier,
+            )
+        })
+        .collect();
+    (pool_selectors, WeightedSelector::new(5, 0.3))
+}
+
+static DEFAULT_NOISE_PERIOD: LazyLock<NoisePeriodEntry> = LazyLock::new(|| NoisePeriodEntry {
+    noise_profile: "default".to_string(),
+    min_duration_seconds: 2.0,
+    max_duration_seconds: 2.0,
+    weight: 1,
+});
+
+static DEFAULT_SIGNAL_PROFILE: LazyLock<SignalProfileEntry> =
+    LazyLock::new(|| SignalProfileEntry {
+        profile_name: "clear".to_string(),
+        weight: 1,
+        fade_duration_seconds: 3.0,
+        min_time_seconds: 60.0,
+        max_time_seconds: 120.0,
+    });
