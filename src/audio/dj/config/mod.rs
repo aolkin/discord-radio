@@ -7,7 +7,6 @@ use crate::bucket::registry::RegistryEntry;
 use crate::state::Data;
 use anyhow::{Context, bail};
 use serde::{Deserialize, Serialize};
-use std::borrow::Cow;
 use std::sync::LazyLock;
 
 #[derive(Deserialize, Serialize, Debug, Default)]
@@ -52,22 +51,8 @@ impl Pool {
     }
 }
 
-impl Weighted for Pool {
-    fn weight(&self) -> f32 {
-        if self.entries.is_empty() {
-            0.0
-        } else {
-            self.weight as f32
-        }
-    }
-
-    fn key(&self) -> Cow<'_, str> {
-        Cow::Borrowed(&self.name)
-    }
-}
-
 /// The kind is inferred from which fields are present.
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(untagged)]
 pub enum PoolEntry {
     Track(TrackEntry),
@@ -122,14 +107,6 @@ impl Weighted for PoolEntry {
             PoolEntry::Noise(noise) => noise.weight as f32,
         }
     }
-
-    fn key(&self) -> Cow<'_, str> {
-        match self {
-            PoolEntry::Track(track) => Cow::Owned(format!("track:{}", track.filename)),
-            PoolEntry::Hex(message) => Cow::Owned(format!("hex:{}", message.text)),
-            PoolEntry::Noise(noise) => Cow::Owned(format!("noise:{}", noise.noise_profile)),
-        }
-    }
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -144,10 +121,6 @@ pub struct SignalProfileEntry {
 impl Weighted for SignalProfileEntry {
     fn weight(&self) -> f32 {
         self.weight as f32
-    }
-
-    fn key(&self) -> Cow<'_, str> {
-        Cow::Borrowed(&self.profile_name)
     }
 }
 

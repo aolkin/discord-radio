@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use std::time::{Duration, Instant};
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct NoisePeriodEntry {
     pub noise_profile: String,
     pub min_duration_seconds: f32,
