@@ -14,42 +14,19 @@ const optionalSeconds = (key, label) => ({ ...seconds(key, label), optional: tru
 const profileText = (key, label, optional = false) => ({ key, label, type: 'text', optional, profile: true });
 const optionalText = (key, label) => ({ key, label, type: 'text', optional: true });
 
-const scalarGroups = [
-    {
-        title: 'General',
-        key: null,
-        fields: [
-            { key: 'recent_history_size', label: 'Recent History Size', type: 'number', step: 1, min: 0 },
-            { key: 'duplicate_penalty_multiplier', label: 'Duplicate Penalty Multiplier', type: 'number', step: 'any' },
-            optionalText('channel_status', 'Channel Status'),
-        ],
-    },
-    {
-        title: 'State Weights',
-        key: 'state_weights',
-        fields: [
-            { key: 'track', label: 'Track', type: 'number', step: 1, min: 0 },
-            { key: 'hex_message', label: 'Hex Message', type: 'number', step: 1, min: 0 },
-            { key: 'noise', label: 'Noise', type: 'number', step: 1, min: 0 },
-        ],
-    },
-    {
-        title: 'Hex Message Defaults',
-        key: 'hex_message_defaults',
-        fields: [
-            { key: 'loop_min', label: 'Loop Min', type: 'number', step: 1, min: 0 },
-            { key: 'loop_max', label: 'Loop Max', type: 'number', step: 1, min: 0 },
-            profileText('signal_profile', 'Signal Profile', true),
-        ],
-    },
+const generalFields = [
+    { key: 'recent_history_size', label: 'Recent History Size', type: 'number', step: 1, min: 0 },
+    { key: 'duplicate_penalty_multiplier', label: 'Duplicate Penalty Multiplier', type: 'number', step: 'any' },
+    optionalText('channel_status', 'Channel Status'),
 ];
 
-const lists = [
-    {
-        key: 'track_pool',
-        title: 'Track Pool',
-        itemLabel: 'Track',
-        fields: [
+const loops = (key, label) => ({ key, label, type: 'number', step: 1, min: 0, default: 1 });
+
+const kinds = {
+    track: {
+        label: 'Track',
+        poolFields: [weight],
+        entryFields: [
             { key: 'filename', label: 'Filename', type: 'text' },
             weight,
             optionalSeconds('max_duration_seconds', 'Max Duration (s)'),
@@ -59,11 +36,16 @@ const lists = [
             optionalText('channel_status', 'Channel Status'),
         ],
     },
-    {
-        key: 'hex_messages',
-        title: 'Hex Messages',
-        itemLabel: 'Hex Message',
-        fields: [
+    hex: {
+        label: 'Hex Message',
+        poolFields: [weight],
+        defaultsFields: [
+            loops('loop_min', 'Loop Min'),
+            loops('loop_max', 'Loop Max'),
+            profileText('signal_profile', 'Signal Profile', true),
+            { key: 'announcements', label: 'Announcements', type: 'strings' },
+        ],
+        entryFields: [
             { key: 'text', label: 'Text', type: 'text' },
             weight,
             profileText('signal_profile', 'Signal Profile', true),
@@ -72,32 +54,32 @@ const lists = [
             optionalText('announcement', 'Announcement'),
         ],
     },
-    {
-        key: 'noise_periods',
-        title: 'Noise Periods',
-        itemLabel: 'Noise Period',
-        fields: [
+    noise: {
+        label: 'Noise',
+        poolFields: [weight],
+        entryFields: [
             profileText('noise_profile', 'Noise Profile'),
             seconds('min_duration_seconds', 'Min Duration (s)'),
             seconds('max_duration_seconds', 'Max Duration (s)'),
             weight,
         ],
     },
-    {
-        key: 'signal_profiles',
-        title: 'Signal Profile Rotation',
-        itemLabel: 'Signal Profile',
-        fields: [
-            profileText('profile_name', 'Profile'),
-            weight,
-            seconds('fade_duration_seconds', 'Fade Duration (s)'),
-            seconds('min_time_seconds', 'Min Time (s)'),
-            seconds('max_time_seconds', 'Max Time (s)'),
-        ],
-    },
+};
+
+const poolNameField = { key: 'name', label: 'Name', type: 'text' };
+
+const signalProfileFields = [
+    profileText('profile_name', 'Profile'),
+    weight,
+    seconds('fade_duration_seconds', 'Fade Duration (s)'),
+    seconds('min_time_seconds', 'Min Time (s)'),
+    seconds('max_time_seconds', 'Max Time (s)'),
 ];
 
 function fieldFromServer(field, value) {
+    if (field.type === 'strings') {
+        return [...(value ?? [])];
+    }
     if (value === null || value === undefined) {
         return '';
     }
@@ -105,6 +87,9 @@ function fieldFromServer(field, value) {
 }
 
 function fieldToServer(field, value) {
+    if (field.type === 'strings') {
+        return value;
+    }
     if (value === '') {
         return null;
     }
@@ -115,42 +100,42 @@ function convertObject(fields, source, convert) {
     return Object.fromEntries(fields.map((field) => [field.key, convert(field, source[field.key])]));
 }
 
+function convertPool(pool, convert) {
+    const kind = kinds[pool.kind];
+    return {
+        kind: pool.kind,
+        ...convertObject(kind.poolFields, pool, convert),
+        ...(kind.defaultsFields && { defaults: convertObject(kind.defaultsFields, pool.defaults ?? {}, convert) }),
+        entries: pool.entries.map((entry) => convertObject(kind.entryFields, entry, convert)),
+    };
+}
+
 function toForm(config) {
-    const form = { name: config.name, hex_message_announcements: config.hex_message_announcements ?? [] };
-    for (const group of scalarGroups) {
-        const converted = convertObject(group.fields, group.key ? config[group.key] : config, fieldFromServer);
-        if (group.key) {
-            form[group.key] = converted;
-        } else {
-            Object.assign(form, converted);
-        }
-    }
-    for (const list of lists) {
-        form[list.key] = config[list.key].map((row) => convertObject(list.fields, row, fieldFromServer));
-    }
-    return form;
+    return {
+        name: config.name,
+        ...convertObject(generalFields, config, fieldFromServer),
+        pools: Object.entries(config.pools).map(([name, pool]) => ({ name, ...convertPool(pool, fieldFromServer) })),
+        signal_profiles: config.signal_profiles.map((row) => convertObject(signalProfileFields, row, fieldFromServer)),
+    };
 }
 
 function toBody(form) {
-    const body = { hex_message_announcements: form.hex_message_announcements };
-    for (const group of scalarGroups) {
-        const converted = convertObject(group.fields, group.key ? form[group.key] : form, fieldToServer);
-        if (group.key) {
-            body[group.key] = converted;
-        } else {
-            Object.assign(body, converted);
-        }
-    }
-    for (const list of lists) {
-        body[list.key] = form[list.key].map((row) => convertObject(list.fields, row, fieldToServer));
-    }
-    return body;
+    return {
+        ...convertObject(generalFields, form, fieldToServer),
+        pools: Object.fromEntries(form.pools.map((pool) => [pool.name, convertPool(pool, fieldToServer)])),
+        signal_profiles: form.signal_profiles.map((row) => convertObject(signalProfileFields, row, fieldToServer)),
+    };
 }
 
-function blankRow(list) {
-    return Object.fromEntries(
-        list.fields.map((field) => [field.key, field.type === 'number' && !field.optional ? 0 : '']),
-    );
+function blankValue(field) {
+    if (field.type === 'strings') {
+        return [];
+    }
+    return field.type === 'number' && !field.optional ? (field.default ?? 0) : '';
+}
+
+function blankRow(fields) {
+    return Object.fromEntries(fields.map((field) => [field.key, blankValue(field)]));
 }
 
 function blankForm() {
@@ -159,12 +144,7 @@ function blankForm() {
         recent_history_size: 5,
         duplicate_penalty_multiplier: 0.5,
         channel_status: '',
-        state_weights: { track: 1, hex_message: 1, noise: 1 },
-        hex_message_defaults: { loop_min: 1, loop_max: 1, signal_profile: '' },
-        hex_message_announcements: [],
-        track_pool: [],
-        hex_messages: [],
-        noise_periods: [],
+        pools: [],
         signal_profiles: [],
     };
 }
@@ -178,8 +158,10 @@ export function djConfigs() {
         djConfigEditorSaving: false,
         djConfigEditorMessage: { text: '', type: '' },
         djConfigForm: blankForm(),
-        djConfigScalarGroups: scalarGroups,
-        djConfigLists: lists,
+        djConfigNewPoolKind: 'track',
+        djConfigGeneralFields: generalFields,
+        djConfigKinds: kinds,
+        djConfigSignalProfileFields: signalProfileFields,
 
         async loadDjConfigs() {
             try {
@@ -191,12 +173,37 @@ export function djConfigs() {
             }
         },
 
-        djConfigGroupValues(group) {
-            return group.key ? this.djConfigForm[group.key] : this.djConfigForm;
+        addDjConfigPool(kind) {
+            const names = this.djConfigForm.pools.map((pool) => pool.name);
+            let name = kind;
+            for (let n = 2; names.includes(name); n++) {
+                name = `${kind}-${n}`;
+            }
+            const { poolFields, defaultsFields } = kinds[kind];
+            this.djConfigForm.pools.push({
+                name,
+                kind,
+                ...blankRow(poolFields),
+                ...(defaultsFields && { defaults: blankRow(defaultsFields) }),
+                entries: [],
+            });
         },
 
-        addDjConfigRow(list) {
-            this.djConfigForm[list.key].push(blankRow(list));
+        djConfigPoolBlocks(pool) {
+            const kind = kinds[pool.kind];
+            return [
+                { row: pool, fields: [poolNameField, ...kind.poolFields] },
+                ...(kind.defaultsFields ? [{ row: pool.defaults, fields: kind.defaultsFields }] : []),
+                ...pool.entries.map((entry, index) => ({ row: entry, fields: kind.entryFields, index })),
+            ];
+        },
+
+        addDjConfigEntry(pool) {
+            pool.entries.push(blankRow(kinds[pool.kind].entryFields));
+        },
+
+        addDjConfigSignalProfile() {
+            this.djConfigForm.signal_profiles.push(blankRow(signalProfileFields));
         },
 
         async openDjConfigEditor(name) {
@@ -226,6 +233,12 @@ export function djConfigs() {
             const name = this.djConfigForm.name;
             if (this.djConfigEditorIsNew && this.djConfigs.includes(name)) {
                 this.djConfigEditorMessage = { text: `A DJ config named "${name}" already exists`, type: 'error' };
+                return;
+            }
+
+            const poolNames = this.djConfigForm.pools.map((pool) => pool.name);
+            if (new Set(poolNames).size !== poolNames.length) {
+                this.djConfigEditorMessage = { text: 'Pool names must be unique', type: 'error' };
                 return;
             }
 
