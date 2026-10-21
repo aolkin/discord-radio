@@ -21,6 +21,12 @@ pub async fn advance_dj_state(
     Path(guild_id): Path<GuildId>,
     AxumJson(request): AxumJson<AdvanceDjStateRequest>,
 ) -> Result<StatusCode, ApiError> {
+    if let Some(pool) = &request.state_type {
+        bot_state
+            .dj_manager(guild_id)
+            .check_advance_pool(pool)
+            .status(StatusCode::BAD_REQUEST)?;
+    }
     send_dj_command(
         &bot_state,
         guild_id,
@@ -72,6 +78,12 @@ pub async fn play_hex_message(
     Path(guild_id): Path<GuildId>,
     AxumJson(request): AxumJson<PlayHexMessageRequest>,
 ) -> Result<StatusCode, ApiError> {
+    if let Some(pool) = &request.pool {
+        bot_state
+            .dj_manager(guild_id)
+            .check_hex_pool(pool)
+            .status(StatusCode::BAD_REQUEST)?;
+    }
     let request = crate::audio::dj::manager::HexMessageRequest {
         message: request.message,
         volume: None,
