@@ -103,6 +103,7 @@ function convertObject(fields, source, convert) {
 function convertPool(pool, convert) {
     const kind = kinds[pool.kind];
     return {
+        name: pool.name,
         kind: pool.kind,
         ...convertObject(kind.poolFields, pool, convert),
         ...(kind.defaultsFields && { defaults: convertObject(kind.defaultsFields, pool.defaults ?? {}, convert) }),
@@ -114,7 +115,7 @@ function toForm(config) {
     return {
         name: config.name,
         ...convertObject(generalFields, config, fieldFromServer),
-        pools: Object.entries(config.pools).map(([name, pool]) => ({ name, ...convertPool(pool, fieldFromServer) })),
+        pools: config.pools.map((pool) => convertPool(pool, fieldFromServer)),
         signal_profiles: config.signal_profiles.map((row) => convertObject(signalProfileFields, row, fieldFromServer)),
     };
 }
@@ -122,7 +123,7 @@ function toForm(config) {
 function toBody(form) {
     return {
         ...convertObject(generalFields, form, fieldToServer),
-        pools: Object.fromEntries(form.pools.map((pool) => [pool.name, convertPool(pool, fieldToServer)])),
+        pools: form.pools.map((pool) => convertPool(pool, fieldToServer)),
         signal_profiles: form.signal_profiles.map((row) => convertObject(signalProfileFields, row, fieldToServer)),
     };
 }

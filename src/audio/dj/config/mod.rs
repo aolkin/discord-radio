@@ -4,12 +4,11 @@ use crate::bucket::registry::RegistryEntry;
 use anyhow::{Context, bail};
 use serde::{Deserialize, Serialize};
 use std::any::Any;
-use std::collections::BTreeMap;
 
 #[derive(Deserialize, Serialize, Debug, Default)]
 pub struct DJConfig {
     pub name: String,
-    pub pools: BTreeMap<String, Box<dyn SegmentPool>>,
+    pub pools: Vec<PoolEntry>,
     pub signal_profiles: Vec<SignalProfileEntry>,
     pub recent_history_size: usize,
     pub duplicate_penalty_multiplier: f32,
@@ -18,13 +17,37 @@ pub struct DJConfig {
 
 impl DJConfig {
     pub fn pool<T: SegmentPool>(&self, name: &str) -> anyhow::Result<&T> {
-        let pool = self
+        let entry = self
             .pools
-            .get(name)
+            .iter()
+            .find(|entry| entry.name == name)
             .with_context(|| format!("no pool named {name:?}"))?;
-        (&**pool as &dyn Any)
+        let pool = &*entry.pool;
+        (pool as &dyn Any)
             .downcast_ref()
             .with_context(|| format!("pool {name:?} is a {} pool", pool.typetag_name()))
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct PoolEntry {
+    pub name: String,
+    pub weight: u32,
+    #[serde(flatten)]
+    pub pool: Box<dyn SegmentPool>,
+}
+
+impl Weighted for PoolEntry {
+    fn weight(&self) -> f32 {
+        if self.pool.is_empty() {
+            0.0
+        } else {
+            self.weight as f32
+        }
+    }
+
+    fn key(&self) -> &str {
+        &self.name
     }
 }
 
@@ -56,8 +79,11 @@ impl RegistryEntry for DJConfig {
 
     /// Rejects values that would make the DJ panic when it picks them.
     fn validate(&self) -> anyhow::Result<()> {
-        for (name, pool) in &self.pools {
-            pool.validate().with_context(|| format!("pool {name:?}"))?;
+        for entry in &self.pools {
+            entry
+                .pool
+                .validate()
+                .with_context(|| format!("pool {:?}", entry.name))?;
         }
         for profile in &self.signal_profiles {
             let context = || format!("signal profile {:?}", profile.profile_name);

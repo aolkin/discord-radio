@@ -35,6 +35,10 @@ impl Weighted for NoisePeriodEntry {
 #[async_trait]
 #[typetag::serde(name = "noise")]
 impl SegmentPool for NoisePool {
+    fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
     fn validate(&self) -> anyhow::Result<()> {
         for noise in &self.entries {
             let context = || format!("noise period {:?}", noise.noise_profile);

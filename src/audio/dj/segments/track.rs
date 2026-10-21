@@ -52,6 +52,10 @@ impl Weighted for TrackEntry {
 #[async_trait]
 #[typetag::serde(name = "track")]
 impl SegmentPool for TrackPool {
+    fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
     fn validate(&self) -> anyhow::Result<()> {
         for track in &self.entries {
             if let Some(seconds) = track.max_duration_seconds {

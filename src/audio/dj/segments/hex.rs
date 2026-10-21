@@ -93,6 +93,10 @@ impl Weighted for HexMessageEntry {
 #[async_trait]
 #[typetag::serde(name = "hex")]
 impl SegmentPool for HexPool {
+    fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
     fn validate(&self) -> anyhow::Result<()> {
         let defaults = &self.defaults;
         ensure_loops(defaults.loop_min, defaults.loop_max).context("defaults")?;

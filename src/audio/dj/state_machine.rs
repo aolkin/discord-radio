@@ -9,7 +9,7 @@ use crate::audio::dj::segments::{
 };
 use crate::audio::dj::segments::{NoisePeriodEntry, NoiseSegment, SegmentCtx};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
-use crate::audio::dj::weighted_choice::{WeightedSelector, choose_index};
+use crate::audio::dj::weighted_choice::{Weighted, WeightedSelector, choose_index};
 use crate::state::Data;
 use anyhow::Context;
 use rand::RngExt;
@@ -435,28 +435,27 @@ impl DJStateMachine {
         pool_name: Option<&str>,
         bot_state: Data,
     ) -> anyhow::Result<Box<dyn Segment>> {
-        let pools: Vec<_> = self.config.pools.iter().collect();
+        let pools = &self.config.pools;
         let index = match pool_name {
             Some(name) => Some(
                 pools
                     .iter()
-                    .position(|(key, _)| *key == name)
+                    .position(|entry| entry.name == name)
                     .with_context(|| format!("no pool named {name:?}"))?,
             ),
             None => {
-                let weights: Vec<f32> = pools
-                    .iter()
-                    .map(|(_, pool)| if pool.is_empty() { 0 } else { pool.weight() } as f32)
-                    .collect();
+                let weights: Vec<f32> = pools.iter().map(Weighted::weight).collect();
                 choose_index(&weights)
             }
         };
         match index {
             Some(index) => {
-                let (name, pool) = pools[index];
-                pool.next_segment(&mut self.pool_selectors[index], bot_state)
+                let entry = &pools[index];
+                entry
+                    .pool
+                    .next_segment(&mut self.pool_selectors[index], bot_state)
                     .await
-                    .with_context(|| format!("pool {name:?} is empty"))
+                    .with_context(|| format!("pool {:?} is empty", entry.name))
             }
             None => Ok(Box::new(NoiseSegment::from(&*DEFAULT_NOISE_PERIOD))),
         }
