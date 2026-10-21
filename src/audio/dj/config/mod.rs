@@ -98,7 +98,9 @@ impl PoolEntry {
             PoolEntry::Track(track) => {
                 Box::new(TrackSegment::from_entry(track.clone(), &bot_state.duration_cache).await)
             }
-            PoolEntry::Hex(message) => Box::new(HexSegment::from_entry(message.clone(), hex_defaults)),
+            PoolEntry::Hex(message) => {
+                Box::new(HexSegment::from_entry(message.clone(), hex_defaults))
+            }
             PoolEntry::Noise(noise) => Box::new(NoiseSegment::from(noise)),
         }
     }
