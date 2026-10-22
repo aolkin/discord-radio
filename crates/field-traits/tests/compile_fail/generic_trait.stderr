@@ -1,0 +1,5 @@
+error: #[field_trait] does not support generic traits
+ --> tests/compile_fail/generic_trait.rs:4:20
+  |
+4 | trait GenericTrait<T> {
+  |                    ^

@@ -1,0 +1,7 @@
+error: #[field_trait_impl] needs at least one trait
+ --> tests/compile_fail/no_traits.rs:3:1
+  |
+3 | #[field_trait_impl()]
+  | ^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `field_trait_impl` (in Nightly builds, run with -Z macro-backtrace for more info)

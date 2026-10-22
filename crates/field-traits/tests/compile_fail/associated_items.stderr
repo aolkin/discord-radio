@@ -1,0 +1,10 @@
+error: #[field_trait_impl] cannot implement `AssociatedItems` because `Item`, `LIMIT` must be written by hand; put #[field_trait_impl] on a hand-written impl block instead
+  --> tests/compile_fail/associated_items.rs:3:1
+   |
+ 3 | #[field_trait]
+   | ^^^^^^^^^^^^^^
+...
+10 | #[field_trait_impl(AssociatedItems)]
+   | ------------------------------------ in this attribute macro expansion
+   |
+   = note: this error originates in the macro `AssociatedItems` which comes from the expansion of the attribute macro `field_trait_impl` (in Nightly builds, run with -Z macro-backtrace for more info)

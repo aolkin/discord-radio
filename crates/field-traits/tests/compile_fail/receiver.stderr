@@ -1,0 +1,23 @@
+error: #[field_trait] methods must take only `&self`
+ --> tests/compile_fail/receiver.rs:5:17
+  |
+5 |     fn by_value(self) -> u32;
+  |                 ^^^^
+
+error: #[field_trait] methods must take only `&self`
+ --> tests/compile_fail/receiver.rs:6:15
+  |
+6 |     fn by_mut(&mut self) -> u32;
+  |               ^^^^^^^^^
+
+error: #[field_trait] methods must take only `&self`
+ --> tests/compile_fail/receiver.rs:7:23
+  |
+7 |     fn extra_argument(&self, scale: u32) -> u32;
+  |                       ^^^^^^^^^^^^^^^^^
+
+error: #[field_trait] methods must take only `&self`
+ --> tests/compile_fail/receiver.rs:8:5
+  |
+8 |     fn no_receiver() -> u32;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^

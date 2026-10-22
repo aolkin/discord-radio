@@ -1,0 +1,17 @@
+error: #[field_trait_impl] enum variants must hold exactly one unnamed field
+  --> tests/compile_fail/enum_variants.rs:10:5
+   |
+10 |     Unit,
+   |     ^^^^
+
+error: #[field_trait_impl] enum variants must hold exactly one unnamed field
+  --> tests/compile_fail/enum_variants.rs:11:5
+   |
+11 |     Pair(u32, u32),
+   |     ^^^^^^^^^^^^^^
+
+error: #[field_trait_impl] enum variants must hold exactly one unnamed field
+  --> tests/compile_fail/enum_variants.rs:12:5
+   |
+12 |     Named { weight: u32 },
+   |     ^^^^^^^^^^^^^^^^^^^^^
