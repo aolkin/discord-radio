@@ -443,7 +443,7 @@ impl DJStateMachine {
                     .with_context(|| format!("no pool named {name:?}"))?,
             ),
             None => {
-                let weights: Vec<f32> = pools.iter().map(Weighted::weight).collect();
+                let weights: Vec<f32> = pools.iter().map(|pool| pool.weight() as f32).collect();
                 choose_index(&weights)
             }
         };

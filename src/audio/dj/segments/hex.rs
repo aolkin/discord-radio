@@ -3,12 +3,14 @@ use super::{
     TrackSlot,
 };
 use crate::audio::dj::segments::signals::{Completed, CompletedSignal};
+use crate::audio::dj::weighted_choice::Weighted;
 use crate::audio::processing::mixer::{TrackCallback, TrackCommand};
 use crate::audio::processing::processor::AudioProcessor;
 use crate::audio::tracks::open_track_source;
 use crate::bucket::FileResolver;
 use anyhow::bail;
 use async_trait::async_trait;
+use field_traits::field_trait_impl;
 use rand::RngExt;
 use rand::seq::IndexedRandom;
 use serde::{Deserialize, Serialize};
@@ -53,6 +55,7 @@ impl HexMessageDefaults {
     }
 }
 
+#[field_trait_impl(Weighted)]
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct HexMessageEntry {
     pub text: String,

@@ -1,19 +1,14 @@
+use field_traits::field_trait;
 use rand::RngExt;
 use std::collections::VecDeque;
 
 /// A weight an item contributes to weighted random selection.
+#[field_trait]
 pub trait Weighted {
     fn weight(&self) -> u32;
 }
 
-macro_rules! impl_weighted {
-    ($($t:ty),*) => { $(impl crate::audio::dj::weighted_choice::Weighted for $t {
-        fn weight(&self) -> u32 { self.weight }
-    })* };
-}
-
-pub(crate) use impl_weighted;
-
+#[allow(dead_code)]
 pub trait WeightedPool<T: Weighted> {
     fn entries(&self) -> &Vec<T>;
     fn history_penalty_multiplier(&self) -> Option<f32>;
