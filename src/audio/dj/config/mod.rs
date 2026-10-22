@@ -14,10 +14,15 @@ use std::sync::LazyLock;
 pub struct DJConfig {
     pub name: String,
     pub pools: Vec<Pool>,
-    pub signal_profiles: Vec<SignalProfileEntry>,
-    pub recent_history_size: usize,
-    pub duplicate_penalty_multiplier: f32,
+    pub signal_profiles: SignalProfiles,
     pub channel_status: Option<String>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Default)]
+pub struct SignalProfiles {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub history_penalty_multiplier: Option<f32>,
+    pub entries: Vec<SignalProfileEntry>,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -25,6 +30,8 @@ pub struct Pool {
     pub name: String,
     pub weight: u32,
     pub hex_defaults: Option<HexMessageDefaults>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub history_penalty_multiplier: Option<f32>,
     pub entries: Vec<PoolEntry>,
 }
 
@@ -38,6 +45,7 @@ impl Pool {
     fn validate(&self) -> anyhow::Result<()> {
         let defaults = self.hex_defaults();
         ensure_loops(defaults.loop_min, defaults.loop_max).context("hex_defaults")?;
+        ensure_penalty_multiplier(self.history_penalty_multiplier)?;
         self.entries
             .iter()
             .try_for_each(|entry| entry.validate(defaults))
@@ -156,7 +164,9 @@ impl RegistryEntry for DJConfig {
             pool.validate()
                 .with_context(|| format!("pool {:?}", pool.name))?;
         }
-        for profile in &self.signal_profiles {
+        ensure_penalty_multiplier(self.signal_profiles.history_penalty_multiplier)
+            .context("signal_profiles")?;
+        for profile in &self.signal_profiles.entries {
             let context = || format!("signal profile {:?}", profile.profile_name);
             ensure_seconds(profile.fade_duration_seconds, context)?;
             ensure_seconds(profile.min_time_seconds, context)?;
@@ -169,6 +179,15 @@ impl RegistryEntry for DJConfig {
         }
         Ok(())
     }
+}
+
+fn ensure_penalty_multiplier(multiplier: Option<f32>) -> anyhow::Result<()> {
+    if let Some(multiplier) = multiplier
+        && !(0.0..=1.0).contains(&multiplier)
+    {
+        bail!("history_penalty_multiplier {multiplier} is not between 0 and 1");
+    }
+    Ok(())
 }
 
 pub fn ensure_seconds(seconds: f32, context: impl Fn() -> String) -> anyhow::Result<()> {

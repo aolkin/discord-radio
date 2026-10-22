@@ -14,11 +14,7 @@ const optionalSeconds = (key, label) => ({ ...seconds(key, label), optional: tru
 const profileText = (key, label, optional = false) => ({ key, label, type: 'text', optional, profile: true });
 const optionalText = (key, label) => ({ key, label, type: 'text', optional: true });
 
-const generalFields = [
-    { key: 'recent_history_size', label: 'Recent History Size', type: 'number', step: 1, min: 0 },
-    { key: 'duplicate_penalty_multiplier', label: 'Duplicate Penalty Multiplier', type: 'number', step: 'any' },
-    optionalText('channel_status', 'Channel Status'),
-];
+const generalFields = [optionalText('channel_status', 'Channel Status')];
 
 const loops = (key, label) => ({ key, label, type: 'number', step: 1, min: 0, default: 1 });
 
@@ -60,7 +56,19 @@ const kinds = {
     },
 };
 
-const poolFields = [{ key: 'name', label: 'Name', type: 'text' }, weight];
+const historyPenaltyMultiplier = {
+    key: 'history_penalty_multiplier',
+    label: 'History penalty multiplier',
+    type: 'number',
+    step: 'any',
+    min: 0,
+    max: 1,
+    optional: true,
+};
+
+const poolFields = [{ key: 'name', label: 'Name', type: 'text' }, weight, historyPenaltyMultiplier];
+
+const signalProfilesFields = [historyPenaltyMultiplier];
 
 const hexDefaultsFields = [
     loops('loop_min', 'Loop Min'),
@@ -125,7 +133,12 @@ function toForm(config) {
         name: config.name,
         ...convertObject(generalFields, config, fieldFromServer),
         pools: config.pools.map(poolFromServer),
-        signal_profiles: config.signal_profiles.map((row) => convertObject(signalProfileFields, row, fieldFromServer)),
+        signal_profiles: {
+            ...convertObject(signalProfilesFields, config.signal_profiles, fieldFromServer),
+            entries: config.signal_profiles.entries.map((row) =>
+                convertObject(signalProfileFields, row, fieldFromServer),
+            ),
+        },
     };
 }
 
@@ -133,7 +146,10 @@ function toBody(form) {
     return {
         ...convertObject(generalFields, form, fieldToServer),
         pools: form.pools.map(poolToServer),
-        signal_profiles: form.signal_profiles.map((row) => convertObject(signalProfileFields, row, fieldToServer)),
+        signal_profiles: {
+            ...convertObject(signalProfilesFields, form.signal_profiles, fieldToServer),
+            entries: form.signal_profiles.entries.map((row) => convertObject(signalProfileFields, row, fieldToServer)),
+        },
     };
 }
 
@@ -151,11 +167,9 @@ function blankRow(fields) {
 function blankForm() {
     return {
         name: '',
-        recent_history_size: 5,
-        duplicate_penalty_multiplier: 0.5,
         channel_status: '',
         pools: [],
-        signal_profiles: [],
+        signal_profiles: { ...blankRow(signalProfilesFields), entries: [] },
     };
 }
 
@@ -171,6 +185,7 @@ export function djConfigs() {
         djConfigNewEntryKind: 'track',
         djConfigGeneralFields: generalFields,
         djConfigKinds: kinds,
+        djConfigSignalProfilesFields: signalProfilesFields,
         djConfigSignalProfileFields: signalProfileFields,
 
         async loadDjConfigs() {
@@ -216,7 +231,7 @@ export function djConfigs() {
         },
 
         addDjConfigSignalProfile() {
-            this.djConfigForm.signal_profiles.push(blankRow(signalProfileFields));
+            this.djConfigForm.signal_profiles.entries.push(blankRow(signalProfileFields));
         },
 
         async openDjConfigEditor(name) {
