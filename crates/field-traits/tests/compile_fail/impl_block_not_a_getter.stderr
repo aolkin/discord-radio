@@ -1,5 +1,0 @@
-error: `doubled_weight` is not a getter of `Weighted`
-  --> tests/compile_fail/impl_block_not_a_getter.rs:16:22
-   |
-16 | #[field_impl(weight, doubled_weight)]
-   |                      ^^^^^^^^^^^^^^

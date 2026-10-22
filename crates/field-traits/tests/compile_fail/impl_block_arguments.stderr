@@ -1,0 +1,14 @@
+error: #[field_impl] on an impl block takes no arguments
+  --> tests/compile_fail/impl_block_arguments.rs:12:14
+   |
+12 | #[field_impl(Weighted)]
+   |              ^^^^^^^^
+
+error[E0046]: not all trait items implemented, missing: `weight`
+  --> tests/compile_fail/impl_block_arguments.rs:13:1
+   |
+ 5 |     fn weight(&self) -> u32;
+   |     ------------------------ `weight` from trait
+...
+13 | impl Weighted for Track {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^ missing `weight` in implementation

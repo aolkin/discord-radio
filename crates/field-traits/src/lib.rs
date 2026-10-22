@@ -22,12 +22,13 @@
 //! inner value.
 //!
 //! On a struct or enum, `#[field_impl]` takes trait names and writes each whole impl. On
-//! a hand-written `impl Trait for Type` block, it takes getter names and adds just those
-//! methods, which lets a trait with associated consts or types that have no default use
-//! it. The impl block form supports structs only, because it cannot see the type definition:
+//! a hand-written `impl Trait for Type` block, it takes no arguments and adds every getter
+//! the block does not define, which lets a trait with associated consts or types that have
+//! no default use it. The impl block form supports structs only, because it cannot see the
+//! type definition:
 //!
 //! ```ignore
-//! #[field_impl(name)]
+//! #[field_impl]
 //! impl RegistryEntry for SignalProfile {
 //!     const KIND: &'static str = "signal";
 //! }
@@ -39,7 +40,7 @@
 
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
-use quote::{ToTokens, format_ident, quote, quote_spanned};
+use quote::{ToTokens, format_ident, quote};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use syn::punctuated::Punctuated;
 use syn::{
@@ -196,10 +197,17 @@ fn companion_macro(
             }
         }
     });
-    let getter_arms = getters.iter().zip(&struct_methods).map(|(getter, method)| {
-        let name = &getter.sig.ident;
-        quote!((getter #name { $($not_a_getter:tt)* }) => { #method };)
-    });
+    let getter_names: Vec<_> = getters.iter().map(|getter| &getter.sig.ident).collect();
+    let fill_arms = quote! {
+        (fill [$($trait_path:tt)*] [$($defined:ident)*]) => {
+            #($($trait_path)*! { @fill #getter_names [$($trait_path)*] [$($defined)*] })*
+        };
+        #((@fill #getter_names [$($trait_path:tt)*] [#getter_names $($rest:ident)*]) => {};)*
+        #((@fill #getter_names [$($trait_path:tt)*] []) => { #struct_methods };)*
+        (@fill $name:ident [$($trait_path:tt)*] [$first:ident $($rest:ident)*]) => {
+            $($trait_path)*! { @fill $name [$($trait_path)*] [$($rest)*] }
+        };
+    };
 
     let impl_arms = if required_non_getters.is_empty() {
         quote! {
@@ -239,8 +247,7 @@ fn companion_macro(
         #[doc(hidden)]
         #[macro_export]
         macro_rules! #macro_name {
-            #(#getter_arms)*
-            (getter $name:ident { $($not_a_getter:tt)* }) => { $($not_a_getter)* };
+            #fill_arms
             #impl_arms
         }
         #[doc(hidden)]
@@ -282,25 +289,18 @@ fn impl_getters(
             "#[field_impl] on an impl block needs a trait impl",
         ));
     };
-    if args.is_empty() {
-        return Err(Error::new(
-            Span::call_site(),
-            "#[field_impl] on an impl block needs at least one getter name",
+    if !args.is_empty() {
+        return Err(Error::new_spanned(
+            args,
+            "#[field_impl] on an impl block takes no arguments",
         ));
     }
-    let trait_name = &trait_path.segments.last().unwrap().ident;
-    let mut getters = Vec::new();
-    for arg in args {
-        let name = arg.get_ident().ok_or_else(|| {
-            Error::new_spanned(arg, "#[field_impl] on an impl block takes getter names")
-        })?;
-        let message = format!("`{name}` is not a getter of `{trait_name}`");
-        let not_a_getter = quote_spanned!(name.span()=> ::core::compile_error!(#message););
-        getters.push(ImplItem::Verbatim(
-            quote!(#trait_path! { getter #name { #not_a_getter } }),
-        ));
-    }
-    item.items.extend(getters);
+    let defined = item.items.iter().filter_map(|impl_item| match impl_item {
+        ImplItem::Fn(method) => Some(&method.sig.ident),
+        _ => None,
+    });
+    let fill = quote!(#trait_path! { fill [#trait_path] [#(#defined)*] });
+    item.items.push(ImplItem::Verbatim(fill));
     Ok(item.into_token_stream())
 }
 

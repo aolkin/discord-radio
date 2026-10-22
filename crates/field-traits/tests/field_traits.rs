@@ -68,9 +68,13 @@ struct Profile {
     label: String,
 }
 
-#[field_impl(priority, label)]
+#[field_impl]
 impl Kinded for Profile {
     const KIND: &'static str = "profile";
+
+    fn priority(&self) -> u8 {
+        self.priority + 1
+    }
 }
 
 fn track() -> Track {
@@ -121,13 +125,13 @@ fn multiple_traits_including_one_from_another_module() {
 }
 
 #[test]
-fn impl_block_gets_listed_getters() {
+fn impl_block_gets_missing_getters() {
     let profile = Profile {
         priority: 2,
         label: "loud".to_string(),
     };
     assert_eq!(Profile::KIND, "profile");
-    assert_eq!(profile.priority(), 2);
+    assert_eq!(profile.priority(), 3);
     assert_eq!(profile.label(), "loud");
 }
 
