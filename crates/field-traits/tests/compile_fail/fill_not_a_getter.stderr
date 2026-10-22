@@ -1,0 +1,12 @@
+error: `doubled_weight` is not a getter of `Weighted`
+  --> tests/compile_fail/fill_not_a_getter.rs:3:1
+   |
+ 3 |   #[field_trait]
+   |   ^^^^^^^^^^^^^^
+...
+16 |   #[field_fill(weight, doubled_weight)]
+   |  ______________________-
+17 | | impl Weighted for Track {}
+   | |_____________- in this macro invocation
+   |
+   = note: this error originates in the macro `Weighted` (in Nightly builds, run with -Z macro-backtrace for more info)

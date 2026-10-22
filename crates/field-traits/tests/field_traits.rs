@@ -1,4 +1,4 @@
-use field_traits::{field_impl, field_trait};
+use field_traits::{field_fill, field_impl, field_trait};
 use serde::{Deserialize, Serialize};
 
 #[field_trait]
@@ -56,6 +56,23 @@ where
     value: T,
 }
 
+#[field_trait]
+pub trait Kinded {
+    const KIND: &'static str;
+    fn priority(&self) -> u8;
+    fn label(&self) -> String;
+}
+
+struct Profile {
+    priority: u8,
+    label: String,
+}
+
+#[field_fill(priority, label)]
+impl Kinded for Profile {
+    const KIND: &'static str = "profile";
+}
+
 fn track() -> Track {
     Track {
         weight: 3,
@@ -101,6 +118,17 @@ fn multiple_traits_including_one_from_another_module() {
     let track = track();
     assert_eq!(track.weight(), 3);
     assert_eq!(traits::Volume::volume(&track), 0.5);
+}
+
+#[test]
+fn fill_adds_getters_to_hand_written_impl() {
+    let profile = Profile {
+        priority: 2,
+        label: "loud".to_string(),
+    };
+    assert_eq!(Profile::KIND, "profile");
+    assert_eq!(profile.priority(), 2);
+    assert_eq!(profile.label(), "loud");
 }
 
 #[test]
