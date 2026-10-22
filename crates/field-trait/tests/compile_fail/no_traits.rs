@@ -1,4 +1,4 @@
-use field_traits::field_trait_impl;
+use field_trait::field_trait_impl;
 
 #[field_trait_impl()]
 struct Widget {

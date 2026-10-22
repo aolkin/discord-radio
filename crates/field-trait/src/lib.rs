@@ -1,7 +1,7 @@
 //! Implement getter-style traits from same-named fields.
 //!
 //! ```ignore
-//! use field_traits::{field_trait, field_trait_impl};
+//! use field_trait::{field_trait, field_trait_impl};
 //!
 //! #[field_trait]
 //! pub trait HasWeight {
