@@ -1,11 +1,11 @@
 use field_traits::{field_trait, field_trait_impl};
 
 #[field_trait]
-trait Weighted {
+trait HasWeight {
     fn weight(&self) -> u32;
 }
 
-#[field_trait_impl(Weighted)]
+#[field_trait_impl(HasWeight)]
 union Bits {
     weight: u32,
 }

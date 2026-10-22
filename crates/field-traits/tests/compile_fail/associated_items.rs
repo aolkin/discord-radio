@@ -8,7 +8,7 @@ trait AssociatedItems {
 }
 
 #[field_trait_impl(AssociatedItems)]
-struct Track {
+struct Widget {
     weight: u32,
 }
 

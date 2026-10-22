@@ -6,7 +6,7 @@ trait Tagged {
 }
 
 #[with_trait_fields(Tagged)]
-struct Track {
+struct Widget {
     weight: u32,
 }
 

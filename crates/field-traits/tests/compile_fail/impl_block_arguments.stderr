@@ -1,8 +1,8 @@
 error: #[field_trait_impl] on an impl block takes no arguments
   --> tests/compile_fail/impl_block_arguments.rs:12:20
    |
-12 | #[field_trait_impl(Weighted)]
-   |                    ^^^^^^^^
+12 | #[field_trait_impl(HasWeight)]
+   |                    ^^^^^^^^^
 
 error[E0046]: not all trait items implemented, missing: `weight`
   --> tests/compile_fail/impl_block_arguments.rs:13:1
@@ -10,5 +10,5 @@ error[E0046]: not all trait items implemented, missing: `weight`
  5 |     fn weight(&self) -> u32;
    |     ------------------------ `weight` from trait
 ...
-13 | impl Weighted for Track {}
-   | ^^^^^^^^^^^^^^^^^^^^^^^ missing `weight` in implementation
+13 | impl HasWeight for Widget {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^ missing `weight` in implementation

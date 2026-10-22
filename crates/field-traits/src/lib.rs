@@ -4,16 +4,16 @@
 //! use field_traits::{field_trait, field_trait_impl};
 //!
 //! #[field_trait]
-//! pub trait Weighted {
+//! pub trait HasWeight {
 //!     fn weight(&self) -> u32;
 //!     fn name(&self) -> &str;
 //! }
 //!
-//! #[field_trait_impl(Weighted)]
-//! struct Track { weight: u32, name: String }
+//! #[field_trait_impl(HasWeight)]
+//! struct Widget { weight: u32, name: String }
 //!
-//! #[field_trait_impl(Weighted)]
-//! enum Entry { Track(Track), Other(OtherTrack) }
+//! #[field_trait_impl(HasWeight)]
+//! enum Item { Widget(Widget), Gadget(Gadget) }
 //! ```
 //!
 //! `fn x(&self) -> T` returns `self.x.clone()` (so `T` must be `Clone`) and `fn x(&self) -> &T`
@@ -29,8 +29,8 @@
 //!
 //! ```ignore
 //! #[field_trait_impl]
-//! impl RegistryEntry for SignalProfile {
-//!     const KIND: &'static str = "signal";
+//! impl HasKind for Part {
+//!     const KIND: &'static str = "part";
 //! }
 //! ```
 //!
@@ -42,10 +42,10 @@
 //! appear in the struct's source.
 //!
 //! ```ignore
-//! #[with_trait_fields(Weighted)]
-//! #[field_trait_impl(Weighted)]
+//! #[with_trait_fields(HasWeight)]
+//! #[field_trait_impl(HasWeight)]
 //! #[derive(Deserialize)]
-//! struct Jingle { name: String }
+//! struct Gizmo { name: String }
 //! ```
 //!
 //! `#[field_trait]` puts a hidden macro beside the trait, under the trait's name, so
