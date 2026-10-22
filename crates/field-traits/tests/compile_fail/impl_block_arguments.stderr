@@ -1,8 +1,8 @@
-error: #[field_impl] on an impl block takes no arguments
-  --> tests/compile_fail/impl_block_arguments.rs:12:14
+error: #[field_trait_impl] on an impl block takes no arguments
+  --> tests/compile_fail/impl_block_arguments.rs:12:20
    |
-12 | #[field_impl(Weighted)]
-   |              ^^^^^^^^
+12 | #[field_trait_impl(Weighted)]
+   |                    ^^^^^^^^
 
 error[E0046]: not all trait items implemented, missing: `weight`
   --> tests/compile_fail/impl_block_arguments.rs:13:1

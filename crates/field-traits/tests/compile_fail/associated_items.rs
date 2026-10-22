@@ -1,4 +1,4 @@
-use field_traits::{field_impl, field_trait};
+use field_traits::{field_trait, field_trait_impl};
 
 #[field_trait]
 trait AssociatedItems {
@@ -7,7 +7,7 @@ trait AssociatedItems {
     fn weight(&self) -> u32;
 }
 
-#[field_impl(AssociatedItems)]
+#[field_trait_impl(AssociatedItems)]
 struct Track {
     weight: u32,
 }

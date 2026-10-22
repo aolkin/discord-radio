@@ -1,7 +1,7 @@
 //! Implement getter-style traits from same-named fields.
 //!
 //! ```ignore
-//! use field_traits::{field_impl, field_trait};
+//! use field_traits::{field_trait, field_trait_impl};
 //!
 //! #[field_trait]
 //! pub trait Weighted {
@@ -9,10 +9,10 @@
 //!     fn name(&self) -> &str;
 //! }
 //!
-//! #[field_impl(Weighted)]
+//! #[field_trait_impl(Weighted)]
 //! struct Track { weight: u32, name: String }
 //!
-//! #[field_impl(Weighted)]
+//! #[field_trait_impl(Weighted)]
 //! enum Entry { Track(Track), Other(OtherTrack) }
 //! ```
 //!
@@ -21,22 +21,36 @@
 //! variant must hold exactly one unnamed field, and each method reads the field from that
 //! inner value.
 //!
-//! On a struct or enum, `#[field_impl]` takes trait names and writes each whole impl. On
+//! On a struct or enum, `#[field_trait_impl]` takes trait names and writes each whole impl. On
 //! a hand-written `impl Trait for Type` block, it takes no arguments and adds every getter
 //! the block does not define, which lets a trait with associated consts or types that have
 //! no default use it. The impl block form supports structs only, because it cannot see the
 //! type definition:
 //!
 //! ```ignore
-//! #[field_impl]
+//! #[field_trait_impl]
 //! impl RegistryEntry for SignalProfile {
 //!     const KIND: &'static str = "signal";
 //! }
 //! ```
 //!
+//! `#[with_trait_fields(Trait, ...)]` on a struct with named fields appends a field for
+//! each getter of the listed traits that the struct does not already declare. The field
+//! has the getter's return type with any reference removed, and the trait's visibility. It
+//! must be the first attribute, so the attributes below it see the added fields. This is
+//! not inheritance: struct literals still set every field, and the added fields do not
+//! appear in the struct's source.
+//!
+//! ```ignore
+//! #[with_trait_fields(Weighted)]
+//! #[field_trait_impl(Weighted)]
+//! #[derive(Deserialize)]
+//! struct Jingle { name: String }
+//! ```
+//!
 //! `#[field_trait]` puts a hidden macro beside the trait, under the trait's name, so
-//! importing the trait also imports what `#[field_impl]` needs. Types named in the trait's
-//! method signatures resolve where `#[field_impl]` is used.
+//! importing the trait also imports what the other attributes need. Types named in the
+//! trait's method signatures resolve where those attributes are used.
 
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
@@ -44,8 +58,9 @@ use quote::{ToTokens, format_ident, quote};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use syn::punctuated::Punctuated;
 use syn::{
-    Data, DeriveInput, Error, Fields, FnArg, Ident, ImplItem, Item, ItemImpl, ItemTrait, Path,
-    ReceiverKind, ReturnType, Safety, Signature, Token, TraitItem, Type, parse_macro_input,
+    Data, DeriveInput, Error, Fields, FnArg, Ident, ImplItem, Item, ItemImpl, ItemStruct,
+    ItemTrait, Path, ReceiverKind, ReturnType, Safety, Signature, Token, TraitItem, Type,
+    parse_macro_input,
 };
 
 #[proc_macro_attribute]
@@ -109,6 +124,25 @@ impl Getter {
         } else {
             quote!(#value.#field.clone())
         }
+    }
+
+    fn field_type(&self) -> Result<&Type, Error> {
+        let ReturnType::Type(_, returned) = &self.sig.output else {
+            unreachable!("getters always return a type");
+        };
+        let ty = match &**returned {
+            Type::Reference(reference) => &*reference.elem,
+            ty => ty,
+        };
+        match ty {
+            Type::Slice(_) | Type::TraitObject(_) => {}
+            Type::Path(path) if path.qself.is_none() && path.path.is_ident("str") => {}
+            ty => return Ok(ty),
+        }
+        Err(Error::new_spanned(
+            returned,
+            "#[with_trait_fields] cannot declare a field for an unsized return type",
+        ))
     }
 }
 
@@ -208,6 +242,72 @@ fn companion_macro(
             $($trait_path)*! { @fill $name [$($trait_path)*] [$($rest)*] }
         };
     };
+    let add_field_arms = getters.iter().map(|getter| {
+        let name = &getter.sig.ident;
+        let (field, error) = match getter.field_type() {
+            Ok(ty) => (quote!(#vis #name: #ty,), None),
+            Err(error) => (quote!(), Some(error.into_compile_error())),
+        };
+        quote! {
+            (
+                @field [$($me:tt)*] [$($prefix:tt)*] [$($body:tt)*] [$($defined:ident)*]
+                [#name $($pending:ident)*] [] $($next:tt)*
+            ) => {
+                #error
+                $($me)*! {
+                    @next_field [$($me)*] [$($prefix)*] [$($body)* #field] [$($defined)* #name]
+                    [$($pending)*] $($next)*
+                }
+            };
+        }
+    });
+    let field_arms = quote! {
+        (@fields [$($me:tt)*] [$($prefix:tt)*] [$($body:tt)*] [$($defined:ident)*] $($next:tt)*) => {
+            $($me)*! {
+                @next_field [$($me)*] [$($prefix)*] [$($body)*] [$($defined)*]
+                [#(#getter_names)*] $($next)*
+            }
+        };
+        #((
+            @field [$($me:tt)*] [$($prefix:tt)*] [$($body:tt)*] [$($defined:ident)*]
+            [#getter_names $($pending:ident)*] [#getter_names $($searched:ident)*] $($next:tt)*
+        ) => {
+            $($me)*! {
+                @next_field [$($me)*] [$($prefix)*] [$($body)*] [$($defined)*]
+                [$($pending)*] $($next)*
+            }
+        };)*
+        #(#add_field_arms)*
+        (
+            @field [$($me:tt)*] [$($prefix:tt)*] [$($body:tt)*] [$($defined:ident)*]
+            [$name:ident $($pending:ident)*] [$first:ident $($searched:ident)*] $($next:tt)*
+        ) => {
+            $($me)*! {
+                @field [$($me)*] [$($prefix)*] [$($body)*] [$($defined)*]
+                [$name $($pending)*] [$($searched)*] $($next)*
+            }
+        };
+        (
+            @next_field [$($me:tt)*] [$($prefix:tt)*] [$($body:tt)*] [$($defined:ident)*]
+            [$name:ident $($pending:ident)*] $($next:tt)*
+        ) => {
+            $($me)*! {
+                @field [$($me)*] [$($prefix)*] [$($body)*] [$($defined)*]
+                [$name $($pending)*] [$($defined)*] $($next)*
+            }
+        };
+        (@next_field [$($me:tt)*] [$($prefix:tt)*] [$($body:tt)*] [$($defined:ident)*] []) => {
+            $($prefix)* { $($body)* }
+        };
+        (
+            @next_field [$($me:tt)*] [$($prefix:tt)*] [$($body:tt)*] [$($defined:ident)*] []
+            [$($next_trait:tt)*] $($rest:tt)*
+        ) => {
+            $($next_trait)*! {
+                @fields [$($next_trait)*] [$($prefix)*] [$($body)*] [$($defined)*] $($rest)*
+            }
+        };
+    };
 
     let impl_arms = if required_non_getters.is_empty() {
         quote! {
@@ -235,8 +335,8 @@ fn companion_macro(
             .collect::<Vec<_>>()
             .join(", ");
         let message = format!(
-            "#[field_impl] cannot implement `{trait_name}` because {names} must be written by hand; \
-             put #[field_impl] on a hand-written impl block instead"
+            "#[field_trait_impl] cannot implement `{trait_name}` because {names} must be written by hand; \
+             put #[field_trait_impl] on a hand-written impl block instead"
         );
         quote! {
             ($($input:tt)*) => { ::core::compile_error!(#message); };
@@ -248,6 +348,7 @@ fn companion_macro(
         #[macro_export]
         macro_rules! #macro_name {
             #fill_arms
+            #field_arms
             #impl_arms
         }
         #[doc(hidden)]
@@ -257,7 +358,7 @@ fn companion_macro(
 }
 
 #[proc_macro_attribute]
-pub fn field_impl(args: TokenStream, input: TokenStream) -> TokenStream {
+pub fn field_trait_impl(args: TokenStream, input: TokenStream) -> TokenStream {
     let args = parse_macro_input!(args with Punctuated::<Path, Token![,]>::parse_terminated);
     let original = TokenStream2::from(input.clone());
     let output = match parse_macro_input!(input as Item) {
@@ -267,7 +368,7 @@ pub fn field_impl(args: TokenStream, input: TokenStream) -> TokenStream {
             .map(|impls| quote!(#original #impls)),
         _ => Err(Error::new(
             Span::call_site(),
-            "#[field_impl] supports structs, enums and trait impl blocks",
+            "#[field_trait_impl] supports structs, enums and trait impl blocks",
         )),
     };
     match output {
@@ -286,13 +387,13 @@ fn impl_getters(
     let Some((trait_path, _)) = &item.trait_ else {
         return Err(Error::new_spanned(
             item.impl_token,
-            "#[field_impl] on an impl block needs a trait impl",
+            "#[field_trait_impl] on an impl block needs a trait impl",
         ));
     };
     if !args.is_empty() {
         return Err(Error::new_spanned(
             args,
-            "#[field_impl] on an impl block takes no arguments",
+            "#[field_trait_impl] on an impl block takes no arguments",
         ));
     }
     let defined = item.items.iter().filter_map(|impl_item| match impl_item {
@@ -318,7 +419,7 @@ fn impl_traits(
                     Fields::Unnamed(fields) if fields.unnamed.len() == 1 => None,
                     _ => Some(Error::new_spanned(
                         variant,
-                        "#[field_impl] enum variants must hold exactly one unnamed field",
+                        "#[field_trait_impl] enum variants must hold exactly one unnamed field",
                     )),
                 });
             if let Some(mut first) = errors.next() {
@@ -331,14 +432,14 @@ fn impl_traits(
         Data::Union(data) => {
             return Err(Error::new_spanned(
                 data.union_token,
-                "#[field_impl] supports structs, enums and trait impl blocks",
+                "#[field_trait_impl] supports structs, enums and trait impl blocks",
             ));
         }
     };
     if trait_paths.is_empty() {
         return Err(Error::new(
             Span::call_site(),
-            "#[field_impl] needs at least one trait",
+            "#[field_trait_impl] needs at least one trait",
         ));
     }
 
@@ -353,4 +454,46 @@ fn impl_traits(
         }
     });
     Ok(quote!(#(#impls)*))
+}
+
+#[proc_macro_attribute]
+pub fn with_trait_fields(args: TokenStream, input: TokenStream) -> TokenStream {
+    let trait_paths = parse_macro_input!(args with Punctuated::<Path, Token![,]>::parse_terminated);
+    let original = TokenStream2::from(input.clone());
+    let item = parse_macro_input!(input as ItemStruct);
+    let Fields::Named(fields) = &item.fields else {
+        let error = Error::new_spanned(&item.fields, "#[with_trait_fields] needs named fields")
+            .into_compile_error();
+        return quote!(#original #error).into();
+    };
+    let mut trait_paths = trait_paths.iter();
+    let Some(first_trait) = trait_paths.next() else {
+        let error = Error::new(
+            Span::call_site(),
+            "#[with_trait_fields] needs at least one trait",
+        )
+        .into_compile_error();
+        return quote!(#original #error).into();
+    };
+
+    let ItemStruct {
+        attrs,
+        vis,
+        struct_token,
+        ident,
+        generics,
+        ..
+    } = &item;
+    let where_clause = &generics.where_clause;
+    let fields = fields.named.iter();
+    let defined = fields.clone().filter_map(|field| field.ident.as_ref());
+    quote! {
+        #first_trait! {
+            @fields [#first_trait]
+            [#(#attrs)* #vis #struct_token #ident #generics #where_clause]
+            [#(#fields,)*] [#(#defined)*]
+            #([#trait_paths])*
+        }
+    }
+    .into()
 }

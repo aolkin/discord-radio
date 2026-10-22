@@ -1,0 +1,10 @@
+error: #[with_trait_fields] cannot declare a field for an unsized return type
+ --> tests/compile_fail/unsized_field.rs:5:23
+  |
+5 |     fn tags(&self) -> &[String];
+  |                       ^^^^^^^^^
+...
+8 | #[with_trait_fields(Tagged)]
+  | ---------------------------- in this attribute macro expansion
+  |
+  = note: this error originates in the macro `Tagged` which comes from the expansion of the attribute macro `with_trait_fields` (in Nightly builds, run with -Z macro-backtrace for more info)

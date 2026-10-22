@@ -1,11 +1,11 @@
-use field_traits::{field_impl, field_trait};
+use field_traits::{field_trait, field_trait_impl};
 
 #[field_trait]
 trait Weighted {
     fn weight(&self) -> u32;
 }
 
-#[field_impl(Weighted)]
+#[field_trait_impl(Weighted)]
 enum Entry {
     Unit,
     Pair(u32, u32),

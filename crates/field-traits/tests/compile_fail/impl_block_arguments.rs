@@ -1,4 +1,4 @@
-use field_traits::{field_impl, field_trait};
+use field_traits::{field_trait, field_trait_impl};
 
 #[field_trait]
 trait Weighted {
@@ -9,7 +9,7 @@ struct Track {
     weight: u32,
 }
 
-#[field_impl(Weighted)]
+#[field_trait_impl(Weighted)]
 impl Weighted for Track {}
 
 fn main() {}

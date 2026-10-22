@@ -1,4 +1,4 @@
-use field_traits::{field_impl, field_trait};
+use field_traits::{field_trait, field_trait_impl, with_trait_fields};
 use serde::{Deserialize, Serialize};
 
 #[field_trait]
@@ -20,7 +20,7 @@ mod traits {
     }
 }
 
-#[field_impl(Weighted, traits::Volume)]
+#[field_trait_impl(Weighted, traits::Volume)]
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 struct Track {
     weight: u32,
@@ -28,7 +28,7 @@ struct Track {
     volume: f32,
 }
 
-#[field_impl(Weighted, traits::Volume)]
+#[field_trait_impl(Weighted, traits::Volume)]
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 struct Noise {
     weight: u32,
@@ -37,7 +37,7 @@ struct Noise {
     seconds: u32,
 }
 
-#[field_impl(Weighted, traits::Volume)]
+#[field_trait_impl(Weighted, traits::Volume)]
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 enum Entry {
@@ -45,7 +45,7 @@ enum Entry {
     Track(Track),
 }
 
-#[field_impl(Weighted)]
+#[field_trait_impl(Weighted)]
 struct Wrapper<T: Clone>
 where
     T: Default,
@@ -68,7 +68,7 @@ struct Profile {
     label: String,
 }
 
-#[field_impl]
+#[field_trait_impl]
 impl Kinded for Profile {
     const KIND: &'static str = "profile";
 
@@ -142,4 +142,24 @@ fn serde_untagged_round_trip() {
     let parsed: Entry = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed, entry);
     assert_eq!(parsed.weight(), 3);
+}
+
+#[with_trait_fields(Weighted)]
+#[field_trait_impl(Weighted)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+struct Jingle {
+    name: String,
+}
+
+#[test]
+fn with_trait_fields_adds_missing_fields() {
+    let jingle = Jingle {
+        name: "ding".to_string(),
+        weight: 2,
+    };
+    assert_eq!(jingle.weight(), 2);
+    assert_eq!(jingle.name(), "ding");
+    let json = serde_json::to_string(&jingle).unwrap();
+    assert_eq!(json, r#"{"name":"ding","weight":2}"#);
+    assert_eq!(serde_json::from_str::<Jingle>(&json).unwrap(), jingle);
 }
