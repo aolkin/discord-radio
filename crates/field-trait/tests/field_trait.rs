@@ -77,6 +77,40 @@ impl HasKind for Part {
     }
 }
 
+#[field_trait]
+pub trait HasParts<T: Clone, U = u8> {
+    fn parts(&self) -> &Vec<T>;
+    fn spare(&self) -> Option<T>;
+    fn extra(&self) -> U;
+}
+
+#[field_trait_impl(HasParts<V>)]
+struct Bin<V>
+where
+    V: Default,
+{
+    parts: Vec<V>,
+    spare: Option<V>,
+    extra: u8,
+}
+
+#[field_trait_impl(HasParts<u32>)]
+enum Container {
+    Bin(Bin<u32>),
+}
+
+struct Pallet {
+    parts: Vec<String>,
+    extra: u16,
+}
+
+#[field_trait_impl]
+impl HasParts<String, u16> for Pallet {
+    fn spare(&self) -> Option<String> {
+        None
+    }
+}
+
 fn widget() -> Widget {
     Widget {
         weight: 3,
@@ -133,6 +167,28 @@ fn impl_block_gets_missing_getters() {
     assert_eq!(Part::KIND, "part");
     assert_eq!(part.rank(), 3);
     assert_eq!(part.label(), "red");
+}
+
+#[test]
+fn generic_trait() {
+    let bin = Bin {
+        parts: vec![1u32, 2],
+        spare: Some(3),
+        extra: 4,
+    };
+    assert_eq!(bin.parts(), &vec![1, 2]);
+    assert_eq!(bin.spare(), Some(3));
+    assert_eq!(bin.extra(), 4);
+    let container = Container::Bin(bin);
+    assert_eq!(container.parts(), &vec![1, 2]);
+    assert_eq!(container.spare(), Some(3));
+    let pallet = Pallet {
+        parts: vec!["a".to_string()],
+        extra: 5,
+    };
+    assert_eq!(pallet.parts(), &vec!["a".to_string()]);
+    assert_eq!(pallet.spare(), None);
+    assert_eq!(pallet.extra(), 5);
 }
 
 #[test]

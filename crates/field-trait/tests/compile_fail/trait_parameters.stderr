@@ -1,0 +1,11 @@
+error: #[field_trait] supports only type parameters on the trait
+ --> tests/compile_fail/trait_parameters.rs:4:19
+  |
+4 | trait Unsupported<'a, const N: usize> {
+  |                   ^^
+
+error: #[field_trait] supports only type parameters on the trait
+ --> tests/compile_fail/trait_parameters.rs:4:23
+  |
+4 | trait Unsupported<'a, const N: usize> {
+  |                       ^^^^^^^^^^^^^^
