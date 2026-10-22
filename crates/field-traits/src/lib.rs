@@ -21,20 +21,21 @@
 //! variant must hold exactly one unnamed field, and each method reads the field from that
 //! inner value.
 //!
-//! A trait with associated consts or types that have no default cannot use
-//! `#[field_impl]`. Write the impl by hand and list the getters to generate with
-//! `#[field_fill]`, which supports structs only because it cannot see the type definition:
+//! On a struct or enum, `#[field_impl]` takes trait names and writes each whole impl. On
+//! a hand-written `impl Trait for Type` block, it takes getter names and adds just those
+//! methods, which lets a trait with associated consts or types that have no default use
+//! it. The impl block form supports structs only, because it cannot see the type definition:
 //!
 //! ```ignore
-//! #[field_fill(name)]
+//! #[field_impl(name)]
 //! impl RegistryEntry for SignalProfile {
 //!     const KIND: &'static str = "signal";
 //! }
 //! ```
 //!
 //! `#[field_trait]` puts a hidden macro beside the trait, under the trait's name, so
-//! importing the trait also imports what the other attributes need. Types named in the
-//! trait's method signatures resolve where those attributes are used.
+//! importing the trait also imports what `#[field_impl]` needs. Types named in the trait's
+//! method signatures resolve where `#[field_impl]` is used.
 
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
@@ -42,7 +43,7 @@ use quote::{ToTokens, format_ident, quote, quote_spanned};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use syn::punctuated::Punctuated;
 use syn::{
-    Data, DeriveInput, Error, Fields, FnArg, Ident, ImplItem, ItemImpl, ItemTrait, Path,
+    Data, DeriveInput, Error, Fields, FnArg, Ident, ImplItem, Item, ItemImpl, ItemTrait, Path,
     ReceiverKind, ReturnType, Safety, Signature, Token, TraitItem, Type, parse_macro_input,
 };
 
@@ -195,11 +196,10 @@ fn companion_macro(
             }
         }
     });
-    let fill_arms = getters.iter().zip(&struct_methods).map(|(getter, method)| {
+    let getter_arms = getters.iter().zip(&struct_methods).map(|(getter, method)| {
         let name = &getter.sig.ident;
-        quote!((fill #name) => { #method };)
+        quote!((getter #name { $($not_a_getter:tt)* }) => { #method };)
     });
-    let not_a_getter = format!("not a getter of `{trait_name}`");
 
     let impl_arms = if required_non_getters.is_empty() {
         quote! {
@@ -228,7 +228,7 @@ fn companion_macro(
             .join(", ");
         let message = format!(
             "#[field_impl] cannot implement `{trait_name}` because {names} must be written by hand; \
-             use #[field_fill] on an impl block instead"
+             put #[field_impl] on a hand-written impl block instead"
         );
         quote! {
             ($($input:tt)*) => { ::core::compile_error!(#message); };
@@ -239,10 +239,8 @@ fn companion_macro(
         #[doc(hidden)]
         #[macro_export]
         macro_rules! #macro_name {
-            #(#fill_arms)*
-            (fill $name:ident) => {
-                ::core::compile_error!(::core::concat!("`", ::core::stringify!($name), "` is ", #not_a_getter));
-            };
+            #(#getter_arms)*
+            (getter $name:ident { $($not_a_getter:tt)* }) => { $($not_a_getter)* };
             #impl_arms
         }
         #[doc(hidden)]
@@ -252,31 +250,66 @@ fn companion_macro(
 }
 
 #[proc_macro_attribute]
-pub fn field_fill(args: TokenStream, input: TokenStream) -> TokenStream {
-    let names = parse_macro_input!(args with Punctuated::<Ident, Token![,]>::parse_terminated);
+pub fn field_impl(args: TokenStream, input: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(args with Punctuated::<Path, Token![,]>::parse_terminated);
     let original = TokenStream2::from(input.clone());
-    let mut item = parse_macro_input!(input as ItemImpl);
-    let Some((trait_path, _)) = &item.trait_ else {
-        let error = Error::new_spanned(item.impl_token, "#[field_fill] needs a trait impl")
-            .into_compile_error();
-        return quote!(#original #error).into();
+    let output = match parse_macro_input!(input as Item) {
+        Item::Impl(item) => impl_getters(&args, item),
+        Item::Struct(_) | Item::Enum(_) | Item::Union(_) => syn::parse2(original.clone())
+            .and_then(|item| impl_traits(&args, &item))
+            .map(|impls| quote!(#original #impls)),
+        _ => Err(Error::new(
+            Span::call_site(),
+            "#[field_impl] supports structs, enums and trait impl blocks",
+        )),
     };
-    let getters: Vec<_> = names
-        .iter()
-        .map(|name| ImplItem::Verbatim(quote_spanned!(name.span()=> #trait_path! { fill #name })))
-        .collect();
-    item.items.extend(getters);
-    item.into_token_stream().into()
+    match output {
+        Ok(output) => output.into(),
+        Err(error) => {
+            let error = error.into_compile_error();
+            quote!(#original #error).into()
+        }
+    }
 }
 
-#[proc_macro_attribute]
-pub fn field_impl(args: TokenStream, input: TokenStream) -> TokenStream {
-    let trait_paths = parse_macro_input!(args with Punctuated::<Path, Token![,]>::parse_terminated);
-    let original = TokenStream2::from(input.clone());
-    let item = parse_macro_input!(input as DeriveInput);
+fn impl_getters(
+    args: &Punctuated<Path, Token![,]>,
+    mut item: ItemImpl,
+) -> Result<TokenStream2, Error> {
+    let Some((trait_path, _)) = &item.trait_ else {
+        return Err(Error::new_spanned(
+            item.impl_token,
+            "#[field_impl] on an impl block needs a trait impl",
+        ));
+    };
+    if args.is_empty() {
+        return Err(Error::new(
+            Span::call_site(),
+            "#[field_impl] on an impl block needs at least one getter name",
+        ));
+    }
+    let trait_name = &trait_path.segments.last().unwrap().ident;
+    let mut getters = Vec::new();
+    for arg in args {
+        let name = arg.get_ident().ok_or_else(|| {
+            Error::new_spanned(arg, "#[field_impl] on an impl block takes getter names")
+        })?;
+        let message = format!("`{name}` is not a getter of `{trait_name}`");
+        let not_a_getter = quote_spanned!(name.span()=> ::core::compile_error!(#message););
+        getters.push(ImplItem::Verbatim(
+            quote!(#trait_path! { getter #name { #not_a_getter } }),
+        ));
+    }
+    item.items.extend(getters);
+    Ok(item.into_token_stream())
+}
 
+fn impl_traits(
+    trait_paths: &Punctuated<Path, Token![,]>,
+    item: &DeriveInput,
+) -> Result<TokenStream2, Error> {
     let shape = match &item.data {
-        Data::Struct(_) => Ok(quote!(struct)),
+        Data::Struct(_) => quote!(struct),
         Data::Enum(data) => {
             let mut errors = data
                 .variants
@@ -288,33 +321,25 @@ pub fn field_impl(args: TokenStream, input: TokenStream) -> TokenStream {
                         "#[field_impl] enum variants must hold exactly one unnamed field",
                     )),
                 });
-            match errors.next() {
-                Some(mut first) => {
-                    errors.for_each(|error| first.combine(error));
-                    Err(first)
-                }
-                None => {
-                    let variants = data.variants.iter().map(|variant| &variant.ident);
-                    Ok(quote!(enum [#(#variants)*]))
-                }
+            if let Some(mut first) = errors.next() {
+                errors.for_each(|error| first.combine(error));
+                return Err(first);
             }
+            let variants = data.variants.iter().map(|variant| &variant.ident);
+            quote!(enum [#(#variants)*])
         }
-        Data::Union(data) => Err(Error::new_spanned(
-            data.union_token,
-            "#[field_impl] supports only structs and enums",
-        )),
-    };
-    let shape = match shape {
-        Ok(shape) => shape,
-        Err(error) => {
-            let error = error.into_compile_error();
-            return quote!(#original #error).into();
+        Data::Union(data) => {
+            return Err(Error::new_spanned(
+                data.union_token,
+                "#[field_impl] supports structs, enums and trait impl blocks",
+            ));
         }
     };
     if trait_paths.is_empty() {
-        let error = Error::new(Span::call_site(), "#[field_impl] needs at least one trait")
-            .into_compile_error();
-        return quote!(#original #error).into();
+        return Err(Error::new(
+            Span::call_site(),
+            "#[field_impl] needs at least one trait",
+        ));
     }
 
     let name = &item.ident;
@@ -327,9 +352,5 @@ pub fn field_impl(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         }
     });
-    quote! {
-        #original
-        #(#impls)*
-    }
-    .into()
+    Ok(quote!(#(#impls)*))
 }

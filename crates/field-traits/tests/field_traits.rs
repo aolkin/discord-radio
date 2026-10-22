@@ -1,4 +1,4 @@
-use field_traits::{field_fill, field_impl, field_trait};
+use field_traits::{field_impl, field_trait};
 use serde::{Deserialize, Serialize};
 
 #[field_trait]
@@ -68,7 +68,7 @@ struct Profile {
     label: String,
 }
 
-#[field_fill(priority, label)]
+#[field_impl(priority, label)]
 impl Kinded for Profile {
     const KIND: &'static str = "profile";
 }
@@ -121,7 +121,7 @@ fn multiple_traits_including_one_from_another_module() {
 }
 
 #[test]
-fn fill_adds_getters_to_hand_written_impl() {
+fn impl_block_gets_listed_getters() {
     let profile = Profile {
         priority: 2,
         label: "loud".to_string(),

@@ -1,4 +1,4 @@
-error: #[field_impl] supports only structs and enums
+error: #[field_impl] supports structs, enums and trait impl blocks
  --> tests/compile_fail/union.rs:9:1
   |
 9 | union Bits {
