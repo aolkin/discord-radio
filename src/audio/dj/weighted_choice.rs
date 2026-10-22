@@ -3,7 +3,20 @@ use std::collections::VecDeque;
 
 /// A weight an item contributes to weighted random selection.
 pub trait Weighted {
-    fn weight(&self) -> f32;
+    fn weight(&self) -> u32;
+}
+
+macro_rules! impl_weighted {
+    ($($t:ty),*) => { $(impl crate::audio::dj::weighted_choice::Weighted for $t {
+        fn weight(&self) -> u32 { self.weight }
+    })* };
+}
+
+pub(crate) use impl_weighted;
+
+pub trait WeightedPool<T: Weighted> {
+    fn entries(&self) -> &Vec<T>;
+    fn history_penalty_multiplier(&self) -> Option<f32>;
 }
 
 /// Picks an index at random in proportion to `weights`, or `None` when they
@@ -56,7 +69,7 @@ impl<T: Weighted> WeightedSelector<T> {
             .items
             .iter()
             .enumerate()
-            .map(|(idx, item)| item.weight() * self.penalty(idx))
+            .map(|(idx, item)| item.weight() as f32 * self.penalty(idx))
             .collect();
 
         let idx = choose_index(&effective_weights)?;

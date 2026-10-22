@@ -671,11 +671,11 @@ struct ActivePool {
 }
 
 impl Weighted for ActivePool {
-    fn weight(&self) -> f32 {
+    fn weight(&self) -> u32 {
         if self.entries.is_empty() {
-            0.0
+            0
         } else {
-            self.weight as f32
+            self.weight
         }
     }
 }

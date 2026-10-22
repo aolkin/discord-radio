@@ -2,12 +2,13 @@ use crate::audio::dj::segments::{
     HexMessageDefaults, HexMessageEntry, HexSegment, NoisePeriodEntry, NoiseSegment, Segment,
     TrackEntry, TrackSegment, ensure_loops,
 };
-use crate::audio::dj::weighted_choice::Weighted;
+use crate::audio::dj::weighted_choice::{impl_weighted, Weighted};
 use crate::bucket::registry::RegistryEntry;
 use crate::state::Data;
 use anyhow::{Context, bail};
 use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;
+use enum_dispatch::enum_dispatch;
 
 #[derive(Deserialize, Serialize, Debug, Default)]
 pub struct DJConfig {
@@ -54,11 +55,14 @@ impl Pool {
 /// The kind is inferred from which fields are present.
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(untagged)]
+#[enum_dispatch(Weighted)]
 pub enum PoolEntry {
     Track(TrackEntry),
     Hex(HexMessageEntry),
     Noise(NoisePeriodEntry),
 }
+
+impl_weighted!(TrackEntry, HexMessageEntry, NoisePeriodEntry);
 
 impl PoolEntry {
     fn validate(&self, hex_defaults: &HexMessageDefaults) -> anyhow::Result<()> {
@@ -99,16 +103,6 @@ impl PoolEntry {
     }
 }
 
-impl Weighted for PoolEntry {
-    fn weight(&self) -> f32 {
-        match self {
-            PoolEntry::Track(track) => track.weight as f32,
-            PoolEntry::Hex(message) => message.weight as f32,
-            PoolEntry::Noise(noise) => noise.weight as f32,
-        }
-    }
-}
-
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct SignalProfileEntry {
     pub profile_name: String,
@@ -118,11 +112,7 @@ pub struct SignalProfileEntry {
     pub max_time_seconds: f32,
 }
 
-impl Weighted for SignalProfileEntry {
-    fn weight(&self) -> f32 {
-        self.weight as f32
-    }
-}
+impl_weighted!(SignalProfileEntry);
 
 impl RegistryEntry for DJConfig {
     const KIND: &'static str = "DJ config";
