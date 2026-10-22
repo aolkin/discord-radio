@@ -940,7 +940,26 @@
 
             <div class="modal-section">
                 <div class="modal-section-title">Signal Profile Rotation</div>
-                <template x-for="(row, index) in djConfigForm.signal_profiles" :key="index">
+                <div class="form-row">
+                    <template x-for="field in djConfigSignalProfilesFields" :key="field.key">
+                        <div class="form-group">
+                            <!-- biome-ignore lint/a11y/noLabelWithoutControl: the input is rendered inside the label -->
+                            <label class="form-label">
+                                <span x-text="field.label"></span>
+                                <input
+                                    type="number"
+                                    class="form-input"
+                                    x-model.number="djConfigForm.signal_profiles[field.key]"
+                                    :step="field.step"
+                                    :min="field.min"
+                                    :max="field.max"
+                                    placeholder="Optional"
+                                >
+                            </label>
+                        </div>
+                    </template>
+                </div>
+                <template x-for="(row, index) in djConfigForm.signal_profiles.entries" :key="index">
                     <div class="list-row">
                         <div class="form-row">
                             <template x-for="field in djConfigSignalProfileFields" :key="field.key">
@@ -977,13 +996,13 @@
                         <button
                             type="button"
                             class="btn btn-secondary"
-                            @click="djConfigForm.signal_profiles.splice(index, 1)"
+                            @click="djConfigForm.signal_profiles.entries.splice(index, 1)"
                         >
                             Remove
                         </button>
                     </div>
                 </template>
-                <div class="empty-state" x-show="djConfigForm.signal_profiles.length === 0">No entries</div>
+                <div class="empty-state" x-show="djConfigForm.signal_profiles.entries.length === 0">No entries</div>
                 <button type="button" class="btn btn-secondary" @click="addDjConfigSignalProfile()">
                     + Add Signal Profile
                 </button>

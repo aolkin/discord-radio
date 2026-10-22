@@ -61,7 +61,7 @@ impl WeightedSelector {
     }
 
     fn get_penalty_for_key(&self, key: &str) -> f32 {
-        for (history_idx, item_key) in self.recent_history.iter().enumerate() {
+        for (history_idx, item_key) in self.recent_history.iter().enumerate().rev() {
             if item_key == key {
                 let recency_factor = 1.0 - (history_idx as f32 / self.recent_history.len() as f32);
                 return self.penalty_multiplier * recency_factor + (1.0 - self.penalty_multiplier);

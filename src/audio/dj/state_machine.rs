@@ -275,7 +275,7 @@ impl DJStateMachine {
     async fn rotate_profile(&mut self) {
         let entry = self
             .signal_profile_selector
-            .choose(&self.config.signal_profiles)
+            .choose(&self.config.signal_profiles.entries)
             .unwrap_or(&DEFAULT_SIGNAL_PROFILE)
             .to_owned();
         let fade = Duration::from_secs_f32(entry.fade_duration_seconds);
@@ -666,14 +666,20 @@ fn selectors(config: &DJConfig) -> (Vec<WeightedSelector>, WeightedSelector) {
     let pool_selectors = config
         .pools
         .iter()
-        .map(|_| {
-            WeightedSelector::new(
-                config.recent_history_size,
-                config.duplicate_penalty_multiplier,
-            )
-        })
+        .map(|pool| selector(pool.entries.len(), pool.history_penalty_multiplier))
         .collect();
-    (pool_selectors, WeightedSelector::new(5, 0.3))
+    let signal_profiles = &config.signal_profiles;
+    (
+        pool_selectors,
+        selector(
+            signal_profiles.entries.len(),
+            signal_profiles.history_penalty_multiplier,
+        ),
+    )
+}
+
+fn selector(entry_count: usize, penalty_multiplier: Option<f32>) -> WeightedSelector {
+    WeightedSelector::new((entry_count / 2).max(2), penalty_multiplier.unwrap_or(1.0))
 }
 
 static DEFAULT_NOISE_PERIOD: LazyLock<NoisePeriodEntry> = LazyLock::new(|| NoisePeriodEntry {

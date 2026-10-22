@@ -30,6 +30,7 @@
     {
       "name": "noise",
       "weight": 50,
+      "history_penalty_multiplier": 0.5,
       "entries": [
         {
           "noise_profile": "noise_pink",
@@ -64,36 +65,37 @@
       ]
     }
   ],
-  "signal_profiles": [
-    {
-      "profile_name": "clear",
-      "weight": 40,
-      "fade_duration_seconds": 8.0,
-      "min_time_seconds": 60.0,
-      "max_time_seconds": 240.0
-    },
-    {
-      "profile_name": "weak_signal",
-      "weight": 5,
-      "fade_duration_seconds": 8.0,
-      "min_time_seconds": 4.0,
-      "max_time_seconds": 30.0
-    },
-    {
-      "profile_name": "tuning",
-      "weight": 10,
-      "fade_duration_seconds": 6.0,
-      "min_time_seconds": 6.0,
-      "max_time_seconds": 30.0
-    },
-    {
-      "profile_name": "locked",
-      "weight": 10,
-      "fade_duration_seconds": 5.0,
-      "min_time_seconds": 10.0,
-      "max_time_seconds": 20.0
-    }
-  ],
-  "recent_history_size": 12,
-  "duplicate_penalty_multiplier": 0.5
+  "signal_profiles": {
+    "history_penalty_multiplier": 0.3,
+    "entries": [
+      {
+        "profile_name": "clear",
+        "weight": 40,
+        "fade_duration_seconds": 8.0,
+        "min_time_seconds": 60.0,
+        "max_time_seconds": 240.0
+      },
+      {
+        "profile_name": "weak_signal",
+        "weight": 5,
+        "fade_duration_seconds": 8.0,
+        "min_time_seconds": 4.0,
+        "max_time_seconds": 30.0
+      },
+      {
+        "profile_name": "tuning",
+        "weight": 10,
+        "fade_duration_seconds": 6.0,
+        "min_time_seconds": 6.0,
+        "max_time_seconds": 30.0
+      },
+      {
+        "profile_name": "locked",
+        "weight": 10,
+        "fade_duration_seconds": 5.0,
+        "min_time_seconds": 10.0,
+        "max_time_seconds": 20.0
+      }
+    ]
+  }
 }
