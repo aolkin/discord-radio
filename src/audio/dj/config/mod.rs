@@ -6,7 +6,7 @@ use crate::audio::dj::weighted_choice::{Weighted, WeightedPool};
 use crate::bucket::registry::RegistryEntry;
 use crate::state::Data;
 use anyhow::{Context, bail};
-use field_traits::field_trait_impl;
+use field_trait::field_trait_impl;
 use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;
 

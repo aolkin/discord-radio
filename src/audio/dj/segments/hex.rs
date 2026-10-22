@@ -10,7 +10,7 @@ use crate::audio::tracks::open_track_source;
 use crate::bucket::FileResolver;
 use anyhow::bail;
 use async_trait::async_trait;
-use field_traits::field_trait_impl;
+use field_trait::field_trait_impl;
 use rand::RngExt;
 use rand::seq::IndexedRandom;
 use serde::{Deserialize, Serialize};

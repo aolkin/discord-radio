@@ -3262,7 +3262,7 @@ dependencies = [
  "biquad",
  "chrono",
  "dotenvy",
- "field-traits",
+ "field-trait",
  "futures-util",
  "http",
  "moka",
