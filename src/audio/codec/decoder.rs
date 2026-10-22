@@ -50,12 +50,19 @@ impl OpenedAudio {
         })
     }
 
+    pub fn sample_rate(&self) -> anyhow::Result<u32> {
+        self.params
+            .sample_rate
+            .context("Audio file has no sample rate")
+    }
+
+    pub fn channels(&self) -> Option<usize> {
+        self.params.channels.as_ref().map(|ch| ch.count())
+    }
+
     /// Fails unless the track's sample rate is `required_sample_rate`.
     pub fn require_sample_rate(&self, required_sample_rate: u32) -> anyhow::Result<u32> {
-        let sample_rate = self
-            .params
-            .sample_rate
-            .context("Audio file has no sample rate")?;
+        let sample_rate = self.sample_rate()?;
         if sample_rate != required_sample_rate {
             bail!(
                 "Audio file has sample rate {sample_rate}Hz, but {required_sample_rate}Hz is required. Please resample the file first."
@@ -64,36 +71,28 @@ impl OpenedAudio {
         Ok(sample_rate)
     }
 
-    fn make_decoder(&self) -> anyhow::Result<Box<dyn AudioDecoder>> {
+    pub fn make_decoder(&self) -> anyhow::Result<Box<dyn AudioDecoder>> {
         symphonia::default::get_codecs()
             .make_audio_decoder(&self.params, &AudioDecoderOptions::default())
             .context("Unsupported audio codec")
     }
-}
 
-/// Fails unless `bytes` decode as `extension`-format audio at
-/// `required_sample_rate`. Decodes the first packet, so a file that probes
-/// but cannot be decoded fails too.
-pub fn check_sample_rate(
-    bytes: Vec<u8>,
-    extension: &str,
-    required_sample_rate: u32,
-) -> anyhow::Result<()> {
-    let mut audio = OpenedAudio::open(Box::new(std::io::Cursor::new(bytes)), Some(extension))?;
-    audio.require_sample_rate(required_sample_rate)?;
-
-    let mut decoder = audio.make_decoder()?;
-    loop {
-        let packet = audio
-            .format
-            .next_packet()
-            .context("Reading the first packet")?
-            .context("Audio file has no packets")?;
-        if packet.track_id == audio.track.id {
-            decoder
-                .decode(&packet)
-                .context("Decoding the first packet")?;
-            return Ok(());
+    /// Decodes the first packet of the track, so a file that probes but
+    /// cannot be decoded fails.
+    pub fn decode_first_packet(&mut self) -> anyhow::Result<()> {
+        let mut decoder = self.make_decoder()?;
+        loop {
+            let packet = self
+                .format
+                .next_packet()
+                .context("Reading the first packet")?
+                .context("Audio file has no packets")?;
+            if packet.track_id == self.track.id {
+                decoder
+                    .decode(&packet)
+                    .context("Decoding the first packet")?;
+                return Ok(());
+            }
         }
     }
 }
@@ -118,12 +117,7 @@ impl SymphoniaSource {
         let audio = OpenedAudio::open(Box::new(file), extension)?;
         let sample_rate = audio.require_sample_rate(required_sample_rate)?;
         let decoder = audio.make_decoder()?;
-        let channels = audio
-            .params
-            .channels
-            .as_ref()
-            .map(|ch| ch.count())
-            .unwrap_or(2);
+        let channels = audio.channels().unwrap_or(2);
 
         tracing::debug!(
             "Loaded audio file: {} (sample rate: {}Hz, channels: {})",
@@ -279,6 +273,7 @@ impl AudioSource for SymphoniaSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::audio::codec::convert::convert_upload;
 
     const RATE: u32 = 48000;
 
@@ -309,8 +304,16 @@ mod tests {
     #[test]
     fn decodes_seeks_and_resets_wav() {
         let frames = 4800;
-        check_sample_rate(wav_bytes(frames), "wav", RATE).unwrap();
-        assert!(check_sample_rate(wav_bytes(frames), "wav", 44100).is_err());
+        assert!(
+            convert_upload(wav_bytes(frames), "wav", RATE)
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            convert_upload(wav_bytes(frames), "wav", 44100)
+                .unwrap()
+                .is_some()
+        );
 
         let path = std::env::temp_dir().join(format!("decoder_test_{}.wav", std::process::id()));
         std::fs::write(&path, wav_bytes(frames)).unwrap();

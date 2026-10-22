@@ -1,4 +1,4 @@
-use crate::audio::codec::decoder::check_sample_rate;
+use crate::audio::codec::convert::convert_upload;
 use crate::bucket::cache::ObjectInfo;
 use crate::bucket::registry::is_valid_name;
 use crate::state::Data;
@@ -98,7 +98,7 @@ pub async fn upload_file(
         .rsplit_once('.')
         .map(|(_, ext)| ext.to_ascii_lowercase())
         .unwrap_or_default();
-    let content_type = if root == AUDIO_ROOT {
+    let (filename, bytes, content_type) = if root == AUDIO_ROOT {
         let (extension, content_type) = match extension.as_str() {
             "mp3" => ("mp3", "audio/mpeg"),
             "ogg" => ("ogg", "audio/ogg"),
@@ -110,15 +110,23 @@ pub async fn upload_file(
             }
         };
         let check_bytes = bytes.to_vec();
-        tokio::task::spawn_blocking(move || {
-            check_sample_rate(check_bytes, extension, REQUIRED_SAMPLE_RATE)
+        let converted = tokio::task::spawn_blocking(move || {
+            convert_upload(check_bytes, extension, REQUIRED_SAMPLE_RATE)
         })
         .await
-        .context("Sample rate check failed to run")?
+        .context("Sample rate conversion failed to run")?
         .status(StatusCode::UNPROCESSABLE_ENTITY)?;
-        content_type
+        match converted {
+            Some(ogg) => {
+                let stem = filename
+                    .rsplit_once('.')
+                    .map_or(&*filename, |(stem, _)| stem);
+                (format!("{stem}.ogg"), ogg.into(), "audio/ogg")
+            }
+            None => (filename, bytes, content_type),
+        }
     } else {
-        match extension.as_str() {
+        let content_type = match extension.as_str() {
             "png" => "image/png",
             "jpg" | "jpeg" => "image/jpeg",
             "gif" => "image/gif",
@@ -127,7 +135,8 @@ pub async fn upload_file(
                     "Only .png, .jpg and .gif files are accepted",
                 ));
             }
-        }
+        };
+        (filename, bytes, content_type)
     };
 
     let key = format!("{}{filename}", params.prefix);
