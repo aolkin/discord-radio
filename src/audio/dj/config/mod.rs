@@ -18,6 +18,7 @@ pub struct DJConfig {
     pub channel_status: Option<String>,
 }
 
+#[field_trait_impl(WeightedPool<SignalProfileEntry>)]
 #[derive(Deserialize, Serialize, Debug, Default)]
 pub struct SignalProfiles {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -25,6 +26,7 @@ pub struct SignalProfiles {
     pub entries: Vec<SignalProfileEntry>,
 }
 
+#[field_trait_impl(WeightedPool<PoolEntry>)]
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Pool {
     pub name: String,
@@ -33,26 +35,6 @@ pub struct Pool {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub history_penalty_multiplier: Option<f32>,
     pub entries: Vec<PoolEntry>,
-}
-
-impl WeightedPool<SignalProfileEntry> for SignalProfiles {
-    fn entries(&self) -> &Vec<SignalProfileEntry> {
-        &self.entries
-    }
-
-    fn history_penalty_multiplier(&self) -> Option<f32> {
-        self.history_penalty_multiplier
-    }
-}
-
-impl WeightedPool<PoolEntry> for Pool {
-    fn entries(&self) -> &Vec<PoolEntry> {
-        &self.entries
-    }
-
-    fn history_penalty_multiplier(&self) -> Option<f32> {
-        self.history_penalty_multiplier
-    }
 }
 
 static BUILT_IN_HEX_DEFAULTS: LazyLock<HexMessageDefaults> = LazyLock::new(Default::default);

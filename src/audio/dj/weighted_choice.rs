@@ -8,6 +8,7 @@ pub trait Weighted {
     fn weight(&self) -> u32;
 }
 
+#[field_trait]
 pub trait WeightedPool<T: Weighted> {
     fn entries(&self) -> &Vec<T>;
     fn history_penalty_multiplier(&self) -> Option<f32>;
