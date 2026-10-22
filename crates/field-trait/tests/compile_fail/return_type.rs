@@ -1,4 +1,4 @@
-use field_traits::field_trait;
+use field_trait::field_trait;
 
 #[field_trait]
 trait ReturnType {

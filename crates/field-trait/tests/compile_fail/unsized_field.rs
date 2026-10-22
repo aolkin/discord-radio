@@ -1,4 +1,4 @@
-use field_traits::{field_trait, with_trait_fields};
+use field_trait::{field_trait, with_trait_fields};
 
 #[field_trait]
 trait Tagged {

@@ -1,4 +1,4 @@
-use field_traits::{field_trait, field_trait_impl, with_trait_fields};
+use field_trait::{field_trait, field_trait_impl, with_trait_fields};
 use serde::{Deserialize, Serialize};
 
 #[field_trait]
@@ -12,7 +12,7 @@ pub trait HasWeight {
 }
 
 mod traits {
-    use field_traits::field_trait;
+    use field_trait::field_trait;
 
     #[field_trait]
     pub trait HasScale {
