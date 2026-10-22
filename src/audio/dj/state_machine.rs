@@ -450,10 +450,9 @@ impl DJStateMachine {
         match index {
             Some(index) => {
                 let pool = &mut pools[index];
-                let entry = pool
-                    .entries
-                    .choose()
-                    .with_context(|| format!("pool {:?} is empty", pool.name))?;
+                let entry = pool.entries.choose().with_context(|| {
+                    format!("pool {:?} has no entry with weight above 0", pool.name)
+                })?;
                 Ok(entry.segment(&pool.hex_defaults, &bot_state).await)
             }
             None => Ok(Box::new(NoiseSegment::from(&*DEFAULT_NOISE_PERIOD))),

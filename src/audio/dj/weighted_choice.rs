@@ -59,9 +59,7 @@ impl<T: Weighted> WeightedSelector<T> {
             .map(|(idx, item)| item.weight() * self.penalty(idx))
             .collect();
 
-        let Some(idx) = choose_index(&effective_weights) else {
-            return self.items.first();
-        };
+        let idx = choose_index(&effective_weights)?;
         if self.recent_history.len() >= self.history_size {
             self.recent_history.pop_front();
         }
