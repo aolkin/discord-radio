@@ -8,7 +8,6 @@ pub trait Weighted {
     fn weight(&self) -> u32;
 }
 
-#[allow(dead_code)]
 pub trait WeightedPool<T: Weighted> {
     fn entries(&self) -> &Vec<T>;
     fn history_penalty_multiplier(&self) -> Option<f32>;
@@ -42,19 +41,22 @@ pub struct WeightedSelector<T> {
     penalty_multiplier: f32,
 }
 
-impl<T: Weighted> WeightedSelector<T> {
-    /// Remembers the last half of `items.len()` picks, at least 2.
-    /// `penalty_multiplier` defaults to 1.
-    pub fn new(items: Vec<T>, penalty_multiplier: Option<f32>) -> Self {
+/// Remembers the last half of the pool's entry count in picks, at least 2.
+/// The penalty multiplier defaults to 1.
+impl<T: Weighted + Clone, P: WeightedPool<T>> From<&P> for WeightedSelector<T> {
+    fn from(pool: &P) -> Self {
+        let items = pool.entries().clone();
         let history_size = (items.len() / 2).max(2);
         Self {
             items,
             recent_history: VecDeque::with_capacity(history_size),
             history_size,
-            penalty_multiplier: penalty_multiplier.unwrap_or(1.0),
+            penalty_multiplier: pool.history_penalty_multiplier().unwrap_or(1.0),
         }
     }
+}
 
+impl<T: Weighted> WeightedSelector<T> {
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()
     }

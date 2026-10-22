@@ -2,7 +2,7 @@ use crate::audio::dj::segments::{
     HexMessageDefaults, HexMessageEntry, HexSegment, NoisePeriodEntry, NoiseSegment, Segment,
     TrackEntry, TrackSegment, ensure_loops,
 };
-use crate::audio::dj::weighted_choice::Weighted;
+use crate::audio::dj::weighted_choice::{Weighted, WeightedPool};
 use crate::bucket::registry::RegistryEntry;
 use crate::state::Data;
 use anyhow::{Context, bail};
@@ -33,6 +33,26 @@ pub struct Pool {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub history_penalty_multiplier: Option<f32>,
     pub entries: Vec<PoolEntry>,
+}
+
+impl WeightedPool<SignalProfileEntry> for SignalProfiles {
+    fn entries(&self) -> &Vec<SignalProfileEntry> {
+        &self.entries
+    }
+
+    fn history_penalty_multiplier(&self) -> Option<f32> {
+        self.history_penalty_multiplier
+    }
+}
+
+impl WeightedPool<PoolEntry> for Pool {
+    fn entries(&self) -> &Vec<PoolEntry> {
+        &self.entries
+    }
+
+    fn history_penalty_multiplier(&self) -> Option<f32> {
+        self.history_penalty_multiplier
+    }
 }
 
 static BUILT_IN_HEX_DEFAULTS: LazyLock<HexMessageDefaults> = LazyLock::new(Default::default);

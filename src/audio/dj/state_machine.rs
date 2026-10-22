@@ -688,14 +688,10 @@ fn selectors(config: &DJConfig) -> (Vec<ActivePool>, WeightedSelector<SignalProf
             name: pool.name.clone(),
             weight: pool.weight,
             hex_defaults: pool.hex_defaults().clone(),
-            entries: WeightedSelector::new(pool.entries.clone(), pool.history_penalty_multiplier),
+            entries: pool.into(),
         })
         .collect();
-    let signal_profiles = WeightedSelector::new(
-        config.signal_profiles.entries.clone(),
-        config.signal_profiles.history_penalty_multiplier,
-    );
-    (pools, signal_profiles)
+    (pools, (&config.signal_profiles).into())
 }
 
 static DEFAULT_NOISE_PERIOD: LazyLock<NoisePeriodEntry> = LazyLock::new(|| NoisePeriodEntry {
