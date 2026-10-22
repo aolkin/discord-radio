@@ -11,6 +11,7 @@ use crate::audio::dj::serde::{deser_instant, ser_instant};
 use crate::audio::dj::weighted_choice::{Weighted, WeightedSelector, choose_index};
 use crate::state::Data;
 use anyhow::Context;
+use field_trait::field_trait_impl;
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use serenity::model::id::{ChannelId, GuildId};
@@ -227,16 +228,15 @@ impl DJStateMachine {
 
         *state.write().await = initial_state;
 
-        let (pools, signal_profile_selector) = selectors(&config);
         Self {
             state,
             guild_id,
             announcement_channel,
             bot_state,
             config_name,
+            pools: active_pools(&config),
+            signal_profile_selector: (&config.signal_profiles).into(),
             config,
-            pools,
-            signal_profile_selector,
             applied_profile: None,
             applied_channel_status: None,
         }
@@ -472,7 +472,8 @@ impl DJStateMachine {
 
     /// Selection starts with an empty recent history.
     fn set_config(&mut self, config: Arc<DJConfig>) {
-        (self.pools, self.signal_profile_selector) = selectors(&config);
+        self.pools = active_pools(&config);
+        self.signal_profile_selector = (&config.signal_profiles).into();
         self.config = config;
     }
 
@@ -663,6 +664,7 @@ impl DJStateMachine {
     }
 }
 
+#[field_trait_impl(Weighted)]
 struct ActivePool {
     name: String,
     weight: u32,
@@ -670,18 +672,8 @@ struct ActivePool {
     entries: WeightedSelector<PoolEntry>,
 }
 
-impl Weighted for ActivePool {
-    fn weight(&self) -> u32 {
-        if self.entries.is_empty() {
-            0
-        } else {
-            self.weight
-        }
-    }
-}
-
-fn selectors(config: &DJConfig) -> (Vec<ActivePool>, WeightedSelector<SignalProfileEntry>) {
-    let pools = config
+fn active_pools(config: &DJConfig) -> Vec<ActivePool> {
+    config
         .pools
         .iter()
         .map(|pool| ActivePool {
@@ -690,8 +682,7 @@ fn selectors(config: &DJConfig) -> (Vec<ActivePool>, WeightedSelector<SignalProf
             hex_defaults: pool.hex_defaults().clone(),
             entries: pool.into(),
         })
-        .collect();
-    (pools, (&config.signal_profiles).into())
+        .collect()
 }
 
 static DEFAULT_NOISE_PERIOD: LazyLock<NoisePeriodEntry> = LazyLock::new(|| NoisePeriodEntry {

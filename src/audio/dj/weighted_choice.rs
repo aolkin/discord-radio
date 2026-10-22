@@ -58,10 +58,6 @@ impl<T: Weighted + Clone, P: WeightedPool<T>> From<&P> for WeightedSelector<T> {
 }
 
 impl<T: Weighted> WeightedSelector<T> {
-    pub fn is_empty(&self) -> bool {
-        self.items.is_empty()
-    }
-
     pub fn choose(&mut self) -> Option<&T> {
         let effective_weights: Vec<f32> = self
             .items

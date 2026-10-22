@@ -48,6 +48,9 @@ impl Pool {
         let defaults = self.hex_defaults();
         ensure_loops(defaults.loop_min, defaults.loop_max).context("hex_defaults")?;
         ensure_penalty_multiplier(self.history_penalty_multiplier)?;
+        if self.entries.is_empty() && self.weight != 0 {
+            bail!("a pool with no entries must have weight 0");
+        }
         self.entries
             .iter()
             .try_for_each(|entry| entry.validate(defaults))
