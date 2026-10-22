@@ -48,19 +48,33 @@
 //! struct Gizmo { name: String }
 //! ```
 //!
+//! A trait may have type parameters, with or without bounds and defaults, but no lifetime or
+//! const parameters and no where clause. Name the trait with its type arguments, and the
+//! generated impl adds the trait's bounds on its parameters to its where clause:
+//!
+//! ```ignore
+//! #[field_trait]
+//! pub trait HasParts<T: Clone> {
+//!     fn parts(&self) -> &Vec<T>;
+//! }
+//!
+//! #[field_trait_impl(HasParts<Gadget>)]
+//! struct Toolbox { parts: Vec<Gadget> }
+//! ```
+//!
 //! `#[field_trait]` puts a hidden macro beside the trait, under the trait's name, so
 //! importing the trait also imports what the other attributes need. Types named in the
 //! trait's method signatures resolve where those attributes are used.
 
 use proc_macro::TokenStream;
-use proc_macro2::{Span, TokenStream as TokenStream2};
+use proc_macro2::{Group, Span, TokenStream as TokenStream2, TokenTree};
 use quote::{ToTokens, format_ident, quote};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use syn::punctuated::Punctuated;
 use syn::{
-    Data, DeriveInput, Error, Fields, FnArg, Ident, ImplItem, Item, ItemImpl, ItemStruct,
-    ItemTrait, Path, ReceiverKind, ReturnType, Safety, Signature, Token, TraitItem, Type,
-    parse_macro_input,
+    Data, DeriveInput, Error, Fields, FnArg, GenericArgument, GenericParam, Ident, ImplItem, Item,
+    ItemImpl, ItemStruct, ItemTrait, Path, PathArguments, ReceiverKind, ReturnType, Safety,
+    Signature, Token, TraitItem, Type, TypeParam, TypeParamBound, parse_macro_input,
 };
 
 #[proc_macro_attribute]
@@ -74,10 +88,18 @@ pub fn field_trait(args: TokenStream, input: TokenStream) -> TokenStream {
             "#[field_trait] takes no arguments",
         ));
     }
-    if !item.generics.params.is_empty() {
+    for param in &item.generics.params {
+        if !matches!(param, GenericParam::Type(_)) {
+            errors.push(Error::new_spanned(
+                param,
+                "#[field_trait] supports only type parameters on the trait",
+            ));
+        }
+    }
+    if let Some(where_clause) = &item.generics.where_clause {
         errors.push(Error::new_spanned(
-            &item.generics.params,
-            "#[field_trait] does not support generic traits",
+            where_clause,
+            "#[field_trait] does not support where clauses on the trait",
         ));
     }
 
@@ -201,6 +223,32 @@ fn getter(sig: &Signature) -> Result<Getter, Error> {
     })
 }
 
+fn metavar(param: &Ident) -> TokenStream2 {
+    let name = format_ident!("__field_trait_{}", param);
+    quote!($#name)
+}
+
+fn substitute(
+    tokens: TokenStream2,
+    replace: &dyn Fn(&Ident) -> Option<TokenStream2>,
+) -> TokenStream2 {
+    tokens
+        .into_iter()
+        .map(|tree| match tree {
+            TokenTree::Ident(ident) => {
+                replace(&ident).unwrap_or_else(|| TokenTree::Ident(ident).into())
+            }
+            TokenTree::Group(group) => {
+                let mut substituted =
+                    Group::new(group.delimiter(), substitute(group.stream(), replace));
+                substituted.set_span(group.span());
+                TokenTree::Group(substituted).into()
+            }
+            other => other.into(),
+        })
+        .collect()
+}
+
 fn companion_macro(
     item: &ItemTrait,
     getters: &[Getter],
@@ -212,16 +260,77 @@ fn companion_macro(
     let macro_name = format_ident!("__field_trait_{}_{:016x}", trait_name, hasher.finish());
     let vis = &item.vis;
 
+    let params: Vec<&TypeParam> = item.generics.type_params().collect();
+    let metavars: Vec<_> = params.iter().map(|param| metavar(&param.ident)).collect();
+    let to_metavar = |ident: &Ident| {
+        params
+            .iter()
+            .find(|param| param.ident == *ident)
+            .map(|param| metavar(&param.ident))
+    };
+    let params_pattern = quote!(#(#metavars:ty),*);
+    let trait_args = if params.is_empty() {
+        quote!()
+    } else {
+        quote!(<#(#metavars),*>)
+    };
+    let param_bounds: Vec<_> = params
+        .iter()
+        .zip(&metavars)
+        .filter_map(|(param, metavar)| {
+            let bounds: Vec<_> = param
+                .bounds
+                .iter()
+                .filter(|bound| !matches!(bound, TypeParamBound::Trait(t) if t.maybe.is_some()))
+                .collect();
+            if bounds.is_empty() {
+                return None;
+            }
+            let bounds = substitute(quote!(#(#bounds)+*), &to_metavar);
+            Some(quote!(#metavar: #bounds,))
+        })
+        .collect();
+
+    let required = params
+        .iter()
+        .take_while(|param| param.default.is_none())
+        .count();
+    let normalize_arms = (required..=params.len()).map(|supplied| {
+        let mut args: Vec<TokenStream2> = Vec::new();
+        for (index, param) in params.iter().enumerate() {
+            let arg = if index < supplied {
+                metavar(&param.ident)
+            } else if let Some((_, default)) = &param.default {
+                substitute(default.to_token_stream(), &|ident| {
+                    params[..index]
+                        .iter()
+                        .position(|earlier| earlier.ident == *ident)
+                        .map(|position| args[position].clone())
+                })
+            } else {
+                return quote!();
+            };
+            args.push(arg);
+        }
+        let pattern = metavars[..supplied].iter();
+        quote! {
+            ([$($me:tt)*] [#(#pattern:ty),*] $kind:tt $($rest:tt)*) => {
+                $($me)*! { @ $kind [$($me)*] [#(#args),*] $($rest)* }
+            };
+        }
+    });
+    let wrong_args = format!("wrong number of type arguments for `{trait_name}`");
+
     let struct_methods: Vec<_> = getters
         .iter()
         .map(|getter| {
-            let sig = &getter.sig;
+            let sig = substitute(getter.sig.to_token_stream(), &to_metavar);
             let body = getter.read_field(quote!(self));
             quote!(#sig { #body })
         })
         .collect();
     let enum_methods = getters.iter().map(|getter| {
-        let sig = &getter.sig;
+        let sig = substitute(getter.sig.to_token_stream(), &to_metavar);
         let body = getter.read_field(quote!(inner));
         quote! {
             #sig {
@@ -233,78 +342,90 @@ fn companion_macro(
     });
     let getter_names: Vec<_> = getters.iter().map(|getter| &getter.sig.ident).collect();
     let fill_arms = quote! {
-        (fill [$($trait_path:tt)*] [$($defined:ident)*]) => {
-            #($($trait_path)*! { @fill #getter_names [$($trait_path)*] [$($defined)*] })*
+        (@fill [$($me:tt)*] [$($args:tt)*] [$($defined:ident)*]) => {
+            #($($me)*! { @fill_getter #getter_names [$($me)*] [$($args)*] [$($defined)*] })*
         };
-        #((@fill #getter_names [$($trait_path:tt)*] [#getter_names $($rest:ident)*]) => {};)*
-        #((@fill #getter_names [$($trait_path:tt)*] []) => { #struct_methods };)*
-        (@fill $name:ident [$($trait_path:tt)*] [$first:ident $($rest:ident)*]) => {
-            $($trait_path)*! { @fill $name [$($trait_path)*] [$($rest)*] }
+        #((@fill_getter #getter_names [$($me:tt)*] [$($args:tt)*] [#getter_names $($rest:ident)*]) => {};)*
+        #((@fill_getter #getter_names [$($me:tt)*] [#params_pattern] []) => { #struct_methods };)*
+        (@fill_getter $name:ident [$($me:tt)*] [$($args:tt)*] [$first:ident $($rest:ident)*]) => {
+            $($me)*! { @fill_getter $name [$($me)*] [$($args)*] [$($rest)*] }
         };
     };
     let add_field_arms = getters.iter().map(|getter| {
         let name = &getter.sig.ident;
         let (field, error) = match getter.field_type() {
-            Ok(ty) => (quote!(#vis #name: #ty,), None),
+            Ok(ty) => {
+                let ty = substitute(ty.to_token_stream(), &to_metavar);
+                (quote!(#vis #name: #ty,), None)
+            }
             Err(error) => (quote!(), Some(error.into_compile_error())),
         };
         quote! {
             (
-                @field [$($me:tt)*] [$($prefix:tt)*] [$($body:tt)*] [$($defined:ident)*]
-                [#name $($pending:ident)*] [] $($next:tt)*
+                @field [$($me:tt)*] [#params_pattern] [$($prefix:tt)*] [$($body:tt)*]
+                [$($defined:ident)*] [#name $($pending:ident)*] [] $($next:tt)*
             ) => {
                 #error
                 $($me)*! {
-                    @next_field [$($me)*] [$($prefix)*] [$($body)* #field] [$($defined)* #name]
-                    [$($pending)*] $($next)*
+                    @next_field [$($me)*] [#(#metavars),*] [$($prefix)*] [$($body)* #field]
+                    [$($defined)* #name] [$($pending)*] $($next)*
                 }
             };
         }
     });
     let field_arms = quote! {
-        (@fields [$($me:tt)*] [$($prefix:tt)*] [$($body:tt)*] [$($defined:ident)*] $($next:tt)*) => {
+        (
+            @fields [$($me:tt)*] [$($args:tt)*] [$($prefix:tt)*] [$($body:tt)*]
+            [$($defined:ident)*] $($next:tt)*
+        ) => {
             $($me)*! {
-                @next_field [$($me)*] [$($prefix)*] [$($body)*] [$($defined)*]
+                @next_field [$($me)*] [$($args)*] [$($prefix)*] [$($body)*] [$($defined)*]
                 [#(#getter_names)*] $($next)*
             }
         };
         #((
-            @field [$($me:tt)*] [$($prefix:tt)*] [$($body:tt)*] [$($defined:ident)*]
-            [#getter_names $($pending:ident)*] [#getter_names $($searched:ident)*] $($next:tt)*
+            @field [$($me:tt)*] [$($args:tt)*] [$($prefix:tt)*] [$($body:tt)*]
+            [$($defined:ident)*] [#getter_names $($pending:ident)*]
+            [#getter_names $($searched:ident)*] $($next:tt)*
         ) => {
             $($me)*! {
-                @next_field [$($me)*] [$($prefix)*] [$($body)*] [$($defined)*]
+                @next_field [$($me)*] [$($args)*] [$($prefix)*] [$($body)*] [$($defined)*]
                 [$($pending)*] $($next)*
             }
         };)*
         #(#add_field_arms)*
         (
-            @field [$($me:tt)*] [$($prefix:tt)*] [$($body:tt)*] [$($defined:ident)*]
-            [$name:ident $($pending:ident)*] [$first:ident $($searched:ident)*] $($next:tt)*
+            @field [$($me:tt)*] [$($args:tt)*] [$($prefix:tt)*] [$($body:tt)*]
+            [$($defined:ident)*] [$name:ident $($pending:ident)*]
+            [$first:ident $($searched:ident)*] $($next:tt)*
         ) => {
             $($me)*! {
-                @field [$($me)*] [$($prefix)*] [$($body)*] [$($defined)*]
+                @field [$($me)*] [$($args)*] [$($prefix)*] [$($body)*] [$($defined)*]
                 [$name $($pending)*] [$($searched)*] $($next)*
             }
         };
         (
-            @next_field [$($me:tt)*] [$($prefix:tt)*] [$($body:tt)*] [$($defined:ident)*]
-            [$name:ident $($pending:ident)*] $($next:tt)*
+            @next_field [$($me:tt)*] [$($args:tt)*] [$($prefix:tt)*] [$($body:tt)*]
+            [$($defined:ident)*] [$name:ident $($pending:ident)*] $($next:tt)*
         ) => {
             $($me)*! {
-                @field [$($me)*] [$($prefix)*] [$($body)*] [$($defined)*]
+                @field [$($me)*] [$($args)*] [$($prefix)*] [$($body)*] [$($defined)*]
                 [$name $($pending)*] [$($defined)*] $($next)*
             }
         };
-        (@next_field [$($me:tt)*] [$($prefix:tt)*] [$($body:tt)*] [$($defined:ident)*] []) => {
+        (
+            @next_field [$($me:tt)*] [$($args:tt)*] [$($prefix:tt)*] [$($body:tt)*]
+            [$($defined:ident)*] []
+        ) => {
             $($prefix)* { $($body)* }
         };
         (
-            @next_field [$($me:tt)*] [$($prefix:tt)*] [$($body:tt)*] [$($defined:ident)*] []
-            [$($next_trait:tt)*] $($rest:tt)*
+            @next_field [$($me:tt)*] [$($args:tt)*] [$($prefix:tt)*] [$($body:tt)*]
+            [$($defined:ident)*] [] [$($next_me:tt)*] [$($next_args:tt)*] $($rest:tt)*
         ) => {
-            $($next_trait)*! {
-                @fields [$($next_trait)*] [$($prefix)*] [$($body)*] [$($defined)*] $($rest)*
+            $($next_me)*! {
+                [$($next_me)*] [$($next_args)*] fields [$($prefix)*] [$($body)*] [$($defined)*]
+                $($rest)*
             }
         };
     };
@@ -312,18 +433,22 @@ fn companion_macro(
     let impl_arms = if required_non_getters.is_empty() {
         quote! {
             (
-                [$($trait_path:tt)*] [$($impl_generics:tt)*] [$($self_ty:tt)*] [$($where_clause:tt)*]
-                struct
+                @impl [$($me:tt)*] [#params_pattern] [$($impl_generics:tt)*] [$($self_ty:tt)*]
+                [$($predicates:tt)*] struct
             ) => {
-                impl $($impl_generics)* $($trait_path)* for $($self_ty)* $($where_clause)* {
+                impl $($impl_generics)* $($me)* #trait_args for $($self_ty)*
+                where $($predicates)* #(#param_bounds)*
+                {
                     #(#struct_methods)*
                 }
             };
             (
-                [$($trait_path:tt)*] [$($impl_generics:tt)*] [$($self_ty:tt)*] [$($where_clause:tt)*]
-                enum [$($variant:ident)*]
+                @impl [$($me:tt)*] [#params_pattern] [$($impl_generics:tt)*] [$($self_ty:tt)*]
+                [$($predicates:tt)*] enum [$($variant:ident)*]
             ) => {
-                impl $($impl_generics)* $($trait_path)* for $($self_ty)* $($where_clause)* {
+                impl $($impl_generics)* $($me)* #trait_args for $($self_ty)*
+                where $($predicates)* #(#param_bounds)*
+                {
                     #(#enum_methods)*
                 }
             };
@@ -339,7 +464,7 @@ fn companion_macro(
              put #[field_trait_impl] on a hand-written impl block instead"
         );
         quote! {
-            ($($input:tt)*) => { ::core::compile_error!(#message); };
+            (@impl $($input:tt)*) => { ::core::compile_error!(#message); };
         }
     };
 
@@ -350,11 +475,64 @@ fn companion_macro(
             #fill_arms
             #field_arms
             #impl_arms
+            #(#normalize_arms)*
+            ([$($me:tt)*] $($rest:tt)*) => { ::core::compile_error!(#wrong_args); };
         }
         #[doc(hidden)]
         #[allow(unused_imports)]
         #vis use #macro_name as #trait_name;
     }
+}
+
+struct TraitRef {
+    macro_path: Path,
+    args: Vec<Type>,
+}
+
+impl TraitRef {
+    fn parse(path: &Path) -> Result<Self, Error> {
+        let mut macro_path = path.clone();
+        let last = macro_path
+            .segments
+            .last_mut()
+            .expect("a parsed path has at least one segment");
+        let arguments = std::mem::replace(&mut last.arguments, PathArguments::None);
+        let args = match arguments {
+            PathArguments::None => Vec::new(),
+            PathArguments::AngleBracketed(arguments) => arguments
+                .args
+                .into_iter()
+                .map(|argument| match argument {
+                    GenericArgument::Type(ty) => Ok(ty),
+                    other => Err(Error::new_spanned(
+                        other,
+                        "#[field_trait] traits take only type arguments",
+                    )),
+                })
+                .collect::<Result<_, _>>()?,
+            arguments @ PathArguments::Parenthesized(_) => {
+                return Err(Error::new_spanned(
+                    arguments,
+                    "#[field_trait] traits take only type arguments",
+                ));
+            }
+        };
+        Ok(TraitRef { macro_path, args })
+    }
+
+    fn invoke(&self, kind: TokenStream2, rest: TokenStream2) -> TokenStream2 {
+        let TraitRef { macro_path, args } = self;
+        quote!(#macro_path! { [#macro_path] [#(#args),*] #kind #rest })
+    }
+
+    fn bracketed(&self) -> TokenStream2 {
+        let TraitRef { macro_path, args } = self;
+        quote!([#macro_path] [#(#args),*])
+    }
+}
+
+fn trait_refs(paths: &Punctuated<Path, Token![,]>) -> Result<Vec<TraitRef>, Error> {
+    paths.iter().map(TraitRef::parse).collect()
 }
 
 #[proc_macro_attribute]
@@ -396,11 +574,12 @@ fn impl_getters(
             "#[field_trait_impl] on an impl block takes no arguments",
         ));
     }
+    let trait_ref = TraitRef::parse(trait_path)?;
     let defined = item.items.iter().filter_map(|impl_item| match impl_item {
         ImplItem::Fn(method) => Some(&method.sig.ident),
         _ => None,
     });
-    let fill = quote!(#trait_path! { fill [#trait_path] [#(#defined)*] });
+    let fill = trait_ref.invoke(quote!(fill), quote!([#(#defined)*]));
     item.items.push(ImplItem::Verbatim(fill));
     Ok(item.into_token_stream())
 }
@@ -445,15 +624,14 @@ fn impl_traits(
 
     let name = &item.ident;
     let (impl_generics, ty_generics, where_clause) = item.generics.split_for_impl();
-    let impls = trait_paths.iter().map(|path| {
-        quote! {
-            #path! {
-                [#path] [#impl_generics] [#name #ty_generics] [#where_clause]
-                #shape
-            }
-        }
-    });
-    Ok(quote!(#(#impls)*))
+    let predicates = where_clause.map(|where_clause| where_clause.predicates.iter());
+    let predicates = predicates.into_iter().flatten();
+    let rest = quote!([#impl_generics] [#name #ty_generics] [#(#predicates,)*] #shape);
+    let impls = trait_refs(trait_paths)?
+        .iter()
+        .map(|trait_ref| trait_ref.invoke(quote!(impl), rest.clone()))
+        .collect::<TokenStream2>();
+    Ok(impls)
 }
 
 #[proc_macro_attribute]
@@ -466,8 +644,14 @@ pub fn with_trait_fields(args: TokenStream, input: TokenStream) -> TokenStream {
             .into_compile_error();
         return quote!(#original #error).into();
     };
-    let mut trait_paths = trait_paths.iter();
-    let Some(first_trait) = trait_paths.next() else {
+    let trait_refs = match trait_refs(&trait_paths) {
+        Ok(trait_refs) => trait_refs,
+        Err(error) => {
+            let error = error.into_compile_error();
+            return quote!(#original #error).into();
+        }
+    };
+    let Some((first_trait, other_traits)) = trait_refs.split_first() else {
         let error = Error::new(
             Span::call_site(),
             "#[with_trait_fields] needs at least one trait",
@@ -487,13 +671,15 @@ pub fn with_trait_fields(args: TokenStream, input: TokenStream) -> TokenStream {
     let where_clause = &generics.where_clause;
     let fields = fields.named.iter();
     let defined = fields.clone().filter_map(|field| field.ident.as_ref());
-    quote! {
-        #first_trait! {
-            @fields [#first_trait]
-            [#(#attrs)* #vis #struct_token #ident #generics #where_clause]
-            [#(#fields,)*] [#(#defined)*]
-            #([#trait_paths])*
-        }
-    }
-    .into()
+    let other_traits = other_traits.iter().map(TraitRef::bracketed);
+    first_trait
+        .invoke(
+            quote!(fields),
+            quote! {
+                [#(#attrs)* #vis #struct_token #ident #generics #where_clause]
+                [#(#fields,)*] [#(#defined)*]
+                #(#other_traits)*
+            },
+        )
+        .into()
 }
