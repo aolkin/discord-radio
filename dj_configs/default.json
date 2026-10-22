@@ -66,6 +66,7 @@
     }
   ],
   "signal_profiles": {
+    "history_penalty_multiplier": 0.3,
     "entries": [
       {
         "profile_name": "clear",
