@@ -1,0 +1,5 @@
+error: #[field_impl] supports only structs and enums
+ --> tests/compile_fail/union.rs:9:1
+  |
+9 | union Bits {
+  | ^^^^^

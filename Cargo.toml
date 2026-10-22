@@ -1,3 +1,6 @@
+[workspace]
+members = ["crates/field-traits"]
+
 [package]
 name = "radio-bot"
 version = "0.1.0"
