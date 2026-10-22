@@ -3,7 +3,6 @@ use anyhow::{Context, bail};
 use rubato::audioadapter_buffers::direct::{InterleavedSlice, SequentialSliceOfVecs};
 use rubato::{Fft, FixedSync, Indexing, Resampler};
 use std::num::{NonZeroU8, NonZeroU32};
-use symphonia::core::errors::Error as SymphoniaError;
 use vorbis_rs::{VorbisBitrateManagementStrategy, VorbisEncoder, VorbisEncoderBuilder};
 
 const CHUNK_FRAMES: usize = 1024;
@@ -42,11 +41,10 @@ fn resample_to_ogg(mut audio: OpenedAudio, sample_rate: u32) -> anyhow::Result<V
         if packet.track_id != audio.track.id {
             continue;
         }
-        match decoder.decode(&packet) {
-            Ok(buf) => buf.copy_to_vec_interleaved(&mut decoded),
-            Err(SymphoniaError::DecodeError(_)) => continue,
-            Err(e) => return Err(e).context("Decoding audio"),
-        }
+        decoder
+            .decode(&packet)
+            .context("Decoding audio")?
+            .copy_to_vec_interleaved(&mut decoded);
         pending.extend_from_slice(&decoded);
         let chunk_len = writer.resampler.input_frames_next() * channels;
         let full_len = pending.len() - pending.len() % chunk_len;
