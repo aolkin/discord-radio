@@ -1,4 +1,4 @@
-use crate::audio::dj::config::{DJConfig, PoolEntry, SignalProfileEntry};
+use crate::audio::dj::config::{DJConfig, Pool, PoolEntry, SignalProfileEntry};
 use crate::audio::dj::manager::{
     ADVANCE_RETRY_DELAY, DEFAULT_DJ_CONFIG, DJCommand, HexMessageRequest, IdleRequest,
     TrackRequest, load_dj_config,
@@ -234,7 +234,7 @@ impl DJStateMachine {
             announcement_channel,
             bot_state,
             config_name,
-            pools: active_pools(&config),
+            pools: config.pools.iter().map(ActivePool::from).collect(),
             signal_profile_selector: (&config.signal_profiles).into(),
             config,
             applied_profile: None,
@@ -472,7 +472,7 @@ impl DJStateMachine {
 
     /// Selection starts with an empty recent history.
     fn set_config(&mut self, config: Arc<DJConfig>) {
-        self.pools = active_pools(&config);
+        self.pools = config.pools.iter().map(ActivePool::from).collect();
         self.signal_profile_selector = (&config.signal_profiles).into();
         self.config = config;
     }
@@ -672,17 +672,15 @@ struct ActivePool {
     entries: WeightedSelector<PoolEntry>,
 }
 
-fn active_pools(config: &DJConfig) -> Vec<ActivePool> {
-    config
-        .pools
-        .iter()
-        .map(|pool| ActivePool {
+impl From<&Pool> for ActivePool {
+    fn from(pool: &Pool) -> Self {
+        Self {
             name: pool.name.clone(),
             weight: pool.weight,
             hex_defaults: pool.hex_defaults().clone(),
             entries: pool.into(),
-        })
-        .collect()
+        }
+    }
 }
 
 static DEFAULT_NOISE_PERIOD: LazyLock<NoisePeriodEntry> = LazyLock::new(|| NoisePeriodEntry {
