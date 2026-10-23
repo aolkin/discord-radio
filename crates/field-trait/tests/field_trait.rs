@@ -58,7 +58,7 @@ where
     value: T,
 }
 
-#[field_trait(Arc)]
+#[field_trait(Deref)]
 pub trait HasKind {
     const KIND: &'static str;
     type Rank;
@@ -81,7 +81,7 @@ impl HasKind for Part {
     }
 }
 
-#[field_trait(Arc)]
+#[field_trait(Deref)]
 pub trait HasParts<T: Clone, U = u8> {
     fn parts(&self) -> &Vec<T>;
     fn spare(&self) -> Option<T>;
@@ -205,6 +205,7 @@ fn generic_trait() {
     assert_eq!(pallet.parts(), &vec!["a".to_string()]);
     assert_eq!(pallet.spare(), None);
     assert_eq!(pallet.extra(), 5);
+    assert_eq!(HasParts::<String, u16>::extra(&&pallet), 5);
     assert_eq!(HasParts::<String, u16>::extra(&Arc::new(pallet)), 5);
 }
 
