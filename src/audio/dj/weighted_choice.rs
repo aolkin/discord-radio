@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 
 /// A weight an item contributes to weighted random selection.
-#[field_trait]
+#[field_trait(Arc)]
 pub trait Weighted {
     fn weight(&self) -> u32;
 }

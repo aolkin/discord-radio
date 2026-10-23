@@ -49,9 +49,6 @@ pub struct Pool {
     pub entries: Arc<[PoolEntry]>,
 }
 
-#[field_trait_impl]
-impl Weighted for Arc<Pool> {}
-
 static BUILT_IN_HEX_DEFAULTS: LazyLock<HexMessageDefaults> = LazyLock::new(Default::default);
 
 impl Pool {
