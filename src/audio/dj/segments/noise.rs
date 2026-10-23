@@ -12,7 +12,7 @@ use std::ops::Deref;
 use std::time::{Duration, Instant};
 
 #[field_trait_impl(Weighted)]
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct NoisePeriodEntry {
     pub noise_profile: String,
     pub min_duration_seconds: f32,

@@ -8,12 +8,12 @@ use crate::state::Data;
 use anyhow::{Context, bail};
 use field_trait::field_trait_impl;
 use serde::{Deserialize, Serialize};
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
 #[derive(Deserialize, Serialize, Debug, Default)]
 pub struct DJConfig {
     pub name: String,
-    pub pools: Vec<Pool>,
+    pub pools: Vec<Arc<Pool>>,
     pub signal_profiles: SignalProfiles,
     pub channel_status: Option<String>,
 }
@@ -23,7 +23,7 @@ pub struct DJConfig {
 pub struct SignalProfiles {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub history_penalty_multiplier: Option<f32>,
-    pub entries: Vec<SignalProfileEntry>,
+    pub entries: Arc<[SignalProfileEntry]>,
 }
 
 #[field_trait_impl(WeightedPool<PoolEntry>)]
@@ -34,7 +34,7 @@ pub struct Pool {
     pub hex_defaults: Option<HexMessageDefaults>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub history_penalty_multiplier: Option<f32>,
-    pub entries: Vec<PoolEntry>,
+    pub entries: Arc<[PoolEntry]>,
 }
 
 static BUILT_IN_HEX_DEFAULTS: LazyLock<HexMessageDefaults> = LazyLock::new(Default::default);
@@ -58,7 +58,7 @@ impl Pool {
 }
 
 /// The kind is inferred from which fields are present.
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(untagged)]
 #[field_trait_impl(Weighted)]
 pub enum PoolEntry {
@@ -131,7 +131,7 @@ impl RegistryEntry for DJConfig {
         }
         ensure_penalty_multiplier(self.signal_profiles.history_penalty_multiplier)
             .context("signal_profiles")?;
-        for profile in &self.signal_profiles.entries {
+        for profile in self.signal_profiles.entries.iter() {
             let context = || format!("signal profile {:?}", profile.profile_name);
             ensure_seconds(profile.fade_duration_seconds, context)?;
             ensure_seconds(profile.min_time_seconds, context)?;

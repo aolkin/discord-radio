@@ -1,6 +1,7 @@
 use field_trait::field_trait;
 use rand::RngExt;
 use std::collections::VecDeque;
+use std::sync::Arc;
 
 /// A weight an item contributes to weighted random selection.
 #[field_trait]
@@ -10,7 +11,7 @@ pub trait Weighted {
 
 #[field_trait]
 pub trait WeightedPool<T: Weighted> {
-    fn entries(&self) -> &Vec<T>;
+    fn entries(&self) -> &Arc<[T]>;
     fn history_penalty_multiplier(&self) -> Option<f32>;
 }
 
@@ -36,7 +37,7 @@ pub fn choose_index(weights: &[f32]) -> Option<usize> {
 
 /// A weighted random selector with history-based penalty to avoid repetition
 pub struct WeightedSelector<T> {
-    items: Vec<T>,
+    items: Arc<[T]>,
     recent_history: VecDeque<usize>,
     history_size: usize,
     penalty_multiplier: f32,
@@ -44,7 +45,7 @@ pub struct WeightedSelector<T> {
 
 /// Remembers the last half of the pool's entry count in picks, at least 2.
 /// The penalty multiplier defaults to 1.
-impl<T: Weighted + Clone, P: WeightedPool<T>> From<&P> for WeightedSelector<T> {
+impl<T: Weighted, P: WeightedPool<T>> From<&P> for WeightedSelector<T> {
     fn from(pool: &P) -> Self {
         let items = pool.entries().clone();
         let history_size = (items.len() / 2).max(2);

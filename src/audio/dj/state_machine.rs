@@ -8,10 +8,9 @@ use crate::audio::dj::segments::{
 };
 use crate::audio::dj::segments::{NoisePeriodEntry, NoiseSegment, SegmentCtx};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
-use crate::audio::dj::weighted_choice::{Weighted, WeightedSelector, choose_index};
+use crate::audio::dj::weighted_choice::{WeightedSelector, choose_index};
 use crate::state::Data;
 use anyhow::Context;
-use field_trait::field_trait_impl;
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use serenity::model::id::{ChannelId, GuildId};
@@ -439,21 +438,24 @@ impl DJStateMachine {
             Some(name) => Some(
                 pools
                     .iter()
-                    .position(|pool| pool.name == name)
+                    .position(|active| active.pool.name == name)
                     .with_context(|| format!("no pool named {name:?}"))?,
             ),
             None => {
-                let weights: Vec<f32> = pools.iter().map(|pool| pool.weight() as f32).collect();
+                let weights: Vec<f32> = pools
+                    .iter()
+                    .map(|active| active.pool.weight as f32)
+                    .collect();
                 choose_index(&weights)
             }
         };
         match index {
             Some(index) => {
-                let pool = &mut pools[index];
-                let entry = pool.entries.choose().with_context(|| {
+                let ActivePool { pool, selector } = &mut pools[index];
+                let entry = selector.choose().with_context(|| {
                     format!("pool {:?} has no entry with weight above 0", pool.name)
                 })?;
-                Ok(entry.segment(&pool.hex_defaults, &bot_state).await)
+                Ok(entry.segment(pool.hex_defaults(), &bot_state).await)
             }
             None => Ok(Box::new(NoiseSegment::from(&*DEFAULT_NOISE_PERIOD))),
         }
@@ -488,14 +490,13 @@ impl DJStateMachine {
         );
         let built_in_defaults = HexMessageDefaults::default();
         let defaults = match &request.pool {
-            Some(name) => {
-                &self
-                    .pools
-                    .iter()
-                    .find(|pool| pool.name == *name)
-                    .with_context(|| format!("no pool named {name:?}"))?
-                    .hex_defaults
-            }
+            Some(name) => self
+                .config
+                .pools
+                .iter()
+                .find(|pool| pool.name == *name)
+                .with_context(|| format!("no pool named {name:?}"))?
+                .hex_defaults(),
             None => &built_in_defaults,
         };
         let loops = request
@@ -664,21 +665,16 @@ impl DJStateMachine {
     }
 }
 
-#[field_trait_impl(Weighted)]
 struct ActivePool {
-    name: String,
-    weight: u32,
-    hex_defaults: HexMessageDefaults,
-    entries: WeightedSelector<PoolEntry>,
+    pool: Arc<Pool>,
+    selector: WeightedSelector<PoolEntry>,
 }
 
-impl From<&Pool> for ActivePool {
-    fn from(pool: &Pool) -> Self {
+impl From<&Arc<Pool>> for ActivePool {
+    fn from(pool: &Arc<Pool>) -> Self {
         Self {
-            name: pool.name.clone(),
-            weight: pool.weight,
-            hex_defaults: pool.hex_defaults().clone(),
-            entries: pool.into(),
+            pool: pool.clone(),
+            selector: (&**pool).into(),
         }
     }
 }
