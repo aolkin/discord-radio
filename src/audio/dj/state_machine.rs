@@ -178,6 +178,7 @@ pub struct DJStateMachine {
     announcement_channel: Option<ChannelId>,
     bot_state: Data,
     config_name: String,
+    shared_config_name: Arc<std::sync::RwLock<String>>,
     config: Arc<DJConfig>,
     pool_selector: WeightedSelector<ActivePool, Box<[ActivePool]>>,
     signal_profile_selector: WeightedSelector<SignalProfileEntry>,
@@ -191,6 +192,7 @@ impl DJStateMachine {
         guild_id: GuildId,
         saved: Option<crate::persistence::DJState>,
         state: Arc<RwLock<DJState>>,
+        shared_config_name: Arc<std::sync::RwLock<String>>,
         bot_state: Data,
     ) -> Self {
         let (config_name, announcement_channel, restored_state) = match saved {
@@ -216,6 +218,11 @@ impl DJStateMachine {
         });
 
         tracing::info!("Starting DJ task with config {:?}", config_name);
+        config_name.clone_into(
+            &mut shared_config_name
+                .write()
+                .unwrap_or_else(|e| e.into_inner()),
+        );
 
         let initial_state = restored_state.unwrap_or_default();
 
@@ -235,6 +242,7 @@ impl DJStateMachine {
             config_name,
             pool_selector: pool_selector(&config),
             signal_profile_selector: (&config.signal_profiles).into(),
+            shared_config_name,
             config,
             applied_profile: None,
             applied_channel_status: None,
@@ -472,10 +480,11 @@ impl DJStateMachine {
     }
 
     pub async fn force_hex_message(
-        &self,
+        &mut self,
         bot_state: &Data,
         request: HexMessageRequest,
     ) -> anyhow::Result<()> {
+        self.reload_config();
         tracing::info!(
             "DJ force transitioning to hex message with custom text: {}",
             request.message
@@ -613,6 +622,12 @@ impl DJStateMachine {
             DJCommand::SetConfig { name, config } => {
                 tracing::info!("DJ switching to config {name:?}");
                 self.set_config(config);
+                name.clone_into(
+                    &mut self
+                        .shared_config_name
+                        .write()
+                        .unwrap_or_else(|e| e.into_inner()),
+                );
                 self.config_name = name;
                 Ok(())
             }
