@@ -13,9 +13,11 @@ use std::sync::{Arc, LazyLock};
 #[derive(Deserialize, Serialize, Debug, Default)]
 pub struct DJConfig {
     pub name: String,
-    pub pools: Vec<Arc<Pool>>,
+    pub pools: Arc<[Arc<Pool>]>,
     pub signal_profiles: SignalProfiles,
     pub channel_status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub history_penalty_multiplier: Option<f32>,
 }
 
 #[field_trait_impl(WeightedPool<SignalProfileEntry>)]
@@ -125,7 +127,8 @@ impl RegistryEntry for DJConfig {
 
     /// Rejects values that would make the DJ panic when it picks them.
     fn validate(&self) -> anyhow::Result<()> {
-        for pool in &self.pools {
+        ensure_penalty_multiplier(self.history_penalty_multiplier)?;
+        for pool in self.pools.iter() {
             pool.validate()
                 .with_context(|| format!("pool {:?}", pool.name))?;
         }
