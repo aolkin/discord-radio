@@ -14,7 +14,20 @@ const optionalSeconds = (key, label) => ({ ...seconds(key, label), optional: tru
 const profileText = (key, label, optional = false) => ({ key, label, type: 'text', optional, profile: true });
 const optionalText = (key, label) => ({ key, label, type: 'text', optional: true });
 
-const generalFields = [optionalText('channel_status', 'Channel Status')];
+const historyPenaltyMultiplier = {
+    key: 'history_penalty_multiplier',
+    label: 'History penalty multiplier',
+    type: 'number',
+    step: 'any',
+    min: 0,
+    max: 1,
+    optional: true,
+};
+
+const generalFields = [
+    optionalText('channel_status', 'Channel Status'),
+    { ...historyPenaltyMultiplier, label: 'Pool history penalty multiplier' },
+];
 
 const loops = (key, label) => ({ key, label, type: 'number', step: 1, min: 0, default: 1 });
 
@@ -54,16 +67,6 @@ const kinds = {
             weight,
         ],
     },
-};
-
-const historyPenaltyMultiplier = {
-    key: 'history_penalty_multiplier',
-    label: 'History penalty multiplier',
-    type: 'number',
-    step: 'any',
-    min: 0,
-    max: 1,
-    optional: true,
 };
 
 const poolFields = [{ key: 'name', label: 'Name', type: 'text' }, weight, historyPenaltyMultiplier];

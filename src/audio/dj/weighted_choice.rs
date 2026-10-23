@@ -17,7 +17,7 @@ pub trait WeightedPool<T: Weighted> {
 
 /// Picks an index at random in proportion to `weights`, or `None` when they
 /// sum to zero.
-pub fn choose_index(weights: &[f32]) -> Option<usize> {
+fn choose_index(weights: &[f32]) -> Option<usize> {
     let total: f32 = weights.iter().sum();
     if total <= 0.0 {
         return None;

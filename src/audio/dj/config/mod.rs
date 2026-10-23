@@ -13,9 +13,21 @@ use std::sync::{Arc, LazyLock};
 #[derive(Deserialize, Serialize, Debug, Default)]
 pub struct DJConfig {
     pub name: String,
-    pub pools: Vec<Arc<Pool>>,
+    pub pools: Arc<[Arc<Pool>]>,
     pub signal_profiles: SignalProfiles,
     pub channel_status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub history_penalty_multiplier: Option<f32>,
+}
+
+impl WeightedPool<Arc<Pool>> for DJConfig {
+    fn entries(&self) -> &Arc<[Arc<Pool>]> {
+        &self.pools
+    }
+
+    fn history_penalty_multiplier(&self) -> Option<f32> {
+        self.history_penalty_multiplier
+    }
 }
 
 #[field_trait_impl(WeightedPool<SignalProfileEntry>)]
@@ -26,7 +38,7 @@ pub struct SignalProfiles {
     pub entries: Arc<[SignalProfileEntry]>,
 }
 
-#[field_trait_impl(WeightedPool<PoolEntry>)]
+#[field_trait_impl(Weighted, WeightedPool<PoolEntry>)]
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Pool {
     pub name: String,
@@ -36,6 +48,9 @@ pub struct Pool {
     pub history_penalty_multiplier: Option<f32>,
     pub entries: Arc<[PoolEntry]>,
 }
+
+#[field_trait_impl]
+impl Weighted for Arc<Pool> {}
 
 static BUILT_IN_HEX_DEFAULTS: LazyLock<HexMessageDefaults> = LazyLock::new(Default::default);
 
@@ -125,7 +140,8 @@ impl RegistryEntry for DJConfig {
 
     /// Rejects values that would make the DJ panic when it picks them.
     fn validate(&self) -> anyhow::Result<()> {
-        for pool in &self.pools {
+        ensure_penalty_multiplier(self.history_penalty_multiplier)?;
+        for pool in self.pools.iter() {
             pool.validate()
                 .with_context(|| format!("pool {:?}", pool.name))?;
         }
