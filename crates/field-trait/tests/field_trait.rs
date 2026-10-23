@@ -1,7 +1,9 @@
 use field_trait::{field_trait, field_trait_impl, with_trait_fields};
 use serde::{Deserialize, Serialize};
+use std::rc::Rc;
+use std::sync::Arc;
 
-#[field_trait]
+#[field_trait(Arc, Rc, Box)]
 pub trait HasWeight {
     fn weight(&self) -> u32;
     fn name(&self) -> &str;
@@ -56,10 +58,11 @@ where
     value: T,
 }
 
-#[field_trait]
+#[field_trait(Deref)]
 pub trait HasKind {
     const KIND: &'static str;
-    fn rank(&self) -> u8;
+    type Rank;
+    fn rank(&self) -> Self::Rank;
     fn label(&self) -> String;
 }
 
@@ -71,13 +74,14 @@ struct Part {
 #[field_trait_impl]
 impl HasKind for Part {
     const KIND: &'static str = "part";
+    type Rank = u8;
 
     fn rank(&self) -> u8 {
         self.rank + 1
     }
 }
 
-#[field_trait]
+#[field_trait(Deref)]
 pub trait HasParts<T: Clone, U = u8> {
     fn parts(&self) -> &Vec<T>;
     fn spare(&self) -> Option<T>;
@@ -125,6 +129,15 @@ fn struct_reads_fields() {
     assert_eq!(widget.weight(), 3);
     assert_eq!(widget.name(), "widget");
     assert_eq!(widget.doubled_weight(), 6);
+    assert_eq!(total_weight(&Arc::new(self::widget())), 3);
+    assert_eq!(total_weight(&Rc::new(self::widget())), 3);
+    let boxed: Box<dyn HasWeight> = Box::new(widget);
+    assert_eq!(total_weight(&boxed), 3);
+    assert_eq!(HasWeight::name(&boxed), "widget");
+}
+
+fn total_weight<T: HasWeight>(item: &T) -> u32 {
+    item.weight()
 }
 
 #[test]
@@ -167,6 +180,9 @@ fn impl_block_gets_missing_getters() {
     assert_eq!(Part::KIND, "part");
     assert_eq!(part.rank(), 3);
     assert_eq!(part.label(), "red");
+    assert_eq!(<Arc<Part> as HasKind>::KIND, "part");
+    let rank: <Arc<Part> as HasKind>::Rank = HasKind::rank(&Arc::new(part));
+    assert_eq!(rank, 3u8);
 }
 
 #[test]
@@ -189,6 +205,8 @@ fn generic_trait() {
     assert_eq!(pallet.parts(), &vec!["a".to_string()]);
     assert_eq!(pallet.spare(), None);
     assert_eq!(pallet.extra(), 5);
+    assert_eq!(HasParts::<String, u16>::extra(&&pallet), 5);
+    assert_eq!(HasParts::<String, u16>::extra(&Arc::new(pallet)), 5);
 }
 
 #[test]

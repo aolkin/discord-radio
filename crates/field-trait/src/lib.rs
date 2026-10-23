@@ -62,6 +62,30 @@
 //! struct Toolbox { parts: Vec<Gadget> }
 //! ```
 //!
+//! A trait implemented by `Widget` is not implemented by `Arc<Widget>`, so a generic bound
+//! like `T: HasWeight` rejects it even though method calls on it auto-deref.
+//! `#[field_trait(Arc, Rc, Box)]` takes a list of wrapper types and implements the trait for
+//! each wrapper around any type that implements it, forwarding every getter to the inner
+//! value and every associated type and const to the inner type's. A wrapper must take one
+//! type parameter and deref to it:
+//!
+//! ```ignore
+//! #[field_trait(Arc, Box)]
+//! pub trait HasWeight {
+//!     fn weight(&self) -> u32;
+//! }
+//!
+//! fn heaviest<T: HasWeight>(items: &[T]) -> Option<u32> { ... }
+//!
+//! heaviest(&[Arc::new(widget)]);
+//! ```
+//!
+//! `#[field_trait(Deref)]` instead implements the trait once for every type that derefs to a
+//! type implementing it, so it cannot be combined with wrapper names. Under that impl, a
+//! type that implements both `Deref` and the trait directly is a conflicting impl, and so
+//! is an impl for a type from another crate, because that crate could add a `Deref` impl
+//! later.
+//!
 //! `#[field_trait]` puts a hidden macro beside the trait, under the trait's name, so
 //! importing the trait also imports what the other attributes need. Types named in the
 //! trait's method signatures resolve where those attributes are used.
@@ -79,13 +103,28 @@ use syn::{
 
 #[proc_macro_attribute]
 pub fn field_trait(args: TokenStream, input: TokenStream) -> TokenStream {
-    let args = TokenStream2::from(args);
+    let wrappers = parse_macro_input!(args with Punctuated::<Path, Token![,]>::parse_terminated);
     let item = parse_macro_input!(input as ItemTrait);
     let mut errors = Vec::new();
-    if !args.is_empty() {
+    for wrapper in &wrappers {
+        if let Some(segment) = wrapper
+            .segments
+            .iter()
+            .find(|segment| !segment.arguments.is_none())
+        {
+            errors.push(Error::new_spanned(
+                segment,
+                "#[field_trait] wrappers must be named without type arguments, like `Arc`",
+            ));
+        }
+    }
+    if wrappers.len() > 1
+        && let Some(deref) = wrappers.iter().find(|wrapper| wrapper.is_ident("Deref"))
+    {
         errors.push(Error::new_spanned(
-            args,
-            "#[field_trait] takes no arguments",
+            deref,
+            "#[field_trait] cannot combine `Deref` with other wrappers, \
+             because its impl already covers every type that derefs",
         ));
     }
     for param in &item.generics.params {
@@ -123,14 +162,73 @@ pub fn field_trait(args: TokenStream, input: TokenStream) -> TokenStream {
         }
     }
 
+    let wrapper_impls = if errors.is_empty() {
+        wrappers
+            .iter()
+            .map(|wrapper| forwarding_impl(&item, &getters, wrapper))
+            .collect()
+    } else {
+        TokenStream2::new()
+    };
     let errors = errors.into_iter().map(Error::into_compile_error);
     let companion = companion_macro(&item, &getters, &required_non_getters);
     quote! {
         #item
         #companion
+        #wrapper_impls
         #(#errors)*
     }
     .into()
+}
+
+fn forwarding_impl(item: &ItemTrait, getters: &[Getter], wrapper: &Path) -> TokenStream2 {
+    let trait_name = &item.ident;
+    let unsafety = &item.unsafety;
+    let mut generics = item.generics.clone();
+    for param in generics.type_params_mut() {
+        param.default = None;
+    }
+    let (_, ty_generics, _) = item.generics.split_for_impl();
+    let params = &generics.params;
+    let trait_ty = quote!(#trait_name #ty_generics);
+    let (header, target) = if wrapper.is_ident("Deref") {
+        let deref = Ident::new("__FieldTraitDeref", Span::call_site());
+        let target = quote!(<#deref as ::core::ops::Deref>::Target);
+        let header = quote! {
+            impl<#deref: ::core::ops::Deref + ?::core::marker::Sized, #params> #trait_ty for #deref
+            where #target: #trait_ty
+        };
+        (header, target)
+    } else {
+        let inner = Ident::new("__FieldTraitInner", Span::call_site());
+        let header = quote! {
+            impl<#inner: #trait_ty + ?::core::marker::Sized, #params> #trait_ty for #wrapper<#inner>
+        };
+        (header, quote!(#inner))
+    };
+    let associated = item.items.iter().filter_map(|trait_item| match trait_item {
+        TraitItem::Const(constant) => {
+            let name = &constant.ident;
+            let ty = &constant.ty;
+            Some(quote!(const #name: #ty = <#target as #trait_ty>::#name;))
+        }
+        TraitItem::Type(ty) => {
+            let name = &ty.ident;
+            Some(quote!(type #name = <#target as #trait_ty>::#name;))
+        }
+        _ => None,
+    });
+    let methods = getters.iter().map(|getter| {
+        let sig = &getter.sig;
+        let name = &sig.ident;
+        quote!(#sig { <#target as #trait_ty>::#name(&**self) })
+    });
+    quote! {
+        #unsafety #header {
+            #(#associated)*
+            #(#methods)*
+        }
+    }
 }
 
 struct Getter {
