@@ -12,4 +12,11 @@ struct Widget {
 #[field_trait_impl(HasWeight)]
 impl HasWeight for Widget {}
 
+struct Gadget {
+    weight: u32,
+}
+
+#[field_trait_impl(heft = weight)]
+impl HasWeight for Gadget {}
+
 fn main() {}

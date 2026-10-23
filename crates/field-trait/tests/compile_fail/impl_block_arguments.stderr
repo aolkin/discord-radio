@@ -1,8 +1,19 @@
-error: #[field_trait_impl] on an impl block takes no arguments
+error: #[field_trait_impl] on an impl block takes only `getter = field` pairs
   --> tests/compile_fail/impl_block_arguments.rs:12:20
    |
 12 | #[field_trait_impl(HasWeight)]
    |                    ^^^^^^^^^
+
+error: `heft` is not a getter of `HasWeight`
+  --> tests/compile_fail/impl_block_arguments.rs:3:1
+   |
+ 3 | #[field_trait]
+   | ^^^^^^^^^^^^^^
+...
+19 | #[field_trait_impl(heft = weight)]
+   | ---------------------------------- in this attribute macro expansion
+   |
+   = note: this error originates in the macro `HasWeight` which comes from the expansion of the attribute macro `field_trait_impl` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error[E0046]: not all trait items implemented, missing: `weight`
   --> tests/compile_fail/impl_block_arguments.rs:13:1
