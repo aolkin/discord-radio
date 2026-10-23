@@ -29,7 +29,7 @@ export function fileBrowser() {
             tracks: {
                 noun: 'Audio File',
                 extensions: '.mp3, .ogg and .wav',
-                hint: '.mp3, .ogg, .wav at 48kHz',
+                hint: '.mp3, .ogg, .wav',
                 accept: '.mp3,.ogg,.wav',
                 pattern: /\.(mp3|ogg|wav)$/i,
             },
