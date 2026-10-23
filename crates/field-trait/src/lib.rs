@@ -62,6 +62,24 @@
 //! struct Toolbox { parts: Vec<Gadget> }
 //! ```
 //!
+//! A trait implemented by `Widget` is not implemented by `Arc<Widget>`, so a generic bound
+//! like `T: HasWeight` rejects it even though method calls on it auto-deref.
+//! `#[field_trait(Arc, Rc, Box)]` takes a list of wrapper types and implements the trait for
+//! each wrapper around any type that implements it, forwarding every getter to the inner
+//! value and every associated type and const to the inner type's. A wrapper must take one
+//! type parameter and deref to it:
+//!
+//! ```ignore
+//! #[field_trait(Arc, Box)]
+//! pub trait HasWeight {
+//!     fn weight(&self) -> u32;
+//! }
+//!
+//! fn heaviest<T: HasWeight>(items: &[T]) -> Option<u32> { ... }
+//!
+//! heaviest(&[Arc::new(widget)]);
+//! ```
+//!
 //! `#[field_trait]` puts a hidden macro beside the trait, under the trait's name, so
 //! importing the trait also imports what the other attributes need. Types named in the
 //! trait's method signatures resolve where those attributes are used.
@@ -79,14 +97,20 @@ use syn::{
 
 #[proc_macro_attribute]
 pub fn field_trait(args: TokenStream, input: TokenStream) -> TokenStream {
-    let args = TokenStream2::from(args);
+    let wrappers = parse_macro_input!(args with Punctuated::<Path, Token![,]>::parse_terminated);
     let item = parse_macro_input!(input as ItemTrait);
     let mut errors = Vec::new();
-    if !args.is_empty() {
-        errors.push(Error::new_spanned(
-            args,
-            "#[field_trait] takes no arguments",
-        ));
+    for wrapper in &wrappers {
+        if let Some(segment) = wrapper
+            .segments
+            .iter()
+            .find(|segment| !segment.arguments.is_none())
+        {
+            errors.push(Error::new_spanned(
+                segment,
+                "#[field_trait] wrappers must be named without type arguments, like `Arc`",
+            ));
+        }
     }
     for param in &item.generics.params {
         if !matches!(param, GenericParam::Type(_)) {
@@ -123,14 +147,59 @@ pub fn field_trait(args: TokenStream, input: TokenStream) -> TokenStream {
         }
     }
 
+    let wrapper_impls = if errors.is_empty() {
+        wrappers
+            .iter()
+            .map(|wrapper| wrapper_impl(&item, &getters, wrapper))
+            .collect()
+    } else {
+        TokenStream2::new()
+    };
     let errors = errors.into_iter().map(Error::into_compile_error);
     let companion = companion_macro(&item, &getters, &required_non_getters);
     quote! {
         #item
         #companion
+        #wrapper_impls
         #(#errors)*
     }
     .into()
+}
+
+fn wrapper_impl(item: &ItemTrait, getters: &[Getter], wrapper: &Path) -> TokenStream2 {
+    let inner = Ident::new("__FieldTraitInner", Span::call_site());
+    let trait_name = &item.ident;
+    let unsafety = &item.unsafety;
+    let mut generics = item.generics.clone();
+    for param in generics.type_params_mut() {
+        param.default = None;
+    }
+    let (_, ty_generics, _) = item.generics.split_for_impl();
+    let params = &generics.params;
+    let trait_ty = quote!(#trait_name #ty_generics);
+    let associated = item.items.iter().filter_map(|trait_item| match trait_item {
+        TraitItem::Const(constant) => {
+            let name = &constant.ident;
+            let ty = &constant.ty;
+            Some(quote!(const #name: #ty = <#inner as #trait_ty>::#name;))
+        }
+        TraitItem::Type(ty) => {
+            let name = &ty.ident;
+            Some(quote!(type #name = <#inner as #trait_ty>::#name;))
+        }
+        _ => None,
+    });
+    let methods = getters.iter().map(|getter| {
+        let sig = &getter.sig;
+        let name = &sig.ident;
+        quote!(#sig { <#inner as #trait_ty>::#name(&**self) })
+    });
+    quote! {
+        #unsafety impl<#inner: #trait_ty + ?::core::marker::Sized, #params> #trait_ty for #wrapper<#inner> {
+            #(#associated)*
+            #(#methods)*
+        }
+    }
 }
 
 struct Getter {
