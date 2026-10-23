@@ -20,16 +20,6 @@ pub struct DJConfig {
     pub history_penalty_multiplier: Option<f32>,
 }
 
-impl WeightedPool<Arc<Pool>> for DJConfig {
-    fn entries(&self) -> &Arc<[Arc<Pool>]> {
-        &self.pools
-    }
-
-    fn history_penalty_multiplier(&self) -> Option<f32> {
-        self.history_penalty_multiplier
-    }
-}
-
 #[field_trait_impl(WeightedPool<SignalProfileEntry>)]
 #[derive(Deserialize, Serialize, Debug, Default)]
 pub struct SignalProfiles {
@@ -38,7 +28,7 @@ pub struct SignalProfiles {
     pub entries: Arc<[SignalProfileEntry]>,
 }
 
-#[field_trait_impl(Weighted, WeightedPool<PoolEntry>)]
+#[field_trait_impl(WeightedPool<PoolEntry>)]
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Pool {
     pub name: String,
