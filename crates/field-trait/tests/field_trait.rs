@@ -58,6 +58,18 @@ where
     value: T,
 }
 
+#[field_trait_impl(HasWeight, weight = mass, name = label, traits::HasScale)]
+struct Sprocket {
+    mass: u32,
+    label: String,
+    scale: f32,
+}
+
+#[field_trait_impl(HasWeight, weight = mass, name = label)]
+enum Cog {
+    Sprocket(Sprocket),
+}
+
 #[field_trait(Deref)]
 pub trait HasKind {
     const KIND: &'static str;
@@ -105,10 +117,10 @@ enum Container {
 
 struct Pallet {
     parts: Vec<String>,
-    extra: u16,
+    surplus: u16,
 }
 
-#[field_trait_impl]
+#[field_trait_impl(extra = surplus)]
 impl HasParts<String, u16> for Pallet {
     fn spare(&self) -> Option<String> {
         None
@@ -151,6 +163,16 @@ fn enum_reads_inner_fields() {
     assert_eq!(item.weight(), 7);
     assert_eq!(item.name(), "gadget");
     assert_eq!(traits::HasScale::scale(&item), 0.25);
+    let sprocket = Sprocket {
+        mass: 6,
+        label: "sprocket".to_string(),
+        scale: 2.0,
+    };
+    assert_eq!(sprocket.name(), "sprocket");
+    assert_eq!(traits::HasScale::scale(&sprocket), 2.0);
+    let cog = Cog::Sprocket(sprocket);
+    assert_eq!(cog.weight(), 6);
+    assert_eq!(cog.name(), "sprocket");
 }
 
 #[test]
@@ -200,7 +222,7 @@ fn generic_trait() {
     assert_eq!(container.spare(), Some(3));
     let pallet = Pallet {
         parts: vec!["a".to_string()],
-        extra: 5,
+        surplus: 5,
     };
     assert_eq!(pallet.parts(), &vec!["a".to_string()]);
     assert_eq!(pallet.spare(), None);
@@ -218,22 +240,24 @@ fn serde_untagged_round_trip() {
     assert_eq!(parsed.weight(), 3);
 }
 
-#[with_trait_fields(HasWeight)]
-#[field_trait_impl(HasWeight)]
+#[with_trait_fields(HasWeight, name = title, traits::HasScale, scale = ratio)]
+#[field_trait_impl(HasWeight, name = title, traits::HasScale, scale = ratio)]
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 struct Gizmo {
-    name: String,
+    title: String,
 }
 
 #[test]
 fn with_trait_fields_adds_missing_fields() {
     let gizmo = Gizmo {
-        name: "gizmo".to_string(),
+        title: "gizmo".to_string(),
         weight: 2,
+        ratio: 0.5,
     };
     assert_eq!(gizmo.weight(), 2);
     assert_eq!(gizmo.name(), "gizmo");
+    assert_eq!(traits::HasScale::scale(&gizmo), 0.5);
     let json = serde_json::to_string(&gizmo).unwrap();
-    assert_eq!(json, r#"{"name":"gizmo","weight":2}"#);
+    assert_eq!(json, r#"{"title":"gizmo","weight":2,"ratio":0.5}"#);
     assert_eq!(serde_json::from_str::<Gizmo>(&json).unwrap(), gizmo);
 }
