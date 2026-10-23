@@ -3,10 +3,12 @@ use super::{
     TrackSlot,
 };
 use crate::audio::dj::segments::signals::{Completed, CompletedSignal};
+use crate::audio::dj::weighted_choice::Weighted;
 use crate::audio::duration::DurationCache;
 use crate::audio::processing::mixer::TrackCommand;
 use crate::audio::tracks::open_track_source;
 use async_trait::async_trait;
+use field_trait::field_trait_impl;
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
@@ -14,6 +16,7 @@ use std::time::Duration;
 
 const FADE_TIME: Duration = Duration::from_secs(1);
 
+#[field_trait_impl(Weighted)]
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct TrackEntry {
     pub filename: String,

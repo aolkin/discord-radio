@@ -3262,6 +3262,7 @@ dependencies = [
  "biquad",
  "chrono",
  "dotenvy",
+ "field-trait",
  "futures-util",
  "http",
  "moka",

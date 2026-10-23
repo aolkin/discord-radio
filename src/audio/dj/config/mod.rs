@@ -2,29 +2,31 @@ use crate::audio::dj::segments::{
     HexMessageDefaults, HexMessageEntry, HexSegment, NoisePeriodEntry, NoiseSegment, Segment,
     TrackEntry, TrackSegment, ensure_loops,
 };
-use crate::audio::dj::weighted_choice::Weighted;
+use crate::audio::dj::weighted_choice::{Weighted, WeightedPool};
 use crate::bucket::registry::RegistryEntry;
 use crate::state::Data;
 use anyhow::{Context, bail};
+use field_trait::field_trait_impl;
 use serde::{Deserialize, Serialize};
-use std::borrow::Cow;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
 #[derive(Deserialize, Serialize, Debug, Default)]
 pub struct DJConfig {
     pub name: String,
-    pub pools: Vec<Pool>,
+    pub pools: Vec<Arc<Pool>>,
     pub signal_profiles: SignalProfiles,
     pub channel_status: Option<String>,
 }
 
+#[field_trait_impl(WeightedPool<SignalProfileEntry>)]
 #[derive(Deserialize, Serialize, Debug, Default)]
 pub struct SignalProfiles {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub history_penalty_multiplier: Option<f32>,
-    pub entries: Vec<SignalProfileEntry>,
+    pub entries: Arc<[SignalProfileEntry]>,
 }
 
+#[field_trait_impl(WeightedPool<PoolEntry>)]
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Pool {
     pub name: String,
@@ -32,7 +34,7 @@ pub struct Pool {
     pub hex_defaults: Option<HexMessageDefaults>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub history_penalty_multiplier: Option<f32>,
-    pub entries: Vec<PoolEntry>,
+    pub entries: Arc<[PoolEntry]>,
 }
 
 static BUILT_IN_HEX_DEFAULTS: LazyLock<HexMessageDefaults> = LazyLock::new(Default::default);
@@ -46,29 +48,19 @@ impl Pool {
         let defaults = self.hex_defaults();
         ensure_loops(defaults.loop_min, defaults.loop_max).context("hex_defaults")?;
         ensure_penalty_multiplier(self.history_penalty_multiplier)?;
+        if self.entries.is_empty() && self.weight != 0 {
+            bail!("a pool with no entries must have weight 0");
+        }
         self.entries
             .iter()
             .try_for_each(|entry| entry.validate(defaults))
     }
 }
 
-impl Weighted for Pool {
-    fn weight(&self) -> f32 {
-        if self.entries.is_empty() {
-            0.0
-        } else {
-            self.weight as f32
-        }
-    }
-
-    fn key(&self) -> Cow<'_, str> {
-        Cow::Borrowed(&self.name)
-    }
-}
-
 /// The kind is inferred from which fields are present.
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(untagged)]
+#[field_trait_impl(Weighted)]
 pub enum PoolEntry {
     Track(TrackEntry),
     Hex(HexMessageEntry),
@@ -114,24 +106,7 @@ impl PoolEntry {
     }
 }
 
-impl Weighted for PoolEntry {
-    fn weight(&self) -> f32 {
-        match self {
-            PoolEntry::Track(track) => track.weight as f32,
-            PoolEntry::Hex(message) => message.weight as f32,
-            PoolEntry::Noise(noise) => noise.weight as f32,
-        }
-    }
-
-    fn key(&self) -> Cow<'_, str> {
-        match self {
-            PoolEntry::Track(track) => Cow::Owned(format!("track:{}", track.filename)),
-            PoolEntry::Hex(message) => Cow::Owned(format!("hex:{}", message.text)),
-            PoolEntry::Noise(noise) => Cow::Owned(format!("noise:{}", noise.noise_profile)),
-        }
-    }
-}
-
+#[field_trait_impl(Weighted)]
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct SignalProfileEntry {
     pub profile_name: String,
@@ -139,16 +114,6 @@ pub struct SignalProfileEntry {
     pub fade_duration_seconds: f32,
     pub min_time_seconds: f32,
     pub max_time_seconds: f32,
-}
-
-impl Weighted for SignalProfileEntry {
-    fn weight(&self) -> f32 {
-        self.weight as f32
-    }
-
-    fn key(&self) -> Cow<'_, str> {
-        Cow::Borrowed(&self.profile_name)
-    }
 }
 
 impl RegistryEntry for DJConfig {
@@ -166,7 +131,7 @@ impl RegistryEntry for DJConfig {
         }
         ensure_penalty_multiplier(self.signal_profiles.history_penalty_multiplier)
             .context("signal_profiles")?;
-        for profile in &self.signal_profiles.entries {
+        for profile in self.signal_profiles.entries.iter() {
             let context = || format!("signal profile {:?}", profile.profile_name);
             ensure_seconds(profile.fade_duration_seconds, context)?;
             ensure_seconds(profile.min_time_seconds, context)?;
