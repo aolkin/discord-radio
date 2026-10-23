@@ -1,6 +1,7 @@
-use crate::audio::dj::config::DJConfig;
-use crate::audio::dj::segments::{HexPool, SignalProfilePlayback};
+use crate::audio::dj::config::{DJConfig, Pool};
+use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::{DJState, DJStateMachine};
+use crate::audio::dj::weighted_choice::Weighted;
 use crate::state::Data;
 use anyhow::{Context, bail};
 use serde::Deserialize;
@@ -123,18 +124,15 @@ impl DJManager {
     /// Checks that a forced advance can pick a segment from the pool `name`.
     pub fn check_advance_pool(&self, name: &str) -> anyhow::Result<()> {
         let config = self.config()?;
-        let pool = config
-            .pools
-            .get(name)
-            .with_context(|| format!("no pool named {name:?}"))?;
-        if pool.is_empty() {
-            bail!("pool {name:?} is empty");
+        let pool = find_pool(&config, name)?;
+        if !pool.entries.iter().any(|entry| entry.weight() > 0) {
+            bail!("pool {name:?} has no entry with weight above 0");
         }
         Ok(())
     }
 
     pub fn check_hex_pool(&self, name: &str) -> anyhow::Result<()> {
-        self.config()?.pool::<HexPool>(name).map(|_| ())
+        find_pool(&*self.config()?, name).map(|_| ())
     }
 
     /// Sends `command` to the running task, returning false when none is running.
@@ -241,4 +239,13 @@ pub fn load_dj_config(bot_state: &Data, name: &str) -> anyhow::Result<Arc<DJConf
         .dj_config_manager
         .get(name)
         .with_context(|| format!("no DJ config {name:?}"))
+}
+
+fn find_pool<'a>(config: &'a DJConfig, name: &str) -> anyhow::Result<&'a Pool> {
+    config
+        .pools
+        .iter()
+        .find(|pool| pool.name == name)
+        .map(|pool| &**pool)
+        .with_context(|| format!("no pool named {name:?}"))
 }
