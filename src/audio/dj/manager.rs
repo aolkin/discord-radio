@@ -1,7 +1,6 @@
 use crate::audio::dj::config::{DJConfig, Pool};
 use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::{DJState, DJStateMachine};
-use crate::audio::dj::weighted_choice::Weighted;
 use crate::state::Data;
 use anyhow::{Context, bail};
 use serde::Deserialize;
@@ -124,7 +123,7 @@ impl DJManager {
     pub fn check_advance_pool(&self, name: &str) -> anyhow::Result<()> {
         let config = self.config();
         let pool = find_pool(&config, name)?;
-        if !pool.entries.iter().any(|entry| entry.weight() > 0) {
+        if !pool.has_weighted_entry() {
             bail!("pool {name:?} has no entry with weight above 0");
         }
         Ok(())
