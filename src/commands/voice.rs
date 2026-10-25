@@ -122,7 +122,9 @@ pub async fn hex(
     #[description = "Times to loop the message (default from the pool's hex config)"] loops: Option<
         u32,
     >,
-    #[description = "Pool to take segment defaults from"] pool: Option<String>,
+    #[description = "Pool to take segment defaults from"]
+    #[autocomplete = "autocomplete_pool"]
+    pool: Option<String>,
 ) -> anyhow::Result<()> {
     let guild_id = require_guild(ctx)?;
     let user_id = ctx.author().id;
@@ -507,6 +509,21 @@ async fn join_voice_channel_helper(
     Ok(processor)
 }
 
+async fn autocomplete_pool(ctx: Context<'_>, partial: &'_ str) -> CreateAutocompleteResponse {
+    let partial = partial.to_lowercase();
+    let mut pools: Vec<String> = ctx
+        .data()
+        .dj_config_manager
+        .pools
+        .list()
+        .into_iter()
+        .filter(|name| name.to_lowercase().contains(&partial))
+        .collect();
+    pools.sort();
+    pools.truncate(25);
+    autocomplete_response(pools)
+}
+
 async fn autocomplete_profile(ctx: Context<'_>, partial: &'_ str) -> CreateAutocompleteResponse {
     let mut profiles: Vec<String> = ctx
         .data()
@@ -743,7 +760,9 @@ pub async fn announcements(
 #[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
 pub async fn skip(
     ctx: Context<'_>,
-    #[description = "Only advance to a segment from this pool (default: any)"] pool: Option<String>,
+    #[description = "Only advance to a segment from this pool (default: any)"]
+    #[autocomplete = "autocomplete_pool"]
+    pool: Option<String>,
 ) -> anyhow::Result<()> {
     let guild_id = require_guild(ctx)?;
 
