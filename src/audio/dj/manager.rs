@@ -88,7 +88,6 @@ impl IdleRequest {
 pub struct DJManager {
     state: Arc<RwLock<DJState>>,
     running: RwLock<Option<Running>>,
-    config: Arc<parking_lot::RwLock<Arc<DJConfig>>>,
     guild_id: GuildId,
     bot_state: Data,
 }
@@ -108,7 +107,6 @@ impl DJManager {
         Self {
             state: Arc::default(),
             running: RwLock::new(None),
-            config: Arc::default(),
             guild_id,
             bot_state,
         }
@@ -119,9 +117,6 @@ impl DJManager {
     }
 
     pub fn find_pool(&self, name: &str, require_playable: bool) -> anyhow::Result<()> {
-        if !self.config.read().pools.contains_key(name) {
-            bail!("no pool named {name:?}");
-        }
         let pool = self.bot_state.dj_config_manager.pools.require(name)?;
         if require_playable && !pool.has_weighted_entry() {
             bail!("pool {name:?} has no entry with weight above 0");
@@ -154,7 +149,7 @@ impl DJManager {
             .as_ref()
             .and_then(|saved| saved.config_name.clone())
             .unwrap_or_else(|| DEFAULT_DJ_CONFIG.to_string());
-        let (loaded, pools) = self
+        let (config, pools) = self
             .bot_state
             .dj_config_manager
             .get(&config_name)
@@ -162,10 +157,8 @@ impl DJManager {
                 tracing::warn!(guild_id = %self.guild_id, "Starting DJ with an empty config: {e:#}");
                 (Arc::default(), Arc::default())
             });
-        *self.config.write() = loaded;
         let guild_id = self.guild_id;
         let task_state = self.state.clone();
-        let config = self.config.clone();
         let bot_state = self.bot_state;
         let span = tracing::info_span!("dj", guild_id = %guild_id);
         let task_handle = tokio::spawn(

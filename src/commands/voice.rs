@@ -122,7 +122,7 @@ pub async fn hex(
     #[description = "Times to loop the message (default from the pool's hex config)"] loops: Option<
         u32,
     >,
-    #[description = "Pool in the DJ config to take segment defaults from"] pool: Option<String>,
+    #[description = "Pool to take segment defaults from"] pool: Option<String>,
 ) -> anyhow::Result<()> {
     let guild_id = require_guild(ctx)?;
     let user_id = ctx.author().id;
@@ -744,8 +744,7 @@ pub async fn announcements(
 #[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
 pub async fn skip(
     ctx: Context<'_>,
-    #[description = "Only advance to a segment from this pool in the DJ config (default: any)"]
-    pool: Option<String>,
+    #[description = "Only advance to a segment from this pool (default: any)"] pool: Option<String>,
 ) -> anyhow::Result<()> {
     let guild_id = require_guild(ctx)?;
 
