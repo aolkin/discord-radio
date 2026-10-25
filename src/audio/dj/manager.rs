@@ -119,18 +119,21 @@ impl DJManager {
         self.config.borrow().clone()
     }
 
+    pub fn find_pool(&self, name: &str) -> anyhow::Result<Arc<Pool>> {
+        self.config()
+            .pools
+            .iter()
+            .find(|pool| pool.name == name)
+            .cloned()
+            .with_context(|| format!("no pool named {name:?}"))
+    }
+
     /// Checks that a forced advance can pick a segment from the pool `name`.
     pub fn check_advance_pool(&self, name: &str) -> anyhow::Result<()> {
-        let config = self.config();
-        let pool = find_pool(&config, name)?;
-        if !pool.has_weighted_entry() {
+        if !self.find_pool(name)?.has_weighted_entry() {
             bail!("pool {name:?} has no entry with weight above 0");
         }
         Ok(())
-    }
-
-    pub fn check_hex_pool(&self, name: &str) -> anyhow::Result<()> {
-        find_pool(&self.config(), name).map(|_| ())
     }
 
     /// Sends `command` to the running task, returning false when none is running.
@@ -237,13 +240,4 @@ pub fn load_dj_config(bot_state: &Data, name: &str) -> anyhow::Result<Arc<DJConf
         .dj_config_manager
         .get(name)
         .with_context(|| format!("no DJ config {name:?}"))
-}
-
-fn find_pool<'a>(config: &'a DJConfig, name: &str) -> anyhow::Result<&'a Pool> {
-    config
-        .pools
-        .iter()
-        .find(|pool| pool.name == name)
-        .map(|pool| &**pool)
-        .with_context(|| format!("no pool named {name:?}"))
 }

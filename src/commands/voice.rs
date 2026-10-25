@@ -133,7 +133,7 @@ pub async fn hex(
     );
 
     if let Some(pool) = &pool
-        && let Err(e) = ctx.data().dj_manager(guild_id).check_hex_pool(pool)
+        && let Err(e) = ctx.data().dj_manager(guild_id).find_pool(pool)
     {
         ctx.say(format!("Failed to use DJ for message playback: {e:#}"))
             .await?;
