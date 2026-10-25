@@ -179,7 +179,6 @@ pub struct DJStateMachine {
     bot_state: Data,
     config_name: String,
     shared_config: watch::Sender<Arc<DJConfig>>,
-    config: Arc<DJConfig>,
     pool_selector: WeightedSelector<ActivePool, Box<[ActivePool]>>,
     signal_profile_selector: WeightedSelector<SignalProfileEntry>,
     applied_profile: Option<(SignalProfilePlayback, ProfileSource)>,
@@ -239,7 +238,6 @@ impl DJStateMachine {
             pool_selector: pool_selector(&config),
             signal_profile_selector: (&config.signal_profiles).into(),
             shared_config,
-            config,
             applied_profile: None,
             applied_channel_status: None,
         }
@@ -336,7 +334,8 @@ impl DJStateMachine {
             self.applied_channel_status = None;
             return;
         }
-        let config_status = self.config.channel_status.as_deref();
+        let config = self.shared_config.borrow().clone();
+        let config_status = config.channel_status.as_deref();
         let target = self
             .state
             .read()
@@ -462,7 +461,7 @@ impl DJStateMachine {
         let Some(config) = self.bot_state.dj_config_manager.get(&self.config_name) else {
             return;
         };
-        if !Arc::ptr_eq(&config, &self.config) {
+        if !Arc::ptr_eq(&config, &self.shared_config.borrow()) {
             tracing::info!("DJ reloading config {:?}", self.config_name);
             self.set_config(config);
         }
@@ -472,8 +471,7 @@ impl DJStateMachine {
     fn set_config(&mut self, config: Arc<DJConfig>) {
         self.pool_selector = pool_selector(&config);
         self.signal_profile_selector = (&config.signal_profiles).into();
-        self.shared_config.send_replace(config.clone());
-        self.config = config;
+        self.shared_config.send_replace(config);
     }
 
     pub async fn force_hex_message(
@@ -486,10 +484,10 @@ impl DJStateMachine {
             "DJ force transitioning to hex message with custom text: {}",
             request.message
         );
+        let config = self.shared_config.borrow().clone();
         let built_in_defaults = HexMessageDefaults::default();
         let defaults = match &request.pool {
-            Some(name) => self
-                .config
+            Some(name) => config
                 .pools
                 .iter()
                 .find(|pool| pool.name == *name)

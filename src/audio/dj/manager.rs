@@ -114,13 +114,9 @@ impl DJManager {
         self.state.clone()
     }
 
-    /// The config the DJ task is using.
-    pub fn config(&self) -> Arc<DJConfig> {
-        self.config.borrow().clone()
-    }
-
     pub fn find_pool(&self, name: &str) -> anyhow::Result<Arc<Pool>> {
-        self.config()
+        self.config
+            .borrow()
             .pools
             .iter()
             .find(|pool| pool.name == name)
