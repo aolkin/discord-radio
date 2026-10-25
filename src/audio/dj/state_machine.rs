@@ -1,7 +1,6 @@
 use crate::audio::dj::config::{DJConfig, Pool, PoolEntry, SignalProfileEntry};
 use crate::audio::dj::manager::{
-    ADVANCE_RETRY_DELAY, DEFAULT_DJ_CONFIG, DJCommand, HexMessageRequest, IdleRequest,
-    TrackRequest, load_dj_config,
+    ADVANCE_RETRY_DELAY, DJCommand, HexMessageRequest, IdleRequest, TrackRequest,
 };
 use crate::audio::dj::segments::{
     Completed, HexMessageDefaults, HexSegment, Segment, SignalProfilePlayback, TrackSegment,
@@ -178,7 +177,7 @@ pub struct DJStateMachine {
     announcement_channel: Option<ChannelId>,
     bot_state: Data,
     config_name: String,
-    config: Arc<DJConfig>,
+    config: Arc<parking_lot::RwLock<Arc<DJConfig>>>,
     pool_selector: WeightedSelector<ActivePool, Box<[ActivePool]>>,
     signal_profile_selector: WeightedSelector<SignalProfileEntry>,
     applied_profile: Option<(SignalProfilePlayback, ProfileSource)>,
@@ -191,9 +190,11 @@ impl DJStateMachine {
         guild_id: GuildId,
         saved: Option<crate::persistence::DJState>,
         state: Arc<RwLock<DJState>>,
+        config_name: String,
+        config: Arc<parking_lot::RwLock<Arc<DJConfig>>>,
         bot_state: Data,
     ) -> Self {
-        let (config_name, announcement_channel, restored_state) = match saved {
+        let (announcement_channel, restored_state) = match saved {
             Some(saved) => {
                 let mut state_machine = saved.state_machine;
                 if !saved.stopped
@@ -202,20 +203,14 @@ impl DJStateMachine {
                     state.shift_back(saved.saved_at.elapsed().unwrap_or_default());
                 }
                 (
-                    saved.config_name,
                     saved.announcement_channel_id.map(ChannelId::new),
                     state_machine,
                 )
             }
-            None => (None, None, None),
+            None => (None, None),
         };
-        let config_name = config_name.unwrap_or_else(|| DEFAULT_DJ_CONFIG.to_string());
-        let config = load_dj_config(&bot_state, &config_name).unwrap_or_else(|e| {
-            tracing::warn!("Starting DJ with an empty config: {e:#}");
-            Arc::default()
-        });
-
         tracing::info!("Starting DJ task with config {:?}", config_name);
+        let loaded = config.read().clone();
 
         let initial_state = restored_state.unwrap_or_default();
 
@@ -233,8 +228,8 @@ impl DJStateMachine {
             announcement_channel,
             bot_state,
             config_name,
-            pool_selector: pool_selector(&config),
-            signal_profile_selector: (&config.signal_profiles).into(),
+            pool_selector: pool_selector(&loaded),
+            signal_profile_selector: (&loaded.signal_profiles).into(),
             config,
             applied_profile: None,
             applied_channel_status: None,
@@ -332,7 +327,8 @@ impl DJStateMachine {
             self.applied_channel_status = None;
             return;
         }
-        let config_status = self.config.channel_status.as_deref();
+        let config = self.config.read().clone();
+        let config_status = config.channel_status.as_deref();
         let target = self
             .state
             .read()
@@ -458,7 +454,7 @@ impl DJStateMachine {
         let Some(config) = self.bot_state.dj_config_manager.get(&self.config_name) else {
             return;
         };
-        if !Arc::ptr_eq(&config, &self.config) {
+        if !Arc::ptr_eq(&config, &self.config.read()) {
             tracing::info!("DJ reloading config {:?}", self.config_name);
             self.set_config(config);
         }
@@ -468,22 +464,23 @@ impl DJStateMachine {
     fn set_config(&mut self, config: Arc<DJConfig>) {
         self.pool_selector = pool_selector(&config);
         self.signal_profile_selector = (&config.signal_profiles).into();
-        self.config = config;
+        *self.config.write() = config;
     }
 
     pub async fn force_hex_message(
-        &self,
+        &mut self,
         bot_state: &Data,
         request: HexMessageRequest,
     ) -> anyhow::Result<()> {
+        self.reload_config();
         tracing::info!(
             "DJ force transitioning to hex message with custom text: {}",
             request.message
         );
+        let config = self.config.read().clone();
         let built_in_defaults = HexMessageDefaults::default();
         let defaults = match &request.pool {
-            Some(name) => self
-                .config
+            Some(name) => config
                 .pools
                 .iter()
                 .find(|pool| pool.name == *name)

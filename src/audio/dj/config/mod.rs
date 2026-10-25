@@ -46,11 +46,15 @@ impl Pool {
         self.hex_defaults.as_ref().unwrap_or(&BUILT_IN_HEX_DEFAULTS)
     }
 
+    pub fn has_weighted_entry(&self) -> bool {
+        self.entries.iter().any(|entry| entry.weight() > 0)
+    }
+
     fn validate(&self) -> anyhow::Result<()> {
         let defaults = self.hex_defaults();
         ensure_loops(defaults.loop_min, defaults.loop_max).context("hex_defaults")?;
         ensure_penalty_multiplier(self.history_penalty_multiplier)?;
-        if self.entries.iter().all(|entry| entry.weight() == 0) && self.weight != 0 {
+        if !self.has_weighted_entry() && self.weight != 0 {
             bail!("a pool with no entry of weight above 0 must have weight 0");
         }
         self.entries

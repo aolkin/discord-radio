@@ -132,6 +132,13 @@ pub async fn hex(
         message,
     );
 
+    if let Some(pool) = &pool
+        && let Err(e) = ctx.data().dj_manager(guild_id).find_pool(pool, false)
+    {
+        ctx.say(format!("Failed to play message: {e:#}")).await?;
+        return Ok(());
+    }
+
     let reply = ctx
         .send(
             poise::CreateReply::default()
@@ -150,16 +157,16 @@ pub async fn hex(
         Ok(()) => {
             let loops_text = match loops {
                 Some(n) => format!("{n} loops"),
-                None => "DJ default loop count".to_string(),
+                None => "default loop count".to_string(),
             };
             format!(
-                "DJ is now playing message: \"{}\" ({}, volume {})",
+                "Playing message: \"{}\" ({}, volume {})",
                 message,
                 loops_text,
                 volume.unwrap_or(1.0)
             )
         }
-        Err(e) => format!("Failed to use DJ for message playback: {}", e),
+        Err(e) => format!("Failed to play message: {e:#}"),
     };
     reply
         .edit(
@@ -739,15 +746,20 @@ pub async fn skip(
 
     ctx.defer_ephemeral().await?;
 
-    if let Err(e) = send_to_dj(ctx.data(), guild_id, DJCommand::ForceAdvance(pool.clone())) {
-        ctx.say(format!("Failed to force DJ state advance: {e:#}"))
-            .await?;
+    if let Err(e) = pool
+        .as_deref()
+        .map_or(Ok(()), |pool| {
+            ctx.data().dj_manager(guild_id).find_pool(pool, true)
+        })
+        .and_then(|()| send_to_dj(ctx.data(), guild_id, DJCommand::ForceAdvance(pool.clone())))
+    {
+        ctx.say(format!("Failed to skip: {e:#}")).await?;
         return Ok(());
     }
 
     let message = match pool {
-        Some(pool) => format!("DJ advancing to a segment from pool {pool:?}"),
-        None => "DJ state advance triggered".to_string(),
+        Some(pool) => format!("Skipping to a segment from pool {pool:?}"),
+        None => "Skipping".to_string(),
     };
     ctx.say(message).await?;
 

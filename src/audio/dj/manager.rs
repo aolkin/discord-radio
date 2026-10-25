@@ -84,6 +84,7 @@ impl IdleRequest {
 pub struct DJManager {
     state: Arc<RwLock<DJState>>,
     running: RwLock<Option<Running>>,
+    config: Arc<parking_lot::RwLock<Arc<DJConfig>>>,
     guild_id: GuildId,
     bot_state: Data,
 }
@@ -103,6 +104,7 @@ impl DJManager {
         Self {
             state: Arc::default(),
             running: RwLock::new(None),
+            config: Arc::default(),
             guild_id,
             bot_state,
         }
@@ -110,6 +112,19 @@ impl DJManager {
 
     pub fn state(&self) -> Arc<RwLock<DJState>> {
         self.state.clone()
+    }
+
+    pub fn find_pool(&self, name: &str, require_playable: bool) -> anyhow::Result<()> {
+        let config = self.config.read();
+        let pool = config
+            .pools
+            .iter()
+            .find(|pool| pool.name == name)
+            .with_context(|| format!("no pool named {name:?}"))?;
+        if require_playable && !pool.has_weighted_entry() {
+            bail!("pool {name:?} has no entry with weight above 0");
+        }
+        Ok(())
     }
 
     /// Sends `command` to the running task, returning false when none is running.
@@ -133,13 +148,22 @@ impl DJManager {
 
     fn spawn(&self, running: &mut Option<Running>, saved: Option<crate::persistence::DJState>) {
         let (command_tx, command_rx) = mpsc::channel(10);
+        let config_name = saved
+            .as_ref()
+            .and_then(|saved| saved.config_name.clone())
+            .unwrap_or_else(|| DEFAULT_DJ_CONFIG.to_string());
+        *self.config.write() = load_dj_config(&self.bot_state, &config_name).unwrap_or_else(|e| {
+            tracing::warn!(guild_id = %self.guild_id, "Starting DJ with an empty config: {e:#}");
+            Arc::default()
+        });
         let guild_id = self.guild_id;
         let task_state = self.state.clone();
+        let config = self.config.clone();
         let bot_state = self.bot_state;
         let span = tracing::info_span!("dj", guild_id = %guild_id);
         let task_handle = tokio::spawn(
             async move {
-                DJStateMachine::new(guild_id, saved, task_state, bot_state)
+                DJStateMachine::new(guild_id, saved, task_state, config_name, config, bot_state)
                     .await
                     .run(command_rx)
                     .await;
