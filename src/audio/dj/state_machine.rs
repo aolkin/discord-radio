@@ -17,7 +17,7 @@ use serenity::model::id::{ChannelId, GuildId};
 use std::ops::Deref;
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant, SystemTime};
-use tokio::sync::{RwLock, RwLockReadGuard, mpsc};
+use tokio::sync::{RwLock, RwLockReadGuard, mpsc, watch};
 
 pub const DEFAULT_PROFILE_FADE: Duration = Duration::from_secs(2);
 
@@ -178,7 +178,7 @@ pub struct DJStateMachine {
     announcement_channel: Option<ChannelId>,
     bot_state: Data,
     config_name: String,
-    shared_config_name: Arc<std::sync::RwLock<String>>,
+    shared_config: watch::Sender<Arc<DJConfig>>,
     config: Arc<DJConfig>,
     pool_selector: WeightedSelector<ActivePool, Box<[ActivePool]>>,
     signal_profile_selector: WeightedSelector<SignalProfileEntry>,
@@ -192,7 +192,7 @@ impl DJStateMachine {
         guild_id: GuildId,
         saved: Option<crate::persistence::DJState>,
         state: Arc<RwLock<DJState>>,
-        shared_config_name: Arc<std::sync::RwLock<String>>,
+        shared_config: watch::Sender<Arc<DJConfig>>,
         bot_state: Data,
     ) -> Self {
         let (config_name, announcement_channel, restored_state) = match saved {
@@ -218,11 +218,7 @@ impl DJStateMachine {
         });
 
         tracing::info!("Starting DJ task with config {:?}", config_name);
-        config_name.clone_into(
-            &mut shared_config_name
-                .write()
-                .unwrap_or_else(|e| e.into_inner()),
-        );
+        shared_config.send_replace(config.clone());
 
         let initial_state = restored_state.unwrap_or_default();
 
@@ -242,7 +238,7 @@ impl DJStateMachine {
             config_name,
             pool_selector: pool_selector(&config),
             signal_profile_selector: (&config.signal_profiles).into(),
-            shared_config_name,
+            shared_config,
             config,
             applied_profile: None,
             applied_channel_status: None,
@@ -476,6 +472,7 @@ impl DJStateMachine {
     fn set_config(&mut self, config: Arc<DJConfig>) {
         self.pool_selector = pool_selector(&config);
         self.signal_profile_selector = (&config.signal_profiles).into();
+        self.shared_config.send_replace(config.clone());
         self.config = config;
     }
 
@@ -622,12 +619,6 @@ impl DJStateMachine {
             DJCommand::SetConfig { name, config } => {
                 tracing::info!("DJ switching to config {name:?}");
                 self.set_config(config);
-                name.clone_into(
-                    &mut self
-                        .shared_config_name
-                        .write()
-                        .unwrap_or_else(|e| e.into_inner()),
-                );
                 self.config_name = name;
                 Ok(())
             }
