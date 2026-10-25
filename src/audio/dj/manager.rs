@@ -8,7 +8,7 @@ use serenity::model::id::{ChannelId, GuildId};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::error::TrySendError;
-use tokio::sync::{RwLock, mpsc, watch};
+use tokio::sync::{RwLock, mpsc};
 use tokio::task::JoinHandle;
 use tracing::Instrument;
 
@@ -84,7 +84,7 @@ impl IdleRequest {
 pub struct DJManager {
     state: Arc<RwLock<DJState>>,
     running: RwLock<Option<Running>>,
-    config: watch::Sender<Arc<DJConfig>>,
+    config: Arc<parking_lot::RwLock<Arc<DJConfig>>>,
     guild_id: GuildId,
     bot_state: Data,
 }
@@ -104,7 +104,7 @@ impl DJManager {
         Self {
             state: Arc::default(),
             running: RwLock::new(None),
-            config: watch::Sender::new(Arc::default()),
+            config: Arc::default(),
             guild_id,
             bot_state,
         }
@@ -116,7 +116,7 @@ impl DJManager {
 
     /// With `non_empty`, also fails when the pool has no entry with weight above 0.
     pub fn find_pool(&self, name: &str, non_empty: bool) -> anyhow::Result<()> {
-        let config = self.config.borrow();
+        let config = self.config.read();
         let pool = config
             .pools
             .iter()

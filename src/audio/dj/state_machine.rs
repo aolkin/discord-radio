@@ -17,7 +17,7 @@ use serenity::model::id::{ChannelId, GuildId};
 use std::ops::Deref;
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant, SystemTime};
-use tokio::sync::{RwLock, RwLockReadGuard, mpsc, watch};
+use tokio::sync::{RwLock, RwLockReadGuard, mpsc};
 
 pub const DEFAULT_PROFILE_FADE: Duration = Duration::from_secs(2);
 
@@ -178,7 +178,7 @@ pub struct DJStateMachine {
     announcement_channel: Option<ChannelId>,
     bot_state: Data,
     config_name: String,
-    shared_config: watch::Sender<Arc<DJConfig>>,
+    shared_config: Arc<parking_lot::RwLock<Arc<DJConfig>>>,
     pool_selector: WeightedSelector<ActivePool, Box<[ActivePool]>>,
     signal_profile_selector: WeightedSelector<SignalProfileEntry>,
     applied_profile: Option<(SignalProfilePlayback, ProfileSource)>,
@@ -191,7 +191,7 @@ impl DJStateMachine {
         guild_id: GuildId,
         saved: Option<crate::persistence::DJState>,
         state: Arc<RwLock<DJState>>,
-        shared_config: watch::Sender<Arc<DJConfig>>,
+        shared_config: Arc<parking_lot::RwLock<Arc<DJConfig>>>,
         bot_state: Data,
     ) -> Self {
         let (config_name, announcement_channel, restored_state) = match saved {
@@ -217,7 +217,7 @@ impl DJStateMachine {
         });
 
         tracing::info!("Starting DJ task with config {:?}", config_name);
-        shared_config.send_replace(config.clone());
+        *shared_config.write() = config.clone();
 
         let initial_state = restored_state.unwrap_or_default();
 
@@ -334,7 +334,7 @@ impl DJStateMachine {
             self.applied_channel_status = None;
             return;
         }
-        let config = self.shared_config.borrow().clone();
+        let config = self.shared_config.read().clone();
         let config_status = config.channel_status.as_deref();
         let target = self
             .state
@@ -461,7 +461,7 @@ impl DJStateMachine {
         let Some(config) = self.bot_state.dj_config_manager.get(&self.config_name) else {
             return;
         };
-        if !Arc::ptr_eq(&config, &self.shared_config.borrow()) {
+        if !Arc::ptr_eq(&config, &self.shared_config.read()) {
             tracing::info!("DJ reloading config {:?}", self.config_name);
             self.set_config(config);
         }
@@ -471,7 +471,7 @@ impl DJStateMachine {
     fn set_config(&mut self, config: Arc<DJConfig>) {
         self.pool_selector = pool_selector(&config);
         self.signal_profile_selector = (&config.signal_profiles).into();
-        self.shared_config.send_replace(config);
+        *self.shared_config.write() = config;
     }
 
     pub async fn force_hex_message(
@@ -484,7 +484,7 @@ impl DJStateMachine {
             "DJ force transitioning to hex message with custom text: {}",
             request.message
         );
-        let config = self.shared_config.borrow().clone();
+        let config = self.shared_config.read().clone();
         let built_in_defaults = HexMessageDefaults::default();
         let defaults = match &request.pool {
             Some(name) => config
