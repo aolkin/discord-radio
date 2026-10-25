@@ -24,7 +24,7 @@ pub async fn advance_dj_state(
     if let Some(pool) = &request.state_type {
         bot_state
             .dj_manager(guild_id)
-            .check_advance_pool(pool)
+            .find_pool(pool, true)
             .status(StatusCode::BAD_REQUEST)?;
     }
     send_dj_command(
@@ -81,7 +81,7 @@ pub async fn play_hex_message(
     if let Some(pool) = &request.pool {
         bot_state
             .dj_manager(guild_id)
-            .find_pool(pool)
+            .find_pool(pool, false)
             .status(StatusCode::BAD_REQUEST)?;
     }
     let request = crate::audio::dj::manager::HexMessageRequest {

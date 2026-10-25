@@ -1,4 +1,4 @@
-use crate::audio::dj::config::{DJConfig, Pool};
+use crate::audio::dj::config::DJConfig;
 use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::{DJState, DJStateMachine};
 use crate::state::Data;
@@ -114,19 +114,15 @@ impl DJManager {
         self.state.clone()
     }
 
-    pub fn find_pool(&self, name: &str) -> anyhow::Result<Arc<Pool>> {
-        self.config
-            .borrow()
+    /// With `non_empty`, also fails when the pool has no entry with weight above 0.
+    pub fn find_pool(&self, name: &str, non_empty: bool) -> anyhow::Result<()> {
+        let config = self.config.borrow();
+        let pool = config
             .pools
             .iter()
             .find(|pool| pool.name == name)
-            .cloned()
-            .with_context(|| format!("no pool named {name:?}"))
-    }
-
-    /// Checks that a forced advance can pick a segment from the pool `name`.
-    pub fn check_advance_pool(&self, name: &str) -> anyhow::Result<()> {
-        if !self.find_pool(name)?.has_weighted_entry() {
+            .with_context(|| format!("no pool named {name:?}"))?;
+        if non_empty && !pool.has_weighted_entry() {
             bail!("pool {name:?} has no entry with weight above 0");
         }
         Ok(())
