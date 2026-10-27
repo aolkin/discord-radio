@@ -60,6 +60,13 @@ impl SegmentDefaults {
     }
 }
 
+#[field_trait_impl]
+impl Weighted for Pool {
+    fn identity(&self) -> Identity {
+        identity_of(&self.name)
+    }
+}
+
 impl Pool {
     pub fn has_weighted_entry(&self) -> bool {
         self.entries.iter().any(|entry| entry.weight() > 0)

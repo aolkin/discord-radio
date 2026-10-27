@@ -7,12 +7,13 @@ use crate::audio::dj::segments::{
 };
 use crate::audio::dj::segments::{NoisePeriodEntry, NoiseSegment, SegmentCtx};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
-use crate::audio::dj::weighted_choice::{Identity, Weighted, WeightedSelector, identity_of};
+use crate::audio::dj::weighted_choice::WeightedSelector;
 use crate::state::Data;
 use anyhow::Context;
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use serenity::model::id::{ChannelId, GuildId};
+use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant, SystemTime};
@@ -177,7 +178,8 @@ pub struct DJStateMachine {
     bot_state: Data,
     config_name: String,
     config: Arc<parking_lot::RwLock<Arc<DJConfig>>>,
-    pool_selector: WeightedSelector<ActivePool, Box<[ActivePool]>>,
+    pool_selector: WeightedSelector<Arc<Pool>>,
+    entry_selectors: HashMap<String, WeightedSelector<PoolEntry>>,
     signal_profile_selector: WeightedSelector<SignalProfileEntry>,
     applied_profile: Option<(SignalProfilePlayback, ProfileSource)>,
     /// An empty status is how Discord clears it.
@@ -227,7 +229,11 @@ impl DJStateMachine {
             announcement_channel,
             bot_state,
             config_name,
-            pool_selector: pool_selector(&loaded),
+            pool_selector: WeightedSelector::new(
+                loaded.pools.clone(),
+                loaded.pool_history_penalty_multiplier,
+            ),
+            entry_selectors: entry_selectors(&loaded.pools, HashMap::new()),
             signal_profile_selector: (&loaded.signal_profiles).into(),
             config,
             applied_profile: None,
@@ -427,20 +433,27 @@ impl DJStateMachine {
         pool_name: Option<&str>,
         bot_state: Data,
     ) -> anyhow::Result<Box<dyn Segment>> {
-        let active = match pool_name {
+        let pool = match pool_name {
             Some(name) => Some(
-                self.pool_selector
-                    .iter_mut()
-                    .find(|active| active.pool.name == name)
+                self.config
+                    .read()
+                    .pools
+                    .iter()
+                    .find(|pool| pool.name == name)
+                    .cloned()
                     .with_context(|| format!("no pool named {name:?}"))?,
             ),
-            None => self.pool_selector.choose_mut(),
+            None => self.pool_selector.choose().cloned(),
         };
-        match active {
-            Some(ActivePool { pool, selector }) => {
-                let entry = selector.choose().with_context(|| {
-                    format!("pool {:?} has no entry with weight above 0", pool.name)
-                })?;
+        match pool {
+            Some(pool) => {
+                let entry = self
+                    .entry_selectors
+                    .get_mut(&pool.name)
+                    .and_then(WeightedSelector::choose)
+                    .with_context(|| {
+                        format!("pool {:?} has no entry with weight above 0", pool.name)
+                    })?;
                 Ok(entry.segment(&pool.segment_defaults, &bot_state).await)
             }
             None => Ok(Box::new(NoiseSegment::from_entry(
@@ -458,27 +471,11 @@ impl DJStateMachine {
         self.set_config(config);
     }
 
-    /// Keeps a pool's recent history while the config still has a pool by
-    /// that name.
     fn set_config(&mut self, config: Arc<DJConfig>) {
-        let pools = config
-            .pools
-            .iter()
-            .map(|pool| {
-                let mut active = ActivePool::from(pool);
-                if let Some(previous) = self
-                    .pool_selector
-                    .iter_mut()
-                    .find(|previous| previous.pool.name == pool.name)
-                {
-                    std::mem::swap(&mut active.selector, &mut previous.selector);
-                    active.selector.set_pool(pool.as_ref());
-                }
-                active
-            })
-            .collect();
         self.pool_selector
-            .set_entries(pools, config.pool_history_penalty_multiplier);
+            .set_entries(config.pools.clone(), config.pool_history_penalty_multiplier);
+        self.entry_selectors =
+            entry_selectors(&config.pools, std::mem::take(&mut self.entry_selectors));
         self.signal_profile_selector
             .set_pool(&config.signal_profiles);
         *self.config.write() = config;
@@ -676,35 +673,25 @@ impl DJStateMachine {
     }
 }
 
-struct ActivePool {
-    pool: Arc<Pool>,
-    selector: WeightedSelector<PoolEntry>,
-}
-
-impl From<&Arc<Pool>> for ActivePool {
-    fn from(pool: &Arc<Pool>) -> Self {
-        Self {
-            pool: pool.clone(),
-            selector: pool.as_ref().into(),
-        }
-    }
-}
-
-impl Weighted for ActivePool {
-    fn weight(&self) -> u32 {
-        self.pool.weight
-    }
-
-    fn identity(&self) -> Identity {
-        identity_of(&self.pool.name)
-    }
-}
-
-fn pool_selector(config: &DJConfig) -> WeightedSelector<ActivePool, Box<[ActivePool]>> {
-    WeightedSelector::new(
-        config.pools.iter().map(ActivePool::from).collect(),
-        config.pool_history_penalty_multiplier,
-    )
+/// Keeps a pool's selector from `previous` while `pools` still has a pool by
+/// that name.
+fn entry_selectors(
+    pools: &[Arc<Pool>],
+    mut previous: HashMap<String, WeightedSelector<PoolEntry>>,
+) -> HashMap<String, WeightedSelector<PoolEntry>> {
+    pools
+        .iter()
+        .map(|pool| {
+            let selector = match previous.remove(&pool.name) {
+                Some(mut selector) => {
+                    selector.set_pool(pool.as_ref());
+                    selector
+                }
+                None => pool.as_ref().into(),
+            };
+            (pool.name.clone(), selector)
+        })
+        .collect()
 }
 
 static DEFAULT_NOISE_PERIOD: LazyLock<NoisePeriodEntry> = LazyLock::new(|| NoisePeriodEntry {
