@@ -1,3 +1,4 @@
+use crate::audio::dj::config::SegmentDefaults;
 use crate::audio::dj::segments::signals::Completed;
 use crate::audio::dj::segments::{
     CommonSegmentPlaybackConfig, Segment, SegmentPlaybackConfig, SignalProfilePlayback,
@@ -33,14 +34,19 @@ pub enum NoiseSegment {
 }
 
 impl NoiseSegment {
-    pub fn new(noise_profile: String, duration: Option<Duration>, fade: Option<Duration>) -> Self {
+    pub fn new(
+        noise_profile: String,
+        duration: Option<Duration>,
+        fade: Option<Duration>,
+        channel_status: Option<String>,
+    ) -> Self {
         let config = CommonSegmentPlaybackConfig {
             signal_profile: Some(SignalProfilePlayback {
                 name: noise_profile,
                 fade_in_duration: fade.or_else(|| duration.map(|duration| duration.div_f32(2.0))),
                 fade_out_duration: None,
             }),
-            channel_status: None,
+            channel_status,
         };
         match duration {
             Some(duration) => Self::Timed { config, duration },
@@ -115,8 +121,8 @@ impl Segment for NoiseSegment {
     }
 }
 
-impl From<&NoisePeriodEntry> for NoiseSegment {
-    fn from(noise_entry: &NoisePeriodEntry) -> Self {
+impl NoiseSegment {
+    pub fn from_entry(noise_entry: &NoisePeriodEntry, segment_defaults: &SegmentDefaults) -> Self {
         let duration_secs = if noise_entry.min_duration_seconds >= noise_entry.max_duration_seconds
         {
             noise_entry.min_duration_seconds
@@ -131,6 +137,7 @@ impl From<&NoisePeriodEntry> for NoiseSegment {
             noise_entry
                 .fade_duration_seconds
                 .map(Duration::from_secs_f32),
+            segment_defaults.channel_status.clone(),
         )
     }
 }

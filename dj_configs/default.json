@@ -14,11 +14,13 @@
     {
       "name": "hex",
       "weight": 2,
-      "hex_defaults": {
-        "loop_min": 2,
-        "loop_max": 3,
+      "segment_defaults": {
         "signal_profile": "locked",
-        "announcements": []
+        "hex_config": {
+          "loop_min": 2,
+          "loop_max": 3,
+          "announcements": []
+        }
       },
       "entries": [
         {

@@ -1,9 +1,9 @@
-use crate::audio::dj::config::{DJConfig, Pool, PoolEntry, SignalProfileEntry};
+use crate::audio::dj::config::{DJConfig, Pool, PoolEntry, SegmentDefaults, SignalProfileEntry};
 use crate::audio::dj::manager::{
     ADVANCE_RETRY_DELAY, DJCommand, HexMessageRequest, IdleRequest, TrackRequest,
 };
 use crate::audio::dj::segments::{
-    Completed, HexMessageDefaults, HexSegment, Segment, SignalProfilePlayback, TrackSegment,
+    Completed, HexSegment, Segment, SignalProfilePlayback, TrackSegment,
 };
 use crate::audio::dj::segments::{NoisePeriodEntry, NoiseSegment, SegmentCtx};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
@@ -137,11 +137,10 @@ impl DJState {
         }
     }
 
-    pub fn effective_channel_status(&self, config_status: Option<&str>) -> Option<String> {
+    pub fn effective_channel_status(&self) -> Option<String> {
         self.override_channel_status
             .clone()
             .or_else(|| self.segment.channel_status())
-            .or_else(|| config_status.map(str::to_owned))
     }
 
     pub fn effective_profile(&self) -> SignalProfilePlayback {
@@ -328,13 +327,11 @@ impl DJStateMachine {
             self.applied_channel_status = None;
             return;
         }
-        let config = self.config.read().clone();
-        let config_status = config.channel_status.as_deref();
         let target = self
             .state
             .read()
             .await
-            .effective_channel_status(config_status)
+            .effective_channel_status()
             .unwrap_or_default();
         self.apply_channel_status(target).await;
     }
@@ -444,9 +441,12 @@ impl DJStateMachine {
                 let entry = selector.choose().with_context(|| {
                     format!("pool {:?} has no entry with weight above 0", pool.name)
                 })?;
-                Ok(entry.segment(pool.hex_defaults(), &bot_state).await)
+                Ok(entry.segment(&pool.segment_defaults, &bot_state).await)
             }
-            None => Ok(Box::new(NoiseSegment::from(&*DEFAULT_NOISE_PERIOD))),
+            None => Ok(Box::new(NoiseSegment::from_entry(
+                &DEFAULT_NOISE_PERIOD,
+                &SegmentDefaults::default(),
+            ))),
         }
     }
 
@@ -479,16 +479,19 @@ impl DJStateMachine {
             request.message
         );
         let config = self.config.read().clone();
-        let built_in_defaults = HexMessageDefaults::default();
-        let defaults = match &request.pool {
-            Some(name) => config
-                .pools
-                .iter()
-                .find(|pool| pool.name == *name)
-                .with_context(|| format!("no pool named {name:?}"))?
-                .hex_defaults(),
+        let built_in_defaults = SegmentDefaults::default();
+        let segment_defaults = match &request.pool {
+            Some(name) => {
+                &config
+                    .pools
+                    .iter()
+                    .find(|pool| pool.name == *name)
+                    .with_context(|| format!("no pool named {name:?}"))?
+                    .segment_defaults
+            }
             None => &built_in_defaults,
         };
+        let defaults = segment_defaults.hex_config();
         let loops = request
             .loops
             .unwrap_or_else(|| rand::rng().random_range(defaults.loop_min..=defaults.loop_max))
@@ -498,7 +501,7 @@ impl DJStateMachine {
             request.volume.unwrap_or(1.0),
             loops,
             defaults.pick_random_announcement(),
-            defaults.signal_profile.clone(),
+            segment_defaults.signal_profile.clone(),
         )
         .into();
         self.enter_state(next_state, bot_state).await
@@ -541,7 +544,9 @@ impl DJStateMachine {
             .map(Duration::try_from_secs_f32)
             .transpose()?;
         let next_state = match (request.noise_profile, duration) {
-            (Some(noise_profile), duration) => NoiseSegment::new(noise_profile, duration, None),
+            (Some(noise_profile), duration) => {
+                NoiseSegment::new(noise_profile, duration, None, None)
+            }
             (None, Some(duration)) => NoiseSegment::quiet(duration),
             (None, None) => NoiseSegment::idle(),
         };
@@ -678,7 +683,7 @@ impl Weighted for ActivePool {
 fn pool_selector(config: &DJConfig) -> WeightedSelector<ActivePool, Box<[ActivePool]>> {
     WeightedSelector::new(
         config.pools.iter().map(ActivePool::from).collect(),
-        config.history_penalty_multiplier,
+        config.pool_history_penalty_multiplier,
     )
 }
 

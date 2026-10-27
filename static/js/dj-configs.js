@@ -25,8 +25,16 @@ const historyPenaltyMultiplier = {
 };
 
 const generalFields = [
+    {
+        ...historyPenaltyMultiplier,
+        key: 'pool_history_penalty_multiplier',
+        label: 'Pool selection history penalty multiplier',
+    },
+];
+
+const segmentDefaultsFields = [
+    profileText('signal_profile', 'Signal Profile', true),
     optionalText('channel_status', 'Channel Status'),
-    { ...historyPenaltyMultiplier, label: 'Pool history penalty multiplier' },
 ];
 
 const loops = (key, label) => ({ key, label, type: 'number', step: 1, min: 0, default: 1 });
@@ -77,7 +85,6 @@ const signalProfilesFields = [historyPenaltyMultiplier];
 const hexDefaultsFields = [
     loops('loop_min', 'Loop Min'),
     loops('loop_max', 'Loop Max'),
-    profileText('signal_profile', 'Signal Profile', true),
     { key: 'announcements', label: 'Announcements', type: 'strings' },
 ];
 
@@ -113,10 +120,25 @@ function convertObject(fields, source, convert) {
     return Object.fromEntries(fields.map((field) => [field.key, convert(field, source[field.key])]));
 }
 
+function segmentDefaultsFromServer(segmentDefaults) {
+    const source = segmentDefaults ?? {};
+    return {
+        ...convertObject(segmentDefaultsFields, source, fieldFromServer),
+        hex_config: source.hex_config ? convertObject(hexDefaultsFields, source.hex_config, fieldFromServer) : null,
+    };
+}
+
+function segmentDefaultsToServer(form) {
+    return {
+        ...convertObject(segmentDefaultsFields, form, fieldToServer),
+        hex_config: form.hex_config && convertObject(hexDefaultsFields, form.hex_config, fieldToServer),
+    };
+}
+
 function poolFromServer(pool) {
     return {
         ...convertObject(poolFields, pool, fieldFromServer),
-        hex_defaults: pool.hex_defaults && convertObject(hexDefaultsFields, pool.hex_defaults, fieldFromServer),
+        segment_defaults: segmentDefaultsFromServer(pool.segment_defaults),
         entries: pool.entries.map((entry) => {
             const kind = Object.keys(kinds).find((name) => kinds[name].identifier in entry);
             return { kind, ...convertObject(kinds[kind].entryFields, entry, fieldFromServer) };
@@ -127,7 +149,7 @@ function poolFromServer(pool) {
 function poolToServer(pool) {
     return {
         ...convertObject(poolFields, pool, fieldToServer),
-        hex_defaults: pool.hex_defaults && convertObject(hexDefaultsFields, pool.hex_defaults, fieldToServer),
+        segment_defaults: segmentDefaultsToServer(pool.segment_defaults),
         entries: pool.entries.map((entry) => convertObject(kinds[entry.kind].entryFields, entry, fieldToServer)),
     };
 }
@@ -171,7 +193,7 @@ function blankRow(fields) {
 function blankForm() {
     return {
         name: '',
-        channel_status: '',
+        ...blankRow(generalFields),
         pools: [],
         signal_profiles: { ...blankRow(signalProfilesFields), entries: [] },
     };
@@ -208,14 +230,21 @@ export function djConfigs() {
             for (let n = 2; names.includes(name); n++) {
                 name = `pool-${n}`;
             }
-            this.djConfigForm.pools.push({ ...blankRow(poolFields), name, hex_defaults: null, entries: [] });
+            this.djConfigForm.pools.push({
+                ...blankRow(poolFields),
+                name,
+                segment_defaults: { ...blankRow(segmentDefaultsFields), hex_config: null },
+                entries: [],
+            });
         },
 
         djConfigPoolBlocks(pool) {
+            const segmentDefaults = pool.segment_defaults;
             return [
                 { row: pool, fields: poolFields },
-                ...(pool.hex_defaults
-                    ? [{ row: pool.hex_defaults, fields: hexDefaultsFields, label: 'Hex Defaults' }]
+                { row: segmentDefaults, fields: segmentDefaultsFields, label: 'Segment Defaults' },
+                ...(segmentDefaults.hex_config
+                    ? [{ row: segmentDefaults.hex_config, fields: hexDefaultsFields, label: 'Hex Config' }]
                     : []),
                 ...pool.entries.map((entry, index) => ({
                     row: entry,
@@ -226,8 +255,9 @@ export function djConfigs() {
             ];
         },
 
-        toggleDjConfigHexDefaults(pool) {
-            pool.hex_defaults = pool.hex_defaults ? null : blankRow(hexDefaultsFields);
+        toggleDjConfigHexConfig(pool) {
+            const segmentDefaults = pool.segment_defaults;
+            segmentDefaults.hex_config = segmentDefaults.hex_config ? null : blankRow(hexDefaultsFields);
         },
 
         addDjConfigEntry(pool, kind) {

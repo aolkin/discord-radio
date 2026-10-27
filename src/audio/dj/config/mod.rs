@@ -15,9 +15,8 @@ pub struct DJConfig {
     pub name: String,
     pub pools: Arc<[Arc<Pool>]>,
     pub signal_profiles: SignalProfiles,
-    pub channel_status: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub history_penalty_multiplier: Option<f32>,
+    pub pool_history_penalty_multiplier: Option<f32>,
 }
 
 #[field_trait_impl(WeightedPool<SignalProfileEntry>)]
@@ -33,26 +32,39 @@ pub struct SignalProfiles {
 pub struct Pool {
     pub name: String,
     pub weight: u32,
-    pub hex_defaults: Option<HexMessageDefaults>,
+    #[serde(default)]
+    pub segment_defaults: SegmentDefaults,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub history_penalty_multiplier: Option<f32>,
     pub entries: Arc<[PoolEntry]>,
 }
 
+#[derive(Deserialize, Serialize, Debug, Default)]
+pub struct SegmentDefaults {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hex_config: Option<HexMessageDefaults>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signal_profile: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub channel_status: Option<String>,
+}
+
 static BUILT_IN_HEX_DEFAULTS: LazyLock<HexMessageDefaults> = LazyLock::new(Default::default);
 
-impl Pool {
-    pub fn hex_defaults(&self) -> &HexMessageDefaults {
-        self.hex_defaults.as_ref().unwrap_or(&BUILT_IN_HEX_DEFAULTS)
+impl SegmentDefaults {
+    pub fn hex_config(&self) -> &HexMessageDefaults {
+        self.hex_config.as_ref().unwrap_or(&BUILT_IN_HEX_DEFAULTS)
     }
+}
 
+impl Pool {
     pub fn has_weighted_entry(&self) -> bool {
         self.entries.iter().any(|entry| entry.weight() > 0)
     }
 
     fn validate(&self) -> anyhow::Result<()> {
-        let defaults = self.hex_defaults();
-        ensure_loops(defaults.loop_min, defaults.loop_max).context("hex_defaults")?;
+        let defaults = self.segment_defaults.hex_config();
+        ensure_loops(defaults.loop_min, defaults.loop_max).context("hex_config")?;
         ensure_penalty_multiplier(self.history_penalty_multiplier)?;
         if !self.has_weighted_entry() && self.weight != 0 {
             bail!("a pool with no entry of weight above 0 must have weight 0");
@@ -100,17 +112,22 @@ impl PoolEntry {
 
     pub async fn segment(
         &self,
-        hex_defaults: &HexMessageDefaults,
+        segment_defaults: &SegmentDefaults,
         bot_state: &Data,
     ) -> Box<dyn Segment> {
         match self {
-            PoolEntry::Track(track) => {
-                Box::new(TrackSegment::from_entry(track.clone(), &bot_state.duration_cache).await)
-            }
+            PoolEntry::Track(track) => Box::new(
+                TrackSegment::from_entry(
+                    track.clone(),
+                    segment_defaults,
+                    &bot_state.duration_cache,
+                )
+                .await,
+            ),
             PoolEntry::Hex(message) => {
-                Box::new(HexSegment::from_entry(message.clone(), hex_defaults))
+                Box::new(HexSegment::from_entry(message.clone(), segment_defaults))
             }
-            PoolEntry::Noise(noise) => Box::new(NoiseSegment::from(noise)),
+            PoolEntry::Noise(noise) => Box::new(NoiseSegment::from_entry(noise, segment_defaults)),
         }
     }
 }
@@ -134,7 +151,7 @@ impl RegistryEntry for DJConfig {
 
     /// Rejects values that would make the DJ panic when it picks them.
     fn validate(&self) -> anyhow::Result<()> {
-        ensure_penalty_multiplier(self.history_penalty_multiplier)?;
+        ensure_penalty_multiplier(self.pool_history_penalty_multiplier)?;
         for pool in self.pools.iter() {
             pool.validate()
                 .with_context(|| format!("pool {:?}", pool.name))?;

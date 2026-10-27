@@ -2,6 +2,7 @@ use super::{
     CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
     TrackSlot,
 };
+use crate::audio::dj::config::SegmentDefaults;
 use crate::audio::dj::segments::signals::{Completed, CompletedSignal};
 use crate::audio::dj::weighted_choice::Weighted;
 use crate::audio::processing::mixer::{TrackCallback, TrackCommand};
@@ -29,7 +30,6 @@ pub struct HexMessageDefaults {
     pub loop_min: u32,
     #[serde(default = "default_loops")]
     pub loop_max: u32,
-    pub signal_profile: Option<String>,
     #[serde(default)]
     pub announcements: Vec<String>,
 }
@@ -39,7 +39,6 @@ impl Default for HexMessageDefaults {
         Self {
             loop_min: default_loops(),
             loop_max: default_loops(),
-            signal_profile: None,
             announcements: Vec::new(),
         }
     }
@@ -145,12 +144,13 @@ impl HexSegment {
         *self.run.lock().unwrap() = Some(handle);
     }
 
-    pub fn from_entry(hex_entry: HexMessageEntry, defaults: &HexMessageDefaults) -> Self {
+    pub fn from_entry(hex_entry: HexMessageEntry, segment_defaults: &SegmentDefaults) -> Self {
+        let defaults = segment_defaults.hex_config();
         let loop_min = hex_entry.loop_min.unwrap_or(defaults.loop_min);
         let loop_max = hex_entry.loop_max.unwrap_or(defaults.loop_max);
         let signal_profile = hex_entry
             .signal_profile
-            .or_else(|| defaults.signal_profile.clone());
+            .or_else(|| segment_defaults.signal_profile.clone());
         let announcement = hex_entry
             .announcement
             .or_else(|| defaults.pick_random_announcement());

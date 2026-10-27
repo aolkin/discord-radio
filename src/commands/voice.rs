@@ -119,9 +119,10 @@ pub async fn hex(
     #[description = "Message to convert to hex and play"] message: String,
     #[description = "Volume 0.0-2.0 (0=silence, 1.0=unity, 2.0=+18dB boost, default 1.0)"]
     volume: Option<f32>,
-    #[description = "Times to loop the message (default from the pool's hex defaults)"]
-    loops: Option<u32>,
-    #[description = "Pool in the DJ config to take hex defaults from"] pool: Option<String>,
+    #[description = "Times to loop the message (default from the pool's hex config)"] loops: Option<
+        u32,
+    >,
+    #[description = "Pool in the DJ config to take segment defaults from"] pool: Option<String>,
 ) -> anyhow::Result<()> {
     let guild_id = require_guild(ctx)?;
     let user_id = ctx.author().id;
