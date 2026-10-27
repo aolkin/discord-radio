@@ -128,11 +128,10 @@ function playbackFromServer(fields, playback) {
 }
 
 function playbackToServer(fields, form) {
-    const playback = {
+    return {
         ...convertObject(fields, form, fieldToServer),
         hex_defaults: form.hex_defaults && convertObject(hexDefaultsFields, form.hex_defaults, fieldToServer),
     };
-    return Object.values(playback).some((value) => value !== null) ? playback : null;
 }
 
 function blankPlayback(fields) {

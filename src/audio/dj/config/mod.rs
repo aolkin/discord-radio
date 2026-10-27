@@ -16,20 +16,15 @@ pub struct DJConfig {
     pub pools: Arc<[Arc<Pool>]>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signal_profiles: Option<SignalProfiles>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub playback_config: Option<PlaybackConfig>,
+    #[serde(default)]
+    pub playback_config: PlaybackConfig,
 }
 
 impl DJConfig {
-    pub fn playback_config(&self) -> &PlaybackConfig {
-        self.playback_config.as_ref().unwrap_or(&NO_PLAYBACK_CONFIG)
-    }
-
-    /// The settings for a segment from `pool`, or from no pool.
     pub fn segment_playback_config(&self, pool: Option<&Pool>) -> PlaybackConfig {
-        pool.and_then(|pool| pool.playback_config.as_ref())
-            .unwrap_or(&NO_PLAYBACK_CONFIG)
-            .with_defaults(self.playback_config())
+        pool.map(|pool| pool.playback_config.clone())
+            .unwrap_or_default()
+            .with_defaults(&self.playback_config)
     }
 }
 
@@ -41,13 +36,37 @@ pub struct SignalProfiles {
     pub entries: Arc<[SignalProfileEntry]>,
 }
 
+#[derive(Deserialize, Serialize, Debug)]
+pub struct Pool {
+    pub name: String,
+    pub weight: u32,
+    #[serde(default)]
+    pub playback_config: PlaybackConfig,
+    pub entries: Arc<[PoolEntry]>,
+}
+
+static BUILT_IN_HEX_DEFAULTS: LazyLock<HexMessageDefaults> = LazyLock::new(Default::default);
+
+impl Pool {
+    pub fn has_weighted_entry(&self) -> bool {
+        self.entries.iter().any(|entry| entry.weight() > 0)
+    }
+
+    fn validate(&self, hex_defaults: &HexMessageDefaults) -> anyhow::Result<()> {
+        self.playback_config.validate().context("playback_config")?;
+        if !self.has_weighted_entry() && self.weight != 0 {
+            bail!("a pool with no entry of weight above 0 must have weight 0");
+        }
+        self.entries
+            .iter()
+            .try_for_each(|entry| entry.validate(hex_defaults))
+    }
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]
 pub struct PlaybackConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub history_penalty_multiplier: Option<f32>,
-    /// On a pool, the profile for its track and hex message segments whose
-    /// entry names none. On the DJ config, the profile the rotation plays when
-    /// it has no entry to pick.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signal_profile: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -56,18 +75,7 @@ pub struct PlaybackConfig {
     pub hex_defaults: Option<HexMessageDefaults>,
 }
 
-static NO_PLAYBACK_CONFIG: PlaybackConfig = PlaybackConfig {
-    history_penalty_multiplier: None,
-    signal_profile: None,
-    channel_status: None,
-    hex_defaults: None,
-};
-
-static BUILT_IN_HEX_DEFAULTS: LazyLock<HexMessageDefaults> = LazyLock::new(Default::default);
-
 impl PlaybackConfig {
-    /// Fills unset settings from `defaults`, except `signal_profile`, which
-    /// means something different on the DJ config.
     pub fn with_defaults(&self, defaults: &Self) -> Self {
         Self {
             history_penalty_multiplier: self
@@ -95,34 +103,6 @@ impl PlaybackConfig {
             ensure_loops(defaults.loop_min, defaults.loop_max).context("hex_defaults")?;
         }
         Ok(())
-    }
-}
-
-#[derive(Deserialize, Serialize, Debug)]
-pub struct Pool {
-    pub name: String,
-    pub weight: u32,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub playback_config: Option<PlaybackConfig>,
-    pub entries: Arc<[PoolEntry]>,
-}
-
-impl Pool {
-    pub fn has_weighted_entry(&self) -> bool {
-        self.entries.iter().any(|entry| entry.weight() > 0)
-    }
-
-    fn validate(&self, playback: &PlaybackConfig) -> anyhow::Result<()> {
-        if let Some(own) = &self.playback_config {
-            own.validate().context("playback_config")?;
-        }
-        if !self.has_weighted_entry() && self.weight != 0 {
-            bail!("a pool with no entry of weight above 0 must have weight 0");
-        }
-        let hex_defaults = playback.hex_defaults();
-        self.entries
-            .iter()
-            .try_for_each(|entry| entry.validate(hex_defaults))
     }
 }
 
@@ -191,11 +171,9 @@ impl RegistryEntry for DJConfig {
 
     /// Rejects values that would make the DJ panic when it picks them.
     fn validate(&self) -> anyhow::Result<()> {
-        self.playback_config()
-            .validate()
-            .context("playback_config")?;
+        self.playback_config.validate().context("playback_config")?;
         for pool in self.pools.iter() {
-            pool.validate(&self.segment_playback_config(Some(pool)))
+            pool.validate(self.segment_playback_config(Some(pool)).hex_defaults())
                 .with_context(|| format!("pool {:?}", pool.name))?;
         }
         let Some(signal_profiles) = &self.signal_profiles else {

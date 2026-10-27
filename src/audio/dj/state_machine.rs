@@ -273,7 +273,7 @@ impl DJStateMachine {
                 noise_profile: self
                     .config
                     .read()
-                    .playback_config()
+                    .playback_config
                     .signal_profile
                     .clone()
                     .unwrap_or_else(|| DEFAULT_SIGNAL_PROFILE.noise_profile.clone()),
@@ -337,7 +337,7 @@ impl DJStateMachine {
             return;
         }
         let config = self.config.read().clone();
-        let config_status = config.playback_config().channel_status.as_deref();
+        let config_status = config.playback_config.channel_status.as_deref();
         let target = self
             .state
             .read()
@@ -708,7 +708,7 @@ fn pool_selector(config: &DJConfig) -> WeightedSelector<ActivePool, Box<[ActiveP
             .iter()
             .map(|pool| ActivePool::new(pool, config))
             .collect(),
-        config.playback_config().history_penalty_multiplier,
+        config.playback_config.history_penalty_multiplier,
     )
 }
 
