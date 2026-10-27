@@ -2,9 +2,12 @@ use crate::audio::dj::segments::{
     HexMessageDefaults, HexMessageEntry, HexSegment, NoisePeriodEntry, NoiseSegment, Segment,
     TrackEntry, TrackSegment, ensure_loops,
 };
-use crate::audio::dj::weighted_choice::{Weighted, WeightedPool, identity_of};
+use crate::audio::dj::weighted_choice::{
+    Identity, Weighted, WeightedPool, ambassador_impl_Weighted, identity_of,
+};
 use crate::bucket::registry::RegistryEntry;
 use crate::state::Data;
+use ambassador::Delegate;
 use anyhow::{Context, bail};
 use field_trait::field_trait_impl;
 use serde::{Deserialize, Serialize};
@@ -76,30 +79,13 @@ impl Pool {
 }
 
 /// The kind is inferred from which fields are present.
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Delegate)]
 #[serde(untagged)]
+#[delegate(Weighted)]
 pub enum PoolEntry {
     Track(TrackEntry),
     Hex(HexMessageEntry),
     Noise(NoisePeriodEntry),
-}
-
-impl Weighted for PoolEntry {
-    fn weight(&self) -> u32 {
-        match self {
-            PoolEntry::Track(track) => track.weight,
-            PoolEntry::Hex(message) => message.weight,
-            PoolEntry::Noise(noise) => noise.weight,
-        }
-    }
-
-    fn identity(&self) -> u64 {
-        match self {
-            PoolEntry::Track(track) => track.identity(),
-            PoolEntry::Hex(message) => message.identity(),
-            PoolEntry::Noise(noise) => noise.identity(),
-        }
-    }
 }
 
 impl PoolEntry {
@@ -160,7 +146,7 @@ pub struct SignalProfileEntry {
 
 #[field_trait_impl]
 impl Weighted for SignalProfileEntry {
-    fn identity(&self) -> u64 {
+    fn identity(&self) -> Identity {
         identity_of((
             &self.noise_profile,
             self.fade_duration_seconds.to_bits(),

@@ -7,7 +7,7 @@ use crate::audio::dj::segments::{
 };
 use crate::audio::dj::segments::{NoisePeriodEntry, NoiseSegment, SegmentCtx};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
-use crate::audio::dj::weighted_choice::{Weighted, WeightedSelector, identity_of};
+use crate::audio::dj::weighted_choice::{Identity, Weighted, WeightedSelector, identity_of};
 use crate::state::Data;
 use anyhow::Context;
 use rand::RngExt;
@@ -461,25 +461,24 @@ impl DJStateMachine {
     /// Keeps a pool's recent history while the config still has a pool by
     /// that name.
     fn set_config(&mut self, config: Arc<DJConfig>) {
-        self.pool_selector.map_entries(
-            |previous| {
-                let mut previous = previous.into_vec();
-                config
-                    .pools
-                    .iter()
-                    .map(|pool| {
-                        match previous
-                            .iter()
-                            .position(|active| active.pool.name == pool.name)
-                        {
-                            Some(idx) => previous.swap_remove(idx).with_pool(pool),
-                            None => pool.into(),
-                        }
-                    })
-                    .collect()
-            },
-            config.pool_history_penalty_multiplier,
-        );
+        let pools = config
+            .pools
+            .iter()
+            .map(|pool| {
+                let mut active = ActivePool::from(pool);
+                if let Some(previous) = self
+                    .pool_selector
+                    .iter_mut()
+                    .find(|previous| previous.pool.name == pool.name)
+                {
+                    std::mem::swap(&mut active.selector, &mut previous.selector);
+                    active.selector.set_pool(pool.as_ref());
+                }
+                active
+            })
+            .collect();
+        self.pool_selector
+            .set_entries(pools, config.pool_history_penalty_multiplier);
         self.signal_profile_selector
             .set_pool(&config.signal_profiles);
         *self.config.write() = config;
@@ -691,20 +690,12 @@ impl From<&Arc<Pool>> for ActivePool {
     }
 }
 
-impl ActivePool {
-    fn with_pool(mut self, pool: &Arc<Pool>) -> Self {
-        self.selector.set_pool(pool.as_ref());
-        self.pool = pool.clone();
-        self
-    }
-}
-
 impl Weighted for ActivePool {
     fn weight(&self) -> u32 {
         self.pool.weight
     }
 
-    fn identity(&self) -> u64 {
+    fn identity(&self) -> Identity {
         identity_of(&self.pool.name)
     }
 }

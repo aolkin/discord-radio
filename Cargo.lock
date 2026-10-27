@@ -53,6 +53,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ambassador"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cd3d4da7fddbc6567cbd7b5c30364f91313701b1857ab5b925eb3acf06162eed"
+dependencies = [
+ "itertools 0.10.5",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "android_system_properties"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1958,6 +1970,15 @@ checksum = "791930b43c0d5973160d90a8f3894509f2b273430f5c5c73b668636d0287c5c0"
 
 [[package]]
 name = "itertools"
+version = "0.10.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b0fd2260e829bddf4cb6ea802289de2f86d6a7a690192fbe91b3f46e0f2c8473"
+dependencies = [
+ "either",
+]
+
+[[package]]
+name = "itertools"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
@@ -3146,7 +3167,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b570b25f7617e43d59005d0990ccb79e950a423952cea19671b7a876da390adf"
 dependencies = [
  "anyhow",
- "itertools",
+ "itertools 0.14.0",
  "proc-macro2",
  "quote",
  "syn 2.0.119",
@@ -3254,6 +3275,7 @@ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 name = "radio-bot"
 version = "0.1.0"
 dependencies = [
+ "ambassador",
  "anyhow",
  "async-trait",
  "atomic_float",

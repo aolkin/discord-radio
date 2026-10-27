@@ -1,3 +1,4 @@
+use ambassador::delegatable_trait;
 use field_trait::field_trait;
 use rand::RngExt;
 use std::collections::VecDeque;
@@ -6,13 +7,17 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 /// A weight an item contributes to weighted random selection.
+#[delegatable_trait]
 #[field_trait]
 pub trait Weighted {
     fn weight(&self) -> u32;
     /// Ignores the weight, so editing only an item's weight keeps its place
     /// in a selector's history.
-    fn identity(&self) -> u64;
+    fn identity(&self) -> Identity;
 }
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Identity(u64);
 
 #[field_trait]
 pub trait WeightedPool<T: Weighted> {
@@ -21,10 +26,10 @@ pub trait WeightedPool<T: Weighted> {
 }
 
 /// Hashes `value` with FNV-1a.
-pub fn identity_of(value: impl Hash) -> u64 {
+pub fn identity_of(value: impl Hash) -> Identity {
     let mut hasher = Fnv1a(0xcbf2_9ce4_8422_2325);
     value.hash(&mut hasher);
-    hasher.finish()
+    Identity(hasher.finish())
 }
 
 struct Fnv1a(u64);
@@ -64,8 +69,8 @@ fn choose_index(weights: &[f32]) -> Option<usize> {
 /// A weighted random selector with history-based penalty to avoid repetition
 pub struct WeightedSelector<T, S = Arc<[T]>> {
     items: S,
-    identities: Box<[u64]>,
-    recent_history: VecDeque<u64>,
+    identities: Box<[Identity]>,
+    recent_history: VecDeque<Identity>,
     history_size: usize,
     penalty_multiplier: f32,
     item: PhantomData<fn() -> T>,
@@ -105,14 +110,6 @@ impl<T: Weighted, S: AsRef<[T]>> WeightedSelector<T, S> {
         self.apply_entries(history_penalty_multiplier);
     }
 
-    pub fn map_entries(&mut self, map: impl FnOnce(S) -> S, history_penalty_multiplier: Option<f32>)
-    where
-        S: Default,
-    {
-        let items = map(std::mem::take(&mut self.items));
-        self.set_entries(items, history_penalty_multiplier);
-    }
-
     fn apply_entries(&mut self, history_penalty_multiplier: Option<f32>) {
         let items = self.items.as_ref();
         self.identities = items.iter().map(Weighted::identity).collect();
@@ -145,7 +142,7 @@ impl<T: Weighted, S: AsRef<[T]>> WeightedSelector<T, S> {
         Some(idx)
     }
 
-    fn penalty(&self, identity: u64) -> f32 {
+    fn penalty(&self, identity: Identity) -> f32 {
         match self
             .recent_history
             .iter()
