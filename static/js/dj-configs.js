@@ -1,12 +1,17 @@
 import { apiRequest, bodyOrStatus, emptyMessage } from './api.js';
 import {
     blankRow,
+    blankSegmentDefaults,
     convertObject,
     fieldFromServer,
     fieldToServer,
     historyPenaltyMultiplier,
     profileText,
     seconds,
+    segmentDefaultsBlocks,
+    segmentDefaultsFromServer,
+    segmentDefaultsToServer,
+    toggleHexConfig,
     weight,
 } from './form-fields.js';
 
@@ -45,9 +50,10 @@ function toForm(config) {
     return {
         name: config.name,
         ...convertObject(generalFields, config, fieldFromServer),
-        pools: Object.entries(config.pools).map(([pool, reference]) =>
-            convertObject(poolReferenceFields, { pool, ...reference }, fieldFromServer),
-        ),
+        pools: Object.entries(config.pools).map(([pool, reference]) => ({
+            ...convertObject(poolReferenceFields, { pool, ...reference }, fieldFromServer),
+            segment_defaults: segmentDefaultsFromServer(reference.segment_defaults),
+        })),
         signal_profiles: {
             ...convertObject(signalProfilesFields, config.signal_profiles, fieldFromServer),
             entries: config.signal_profiles.entries.map((row) =>
@@ -63,7 +69,7 @@ function toBody(form) {
         pools: Object.fromEntries(
             form.pools.map((reference) => {
                 const { pool, ...settings } = convertObject(poolReferenceFields, reference, fieldToServer);
-                return [pool, settings];
+                return [pool, { ...settings, segment_defaults: segmentDefaultsToServer(reference.segment_defaults) }];
             }),
         ),
         signal_profiles: {
@@ -112,7 +118,19 @@ export function djConfigs() {
         },
 
         addDjConfigPool() {
-            this.djConfigForm.pools.push({ ...blankRow(poolReferenceFields), pool: this.pools[0] ?? '' });
+            this.djConfigForm.pools.push({
+                ...blankRow(poolReferenceFields),
+                pool: this.pools[0] ?? '',
+                segment_defaults: blankSegmentDefaults(),
+            });
+        },
+
+        djConfigReferenceBlocks(reference) {
+            return segmentDefaultsBlocks(reference.segment_defaults);
+        },
+
+        toggleDjConfigReferenceHexConfig(reference) {
+            toggleHexConfig(reference.segment_defaults);
         },
 
         addDjConfigSignalProfile() {

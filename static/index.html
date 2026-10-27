@@ -860,6 +860,87 @@
                                 </label>
                             </div>
                         </div>
+                        <template x-for="(block, blockIndex) in djConfigReferenceBlocks(reference)" :key="blockIndex">
+                            <div>
+                                <div class="form-label" x-show="block.label" x-text="block.label"></div>
+                                <div class="form-row">
+                                    <template x-for="field in block.fields" :key="field.key">
+                                        <div class="form-group">
+                                            <label class="form-label">
+                                                <span x-text="field.label"></span>
+                                                <template x-if="field.type === 'number'">
+                                                    <input
+                                                        type="number"
+                                                        class="form-input"
+                                                        x-model.number="block.row[field.key]"
+                                                        :step="field.step"
+                                                        :min="field.min"
+                                                        :max="field.max"
+                                                        :required="!field.optional"
+                                                        :placeholder="field.optional ? 'Optional' : ''"
+                                                    >
+                                                </template>
+                                                <template x-if="field.type === 'text'">
+                                                    <input
+                                                        type="text"
+                                                        class="form-input"
+                                                        x-model="block.row[field.key]"
+                                                        :list="field.profile ? 'dj-config-profile-options' : null"
+                                                        :required="!field.optional"
+                                                        :placeholder="field.optional ? 'Optional' : ''"
+                                                    >
+                                                </template>
+                                                <template x-if="field.type === 'bool'">
+                                                    <select class="form-input" x-model="block.row[field.key]">
+                                                        <option value="">Default</option>
+                                                        <option value="true">Yes</option>
+                                                        <option value="false">No</option>
+                                                    </select>
+                                                </template>
+                                            </label>
+                                            <template x-if="field.type === 'strings'">
+                                                <div>
+                                                    <template
+                                                        x-for="(value, valueIndex) in block.row[field.key]"
+                                                        :key="valueIndex"
+                                                    >
+                                                        <div class="list-row">
+                                                            <input
+                                                                type="text"
+                                                                class="form-input"
+                                                                :aria-label="field.label"
+                                                                x-model="block.row[field.key][valueIndex]"
+                                                                required
+                                                            >
+                                                            <button
+                                                                type="button"
+                                                                class="btn btn-secondary"
+                                                                @click="block.row[field.key].splice(valueIndex, 1)"
+                                                            >
+                                                                Remove
+                                                            </button>
+                                                        </div>
+                                                    </template>
+                                                    <button
+                                                        type="button"
+                                                        class="btn btn-secondary"
+                                                        @click="block.row[field.key].push('')"
+                                                    >
+                                                        + Add
+                                                    </button>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+                        <button
+                            type="button"
+                            class="btn btn-secondary"
+                            @click="toggleDjConfigReferenceHexConfig(reference)"
+                            x-text="reference.segment_defaults.hex_config ? 'Remove Hex Config' : '+ Add Hex Config'"
+                        ></button>
                         <button
                             type="button"
                             class="btn btn-secondary"

@@ -20,7 +20,7 @@ The Discord bot includes a built-in web portal for monitoring bot status and con
   - Set or clear the DJ's background profile and profile override
   - List, create, and edit signal profiles
 - **DJ config editing**
-  - List, create, and edit DJ configs in a form, choosing the pool files each one references and their weights
+  - List, create, and edit DJ configs in a form, choosing the pool files each one references, their weights and segment defaults
 - **Pool editing**
   - List, create, and edit pool files (entries, segment defaults, history penalty multiplier) in a form
 - **Audio file browser**

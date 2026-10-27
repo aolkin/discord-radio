@@ -1,6 +1,7 @@
 import { apiRequest, bodyOrStatus, emptyMessage } from './api.js';
 import {
     blankRow,
+    blankSegmentDefaults,
     convertObject,
     fieldFromServer,
     fieldToServer,
@@ -9,6 +10,10 @@ import {
     optionalText,
     profileText,
     seconds,
+    segmentDefaultsBlocks,
+    segmentDefaultsFromServer,
+    segmentDefaultsToServer,
+    toggleHexConfig,
     weight,
 } from './form-fields.js';
 
@@ -19,8 +24,6 @@ export const modals = {
         reset: () => ({ poolEditorMessage: emptyMessage() }),
     },
 };
-
-const loops = (key, label) => ({ key, label, type: 'number', step: 1, min: 0, default: 1 });
 
 const kinds = {
     track: {
@@ -63,32 +66,6 @@ const kinds = {
 
 const poolFields = [historyPenaltyMultiplier];
 
-const segmentDefaultsFields = [
-    profileText('signal_profile', 'Signal Profile', true),
-    optionalText('channel_status', 'Channel Status'),
-];
-
-const hexDefaultsFields = [
-    loops('loop_min', 'Loop Min'),
-    loops('loop_max', 'Loop Max'),
-    { key: 'announcements', label: 'Announcements', type: 'strings' },
-];
-
-function segmentDefaultsFromServer(segmentDefaults) {
-    const source = segmentDefaults ?? {};
-    return {
-        ...convertObject(segmentDefaultsFields, source, fieldFromServer),
-        hex_config: source.hex_config ? convertObject(hexDefaultsFields, source.hex_config, fieldFromServer) : null,
-    };
-}
-
-function segmentDefaultsToServer(form) {
-    return {
-        ...convertObject(segmentDefaultsFields, form, fieldToServer),
-        hex_config: form.hex_config && convertObject(hexDefaultsFields, form.hex_config, fieldToServer),
-    };
-}
-
 function toForm(name, pool) {
     return {
         name,
@@ -113,7 +90,7 @@ function blankForm() {
     return {
         name: '',
         ...blankRow(poolFields),
-        segment_defaults: { ...blankRow(segmentDefaultsFields), hex_config: null },
+        segment_defaults: blankSegmentDefaults(),
         entries: [],
     };
 }
@@ -142,13 +119,9 @@ export function pools() {
 
         poolBlocks() {
             const pool = this.poolForm;
-            const segmentDefaults = pool.segment_defaults;
             return [
                 { row: pool, fields: poolFields },
-                { row: segmentDefaults, fields: segmentDefaultsFields, label: 'Segment Defaults' },
-                ...(segmentDefaults.hex_config
-                    ? [{ row: segmentDefaults.hex_config, fields: hexDefaultsFields, label: 'Hex Config' }]
-                    : []),
+                ...segmentDefaultsBlocks(pool.segment_defaults),
                 ...pool.entries.map((entry, index) => ({
                     row: entry,
                     fields: kinds[entry.kind].entryFields,
@@ -159,8 +132,7 @@ export function pools() {
         },
 
         togglePoolHexConfig() {
-            const segmentDefaults = this.poolForm.segment_defaults;
-            segmentDefaults.hex_config = segmentDefaults.hex_config ? null : blankRow(hexDefaultsFields);
+            toggleHexConfig(this.poolForm.segment_defaults);
         },
 
         addPoolEntry() {
