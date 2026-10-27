@@ -2,7 +2,7 @@ use crate::audio::dj::segments::{
     HexMessageDefaults, HexMessageEntry, HexSegment, NoisePeriodEntry, NoiseSegment, Segment,
     TrackEntry, TrackSegment, ensure_loops,
 };
-use crate::audio::dj::weighted_choice::{Weighted, WeightedPool};
+use crate::audio::dj::weighted_choice::{Weighted, WeightedPool, identity_of};
 use crate::bucket::registry::RegistryEntry;
 use crate::state::Data;
 use anyhow::{Context, bail};
@@ -78,11 +78,28 @@ impl Pool {
 /// The kind is inferred from which fields are present.
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(untagged)]
-#[field_trait_impl(Weighted)]
 pub enum PoolEntry {
     Track(TrackEntry),
     Hex(HexMessageEntry),
     Noise(NoisePeriodEntry),
+}
+
+impl Weighted for PoolEntry {
+    fn weight(&self) -> u32 {
+        match self {
+            PoolEntry::Track(track) => track.weight,
+            PoolEntry::Hex(message) => message.weight,
+            PoolEntry::Noise(noise) => noise.weight,
+        }
+    }
+
+    fn identity(&self) -> u64 {
+        match self {
+            PoolEntry::Track(track) => track.identity(),
+            PoolEntry::Hex(message) => message.identity(),
+            PoolEntry::Noise(noise) => noise.identity(),
+        }
+    }
 }
 
 impl PoolEntry {
@@ -132,7 +149,6 @@ impl PoolEntry {
     }
 }
 
-#[field_trait_impl(Weighted)]
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct SignalProfileEntry {
     pub noise_profile: String,
@@ -140,6 +156,18 @@ pub struct SignalProfileEntry {
     pub fade_duration_seconds: f32,
     pub min_duration_seconds: f32,
     pub max_duration_seconds: f32,
+}
+
+#[field_trait_impl]
+impl Weighted for SignalProfileEntry {
+    fn identity(&self) -> u64 {
+        identity_of((
+            &self.noise_profile,
+            self.fade_duration_seconds.to_bits(),
+            self.min_duration_seconds.to_bits(),
+            self.max_duration_seconds.to_bits(),
+        ))
+    }
 }
 
 impl RegistryEntry for DJConfig {

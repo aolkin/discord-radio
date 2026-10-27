@@ -4,7 +4,7 @@ use super::{
 };
 use crate::audio::dj::config::SegmentDefaults;
 use crate::audio::dj::segments::signals::{Completed, CompletedSignal};
-use crate::audio::dj::weighted_choice::Weighted;
+use crate::audio::dj::weighted_choice::{Weighted, identity_of};
 use crate::audio::processing::mixer::{TrackCallback, TrackCommand};
 use crate::audio::processing::processor::AudioProcessor;
 use crate::audio::tracks::open_track_source;
@@ -54,7 +54,6 @@ impl HexMessageDefaults {
     }
 }
 
-#[field_trait_impl(Weighted)]
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct HexMessageEntry {
     pub text: String,
@@ -63,6 +62,19 @@ pub struct HexMessageEntry {
     pub loop_min: Option<u32>,
     pub loop_max: Option<u32>,
     pub announcement: Option<String>,
+}
+
+#[field_trait_impl]
+impl Weighted for HexMessageEntry {
+    fn identity(&self) -> u64 {
+        identity_of((
+            &self.text,
+            &self.signal_profile,
+            self.loop_min,
+            self.loop_max,
+            &self.announcement,
+        ))
+    }
 }
 
 pub fn ensure_loops(min: u32, max: u32) -> anyhow::Result<()> {

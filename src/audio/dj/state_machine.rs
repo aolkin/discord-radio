@@ -7,7 +7,7 @@ use crate::audio::dj::segments::{
 };
 use crate::audio::dj::segments::{NoisePeriodEntry, NoiseSegment, SegmentCtx};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
-use crate::audio::dj::weighted_choice::{Weighted, WeightedSelector};
+use crate::audio::dj::weighted_choice::{Weighted, WeightedSelector, identity_of};
 use crate::state::Data;
 use anyhow::Context;
 use rand::RngExt;
@@ -455,16 +455,33 @@ impl DJStateMachine {
         let Some(config) = self.bot_state.dj_config_manager.get(&self.config_name) else {
             return;
         };
-        if !Arc::ptr_eq(&config, &self.config.read()) {
-            tracing::info!("DJ reloading config {:?}", self.config_name);
-            self.set_config(config);
-        }
+        self.set_config(config);
     }
 
-    /// Selection starts with an empty recent history.
+    /// Keeps a pool's recent history while the config still has a pool by
+    /// that name.
     fn set_config(&mut self, config: Arc<DJConfig>) {
-        self.pool_selector = pool_selector(&config);
-        self.signal_profile_selector = (&config.signal_profiles).into();
+        self.pool_selector.map_entries(
+            |previous| {
+                let mut previous = previous.into_vec();
+                config
+                    .pools
+                    .iter()
+                    .map(|pool| {
+                        match previous
+                            .iter()
+                            .position(|active| active.pool.name == pool.name)
+                        {
+                            Some(idx) => previous.swap_remove(idx).with_pool(pool),
+                            None => pool.into(),
+                        }
+                    })
+                    .collect()
+            },
+            config.pool_history_penalty_multiplier,
+        );
+        self.signal_profile_selector
+            .set_pool(&config.signal_profiles);
         *self.config.write() = config;
     }
 
@@ -674,9 +691,21 @@ impl From<&Arc<Pool>> for ActivePool {
     }
 }
 
+impl ActivePool {
+    fn with_pool(mut self, pool: &Arc<Pool>) -> Self {
+        self.selector.set_pool(pool.as_ref());
+        self.pool = pool.clone();
+        self
+    }
+}
+
 impl Weighted for ActivePool {
     fn weight(&self) -> u32 {
         self.pool.weight
+    }
+
+    fn identity(&self) -> u64 {
+        identity_of(&self.pool.name)
     }
 }
 
