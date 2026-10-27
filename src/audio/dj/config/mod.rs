@@ -25,11 +25,9 @@ impl DJConfig {
         self.playback_config.as_ref().unwrap_or(&NO_PLAYBACK_CONFIG)
     }
 
-    /// The pool's playback settings, with the DJ config's filling any the pool
-    /// leaves unset.
-    pub fn pool_playback_config(&self, pool: &Pool) -> PlaybackConfig {
-        pool.playback_config
-            .as_ref()
+    /// The settings for a segment from `pool`, or from no pool.
+    pub fn segment_playback_config(&self, pool: Option<&Pool>) -> PlaybackConfig {
+        pool.and_then(|pool| pool.playback_config.as_ref())
             .unwrap_or(&NO_PLAYBACK_CONFIG)
             .with_defaults(self.playback_config())
     }
@@ -47,6 +45,9 @@ pub struct SignalProfiles {
 pub struct PlaybackConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub history_penalty_multiplier: Option<f32>,
+    /// On a pool, the profile for its track and hex message segments whose
+    /// entry names none. On the DJ config, the profile the rotation plays when
+    /// it has no entry to pick.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signal_profile: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -65,15 +66,14 @@ static NO_PLAYBACK_CONFIG: PlaybackConfig = PlaybackConfig {
 static BUILT_IN_HEX_DEFAULTS: LazyLock<HexMessageDefaults> = LazyLock::new(Default::default);
 
 impl PlaybackConfig {
+    /// Fills unset settings from `defaults`, except `signal_profile`, which
+    /// means something different on the DJ config.
     pub fn with_defaults(&self, defaults: &Self) -> Self {
         Self {
             history_penalty_multiplier: self
                 .history_penalty_multiplier
                 .or(defaults.history_penalty_multiplier),
-            signal_profile: self
-                .signal_profile
-                .clone()
-                .or_else(|| defaults.signal_profile.clone()),
+            signal_profile: self.signal_profile.clone(),
             channel_status: self
                 .channel_status
                 .clone()
@@ -195,7 +195,7 @@ impl RegistryEntry for DJConfig {
             .validate()
             .context("playback_config")?;
         for pool in self.pools.iter() {
-            pool.validate(&self.pool_playback_config(pool))
+            pool.validate(&self.segment_playback_config(Some(pool)))
                 .with_context(|| format!("pool {:?}", pool.name))?;
         }
         let Some(signal_profiles) = &self.signal_profiles else {

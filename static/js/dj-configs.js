@@ -24,11 +24,15 @@ const historyPenaltyMultiplier = {
     optional: true,
 };
 
-const playbackFields = [
+const playbackFields = (signalProfileLabel) => [
     historyPenaltyMultiplier,
-    profileText('signal_profile', 'Signal Profile', true),
+    profileText('signal_profile', signalProfileLabel, true),
     optionalText('channel_status', 'Channel Status'),
 ];
+
+const configPlaybackFields = playbackFields('Rotation Fallback Signal Profile');
+
+const poolPlaybackFields = playbackFields('Segment Signal Profile');
 
 const loops = (key, label) => ({ key, label, type: 'number', step: 1, min: 0, default: 1 });
 
@@ -113,31 +117,31 @@ function convertObject(fields, source, convert) {
     return Object.fromEntries(fields.map((field) => [field.key, convert(field, source[field.key])]));
 }
 
-function playbackFromServer(playback) {
+function playbackFromServer(fields, playback) {
     const source = playback ?? {};
     return {
-        ...convertObject(playbackFields, source, fieldFromServer),
+        ...convertObject(fields, source, fieldFromServer),
         hex_defaults: source.hex_defaults
             ? convertObject(hexDefaultsFields, source.hex_defaults, fieldFromServer)
             : null,
     };
 }
 
-function playbackToServer(form) {
+function playbackToServer(fields, form) {
     const playback = {
-        ...convertObject(playbackFields, form, fieldToServer),
+        ...convertObject(fields, form, fieldToServer),
         hex_defaults: form.hex_defaults && convertObject(hexDefaultsFields, form.hex_defaults, fieldToServer),
     };
     return Object.values(playback).some((value) => value !== null) ? playback : null;
 }
 
-function blankPlayback() {
-    return { ...blankRow(playbackFields), hex_defaults: null };
+function blankPlayback(fields) {
+    return { ...blankRow(fields), hex_defaults: null };
 }
 
-function playbackBlocks(playback, label) {
+function playbackBlocks(fields, playback, label) {
     return [
-        { row: playback, fields: playbackFields, label },
+        { row: playback, fields, label },
         ...(playback.hex_defaults
             ? [{ row: playback.hex_defaults, fields: hexDefaultsFields, label: 'Hex Defaults' }]
             : []),
@@ -147,7 +151,7 @@ function playbackBlocks(playback, label) {
 function poolFromServer(pool) {
     return {
         ...convertObject(poolFields, pool, fieldFromServer),
-        playback_config: playbackFromServer(pool.playback_config),
+        playback_config: playbackFromServer(poolPlaybackFields, pool.playback_config),
         entries: pool.entries.map((entry) => {
             const kind = Object.keys(kinds).find((name) => kinds[name].identifier in entry);
             return { kind, ...convertObject(kinds[kind].entryFields, entry, fieldFromServer) };
@@ -158,7 +162,7 @@ function poolFromServer(pool) {
 function poolToServer(pool) {
     return {
         ...convertObject(poolFields, pool, fieldToServer),
-        playback_config: playbackToServer(pool.playback_config),
+        playback_config: playbackToServer(poolPlaybackFields, pool.playback_config),
         entries: pool.entries.map((entry) => convertObject(kinds[entry.kind].entryFields, entry, fieldToServer)),
     };
 }
@@ -167,7 +171,7 @@ function toForm(config) {
     const signalProfiles = config.signal_profiles ?? { entries: [] };
     return {
         name: config.name,
-        playback_config: playbackFromServer(config.playback_config),
+        playback_config: playbackFromServer(configPlaybackFields, config.playback_config),
         pools: config.pools.map(poolFromServer),
         signal_profiles: {
             ...convertObject(signalProfilesFields, signalProfiles, fieldFromServer),
@@ -178,7 +182,7 @@ function toForm(config) {
 
 function toBody(form) {
     return {
-        playback_config: playbackToServer(form.playback_config),
+        playback_config: playbackToServer(configPlaybackFields, form.playback_config),
         pools: form.pools.map(poolToServer),
         signal_profiles: {
             ...convertObject(signalProfilesFields, form.signal_profiles, fieldToServer),
@@ -201,7 +205,7 @@ function blankRow(fields) {
 function blankForm() {
     return {
         name: '',
-        playback_config: blankPlayback(),
+        playback_config: blankPlayback(configPlaybackFields),
         pools: [],
         signal_profiles: { ...blankRow(signalProfilesFields), entries: [] },
     };
@@ -240,19 +244,19 @@ export function djConfigs() {
             this.djConfigForm.pools.push({
                 ...blankRow(poolFields),
                 name,
-                playback_config: blankPlayback(),
+                playback_config: blankPlayback(poolPlaybackFields),
                 entries: [],
             });
         },
 
         djConfigGeneralBlocks() {
-            return playbackBlocks(this.djConfigForm.playback_config);
+            return playbackBlocks(configPlaybackFields, this.djConfigForm.playback_config);
         },
 
         djConfigPoolBlocks(pool) {
             return [
                 { row: pool, fields: poolFields },
-                ...playbackBlocks(pool.playback_config, 'Playback'),
+                ...playbackBlocks(poolPlaybackFields, pool.playback_config, 'Playback'),
                 ...pool.entries.map((entry, index) => ({
                     row: entry,
                     fields: kinds[entry.kind].entryFields,

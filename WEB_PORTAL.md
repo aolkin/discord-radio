@@ -77,6 +77,8 @@ The Signal Profiles panel lists every profile by name. Saving a new or edited pr
 
 The bot loads DJ configs from the `DJ_CONFIGS_PATH` directory (default `dj_configs/`; the value must end with a slash), under both the content root and the object storage bucket root. A config in object storage replaces a local config of the same name. A DJ uses the config named `default` until one is chosen with `/dj configure`. The DJ Configs panel lists every config by name and opens a form with every field of the config, showing the server's reason when it rejects a save. Saving a config writes it to object storage; a running DJ using that config switches to the saved copy the next time it advances to a new segment.
 
+The DJ config and each of its pools can hold playback settings. A pool's setting wins; a setting the pool leaves unset falls back to the DJ config's, then to a built-in default. The signal profile means something different at each level and does not fall back: a pool's signal profile is the forced profile for that pool's tracks and hex messages whose entry names none, and the DJ config's signal profile is the profile the rotation plays when the config has no signal profile entry to pick.
+
 ### Audio File Browser
 
 The Audio Files panel opens a browser over the `tracks/` folder of object storage. Dropping or choosing files uploads them to the current folder one after another, with a progress bar per file and the server's message when a file is rejected. Breadcrumbs and Up move between folders, and each file shows its full key, size and last modified time. The same browser opens in a mode that picks a file or a folder and hands the choice back to the section that opened it.
@@ -98,7 +100,7 @@ Each guild card's Bot Profile button opens the bot's current nickname, avatar an
 - `GET /api/health` - Health check endpoint
 - `POST /api/guilds/:guild_id/dj/advance` - Advance DJ state, optionally to a segment from the DJ config pool named `state_type`
 - `POST /api/guilds/:guild_id/dj/idle` - Make the DJ go idle now, optionally playing a `noise_profile`, for `duration` seconds or, without one, until the DJ is advanced
-- `POST /api/guilds/:guild_id/hex/play` - Play hex message via DJ, with the playback settings of the pool named `pool` when set, or else of the DJ config
+- `POST /api/guilds/:guild_id/hex/play` - Play hex message via DJ, with the playback settings of the pool named `pool` when set
 - `POST /api/guilds/:guild_id/track/play` - Play audio track via DJ
 - `POST /api/guilds/:guild_id/tracks` - Manage track state (start, stop, update)
 - `POST /api/guilds/:guild_id/dj/profile` - Set the DJ background profile with an optional `fade_duration` in seconds, used to fade in and out of it, or clear it (`{"profile": null}`)
