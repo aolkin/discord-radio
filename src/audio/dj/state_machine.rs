@@ -273,11 +273,12 @@ impl DJStateMachine {
             .unwrap_or(&DEFAULT_SIGNAL_PROFILE)
             .to_owned();
         let fade = Duration::from_secs_f32(entry.fade_duration_seconds);
-        let hold_secs = rand::rng().random_range(entry.min_time_seconds..entry.max_time_seconds);
+        let hold_secs =
+            rand::rng().random_range(entry.min_duration_seconds..entry.max_duration_seconds);
         self.state.write().await.background_profile = BackgroundProfile::Rotating {
             profile: SignalProfilePlayback {
                 fade_in_duration: Some(fade),
-                ..entry.profile_name.into()
+                ..entry.noise_profile.into()
             },
             started_at: Instant::now(),
             duration: fade + Duration::from_secs_f32(hold_secs),
@@ -540,7 +541,7 @@ impl DJStateMachine {
             .map(Duration::try_from_secs_f32)
             .transpose()?;
         let next_state = match (request.noise_profile, duration) {
-            (Some(noise_profile), duration) => NoiseSegment::new(noise_profile, duration),
+            (Some(noise_profile), duration) => NoiseSegment::new(noise_profile, duration, None),
             (None, Some(duration)) => NoiseSegment::quiet(duration),
             (None, None) => NoiseSegment::idle(),
         };
@@ -686,13 +687,14 @@ static DEFAULT_NOISE_PERIOD: LazyLock<NoisePeriodEntry> = LazyLock::new(|| Noise
     min_duration_seconds: 2.0,
     max_duration_seconds: 2.0,
     weight: 1,
+    fade_duration_seconds: None,
 });
 
 static DEFAULT_SIGNAL_PROFILE: LazyLock<SignalProfileEntry> =
     LazyLock::new(|| SignalProfileEntry {
-        profile_name: "clear".to_string(),
+        noise_profile: "clear".to_string(),
         weight: 1,
         fade_duration_seconds: 3.0,
-        min_time_seconds: 60.0,
-        max_time_seconds: 120.0,
+        min_duration_seconds: 60.0,
+        max_duration_seconds: 120.0,
     });

@@ -90,6 +90,9 @@ impl PoolEntry {
                 let context = || format!("noise period {:?}", noise.noise_profile);
                 ensure_seconds(noise.min_duration_seconds, context)?;
                 ensure_seconds(noise.max_duration_seconds, context)?;
+                if let Some(seconds) = noise.fade_duration_seconds {
+                    ensure_seconds(seconds, context)?;
+                }
             }
         }
         Ok(())
@@ -115,11 +118,11 @@ impl PoolEntry {
 #[field_trait_impl(Weighted)]
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct SignalProfileEntry {
-    pub profile_name: String,
+    pub noise_profile: String,
     pub weight: u32,
     pub fade_duration_seconds: f32,
-    pub min_time_seconds: f32,
-    pub max_time_seconds: f32,
+    pub min_duration_seconds: f32,
+    pub max_duration_seconds: f32,
 }
 
 impl RegistryEntry for DJConfig {
@@ -139,12 +142,12 @@ impl RegistryEntry for DJConfig {
         ensure_penalty_multiplier(self.signal_profiles.history_penalty_multiplier)
             .context("signal_profiles")?;
         for profile in self.signal_profiles.entries.iter() {
-            let context = || format!("signal profile {:?}", profile.profile_name);
+            let context = || format!("signal profile {:?}", profile.noise_profile);
             ensure_seconds(profile.fade_duration_seconds, context)?;
-            ensure_seconds(profile.min_time_seconds, context)?;
-            if profile.min_time_seconds >= profile.max_time_seconds {
+            ensure_seconds(profile.min_duration_seconds, context)?;
+            if profile.min_duration_seconds >= profile.max_duration_seconds {
                 bail!(
-                    "{}: min_time_seconds must be less than max_time_seconds",
+                    "{}: min_duration_seconds must be less than max_duration_seconds",
                     context()
                 );
             }

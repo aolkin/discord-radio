@@ -65,6 +65,7 @@ const kinds = {
             seconds('min_duration_seconds', 'Min Duration (s)'),
             seconds('max_duration_seconds', 'Max Duration (s)'),
             weight,
+            optionalSeconds('fade_duration_seconds', 'Fade Duration (s)'),
         ],
     },
 };
@@ -81,11 +82,11 @@ const hexDefaultsFields = [
 ];
 
 const signalProfileFields = [
-    profileText('profile_name', 'Profile'),
+    profileText('noise_profile', 'Noise Profile'),
     weight,
     seconds('fade_duration_seconds', 'Fade Duration (s)'),
-    seconds('min_time_seconds', 'Min Time (s)'),
-    seconds('max_time_seconds', 'Max Time (s)'),
+    seconds('min_duration_seconds', 'Min Duration (s)'),
+    seconds('max_duration_seconds', 'Max Duration (s)'),
 ];
 
 function fieldFromServer(field, value) {

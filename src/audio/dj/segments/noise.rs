@@ -18,6 +18,7 @@ pub struct NoisePeriodEntry {
     pub min_duration_seconds: f32,
     pub max_duration_seconds: f32,
     pub weight: u32,
+    pub fade_duration_seconds: Option<f32>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -32,11 +33,11 @@ pub enum NoiseSegment {
 }
 
 impl NoiseSegment {
-    pub fn new(noise_profile: String, duration: Option<Duration>) -> Self {
+    pub fn new(noise_profile: String, duration: Option<Duration>, fade: Option<Duration>) -> Self {
         let config = CommonSegmentPlaybackConfig {
             signal_profile: Some(SignalProfilePlayback {
                 name: noise_profile,
-                fade_in_duration: duration.map(|duration| duration.div_f32(2.0)),
+                fade_in_duration: fade.or_else(|| duration.map(|duration| duration.div_f32(2.0))),
                 fade_out_duration: None,
             }),
             channel_status: None,
@@ -127,6 +128,9 @@ impl From<&NoisePeriodEntry> for NoiseSegment {
         Self::new(
             noise_entry.noise_profile.clone(),
             Some(Duration::from_secs_f32(duration_secs)),
+            noise_entry
+                .fade_duration_seconds
+                .map(Duration::from_secs_f32),
         )
     }
 }
