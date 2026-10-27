@@ -2,7 +2,7 @@ use super::{
     CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
     TrackSlot,
 };
-use crate::audio::dj::config::PlaybackConfig;
+use crate::audio::dj::config::SegmentDefaults;
 use crate::audio::dj::segments::signals::{Completed, CompletedSignal};
 use crate::audio::dj::weighted_choice::Weighted;
 use crate::audio::duration::DurationCache;
@@ -115,7 +115,7 @@ impl TrackSegment {
 
     pub async fn from_entry(
         track_entry: TrackEntry,
-        playback: &PlaybackConfig,
+        segment_defaults: &SegmentDefaults,
         duration_cache: &DurationCache,
     ) -> Self {
         let duration = duration_cache.get_duration(&track_entry.filename).await;
@@ -156,12 +156,12 @@ impl TrackSegment {
             play_duration,
             track_entry
                 .signal_profile
-                .or_else(|| playback.signal_profile.clone()),
+                .or_else(|| segment_defaults.signal_profile.clone()),
             track_entry
                 .channel_status
                 .as_deref()
                 .map(with_status_emoji)
-                .or_else(|| playback.channel_status.clone()),
+                .or_else(|| segment_defaults.channel_status.clone()),
         )
     }
 }

@@ -14,18 +14,9 @@ use std::sync::{Arc, LazyLock};
 pub struct DJConfig {
     pub name: String,
     pub pools: Arc<[Arc<Pool>]>,
+    pub signal_profiles: SignalProfiles,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub signal_profiles: Option<SignalProfiles>,
-    #[serde(default)]
-    pub playback_config: PlaybackConfig,
-}
-
-impl DJConfig {
-    pub fn segment_playback_config(&self, pool: Option<&Pool>) -> PlaybackConfig {
-        pool.map(|pool| pool.playback_config.clone())
-            .unwrap_or_default()
-            .with_defaults(&self.playback_config)
-    }
+    pub pool_history_penalty_multiplier: Option<f32>,
 }
 
 #[field_trait_impl(WeightedPool<SignalProfileEntry>)]
@@ -36,73 +27,51 @@ pub struct SignalProfiles {
     pub entries: Arc<[SignalProfileEntry]>,
 }
 
+#[field_trait_impl(WeightedPool<PoolEntry>)]
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Pool {
     pub name: String,
     pub weight: u32,
     #[serde(default)]
-    pub playback_config: PlaybackConfig,
+    pub segment_defaults: SegmentDefaults,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub history_penalty_multiplier: Option<f32>,
     pub entries: Arc<[PoolEntry]>,
 }
 
+#[derive(Deserialize, Serialize, Debug, Default)]
+pub struct SegmentDefaults {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hex_config: Option<HexMessageDefaults>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signal_profile: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub channel_status: Option<String>,
+}
+
 static BUILT_IN_HEX_DEFAULTS: LazyLock<HexMessageDefaults> = LazyLock::new(Default::default);
+
+impl SegmentDefaults {
+    pub fn hex_config(&self) -> &HexMessageDefaults {
+        self.hex_config.as_ref().unwrap_or(&BUILT_IN_HEX_DEFAULTS)
+    }
+}
 
 impl Pool {
     pub fn has_weighted_entry(&self) -> bool {
         self.entries.iter().any(|entry| entry.weight() > 0)
     }
 
-    fn validate(&self, hex_defaults: &HexMessageDefaults) -> anyhow::Result<()> {
-        self.playback_config.validate().context("playback_config")?;
+    fn validate(&self) -> anyhow::Result<()> {
+        let defaults = self.segment_defaults.hex_config();
+        ensure_loops(defaults.loop_min, defaults.loop_max).context("hex_config")?;
+        ensure_penalty_multiplier(self.history_penalty_multiplier)?;
         if !self.has_weighted_entry() && self.weight != 0 {
             bail!("a pool with no entry of weight above 0 must have weight 0");
         }
         self.entries
             .iter()
-            .try_for_each(|entry| entry.validate(hex_defaults))
-    }
-}
-
-#[derive(Deserialize, Serialize, Clone, Debug, Default)]
-pub struct PlaybackConfig {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub history_penalty_multiplier: Option<f32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub signal_profile: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub channel_status: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub hex_defaults: Option<HexMessageDefaults>,
-}
-
-impl PlaybackConfig {
-    pub fn with_defaults(&self, defaults: &Self) -> Self {
-        Self {
-            history_penalty_multiplier: self
-                .history_penalty_multiplier
-                .or(defaults.history_penalty_multiplier),
-            signal_profile: self.signal_profile.clone(),
-            channel_status: self
-                .channel_status
-                .clone()
-                .or_else(|| defaults.channel_status.clone()),
-            hex_defaults: self
-                .hex_defaults
-                .clone()
-                .or_else(|| defaults.hex_defaults.clone()),
-        }
-    }
-
-    pub fn hex_defaults(&self) -> &HexMessageDefaults {
-        self.hex_defaults.as_ref().unwrap_or(&BUILT_IN_HEX_DEFAULTS)
-    }
-
-    fn validate(&self) -> anyhow::Result<()> {
-        ensure_penalty_multiplier(self.history_penalty_multiplier)?;
-        if let Some(defaults) = &self.hex_defaults {
-            ensure_loops(defaults.loop_min, defaults.loop_max).context("hex_defaults")?;
-        }
-        Ok(())
+            .try_for_each(|entry| entry.validate(defaults))
     }
 }
 
@@ -141,13 +110,24 @@ impl PoolEntry {
         Ok(())
     }
 
-    pub async fn segment(&self, playback: &PlaybackConfig, bot_state: &Data) -> Box<dyn Segment> {
+    pub async fn segment(
+        &self,
+        segment_defaults: &SegmentDefaults,
+        bot_state: &Data,
+    ) -> Box<dyn Segment> {
         match self {
             PoolEntry::Track(track) => Box::new(
-                TrackSegment::from_entry(track.clone(), playback, &bot_state.duration_cache).await,
+                TrackSegment::from_entry(
+                    track.clone(),
+                    segment_defaults,
+                    &bot_state.duration_cache,
+                )
+                .await,
             ),
-            PoolEntry::Hex(message) => Box::new(HexSegment::from_entry(message.clone(), playback)),
-            PoolEntry::Noise(noise) => Box::new(NoiseSegment::from_entry(noise, playback)),
+            PoolEntry::Hex(message) => {
+                Box::new(HexSegment::from_entry(message.clone(), segment_defaults))
+            }
+            PoolEntry::Noise(noise) => Box::new(NoiseSegment::from_entry(noise, segment_defaults)),
         }
     }
 }
@@ -171,17 +151,14 @@ impl RegistryEntry for DJConfig {
 
     /// Rejects values that would make the DJ panic when it picks them.
     fn validate(&self) -> anyhow::Result<()> {
-        self.playback_config.validate().context("playback_config")?;
+        ensure_penalty_multiplier(self.pool_history_penalty_multiplier)?;
         for pool in self.pools.iter() {
-            pool.validate(self.segment_playback_config(Some(pool)).hex_defaults())
+            pool.validate()
                 .with_context(|| format!("pool {:?}", pool.name))?;
         }
-        let Some(signal_profiles) = &self.signal_profiles else {
-            return Ok(());
-        };
-        ensure_penalty_multiplier(signal_profiles.history_penalty_multiplier)
+        ensure_penalty_multiplier(self.signal_profiles.history_penalty_multiplier)
             .context("signal_profiles")?;
-        for profile in signal_profiles.entries.iter() {
+        for profile in self.signal_profiles.entries.iter() {
             let context = || format!("signal profile {:?}", profile.noise_profile);
             ensure_seconds(profile.fade_duration_seconds, context)?;
             ensure_seconds(profile.min_duration_seconds, context)?;

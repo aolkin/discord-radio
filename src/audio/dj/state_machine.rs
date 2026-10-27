@@ -1,4 +1,4 @@
-use crate::audio::dj::config::{DJConfig, PlaybackConfig, Pool, PoolEntry, SignalProfileEntry};
+use crate::audio::dj::config::{DJConfig, Pool, PoolEntry, SegmentDefaults, SignalProfileEntry};
 use crate::audio::dj::manager::{
     ADVANCE_RETRY_DELAY, DJCommand, HexMessageRequest, IdleRequest, TrackRequest,
 };
@@ -137,11 +137,10 @@ impl DJState {
         }
     }
 
-    pub fn effective_channel_status(&self, config_status: Option<&str>) -> Option<String> {
+    pub fn effective_channel_status(&self) -> Option<String> {
         self.override_channel_status
             .clone()
             .or_else(|| self.segment.channel_status())
-            .or_else(|| config_status.map(str::to_owned))
     }
 
     pub fn effective_profile(&self) -> SignalProfilePlayback {
@@ -229,7 +228,7 @@ impl DJStateMachine {
             bot_state,
             config_name,
             pool_selector: pool_selector(&loaded),
-            signal_profile_selector: signal_profile_selector(&loaded),
+            signal_profile_selector: (&loaded.signal_profiles).into(),
             config,
             applied_profile: None,
             applied_channel_status: None,
@@ -267,19 +266,11 @@ impl DJStateMachine {
     }
 
     async fn rotate_profile(&mut self) {
-        let entry = match self.signal_profile_selector.choose() {
-            Some(entry) => entry.to_owned(),
-            None => SignalProfileEntry {
-                noise_profile: self
-                    .config
-                    .read()
-                    .playback_config
-                    .signal_profile
-                    .clone()
-                    .unwrap_or_else(|| DEFAULT_SIGNAL_PROFILE.noise_profile.clone()),
-                ..DEFAULT_SIGNAL_PROFILE.clone()
-            },
-        };
+        let entry = self
+            .signal_profile_selector
+            .choose()
+            .unwrap_or(&DEFAULT_SIGNAL_PROFILE)
+            .to_owned();
         let fade = Duration::from_secs_f32(entry.fade_duration_seconds);
         let hold_secs =
             rand::rng().random_range(entry.min_duration_seconds..entry.max_duration_seconds);
@@ -336,13 +327,11 @@ impl DJStateMachine {
             self.applied_channel_status = None;
             return;
         }
-        let config = self.config.read().clone();
-        let config_status = config.playback_config.channel_status.as_deref();
         let target = self
             .state
             .read()
             .await
-            .effective_channel_status(config_status)
+            .effective_channel_status()
             .unwrap_or_default();
         self.apply_channel_status(target).await;
     }
@@ -448,19 +437,15 @@ impl DJStateMachine {
             None => self.pool_selector.choose_mut(),
         };
         match active {
-            Some(ActivePool {
-                pool,
-                playback,
-                selector,
-            }) => {
+            Some(ActivePool { pool, selector }) => {
                 let entry = selector.choose().with_context(|| {
                     format!("pool {:?} has no entry with weight above 0", pool.name)
                 })?;
-                Ok(entry.segment(playback, &bot_state).await)
+                Ok(entry.segment(&pool.segment_defaults, &bot_state).await)
             }
             None => Ok(Box::new(NoiseSegment::from_entry(
                 &DEFAULT_NOISE_PERIOD,
-                &self.config.read().segment_playback_config(None),
+                &SegmentDefaults::default(),
             ))),
         }
     }
@@ -479,7 +464,7 @@ impl DJStateMachine {
     /// Selection starts with an empty recent history.
     fn set_config(&mut self, config: Arc<DJConfig>) {
         self.pool_selector = pool_selector(&config);
-        self.signal_profile_selector = signal_profile_selector(&config);
+        self.signal_profile_selector = (&config.signal_profiles).into();
         *self.config.write() = config;
     }
 
@@ -494,19 +479,19 @@ impl DJStateMachine {
             request.message
         );
         let config = self.config.read().clone();
-        let pool = request
-            .pool
-            .as_ref()
-            .map(|name| {
-                config
+        let built_in_defaults = SegmentDefaults::default();
+        let segment_defaults = match &request.pool {
+            Some(name) => {
+                &config
                     .pools
                     .iter()
                     .find(|pool| pool.name == *name)
-                    .with_context(|| format!("no pool named {name:?}"))
-            })
-            .transpose()?;
-        let playback = config.segment_playback_config(pool.map(|pool| &**pool));
-        let defaults = playback.hex_defaults();
+                    .with_context(|| format!("no pool named {name:?}"))?
+                    .segment_defaults
+            }
+            None => &built_in_defaults,
+        };
+        let defaults = segment_defaults.hex_config();
         let loops = request
             .loops
             .unwrap_or_else(|| rand::rng().random_range(defaults.loop_min..=defaults.loop_max))
@@ -516,7 +501,7 @@ impl DJStateMachine {
             request.volume.unwrap_or(1.0),
             loops,
             defaults.pick_random_announcement(),
-            playback.signal_profile.clone(),
+            segment_defaults.signal_profile.clone(),
         )
         .into();
         self.enter_state(next_state, bot_state).await
@@ -677,20 +662,14 @@ impl DJStateMachine {
 
 struct ActivePool {
     pool: Arc<Pool>,
-    playback: PlaybackConfig,
     selector: WeightedSelector<PoolEntry>,
 }
 
-impl ActivePool {
-    fn new(pool: &Arc<Pool>, config: &DJConfig) -> Self {
-        let playback = config.segment_playback_config(Some(pool));
+impl From<&Arc<Pool>> for ActivePool {
+    fn from(pool: &Arc<Pool>) -> Self {
         Self {
             pool: pool.clone(),
-            selector: WeightedSelector::new(
-                pool.entries.clone(),
-                playback.history_penalty_multiplier,
-            ),
-            playback,
+            selector: pool.as_ref().into(),
         }
     }
 }
@@ -703,20 +682,9 @@ impl Weighted for ActivePool {
 
 fn pool_selector(config: &DJConfig) -> WeightedSelector<ActivePool, Box<[ActivePool]>> {
     WeightedSelector::new(
-        config
-            .pools
-            .iter()
-            .map(|pool| ActivePool::new(pool, config))
-            .collect(),
-        config.playback_config.history_penalty_multiplier,
+        config.pools.iter().map(ActivePool::from).collect(),
+        config.pool_history_penalty_multiplier,
     )
-}
-
-fn signal_profile_selector(config: &DJConfig) -> WeightedSelector<SignalProfileEntry> {
-    match &config.signal_profiles {
-        Some(profiles) => profiles.into(),
-        None => WeightedSelector::new(Arc::from([]), None),
-    }
 }
 
 static DEFAULT_NOISE_PERIOD: LazyLock<NoisePeriodEntry> = LazyLock::new(|| NoisePeriodEntry {

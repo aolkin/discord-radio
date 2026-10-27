@@ -14,9 +14,9 @@
     {
       "name": "hex",
       "weight": 2,
-      "playback_config": {
+      "segment_defaults": {
         "signal_profile": "locked",
-        "hex_defaults": {
+        "hex_config": {
           "loop_min": 2,
           "loop_max": 3,
           "announcements": []
@@ -32,9 +32,7 @@
     {
       "name": "noise",
       "weight": 50,
-      "playback_config": {
-        "history_penalty_multiplier": 0.5
-      },
+      "history_penalty_multiplier": 0.5,
       "entries": [
         {
           "noise_profile": "noise_pink",

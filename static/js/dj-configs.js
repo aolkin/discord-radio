@@ -24,15 +24,18 @@ const historyPenaltyMultiplier = {
     optional: true,
 };
 
-const playbackFields = (signalProfileLabel) => [
-    historyPenaltyMultiplier,
-    profileText('signal_profile', signalProfileLabel, true),
-    optionalText('channel_status', 'Channel Status'),
+const generalFields = [
+    {
+        ...historyPenaltyMultiplier,
+        key: 'pool_history_penalty_multiplier',
+        label: 'Pool selection history penalty multiplier',
+    },
 ];
 
-const configPlaybackFields = playbackFields('Rotation Fallback Signal Profile');
-
-const poolPlaybackFields = playbackFields('Segment Signal Profile');
+const segmentDefaultsFields = [
+    profileText('signal_profile', 'Signal Profile', true),
+    optionalText('channel_status', 'Channel Status'),
+];
 
 const loops = (key, label) => ({ key, label, type: 'number', step: 1, min: 0, default: 1 });
 
@@ -75,7 +78,7 @@ const kinds = {
     },
 };
 
-const poolFields = [{ key: 'name', label: 'Name', type: 'text' }, weight];
+const poolFields = [{ key: 'name', label: 'Name', type: 'text' }, weight, historyPenaltyMultiplier];
 
 const signalProfilesFields = [historyPenaltyMultiplier];
 
@@ -117,40 +120,25 @@ function convertObject(fields, source, convert) {
     return Object.fromEntries(fields.map((field) => [field.key, convert(field, source[field.key])]));
 }
 
-function playbackFromServer(fields, playback) {
-    const source = playback ?? {};
+function segmentDefaultsFromServer(segmentDefaults) {
+    const source = segmentDefaults ?? {};
     return {
-        ...convertObject(fields, source, fieldFromServer),
-        hex_defaults: source.hex_defaults
-            ? convertObject(hexDefaultsFields, source.hex_defaults, fieldFromServer)
-            : null,
+        ...convertObject(segmentDefaultsFields, source, fieldFromServer),
+        hex_config: source.hex_config ? convertObject(hexDefaultsFields, source.hex_config, fieldFromServer) : null,
     };
 }
 
-function playbackToServer(fields, form) {
+function segmentDefaultsToServer(form) {
     return {
-        ...convertObject(fields, form, fieldToServer),
-        hex_defaults: form.hex_defaults && convertObject(hexDefaultsFields, form.hex_defaults, fieldToServer),
+        ...convertObject(segmentDefaultsFields, form, fieldToServer),
+        hex_config: form.hex_config && convertObject(hexDefaultsFields, form.hex_config, fieldToServer),
     };
-}
-
-function blankPlayback(fields) {
-    return { ...blankRow(fields), hex_defaults: null };
-}
-
-function playbackBlocks(fields, playback, label) {
-    return [
-        { row: playback, fields, label },
-        ...(playback.hex_defaults
-            ? [{ row: playback.hex_defaults, fields: hexDefaultsFields, label: 'Hex Defaults' }]
-            : []),
-    ];
 }
 
 function poolFromServer(pool) {
     return {
         ...convertObject(poolFields, pool, fieldFromServer),
-        playback_config: playbackFromServer(poolPlaybackFields, pool.playback_config),
+        segment_defaults: segmentDefaultsFromServer(pool.segment_defaults),
         entries: pool.entries.map((entry) => {
             const kind = Object.keys(kinds).find((name) => kinds[name].identifier in entry);
             return { kind, ...convertObject(kinds[kind].entryFields, entry, fieldFromServer) };
@@ -161,27 +149,28 @@ function poolFromServer(pool) {
 function poolToServer(pool) {
     return {
         ...convertObject(poolFields, pool, fieldToServer),
-        playback_config: playbackToServer(poolPlaybackFields, pool.playback_config),
+        segment_defaults: segmentDefaultsToServer(pool.segment_defaults),
         entries: pool.entries.map((entry) => convertObject(kinds[entry.kind].entryFields, entry, fieldToServer)),
     };
 }
 
 function toForm(config) {
-    const signalProfiles = config.signal_profiles ?? { entries: [] };
     return {
         name: config.name,
-        playback_config: playbackFromServer(configPlaybackFields, config.playback_config),
+        ...convertObject(generalFields, config, fieldFromServer),
         pools: config.pools.map(poolFromServer),
         signal_profiles: {
-            ...convertObject(signalProfilesFields, signalProfiles, fieldFromServer),
-            entries: signalProfiles.entries.map((row) => convertObject(signalProfileFields, row, fieldFromServer)),
+            ...convertObject(signalProfilesFields, config.signal_profiles, fieldFromServer),
+            entries: config.signal_profiles.entries.map((row) =>
+                convertObject(signalProfileFields, row, fieldFromServer),
+            ),
         },
     };
 }
 
 function toBody(form) {
     return {
-        playback_config: playbackToServer(configPlaybackFields, form.playback_config),
+        ...convertObject(generalFields, form, fieldToServer),
         pools: form.pools.map(poolToServer),
         signal_profiles: {
             ...convertObject(signalProfilesFields, form.signal_profiles, fieldToServer),
@@ -204,7 +193,7 @@ function blankRow(fields) {
 function blankForm() {
     return {
         name: '',
-        playback_config: blankPlayback(configPlaybackFields),
+        ...blankRow(generalFields),
         pools: [],
         signal_profiles: { ...blankRow(signalProfilesFields), entries: [] },
     };
@@ -220,6 +209,7 @@ export function djConfigs() {
         djConfigEditorMessage: { text: '', type: '' },
         djConfigForm: blankForm(),
         djConfigNewEntryKind: 'track',
+        djConfigGeneralFields: generalFields,
         djConfigKinds: kinds,
         djConfigSignalProfilesFields: signalProfilesFields,
         djConfigSignalProfileFields: signalProfileFields,
@@ -243,19 +233,19 @@ export function djConfigs() {
             this.djConfigForm.pools.push({
                 ...blankRow(poolFields),
                 name,
-                playback_config: blankPlayback(poolPlaybackFields),
+                segment_defaults: { ...blankRow(segmentDefaultsFields), hex_config: null },
                 entries: [],
             });
         },
 
-        djConfigGeneralBlocks() {
-            return playbackBlocks(configPlaybackFields, this.djConfigForm.playback_config);
-        },
-
         djConfigPoolBlocks(pool) {
+            const segmentDefaults = pool.segment_defaults;
             return [
                 { row: pool, fields: poolFields },
-                ...playbackBlocks(poolPlaybackFields, pool.playback_config, 'Playback'),
+                { row: segmentDefaults, fields: segmentDefaultsFields, label: 'Segment Defaults' },
+                ...(segmentDefaults.hex_config
+                    ? [{ row: segmentDefaults.hex_config, fields: hexDefaultsFields, label: 'Hex Config' }]
+                    : []),
                 ...pool.entries.map((entry, index) => ({
                     row: entry,
                     fields: kinds[entry.kind].entryFields,
@@ -265,8 +255,9 @@ export function djConfigs() {
             ];
         },
 
-        toggleDjConfigHexDefaults(playback) {
-            playback.hex_defaults = playback.hex_defaults ? null : blankRow(hexDefaultsFields);
+        toggleDjConfigHexConfig(pool) {
+            const segmentDefaults = pool.segment_defaults;
+            segmentDefaults.hex_config = segmentDefaults.hex_config ? null : blankRow(hexDefaultsFields);
         },
 
         addDjConfigEntry(pool, kind) {

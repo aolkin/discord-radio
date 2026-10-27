@@ -1,4 +1,4 @@
-use crate::audio::dj::config::PlaybackConfig;
+use crate::audio::dj::config::SegmentDefaults;
 use crate::audio::dj::segments::signals::Completed;
 use crate::audio::dj::segments::{
     CommonSegmentPlaybackConfig, Segment, SegmentPlaybackConfig, SignalProfilePlayback,
@@ -122,7 +122,7 @@ impl Segment for NoiseSegment {
 }
 
 impl NoiseSegment {
-    pub fn from_entry(noise_entry: &NoisePeriodEntry, playback: &PlaybackConfig) -> Self {
+    pub fn from_entry(noise_entry: &NoisePeriodEntry, segment_defaults: &SegmentDefaults) -> Self {
         let duration_secs = if noise_entry.min_duration_seconds >= noise_entry.max_duration_seconds
         {
             noise_entry.min_duration_seconds
@@ -137,7 +137,7 @@ impl NoiseSegment {
             noise_entry
                 .fade_duration_seconds
                 .map(Duration::from_secs_f32),
-            playback.channel_status.clone(),
+            segment_defaults.channel_status.clone(),
         )
     }
 }

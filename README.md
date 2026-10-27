@@ -99,7 +99,7 @@ See [WEB_PORTAL.md](WEB_PORTAL.md) for more details.
 - `/dj skip` - Skip the DJ to its next state now, optionally to a segment from a named pool in the DJ config
 - `/dj idle` - Have the DJ go idle now, optionally playing a noise profile, for a number of seconds or until the DJ is advanced
 - `/dj track` - Have the DJ play an audio track now
-- `/dj hex` - Have the DJ play a text message as hex audio, optionally with the playback settings of a named pool in the DJ config
+- `/dj hex` - Have the DJ play a text message as hex audio, optionally with the segment defaults of a named pool in the DJ config
 - `/dj status` - Get the current status of the DJ
 - `/dj configure` - Restart the DJ with a chosen configuration (the DJ runs whenever the bot is in a voice channel)
 - `/dj announcements` - Choose the DJ announcement channel, or turn announcements off by omitting it
