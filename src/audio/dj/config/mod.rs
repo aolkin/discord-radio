@@ -14,10 +14,25 @@ use std::sync::{Arc, LazyLock};
 pub struct DJConfig {
     pub name: String,
     pub pools: Arc<[Arc<Pool>]>,
-    pub signal_profiles: SignalProfiles,
-    pub channel_status: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub history_penalty_multiplier: Option<f32>,
+    pub signal_profiles: Option<SignalProfiles>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub playback_config: Option<PlaybackConfig>,
+}
+
+impl DJConfig {
+    pub fn playback_config(&self) -> &PlaybackConfig {
+        self.playback_config.as_ref().unwrap_or(&NO_PLAYBACK_CONFIG)
+    }
+
+    /// The pool's playback settings, with the DJ config's filling any the pool
+    /// leaves unset.
+    pub fn pool_playback_config(&self, pool: &Pool) -> PlaybackConfig {
+        pool.playback_config
+            .as_ref()
+            .unwrap_or(&NO_PLAYBACK_CONFIG)
+            .with_defaults(self.playback_config())
+    }
 }
 
 #[field_trait_impl(WeightedPool<SignalProfileEntry>)]
@@ -28,38 +43,86 @@ pub struct SignalProfiles {
     pub entries: Arc<[SignalProfileEntry]>,
 }
 
-#[field_trait_impl(WeightedPool<PoolEntry>)]
-#[derive(Deserialize, Serialize, Debug)]
-pub struct Pool {
-    pub name: String,
-    pub weight: u32,
-    pub hex_defaults: Option<HexMessageDefaults>,
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+pub struct PlaybackConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub history_penalty_multiplier: Option<f32>,
-    pub entries: Arc<[PoolEntry]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signal_profile: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub channel_status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hex_defaults: Option<HexMessageDefaults>,
 }
+
+static NO_PLAYBACK_CONFIG: PlaybackConfig = PlaybackConfig {
+    history_penalty_multiplier: None,
+    signal_profile: None,
+    channel_status: None,
+    hex_defaults: None,
+};
 
 static BUILT_IN_HEX_DEFAULTS: LazyLock<HexMessageDefaults> = LazyLock::new(Default::default);
 
-impl Pool {
+impl PlaybackConfig {
+    pub fn with_defaults(&self, defaults: &Self) -> Self {
+        Self {
+            history_penalty_multiplier: self
+                .history_penalty_multiplier
+                .or(defaults.history_penalty_multiplier),
+            signal_profile: self
+                .signal_profile
+                .clone()
+                .or_else(|| defaults.signal_profile.clone()),
+            channel_status: self
+                .channel_status
+                .clone()
+                .or_else(|| defaults.channel_status.clone()),
+            hex_defaults: self
+                .hex_defaults
+                .clone()
+                .or_else(|| defaults.hex_defaults.clone()),
+        }
+    }
+
     pub fn hex_defaults(&self) -> &HexMessageDefaults {
         self.hex_defaults.as_ref().unwrap_or(&BUILT_IN_HEX_DEFAULTS)
     }
 
+    fn validate(&self) -> anyhow::Result<()> {
+        ensure_penalty_multiplier(self.history_penalty_multiplier)?;
+        if let Some(defaults) = &self.hex_defaults {
+            ensure_loops(defaults.loop_min, defaults.loop_max).context("hex_defaults")?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct Pool {
+    pub name: String,
+    pub weight: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub playback_config: Option<PlaybackConfig>,
+    pub entries: Arc<[PoolEntry]>,
+}
+
+impl Pool {
     pub fn has_weighted_entry(&self) -> bool {
         self.entries.iter().any(|entry| entry.weight() > 0)
     }
 
-    fn validate(&self) -> anyhow::Result<()> {
-        let defaults = self.hex_defaults();
-        ensure_loops(defaults.loop_min, defaults.loop_max).context("hex_defaults")?;
-        ensure_penalty_multiplier(self.history_penalty_multiplier)?;
+    fn validate(&self, playback: &PlaybackConfig) -> anyhow::Result<()> {
+        if let Some(own) = &self.playback_config {
+            own.validate().context("playback_config")?;
+        }
         if !self.has_weighted_entry() && self.weight != 0 {
             bail!("a pool with no entry of weight above 0 must have weight 0");
         }
+        let hex_defaults = playback.hex_defaults();
         self.entries
             .iter()
-            .try_for_each(|entry| entry.validate(defaults))
+            .try_for_each(|entry| entry.validate(hex_defaults))
     }
 }
 
@@ -98,19 +161,13 @@ impl PoolEntry {
         Ok(())
     }
 
-    pub async fn segment(
-        &self,
-        hex_defaults: &HexMessageDefaults,
-        bot_state: &Data,
-    ) -> Box<dyn Segment> {
+    pub async fn segment(&self, playback: &PlaybackConfig, bot_state: &Data) -> Box<dyn Segment> {
         match self {
-            PoolEntry::Track(track) => {
-                Box::new(TrackSegment::from_entry(track.clone(), &bot_state.duration_cache).await)
-            }
-            PoolEntry::Hex(message) => {
-                Box::new(HexSegment::from_entry(message.clone(), hex_defaults))
-            }
-            PoolEntry::Noise(noise) => Box::new(NoiseSegment::from(noise)),
+            PoolEntry::Track(track) => Box::new(
+                TrackSegment::from_entry(track.clone(), playback, &bot_state.duration_cache).await,
+            ),
+            PoolEntry::Hex(message) => Box::new(HexSegment::from_entry(message.clone(), playback)),
+            PoolEntry::Noise(noise) => Box::new(NoiseSegment::from_entry(noise, playback)),
         }
     }
 }
@@ -134,14 +191,19 @@ impl RegistryEntry for DJConfig {
 
     /// Rejects values that would make the DJ panic when it picks them.
     fn validate(&self) -> anyhow::Result<()> {
-        ensure_penalty_multiplier(self.history_penalty_multiplier)?;
+        self.playback_config()
+            .validate()
+            .context("playback_config")?;
         for pool in self.pools.iter() {
-            pool.validate()
+            pool.validate(&self.pool_playback_config(pool))
                 .with_context(|| format!("pool {:?}", pool.name))?;
         }
-        ensure_penalty_multiplier(self.signal_profiles.history_penalty_multiplier)
+        let Some(signal_profiles) = &self.signal_profiles else {
+            return Ok(());
+        };
+        ensure_penalty_multiplier(signal_profiles.history_penalty_multiplier)
             .context("signal_profiles")?;
-        for profile in self.signal_profiles.entries.iter() {
+        for profile in signal_profiles.entries.iter() {
             let context = || format!("signal profile {:?}", profile.noise_profile);
             ensure_seconds(profile.fade_duration_seconds, context)?;
             ensure_seconds(profile.min_duration_seconds, context)?;

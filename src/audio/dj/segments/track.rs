@@ -2,6 +2,7 @@ use super::{
     CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
     TrackSlot,
 };
+use crate::audio::dj::config::PlaybackConfig;
 use crate::audio::dj::segments::signals::{Completed, CompletedSignal};
 use crate::audio::dj::weighted_choice::Weighted;
 use crate::audio::duration::DurationCache;
@@ -64,11 +65,11 @@ impl TrackSegment {
         start_position: Option<Duration>,
         duration: Duration,
         signal_profile: Option<String>,
-        channel_status: Option<&str>,
+        channel_status: Option<String>,
     ) -> Self {
         let config = CommonSegmentPlaybackConfig {
             signal_profile: signal_profile.map(Into::into),
-            channel_status: channel_status.map(with_status_emoji),
+            channel_status,
         };
         Self {
             config,
@@ -112,7 +113,11 @@ impl TrackSegment {
         Ok(())
     }
 
-    pub async fn from_entry(track_entry: TrackEntry, duration_cache: &DurationCache) -> Self {
+    pub async fn from_entry(
+        track_entry: TrackEntry,
+        playback: &PlaybackConfig,
+        duration_cache: &DurationCache,
+    ) -> Self {
         let duration = duration_cache.get_duration(&track_entry.filename).await;
         let (start_position, play_duration) = if track_entry.allow_subsection.unwrap_or(false) {
             if let Some(total_duration) = duration {
@@ -149,8 +154,14 @@ impl TrackSegment {
             volume,
             start_position,
             play_duration,
-            track_entry.signal_profile,
-            track_entry.channel_status.as_deref(),
+            track_entry
+                .signal_profile
+                .or_else(|| playback.signal_profile.clone()),
+            track_entry
+                .channel_status
+                .as_deref()
+                .map(with_status_emoji)
+                .or_else(|| playback.channel_status.clone()),
         )
     }
 }

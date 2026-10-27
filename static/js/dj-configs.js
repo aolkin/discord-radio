@@ -24,9 +24,10 @@ const historyPenaltyMultiplier = {
     optional: true,
 };
 
-const generalFields = [
+const playbackFields = [
+    historyPenaltyMultiplier,
+    profileText('signal_profile', 'Signal Profile', true),
     optionalText('channel_status', 'Channel Status'),
-    { ...historyPenaltyMultiplier, label: 'Pool history penalty multiplier' },
 ];
 
 const loops = (key, label) => ({ key, label, type: 'number', step: 1, min: 0, default: 1 });
@@ -70,14 +71,13 @@ const kinds = {
     },
 };
 
-const poolFields = [{ key: 'name', label: 'Name', type: 'text' }, weight, historyPenaltyMultiplier];
+const poolFields = [{ key: 'name', label: 'Name', type: 'text' }, weight];
 
 const signalProfilesFields = [historyPenaltyMultiplier];
 
 const hexDefaultsFields = [
     loops('loop_min', 'Loop Min'),
     loops('loop_max', 'Loop Max'),
-    profileText('signal_profile', 'Signal Profile', true),
     { key: 'announcements', label: 'Announcements', type: 'strings' },
 ];
 
@@ -113,10 +113,41 @@ function convertObject(fields, source, convert) {
     return Object.fromEntries(fields.map((field) => [field.key, convert(field, source[field.key])]));
 }
 
+function playbackFromServer(playback) {
+    const source = playback ?? {};
+    return {
+        ...convertObject(playbackFields, source, fieldFromServer),
+        hex_defaults: source.hex_defaults
+            ? convertObject(hexDefaultsFields, source.hex_defaults, fieldFromServer)
+            : null,
+    };
+}
+
+function playbackToServer(form) {
+    const playback = {
+        ...convertObject(playbackFields, form, fieldToServer),
+        hex_defaults: form.hex_defaults && convertObject(hexDefaultsFields, form.hex_defaults, fieldToServer),
+    };
+    return Object.values(playback).some((value) => value !== null) ? playback : null;
+}
+
+function blankPlayback() {
+    return { ...blankRow(playbackFields), hex_defaults: null };
+}
+
+function playbackBlocks(playback, label) {
+    return [
+        { row: playback, fields: playbackFields, label },
+        ...(playback.hex_defaults
+            ? [{ row: playback.hex_defaults, fields: hexDefaultsFields, label: 'Hex Defaults' }]
+            : []),
+    ];
+}
+
 function poolFromServer(pool) {
     return {
         ...convertObject(poolFields, pool, fieldFromServer),
-        hex_defaults: pool.hex_defaults && convertObject(hexDefaultsFields, pool.hex_defaults, fieldFromServer),
+        playback_config: playbackFromServer(pool.playback_config),
         entries: pool.entries.map((entry) => {
             const kind = Object.keys(kinds).find((name) => kinds[name].identifier in entry);
             return { kind, ...convertObject(kinds[kind].entryFields, entry, fieldFromServer) };
@@ -127,28 +158,27 @@ function poolFromServer(pool) {
 function poolToServer(pool) {
     return {
         ...convertObject(poolFields, pool, fieldToServer),
-        hex_defaults: pool.hex_defaults && convertObject(hexDefaultsFields, pool.hex_defaults, fieldToServer),
+        playback_config: playbackToServer(pool.playback_config),
         entries: pool.entries.map((entry) => convertObject(kinds[entry.kind].entryFields, entry, fieldToServer)),
     };
 }
 
 function toForm(config) {
+    const signalProfiles = config.signal_profiles ?? { entries: [] };
     return {
         name: config.name,
-        ...convertObject(generalFields, config, fieldFromServer),
+        playback_config: playbackFromServer(config.playback_config),
         pools: config.pools.map(poolFromServer),
         signal_profiles: {
-            ...convertObject(signalProfilesFields, config.signal_profiles, fieldFromServer),
-            entries: config.signal_profiles.entries.map((row) =>
-                convertObject(signalProfileFields, row, fieldFromServer),
-            ),
+            ...convertObject(signalProfilesFields, signalProfiles, fieldFromServer),
+            entries: signalProfiles.entries.map((row) => convertObject(signalProfileFields, row, fieldFromServer)),
         },
     };
 }
 
 function toBody(form) {
     return {
-        ...convertObject(generalFields, form, fieldToServer),
+        playback_config: playbackToServer(form.playback_config),
         pools: form.pools.map(poolToServer),
         signal_profiles: {
             ...convertObject(signalProfilesFields, form.signal_profiles, fieldToServer),
@@ -171,7 +201,7 @@ function blankRow(fields) {
 function blankForm() {
     return {
         name: '',
-        channel_status: '',
+        playback_config: blankPlayback(),
         pools: [],
         signal_profiles: { ...blankRow(signalProfilesFields), entries: [] },
     };
@@ -187,7 +217,6 @@ export function djConfigs() {
         djConfigEditorMessage: { text: '', type: '' },
         djConfigForm: blankForm(),
         djConfigNewEntryKind: 'track',
-        djConfigGeneralFields: generalFields,
         djConfigKinds: kinds,
         djConfigSignalProfilesFields: signalProfilesFields,
         djConfigSignalProfileFields: signalProfileFields,
@@ -208,15 +237,22 @@ export function djConfigs() {
             for (let n = 2; names.includes(name); n++) {
                 name = `pool-${n}`;
             }
-            this.djConfigForm.pools.push({ ...blankRow(poolFields), name, hex_defaults: null, entries: [] });
+            this.djConfigForm.pools.push({
+                ...blankRow(poolFields),
+                name,
+                playback_config: blankPlayback(),
+                entries: [],
+            });
+        },
+
+        djConfigGeneralBlocks() {
+            return playbackBlocks(this.djConfigForm.playback_config);
         },
 
         djConfigPoolBlocks(pool) {
             return [
                 { row: pool, fields: poolFields },
-                ...(pool.hex_defaults
-                    ? [{ row: pool.hex_defaults, fields: hexDefaultsFields, label: 'Hex Defaults' }]
-                    : []),
+                ...playbackBlocks(pool.playback_config, 'Playback'),
                 ...pool.entries.map((entry, index) => ({
                     row: entry,
                     fields: kinds[entry.kind].entryFields,
@@ -226,8 +262,8 @@ export function djConfigs() {
             ];
         },
 
-        toggleDjConfigHexDefaults(pool) {
-            pool.hex_defaults = pool.hex_defaults ? null : blankRow(hexDefaultsFields);
+        toggleDjConfigHexDefaults(playback) {
+            playback.hex_defaults = playback.hex_defaults ? null : blankRow(hexDefaultsFields);
         },
 
         addDjConfigEntry(pool, kind) {
