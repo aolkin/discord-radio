@@ -24,8 +24,8 @@ pub trait WeightedPool<T: Weighted> {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Identity(u64);
 
-impl<T: Hash> From<T> for Identity {
-    fn from(value: T) -> Self {
+impl Identity {
+    pub fn of(value: impl Hash) -> Self {
         let mut hasher = Fnv1a(0xcbf2_9ce4_8422_2325);
         value.hash(&mut hasher);
         Self(hasher.finish())
@@ -90,22 +90,31 @@ impl<T: Weighted> WeightedSelector<T> {
             recent_history: VecDeque::new(),
             penalty_multiplier: history_penalty_multiplier.unwrap_or(1.0),
         };
-        selector.update_history();
+        selector.update_identities();
         selector
     }
 
     pub fn set_entries(&mut self, items: Arc<[T]>, history_penalty_multiplier: Option<f32>) {
         self.items = items;
         self.penalty_multiplier = history_penalty_multiplier.unwrap_or(1.0);
-        self.update_history();
+        self.update_identities();
+        let excess = self
+            .recent_history
+            .len()
+            .saturating_sub(self.history_size());
+        self.recent_history.drain(..excess);
     }
 
     pub fn set_pool<P: WeightedPool<T>>(&mut self, pool: &P) {
         self.set_entries(pool.entries().clone(), pool.history_penalty_multiplier());
     }
 
-    fn update_history(&mut self) {
-        self.identities = (&self.items).iter().map(Weighted::identity).collect();
+    fn update_identities(&mut self) {
+        self.identities = self.items.iter().map(Weighted::identity).collect();
+    }
+
+    fn history_size(&self) -> usize {
+        (self.items.len() / 2).max(2)
     }
 
     pub fn choose(&mut self) -> Option<&T> {
@@ -123,8 +132,7 @@ impl<T: Weighted> WeightedSelector<T> {
     }
 
     fn record_history(&mut self, identity: Identity) {
-        let history_size = (&self.items.len() / 2).max(2);
-        while self.recent_history.len() >= history_size {
+        while self.recent_history.len() >= self.history_size() {
             self.recent_history.pop_front();
         }
         self.recent_history.push_back(identity);

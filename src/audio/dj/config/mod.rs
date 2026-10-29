@@ -63,7 +63,7 @@ impl SegmentDefaults {
 #[field_trait_impl]
 impl Weighted for Pool {
     fn identity(&self) -> Identity {
-        (&self.name).into()
+        Identity::of(&self.name)
     }
 }
 
@@ -154,12 +154,12 @@ pub struct SignalProfileEntry {
 #[field_trait_impl]
 impl Weighted for SignalProfileEntry {
     fn identity(&self) -> Identity {
-        (
+        Identity::of((
             &self.noise_profile,
             self.fade_duration_seconds.to_bits(),
             self.min_duration_seconds.to_bits(),
             self.max_duration_seconds.to_bits(),
-        ).into()
+        ))
     }
 }
 

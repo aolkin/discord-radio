@@ -67,13 +67,13 @@ pub struct HexMessageEntry {
 #[field_trait_impl]
 impl Weighted for HexMessageEntry {
     fn identity(&self) -> Identity {
-        (
+        Identity::of((
             &self.text,
             &self.signal_profile,
             self.loop_min,
             self.loop_max,
             &self.announcement,
-        ).into()
+        ))
     }
 }
 

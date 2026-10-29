@@ -40,14 +40,14 @@ pub struct TrackEntry {
 #[field_trait_impl]
 impl Weighted for TrackEntry {
     fn identity(&self) -> Identity {
-        (
+        Identity::of((
             &self.filename,
             self.max_duration_seconds.map(f32::to_bits),
             self.allow_subsection,
             &self.signal_profile,
             self.volume.map(f32::to_bits),
             &self.channel_status,
-        ).into()
+        ))
     }
 }
 
