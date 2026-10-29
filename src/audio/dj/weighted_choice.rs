@@ -15,33 +15,34 @@ pub trait Weighted {
     fn identity(&self) -> Identity;
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct Identity(u64);
-
 #[field_trait]
 pub trait WeightedPool<T: Weighted> {
     fn entries(&self) -> &Arc<[T]>;
     fn history_penalty_multiplier(&self) -> Option<f32>;
 }
 
-/// Hashes `value` with FNV-1a.
-pub fn identity_of(value: impl Hash) -> Identity {
-    let mut hasher = Fnv1a(0xcbf2_9ce4_8422_2325);
-    value.hash(&mut hasher);
-    Identity(hasher.finish())
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Identity(u64);
+
+impl<T: Hash> From<T> for Identity {
+    fn from(value: T) -> Self {
+        let mut hasher = Fnv1a(0xcbf2_9ce4_8422_2325);
+        value.hash(&mut hasher);
+        Self(hasher.finish())
+    }
 }
 
 struct Fnv1a(u64);
 
 impl Hasher for Fnv1a {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
     fn write(&mut self, bytes: &[u8]) {
         for byte in bytes {
             self.0 = (self.0 ^ u64::from(*byte)).wrapping_mul(0x0100_0000_01b3);
         }
-    }
-
-    fn finish(&self) -> u64 {
-        self.0
     }
 }
 
@@ -70,7 +71,6 @@ pub struct WeightedSelector<T> {
     items: Arc<[T]>,
     identities: Box<[Identity]>,
     recent_history: VecDeque<Identity>,
-    history_size: usize,
     penalty_multiplier: f32,
 }
 
@@ -88,39 +88,27 @@ impl<T: Weighted> WeightedSelector<T> {
             items,
             identities: Box::default(),
             recent_history: VecDeque::new(),
-            history_size: 0,
-            penalty_multiplier: 1.0,
+            penalty_multiplier: history_penalty_multiplier.unwrap_or(1.0),
         };
-        selector.apply_entries(history_penalty_multiplier);
+        selector.update_history();
         selector
     }
 
-    /// Keeps the recent history, trimmed to the new item count.
     pub fn set_entries(&mut self, items: Arc<[T]>, history_penalty_multiplier: Option<f32>) {
         self.items = items;
-        self.apply_entries(history_penalty_multiplier);
+        self.penalty_multiplier = history_penalty_multiplier.unwrap_or(1.0);
+        self.update_history();
     }
 
     pub fn set_pool<P: WeightedPool<T>>(&mut self, pool: &P) {
         self.set_entries(pool.entries().clone(), pool.history_penalty_multiplier());
     }
 
-    fn apply_entries(&mut self, history_penalty_multiplier: Option<f32>) {
-        let items = &self.items;
-        self.identities = items.iter().map(Weighted::identity).collect();
-        self.history_size = (items.len() / 2).max(2);
-        while self.recent_history.len() > self.history_size {
-            self.recent_history.pop_front();
-        }
-        self.penalty_multiplier = history_penalty_multiplier.unwrap_or(1.0);
+    fn update_history(&mut self) {
+        self.identities = (&self.items).iter().map(Weighted::identity).collect();
     }
 
     pub fn choose(&mut self) -> Option<&T> {
-        let idx = self.pick_index()?;
-        Some(&self.items[idx])
-    }
-
-    fn pick_index(&mut self) -> Option<usize> {
         let effective_weights: Vec<f32> = self
             .items
             .as_ref()
@@ -130,11 +118,16 @@ impl<T: Weighted> WeightedSelector<T> {
             .collect();
 
         let idx = choose_index(&effective_weights)?;
-        if self.recent_history.len() >= self.history_size {
+        self.record_history(self.identities[idx]);
+        Some(&self.items[idx])
+    }
+
+    fn record_history(&mut self, identity: Identity) {
+        let history_size = (&self.items.len() / 2).max(2);
+        while self.recent_history.len() >= history_size {
             self.recent_history.pop_front();
         }
-        self.recent_history.push_back(self.identities[idx]);
-        Some(idx)
+        self.recent_history.push_back(identity);
     }
 
     fn penalty(&self, identity: Identity) -> f32 {

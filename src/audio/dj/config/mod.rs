@@ -3,7 +3,7 @@ use crate::audio::dj::segments::{
     TrackEntry, TrackSegment, ensure_loops,
 };
 use crate::audio::dj::weighted_choice::{
-    Identity, Weighted, WeightedPool, ambassador_impl_Weighted, identity_of,
+    Identity, Weighted, WeightedPool, ambassador_impl_Weighted,
 };
 use crate::bucket::registry::RegistryEntry;
 use crate::state::Data;
@@ -63,7 +63,7 @@ impl SegmentDefaults {
 #[field_trait_impl]
 impl Weighted for Pool {
     fn identity(&self) -> Identity {
-        identity_of(&self.name)
+        (&self.name).into()
     }
 }
 
@@ -154,12 +154,12 @@ pub struct SignalProfileEntry {
 #[field_trait_impl]
 impl Weighted for SignalProfileEntry {
     fn identity(&self) -> Identity {
-        identity_of((
+        (
             &self.noise_profile,
             self.fade_duration_seconds.to_bits(),
             self.min_duration_seconds.to_bits(),
             self.max_duration_seconds.to_bits(),
-        ))
+        ).into()
     }
 }
 

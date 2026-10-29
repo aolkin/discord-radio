@@ -4,7 +4,7 @@ use super::{
 };
 use crate::audio::dj::config::SegmentDefaults;
 use crate::audio::dj::segments::signals::{Completed, CompletedSignal};
-use crate::audio::dj::weighted_choice::{Identity, Weighted, identity_of};
+use crate::audio::dj::weighted_choice::{Identity, Weighted};
 use crate::audio::processing::mixer::{TrackCallback, TrackCommand};
 use crate::audio::processing::processor::AudioProcessor;
 use crate::audio::tracks::open_track_source;
@@ -67,13 +67,13 @@ pub struct HexMessageEntry {
 #[field_trait_impl]
 impl Weighted for HexMessageEntry {
     fn identity(&self) -> Identity {
-        identity_of((
+        (
             &self.text,
             &self.signal_profile,
             self.loop_min,
             self.loop_max,
             &self.announcement,
-        ))
+        ).into()
     }
 }
 

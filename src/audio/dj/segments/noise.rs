@@ -4,7 +4,7 @@ use crate::audio::dj::segments::{
     CommonSegmentPlaybackConfig, Segment, SegmentPlaybackConfig, SignalProfilePlayback,
     StateDisplay,
 };
-use crate::audio::dj::weighted_choice::{Identity, Weighted, identity_of};
+use crate::audio::dj::weighted_choice::{Identity, Weighted};
 use async_trait::async_trait;
 use field_trait::field_trait_impl;
 use rand::RngExt;
@@ -24,12 +24,12 @@ pub struct NoisePeriodEntry {
 #[field_trait_impl]
 impl Weighted for NoisePeriodEntry {
     fn identity(&self) -> Identity {
-        identity_of((
+        (
             &self.noise_profile,
             self.min_duration_seconds.to_bits(),
             self.max_duration_seconds.to_bits(),
             self.fade_duration_seconds.map(f32::to_bits),
-        ))
+        ).into()
     }
 }
 
