@@ -14,6 +14,7 @@ use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use serenity::model::id::{ChannelId, GuildId};
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::ops::Deref;
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant, SystemTime};
@@ -223,22 +224,21 @@ impl DJStateMachine {
 
         *state.write().await = initial_state;
 
-        Self {
+        let mut state_machine = Self {
             state,
             guild_id,
             announcement_channel,
             bot_state,
             config_name,
-            pool_selector: WeightedSelector::new(
-                loaded.pools.clone(),
-                loaded.pool_history_penalty_multiplier,
-            ),
-            entry_selectors: entry_selectors(&loaded.pools, HashMap::new()),
-            signal_profile_selector: (&loaded.signal_profiles).into(),
+            pool_selector: WeightedSelector::new(Arc::default(), None),
+            entry_selectors: HashMap::new(),
+            signal_profile_selector: WeightedSelector::new(Arc::default(), None),
             config,
             applied_profile: None,
             applied_channel_status: None,
-        }
+        };
+        state_machine.set_config(loaded);
+        state_machine
     }
 
     pub async fn run(mut self, mut command_rx: mpsc::Receiver<DJCommand>) {
@@ -474,8 +474,16 @@ impl DJStateMachine {
     fn set_config(&mut self, config: Arc<DJConfig>) {
         self.pool_selector
             .set_entries(config.pools.clone(), config.pool_history_penalty_multiplier);
-        self.entry_selectors =
-            entry_selectors(&config.pools, std::mem::take(&mut self.entry_selectors));
+        self.entry_selectors
+            .retain(|name, _| config.pools.iter().any(|pool| pool.name == *name));
+        for pool in config.pools.iter() {
+            match self.entry_selectors.entry(pool.name.clone()) {
+                Entry::Occupied(mut selector) => selector.get_mut().set_pool(pool.as_ref()),
+                Entry::Vacant(slot) => {
+                    slot.insert(pool.as_ref().into());
+                }
+            }
+        }
         self.signal_profile_selector
             .set_pool(&config.signal_profiles);
         *self.config.write() = config;
@@ -671,27 +679,6 @@ impl DJStateMachine {
             .log_dj_activity(self.guild_id.get(), event_type, details)
             .await
     }
-}
-
-/// Keeps a pool's selector from `previous` while `pools` still has a pool by
-/// that name.
-fn entry_selectors(
-    pools: &[Arc<Pool>],
-    mut previous: HashMap<String, WeightedSelector<PoolEntry>>,
-) -> HashMap<String, WeightedSelector<PoolEntry>> {
-    pools
-        .iter()
-        .map(|pool| {
-            let selector = match previous.remove(&pool.name) {
-                Some(mut selector) => {
-                    selector.set_pool(pool.as_ref());
-                    selector
-                }
-                None => pool.as_ref().into(),
-            };
-            (pool.name.clone(), selector)
-        })
-        .collect()
 }
 
 static DEFAULT_NOISE_PERIOD: LazyLock<NoisePeriodEntry> = LazyLock::new(|| NoisePeriodEntry {
