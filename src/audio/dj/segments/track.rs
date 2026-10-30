@@ -4,7 +4,7 @@ use super::{
 };
 use crate::audio::dj::config::SegmentDefaults;
 use crate::audio::dj::segments::signals::{Completed, CompletedSignal};
-use crate::audio::dj::weighted_choice::Weighted;
+use crate::audio::dj::weighted_choice::{Identity, Weighted};
 use crate::audio::duration::DurationCache;
 use crate::audio::processing::mixer::TrackCommand;
 use crate::audio::tracks::open_track_source;
@@ -17,7 +17,6 @@ use std::time::Duration;
 
 const FADE_TIME: Duration = Duration::from_secs(1);
 
-#[field_trait_impl(Weighted)]
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct TrackEntry {
     pub filename: String,
@@ -36,6 +35,20 @@ pub struct TrackEntry {
     /// compared to linear scaling.
     pub volume: Option<f32>,
     pub channel_status: Option<String>,
+}
+
+#[field_trait_impl]
+impl Weighted for TrackEntry {
+    fn identity(&self) -> Identity {
+        Identity::of((
+            &self.filename,
+            self.max_duration_seconds.map(f32::to_bits),
+            self.allow_subsection,
+            &self.signal_profile,
+            self.volume.map(f32::to_bits),
+            &self.channel_status,
+        ))
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

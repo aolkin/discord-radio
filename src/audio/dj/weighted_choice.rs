@@ -1,19 +1,49 @@
+use ambassador::delegatable_trait;
 use field_trait::field_trait;
 use rand::RngExt;
 use std::collections::VecDeque;
-use std::marker::PhantomData;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 /// A weight an item contributes to weighted random selection.
-#[field_trait]
+#[delegatable_trait]
+#[field_trait(Arc)]
 pub trait Weighted {
     fn weight(&self) -> u32;
+    /// Ignores the weight, so editing only an item's weight keeps its place
+    /// in a selector's history.
+    fn identity(&self) -> Identity;
 }
 
 #[field_trait]
 pub trait WeightedPool<T: Weighted> {
     fn entries(&self) -> &Arc<[T]>;
     fn history_penalty_multiplier(&self) -> Option<f32>;
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Identity(u64);
+
+impl Identity {
+    pub fn of(value: impl Hash) -> Self {
+        let mut hasher = Fnv1a(0xcbf2_9ce4_8422_2325);
+        value.hash(&mut hasher);
+        Self(hasher.finish())
+    }
+}
+
+struct Fnv1a(u64);
+
+impl Hasher for Fnv1a {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        for byte in bytes {
+            self.0 = (self.0 ^ u64::from(*byte)).wrapping_mul(0x0100_0000_01b3);
+        }
+    }
 }
 
 /// Picks an index at random in proportion to `weights`, or `None` when they
@@ -37,12 +67,11 @@ fn choose_index(weights: &[f32]) -> Option<usize> {
 }
 
 /// A weighted random selector with history-based penalty to avoid repetition
-pub struct WeightedSelector<T, S = Arc<[T]>> {
-    items: S,
-    recent_history: VecDeque<usize>,
-    history_size: usize,
+pub struct WeightedSelector<T> {
+    items: Arc<[T]>,
+    identities: Box<[Identity]>,
+    recent_history: VecDeque<Identity>,
     penalty_multiplier: f32,
-    item: PhantomData<fn() -> T>,
 }
 
 impl<T: Weighted, P: WeightedPool<T>> From<&P> for WeightedSelector<T> {
@@ -51,47 +80,51 @@ impl<T: Weighted, P: WeightedPool<T>> From<&P> for WeightedSelector<T> {
     }
 }
 
-impl<T: Weighted, S: AsRef<[T]>> WeightedSelector<T, S> {
+impl<T: Weighted> WeightedSelector<T> {
     /// Remembers the last half of the item count in picks, at least 2.
     /// The penalty multiplier defaults to 1.
-    pub fn new(items: S, history_penalty_multiplier: Option<f32>) -> Self {
-        let history_size = (items.as_ref().len() / 2).max(2);
+    pub fn new(items: Arc<[T]>, history_penalty_multiplier: Option<f32>) -> Self {
         Self {
+            identities: items.iter().map(Weighted::identity).collect(),
             items,
-            recent_history: VecDeque::with_capacity(history_size),
-            history_size,
+            recent_history: VecDeque::new(),
             penalty_multiplier: history_penalty_multiplier.unwrap_or(1.0),
-            item: PhantomData,
         }
     }
 
-    pub fn choose(&mut self) -> Option<&T> {
-        let idx = self.pick_index()?;
-        Some(&self.items.as_ref()[idx])
+    pub fn reconfigure(&mut self, items: Arc<[T]>, history_penalty_multiplier: Option<f32>) {
+        self.identities = items.iter().map(Weighted::identity).collect();
+        self.items = items;
+        self.penalty_multiplier = history_penalty_multiplier.unwrap_or(1.0);
     }
 
-    fn pick_index(&mut self) -> Option<usize> {
+    pub fn set_pool<P: WeightedPool<T>>(&mut self, pool: &P) {
+        self.reconfigure(pool.entries().clone(), pool.history_penalty_multiplier());
+    }
+
+    pub fn choose(&mut self) -> Option<&T> {
+        let history_size = (self.items.len() / 2).max(2);
+        let excess = self.recent_history.len().saturating_sub(history_size);
+        self.recent_history.drain(..excess);
+
         let effective_weights: Vec<f32> = self
             .items
             .as_ref()
             .iter()
-            .enumerate()
-            .map(|(idx, item)| item.weight() as f32 * self.penalty(idx))
+            .zip(&self.identities)
+            .map(|(item, &identity)| item.weight() as f32 * self.penalty(identity))
             .collect();
 
         let idx = choose_index(&effective_weights)?;
-        if self.recent_history.len() >= self.history_size {
-            self.recent_history.pop_front();
-        }
-        self.recent_history.push_back(idx);
-        Some(idx)
+        self.recent_history.push_back(self.identities[idx]);
+        Some(&self.items[idx])
     }
 
-    fn penalty(&self, idx: usize) -> f32 {
+    fn penalty(&self, identity: Identity) -> f32 {
         match self
             .recent_history
             .iter()
-            .rposition(|&recent| recent == idx)
+            .rposition(|&recent| recent == identity)
         {
             Some(history_idx) => {
                 let recency_factor = 1.0 - (history_idx as f32 / self.recent_history.len() as f32);
@@ -99,16 +132,5 @@ impl<T: Weighted, S: AsRef<[T]>> WeightedSelector<T, S> {
             }
             None => 1.0,
         }
-    }
-}
-
-impl<T: Weighted, S: AsRef<[T]> + AsMut<[T]>> WeightedSelector<T, S> {
-    pub fn choose_mut(&mut self) -> Option<&mut T> {
-        let idx = self.pick_index()?;
-        Some(&mut self.items.as_mut()[idx])
-    }
-
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
-        self.items.as_mut().iter_mut()
     }
 }

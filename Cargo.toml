@@ -57,6 +57,7 @@ thiserror = "2.0.20"
 strum = { version = "0.28.0", features = ["derive"] }
 rust-embed = { version = "8.13.0", features = ["include-exclude", "mime-guess"] }
 field-trait = { path = "crates/field-trait" }
+ambassador = "0.5.1"
 
 [dev-dependencies]
 tempfile = "3.0"

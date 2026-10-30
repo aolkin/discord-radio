@@ -7,12 +7,14 @@ use crate::audio::dj::segments::{
 };
 use crate::audio::dj::segments::{NoisePeriodEntry, NoiseSegment, SegmentCtx};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
-use crate::audio::dj::weighted_choice::{Weighted, WeightedSelector};
+use crate::audio::dj::weighted_choice::WeightedSelector;
 use crate::state::Data;
 use anyhow::Context;
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use serenity::model::id::{ChannelId, GuildId};
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::ops::Deref;
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant, SystemTime};
@@ -177,7 +179,8 @@ pub struct DJStateMachine {
     bot_state: Data,
     config_name: String,
     config: Arc<parking_lot::RwLock<Arc<DJConfig>>>,
-    pool_selector: WeightedSelector<ActivePool, Box<[ActivePool]>>,
+    pool_selector: WeightedSelector<Arc<Pool>>,
+    entry_selectors: HashMap<String, WeightedSelector<PoolEntry>>,
     signal_profile_selector: WeightedSelector<SignalProfileEntry>,
     applied_profile: Option<(SignalProfilePlayback, ProfileSource)>,
     /// An empty status is how Discord clears it.
@@ -221,18 +224,21 @@ impl DJStateMachine {
 
         *state.write().await = initial_state;
 
-        Self {
+        let mut state_machine = Self {
             state,
             guild_id,
             announcement_channel,
             bot_state,
             config_name,
-            pool_selector: pool_selector(&loaded),
-            signal_profile_selector: (&loaded.signal_profiles).into(),
+            pool_selector: WeightedSelector::new(Arc::default(), None),
+            entry_selectors: HashMap::new(),
+            signal_profile_selector: WeightedSelector::new(Arc::default(), None),
             config,
             applied_profile: None,
             applied_channel_status: None,
-        }
+        };
+        state_machine.set_config(loaded);
+        state_machine
     }
 
     pub async fn run(mut self, mut command_rx: mpsc::Receiver<DJCommand>) {
@@ -427,20 +433,27 @@ impl DJStateMachine {
         pool_name: Option<&str>,
         bot_state: Data,
     ) -> anyhow::Result<Box<dyn Segment>> {
-        let active = match pool_name {
+        let pool = match pool_name {
             Some(name) => Some(
-                self.pool_selector
-                    .iter_mut()
-                    .find(|active| active.pool.name == name)
+                self.config
+                    .read()
+                    .pools
+                    .iter()
+                    .find(|pool| pool.name == name)
+                    .cloned()
                     .with_context(|| format!("no pool named {name:?}"))?,
             ),
-            None => self.pool_selector.choose_mut(),
+            None => self.pool_selector.choose().cloned(),
         };
-        match active {
-            Some(ActivePool { pool, selector }) => {
-                let entry = selector.choose().with_context(|| {
-                    format!("pool {:?} has no entry with weight above 0", pool.name)
-                })?;
+        match pool {
+            Some(pool) => {
+                let entry = self
+                    .entry_selectors
+                    .get_mut(&pool.name)
+                    .and_then(WeightedSelector::choose)
+                    .with_context(|| {
+                        format!("pool {:?} has no entry with weight above 0", pool.name)
+                    })?;
                 Ok(entry.segment(&pool.segment_defaults, &bot_state).await)
             }
             None => Ok(Box::new(NoiseSegment::from_entry(
@@ -455,16 +468,24 @@ impl DJStateMachine {
         let Some(config) = self.bot_state.dj_config_manager.get(&self.config_name) else {
             return;
         };
-        if !Arc::ptr_eq(&config, &self.config.read()) {
-            tracing::info!("DJ reloading config {:?}", self.config_name);
-            self.set_config(config);
-        }
+        self.set_config(config);
     }
 
-    /// Selection starts with an empty recent history.
     fn set_config(&mut self, config: Arc<DJConfig>) {
-        self.pool_selector = pool_selector(&config);
-        self.signal_profile_selector = (&config.signal_profiles).into();
+        self.pool_selector
+            .reconfigure(config.pools.clone(), config.pool_history_penalty_multiplier);
+        self.entry_selectors
+            .retain(|name, _| config.pools.iter().any(|pool| pool.name == *name));
+        for pool in config.pools.iter() {
+            match self.entry_selectors.entry(pool.name.clone()) {
+                Entry::Occupied(mut selector) => selector.get_mut().set_pool(pool.as_ref()),
+                Entry::Vacant(slot) => {
+                    slot.insert(pool.as_ref().into());
+                }
+            }
+        }
+        self.signal_profile_selector
+            .set_pool(&config.signal_profiles);
         *self.config.write() = config;
     }
 
@@ -658,33 +679,6 @@ impl DJStateMachine {
             .log_dj_activity(self.guild_id.get(), event_type, details)
             .await
     }
-}
-
-struct ActivePool {
-    pool: Arc<Pool>,
-    selector: WeightedSelector<PoolEntry>,
-}
-
-impl From<&Arc<Pool>> for ActivePool {
-    fn from(pool: &Arc<Pool>) -> Self {
-        Self {
-            pool: pool.clone(),
-            selector: pool.as_ref().into(),
-        }
-    }
-}
-
-impl Weighted for ActivePool {
-    fn weight(&self) -> u32 {
-        self.pool.weight
-    }
-}
-
-fn pool_selector(config: &DJConfig) -> WeightedSelector<ActivePool, Box<[ActivePool]>> {
-    WeightedSelector::new(
-        config.pools.iter().map(ActivePool::from).collect(),
-        config.pool_history_penalty_multiplier,
-    )
 }
 
 static DEFAULT_NOISE_PERIOD: LazyLock<NoisePeriodEntry> = LazyLock::new(|| NoisePeriodEntry {
