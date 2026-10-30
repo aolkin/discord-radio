@@ -1,4 +1,4 @@
-use crate::audio::dj::config::DJConfig;
+use crate::audio::dj::config::{ConfiguredPool, DJConfig};
 use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::{DJState, DJStateMachine};
 use crate::state::Data;
@@ -22,7 +22,11 @@ pub enum DJCommand {
     ForceTrack(TrackRequest),
     ForceIdle(IdleRequest),
     Stop,
-    SetConfig { name: String, config: Arc<DJConfig> },
+    SetConfig {
+        name: String,
+        config: Arc<DJConfig>,
+        pools: Arc<[ConfiguredPool]>,
+    },
     SetAnnouncementChannel(Option<ChannelId>),
     SetBackgroundProfile(Option<SignalProfilePlayback>),
     SetOverrideProfile(Option<SignalProfilePlayback>),
@@ -115,12 +119,10 @@ impl DJManager {
     }
 
     pub fn find_pool(&self, name: &str, require_playable: bool) -> anyhow::Result<()> {
-        let config = self.config.read();
-        let pool = config
-            .pools
-            .iter()
-            .find(|pool| pool.name == name)
-            .with_context(|| format!("no pool named {name:?}"))?;
+        if !self.config.read().pools.contains_key(name) {
+            bail!("no pool named {name:?}");
+        }
+        let pool = self.bot_state.dj_config_manager.pools.require(name)?;
         if require_playable && !pool.has_weighted_entry() {
             bail!("pool {name:?} has no entry with weight above 0");
         }
@@ -152,10 +154,15 @@ impl DJManager {
             .as_ref()
             .and_then(|saved| saved.config_name.clone())
             .unwrap_or_else(|| DEFAULT_DJ_CONFIG.to_string());
-        *self.config.write() = load_dj_config(&self.bot_state, &config_name).unwrap_or_else(|e| {
-            tracing::warn!(guild_id = %self.guild_id, "Starting DJ with an empty config: {e:#}");
-            Arc::default()
-        });
+        let (loaded, pools) = self
+            .bot_state
+            .dj_config_manager
+            .get(&config_name)
+            .unwrap_or_else(|e| {
+                tracing::warn!(guild_id = %self.guild_id, "Starting DJ with an empty config: {e:#}");
+                (Arc::default(), Arc::default())
+            });
+        *self.config.write() = loaded;
         let guild_id = self.guild_id;
         let task_state = self.state.clone();
         let config = self.config.clone();
@@ -163,10 +170,18 @@ impl DJManager {
         let span = tracing::info_span!("dj", guild_id = %guild_id);
         let task_handle = tokio::spawn(
             async move {
-                DJStateMachine::new(guild_id, saved, task_state, config_name, config, bot_state)
-                    .await
-                    .run(command_rx)
-                    .await;
+                DJStateMachine::new(
+                    guild_id,
+                    saved,
+                    task_state,
+                    config_name,
+                    config,
+                    pools,
+                    bot_state,
+                )
+                .await
+                .run(command_rx)
+                .await;
             }
             .instrument(span),
         );
@@ -233,10 +248,3 @@ impl DJManager {
 }
 
 pub const DEFAULT_DJ_CONFIG: &str = "default";
-
-pub fn load_dj_config(bot_state: &Data, name: &str) -> anyhow::Result<Arc<DJConfig>> {
-    bot_state
-        .dj_config_manager
-        .get(name)
-        .with_context(|| format!("no DJ config {name:?}"))
-}

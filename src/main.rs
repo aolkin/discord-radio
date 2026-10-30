@@ -12,6 +12,7 @@ mod startup;
 mod state;
 mod web;
 
+use crate::audio::dj::config::DJConfigRegistry;
 use crate::bucket::registry::JsonRegistry;
 use crate::state::{BotState, Data};
 use anyhow::Context;
@@ -197,8 +198,10 @@ async fn main() -> anyhow::Result<()> {
     let dj_configs_path =
         std::env::var("DJ_CONFIGS_PATH").unwrap_or_else(|_| "dj_configs/".to_string());
     tracing::info!("Using DJ configs path: {}", dj_configs_path);
+    let pools_path = std::env::var("POOLS_PATH").unwrap_or_else(|_| "pools/".to_string());
+    tracing::info!("Using pools path: {}", pools_path);
     let dj_config_manager =
-        JsonRegistry::from_storage(dj_configs_path, file_resolver.clone()).await;
+        DJConfigRegistry::from_storage(dj_configs_path, pools_path, file_resolver.clone()).await;
 
     let songbird = songbird::Songbird::serenity();
     let data: Data = Box::leak(Box::new(BotState::new(

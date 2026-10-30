@@ -98,6 +98,10 @@ impl<T: Weighted> WeightedSelector<T> {
         self.penalty_multiplier = history_penalty_multiplier.unwrap_or(1.0);
     }
 
+    pub fn items(&self) -> &Arc<[T]> {
+        &self.items
+    }
+
     pub fn set_pool<P: WeightedPool<T>>(&mut self, pool: &P) {
         self.reconfigure(pool.entries().clone(), pool.history_penalty_multiplier());
     }

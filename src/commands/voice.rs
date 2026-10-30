@@ -1,5 +1,5 @@
 use crate::audio::connection::connect_voice_channel;
-use crate::audio::dj::manager::{DJCommand, load_dj_config};
+use crate::audio::dj::manager::DJCommand;
 use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
 use crate::audio::processing::processor::ProcessorRef;
@@ -680,13 +680,19 @@ pub async fn configure(
 
     ctx.defer_ephemeral().await?;
 
-    if let Err(e) = load_dj_config(ctx.data(), &config).and_then(|loaded| {
-        let command = DJCommand::SetConfig {
-            name: config.clone(),
-            config: loaded,
-        };
-        send_to_dj(ctx.data(), guild_id, command)
-    }) {
+    if let Err(e) = ctx
+        .data()
+        .dj_config_manager
+        .get(&config)
+        .and_then(|(loaded, pools)| {
+            let command = DJCommand::SetConfig {
+                name: config.clone(),
+                config: loaded,
+                pools,
+            };
+            send_to_dj(ctx.data(), guild_id, command)
+        })
+    {
         ctx.say(format!("Failed to configure DJ: {e:#}")).await?;
         return Ok(());
     }

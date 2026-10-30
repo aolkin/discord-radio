@@ -24,7 +24,7 @@ use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tracing::Instrument;
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct HexMessageDefaults {
     #[serde(default = "default_loops")]
     pub loop_min: u32,

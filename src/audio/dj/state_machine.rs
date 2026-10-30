@@ -1,4 +1,6 @@
-use crate::audio::dj::config::{DJConfig, Pool, PoolEntry, SegmentDefaults, SignalProfileEntry};
+use crate::audio::dj::config::{
+    ConfiguredPool, DJConfig, PoolEntry, SegmentDefaults, SignalProfileEntry,
+};
 use crate::audio::dj::manager::{
     ADVANCE_RETRY_DELAY, DJCommand, HexMessageRequest, IdleRequest, TrackRequest,
 };
@@ -179,7 +181,7 @@ pub struct DJStateMachine {
     bot_state: Data,
     config_name: String,
     config: Arc<parking_lot::RwLock<Arc<DJConfig>>>,
-    pool_selector: WeightedSelector<Arc<Pool>>,
+    pool_selector: WeightedSelector<ConfiguredPool>,
     entry_selectors: HashMap<String, WeightedSelector<PoolEntry>>,
     signal_profile_selector: WeightedSelector<SignalProfileEntry>,
     applied_profile: Option<(SignalProfilePlayback, ProfileSource)>,
@@ -194,6 +196,7 @@ impl DJStateMachine {
         state: Arc<RwLock<DJState>>,
         config_name: String,
         config: Arc<parking_lot::RwLock<Arc<DJConfig>>>,
+        pools: Arc<[ConfiguredPool]>,
         bot_state: Data,
     ) -> Self {
         let (announcement_channel, restored_state) = match saved {
@@ -237,7 +240,7 @@ impl DJStateMachine {
             applied_profile: None,
             applied_channel_status: None,
         };
-        state_machine.set_config(loaded);
+        state_machine.set_config(loaded, pools);
         state_machine
     }
 
@@ -435,9 +438,8 @@ impl DJStateMachine {
     ) -> anyhow::Result<Box<dyn Segment>> {
         let pool = match pool_name {
             Some(name) => Some(
-                self.config
-                    .read()
-                    .pools
+                self.pool_selector
+                    .items()
                     .iter()
                     .find(|pool| pool.name == name)
                     .cloned()
@@ -465,25 +467,29 @@ impl DJStateMachine {
 
     /// Switches to the latest saved copy of the DJ's named config.
     fn reload_config(&mut self) {
-        let Some(config) = self.bot_state.dj_config_manager.get(&self.config_name) else {
-            return;
+        let (config, pools) = match self.bot_state.dj_config_manager.get(&self.config_name) {
+            Ok(loaded) => loaded,
+            Err(e) => {
+                tracing::warn!("DJ keeping its current config: {e:#}");
+                return;
+            }
         };
-        self.set_config(config);
+        self.set_config(config, pools);
     }
 
-    fn set_config(&mut self, config: Arc<DJConfig>) {
-        self.pool_selector
-            .reconfigure(config.pools.clone(), config.pool_history_penalty_multiplier);
+    fn set_config(&mut self, config: Arc<DJConfig>, pools: Arc<[ConfiguredPool]>) {
         self.entry_selectors
-            .retain(|name, _| config.pools.iter().any(|pool| pool.name == *name));
-        for pool in config.pools.iter() {
+            .retain(|name, _| pools.iter().any(|pool| pool.name == *name));
+        for pool in pools.iter() {
             match self.entry_selectors.entry(pool.name.clone()) {
-                Entry::Occupied(mut selector) => selector.get_mut().set_pool(pool.as_ref()),
+                Entry::Occupied(mut selector) => selector.get_mut().set_pool(pool.file.as_ref()),
                 Entry::Vacant(slot) => {
-                    slot.insert(pool.as_ref().into());
+                    slot.insert(pool.file.as_ref().into());
                 }
             }
         }
+        self.pool_selector
+            .reconfigure(pools, config.pool_history_penalty_multiplier);
         self.signal_profile_selector
             .set_pool(&config.signal_profiles);
         *self.config.write() = config;
@@ -499,12 +505,11 @@ impl DJStateMachine {
             "DJ force transitioning to hex message with custom text: {}",
             request.message
         );
-        let config = self.config.read().clone();
+        let pools = self.pool_selector.items().clone();
         let built_in_defaults = SegmentDefaults::default();
         let segment_defaults = match &request.pool {
             Some(name) => {
-                &config
-                    .pools
+                &pools
                     .iter()
                     .find(|pool| pool.name == *name)
                     .with_context(|| format!("no pool named {name:?}"))?
@@ -634,9 +639,13 @@ impl DJStateMachine {
                 self.stop(&bot_state).await;
                 return true;
             }
-            DJCommand::SetConfig { name, config } => {
+            DJCommand::SetConfig {
+                name,
+                config,
+                pools,
+            } => {
                 tracing::info!("DJ switching to config {name:?}");
-                self.set_config(config);
+                self.set_config(config, pools);
                 self.config_name = name;
                 Ok(())
             }

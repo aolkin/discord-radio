@@ -80,6 +80,16 @@ impl<T: RegistryEntry> JsonRegistry<T> {
         self.entries.read().unwrap().get(name).cloned()
     }
 
+    pub fn require(&self, name: &str) -> anyhow::Result<Arc<T>> {
+        self.get(name).with_context(|| {
+            format!(
+                "{} {name:?} ({}{name}.json) is missing or invalid",
+                T::KIND,
+                self.path
+            )
+        })
+    }
+
     pub fn list(&self) -> Vec<String> {
         self.entries.read().unwrap().keys().cloned().collect()
     }

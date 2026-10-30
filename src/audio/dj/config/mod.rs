@@ -5,21 +5,88 @@ use crate::audio::dj::segments::{
 use crate::audio::dj::weighted_choice::{
     Identity, Weighted, WeightedPool, ambassador_impl_Weighted,
 };
-use crate::bucket::registry::RegistryEntry;
+use crate::bucket::FileResolver;
+use crate::bucket::registry::{JsonRegistry, RegistryEntry};
 use crate::state::Data;
 use ambassador::Delegate;
 use anyhow::{Context, bail};
 use field_trait::field_trait_impl;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+use std::num::NonZeroU32;
 use std::sync::{Arc, LazyLock};
 
 #[derive(Deserialize, Serialize, Debug, Default)]
 pub struct DJConfig {
     pub name: String,
-    pub pools: Arc<[Arc<Pool>]>,
+    pub pools: BTreeMap<String, PoolConfig>,
     pub signal_profiles: SignalProfiles,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pool_history_penalty_multiplier: Option<f32>,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct PoolConfig {
+    pub weight: NonZeroU32,
+    #[serde(default)]
+    pub segment_defaults: SegmentDefaults,
+}
+
+#[derive(Debug, Clone)]
+pub struct ConfiguredPool {
+    pub name: String,
+    pub weight: u32,
+    pub segment_defaults: SegmentDefaults,
+    pub file: Arc<Pool>,
+}
+
+pub struct DJConfigRegistry {
+    pub configs: JsonRegistry<DJConfig>,
+    pub pools: JsonRegistry<Pool>,
+}
+
+impl DJConfigRegistry {
+    pub async fn from_storage(
+        configs_path: String,
+        pools_path: String,
+        file_resolver: FileResolver,
+    ) -> Self {
+        let registry = Self {
+            configs: JsonRegistry::from_storage(configs_path, file_resolver.clone()).await,
+            pools: JsonRegistry::from_storage(pools_path, file_resolver).await,
+        };
+        for name in registry.configs.list() {
+            if let Err(e) = registry.get(&name) {
+                tracing::warn!("Failed to load DJ config {name:?}: {e:#}");
+            }
+        }
+        registry
+    }
+
+    pub fn get(&self, name: &str) -> anyhow::Result<(Arc<DJConfig>, Arc<[ConfiguredPool]>)> {
+        let config = self
+            .configs
+            .get(name)
+            .with_context(|| format!("no DJ config {name:?}"))?;
+        let pools = config
+            .pools
+            .iter()
+            .map(|(pool_name, pool_config)| {
+                let file = self.pools.require(pool_name)?;
+                if !file.has_weighted_entry() {
+                    bail!("pool {pool_name:?} has no entry of weight above 0");
+                }
+                Ok(ConfiguredPool {
+                    name: pool_name.clone(),
+                    weight: pool_config.weight.get(),
+                    segment_defaults: pool_config.segment_defaults.or(&file.segment_defaults),
+                    file,
+                })
+            })
+            .collect::<anyhow::Result<_>>()
+            .with_context(|| format!("DJ config {name:?}"))?;
+        Ok((config, pools))
+    }
 }
 
 #[field_trait_impl(WeightedPool<SignalProfileEntry>)]
@@ -34,7 +101,6 @@ pub struct SignalProfiles {
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Pool {
     pub name: String,
-    pub weight: u32,
     #[serde(default)]
     pub segment_defaults: SegmentDefaults,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -42,7 +108,7 @@ pub struct Pool {
     pub entries: Arc<[PoolEntry]>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Default)]
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
 pub struct SegmentDefaults {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hex_config: Option<HexMessageDefaults>,
@@ -58,10 +124,27 @@ impl SegmentDefaults {
     pub fn hex_config(&self) -> &HexMessageDefaults {
         self.hex_config.as_ref().unwrap_or(&BUILT_IN_HEX_DEFAULTS)
     }
+
+    pub fn or(&self, fallback: &Self) -> Self {
+        Self {
+            hex_config: self
+                .hex_config
+                .clone()
+                .or_else(|| fallback.hex_config.clone()),
+            signal_profile: self
+                .signal_profile
+                .clone()
+                .or_else(|| fallback.signal_profile.clone()),
+            channel_status: self
+                .channel_status
+                .clone()
+                .or_else(|| fallback.channel_status.clone()),
+        }
+    }
 }
 
 #[field_trait_impl]
-impl Weighted for Pool {
+impl Weighted for ConfiguredPool {
     fn identity(&self) -> Identity {
         Identity::of(&self.name)
     }
@@ -71,14 +154,19 @@ impl Pool {
     pub fn has_weighted_entry(&self) -> bool {
         self.entries.iter().any(|entry| entry.weight() > 0)
     }
+}
+
+impl RegistryEntry for Pool {
+    const KIND: &'static str = "pool";
+
+    fn name(&self) -> &str {
+        &self.name
+    }
 
     fn validate(&self) -> anyhow::Result<()> {
         let defaults = self.segment_defaults.hex_config();
         ensure_loops(defaults.loop_min, defaults.loop_max).context("hex_config")?;
         ensure_penalty_multiplier(self.history_penalty_multiplier)?;
-        if !self.has_weighted_entry() && self.weight != 0 {
-            bail!("a pool with no entry of weight above 0 must have weight 0");
-        }
         self.entries
             .iter()
             .try_for_each(|entry| entry.validate(defaults))
@@ -173,10 +261,6 @@ impl RegistryEntry for DJConfig {
     /// Rejects values that would make the DJ panic when it picks them.
     fn validate(&self) -> anyhow::Result<()> {
         ensure_penalty_multiplier(self.pool_history_penalty_multiplier)?;
-        for pool in self.pools.iter() {
-            pool.validate()
-                .with_context(|| format!("pool {:?}", pool.name))?;
-        }
         ensure_penalty_multiplier(self.signal_profiles.history_penalty_multiplier)
             .context("signal_profiles")?;
         for profile in self.signal_profiles.entries.iter() {

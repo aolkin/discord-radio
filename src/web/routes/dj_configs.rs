@@ -14,7 +14,7 @@ pub struct DjConfigsResponse {
 }
 
 pub async fn get_dj_configs(State(bot_state): State<Data>) -> AxumJson<DjConfigsResponse> {
-    let configs = bot_state.dj_config_manager.list();
+    let configs = bot_state.dj_config_manager.configs.list();
     AxumJson(DjConfigsResponse { configs })
 }
 
@@ -26,6 +26,7 @@ pub async fn get_dj_config(
     if params.refresh {
         return bot_state
             .dj_config_manager
+            .configs
             .refresh(&name)
             .await
             .map(AxumJson)
@@ -33,6 +34,7 @@ pub async fn get_dj_config(
     }
     bot_state
         .dj_config_manager
+        .configs
         .get(&name)
         .map(AxumJson)
         .ok_or_else(|| ApiError::not_found(format!("No DJ config {name:?}")))
@@ -45,6 +47,7 @@ pub async fn put_dj_config(
 ) -> Result<StatusCode, ApiError> {
     bot_state
         .dj_config_manager
+        .configs
         .save(&name, body)
         .await
         .map_err(registry_error)?;
