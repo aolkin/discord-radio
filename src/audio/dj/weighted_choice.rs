@@ -84,28 +84,22 @@ impl<T: Weighted> WeightedSelector<T> {
     /// Remembers the last half of the item count in picks, at least 2.
     /// The penalty multiplier defaults to 1.
     pub fn new(items: Arc<[T]>, history_penalty_multiplier: Option<f32>) -> Self {
-        let mut selector = Self {
+        Self {
+            identities: items.iter().map(Weighted::identity).collect(),
             items,
-            identities: Box::default(),
             recent_history: VecDeque::new(),
             penalty_multiplier: history_penalty_multiplier.unwrap_or(1.0),
-        };
-        selector.update_identities();
-        selector
+        }
     }
 
-    pub fn set_entries(&mut self, items: Arc<[T]>, history_penalty_multiplier: Option<f32>) {
+    pub fn reconfigure(&mut self, items: Arc<[T]>, history_penalty_multiplier: Option<f32>) {
+        self.identities = items.iter().map(Weighted::identity).collect();
         self.items = items;
         self.penalty_multiplier = history_penalty_multiplier.unwrap_or(1.0);
-        self.update_identities();
     }
 
     pub fn set_pool<P: WeightedPool<T>>(&mut self, pool: &P) {
-        self.set_entries(pool.entries().clone(), pool.history_penalty_multiplier());
-    }
-
-    fn update_identities(&mut self) {
-        self.identities = self.items.iter().map(Weighted::identity).collect();
+        self.reconfigure(pool.entries().clone(), pool.history_penalty_multiplier());
     }
 
     pub fn choose(&mut self) -> Option<&T> {

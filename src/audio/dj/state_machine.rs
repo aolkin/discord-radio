@@ -473,7 +473,7 @@ impl DJStateMachine {
 
     fn set_config(&mut self, config: Arc<DJConfig>) {
         self.pool_selector
-            .set_entries(config.pools.clone(), config.pool_history_penalty_multiplier);
+            .reconfigure(config.pools.clone(), config.pool_history_penalty_multiplier);
         self.entry_selectors
             .retain(|name, _| config.pools.iter().any(|pool| pool.name == *name));
         for pool in config.pools.iter() {
