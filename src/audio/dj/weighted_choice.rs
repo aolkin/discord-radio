@@ -98,11 +98,6 @@ impl<T: Weighted> WeightedSelector<T> {
         self.items = items;
         self.penalty_multiplier = history_penalty_multiplier.unwrap_or(1.0);
         self.update_identities();
-        let excess = self
-            .recent_history
-            .len()
-            .saturating_sub(self.history_size());
-        self.recent_history.drain(..excess);
     }
 
     pub fn set_pool<P: WeightedPool<T>>(&mut self, pool: &P) {
@@ -118,6 +113,12 @@ impl<T: Weighted> WeightedSelector<T> {
     }
 
     pub fn choose(&mut self) -> Option<&T> {
+        let excess = self
+            .recent_history
+            .len()
+            .saturating_sub(self.history_size());
+        self.recent_history.drain(..excess);
+
         let effective_weights: Vec<f32> = self
             .items
             .as_ref()
