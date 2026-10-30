@@ -108,15 +108,9 @@ impl<T: Weighted> WeightedSelector<T> {
         self.identities = self.items.iter().map(Weighted::identity).collect();
     }
 
-    fn history_size(&self) -> usize {
-        (self.items.len() / 2).max(2)
-    }
-
     pub fn choose(&mut self) -> Option<&T> {
-        let excess = self
-            .recent_history
-            .len()
-            .saturating_sub(self.history_size());
+        let history_size = (self.items.len() / 2).max(2);
+        let excess = self.recent_history.len().saturating_sub(history_size);
         self.recent_history.drain(..excess);
 
         let effective_weights: Vec<f32> = self
@@ -128,15 +122,8 @@ impl<T: Weighted> WeightedSelector<T> {
             .collect();
 
         let idx = choose_index(&effective_weights)?;
-        self.record_history(self.identities[idx]);
+        self.recent_history.push_back(self.identities[idx]);
         Some(&self.items[idx])
-    }
-
-    fn record_history(&mut self, identity: Identity) {
-        while self.recent_history.len() >= self.history_size() {
-            self.recent_history.pop_front();
-        }
-        self.recent_history.push_back(identity);
     }
 
     fn penalty(&self, identity: Identity) -> f32 {
