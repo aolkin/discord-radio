@@ -116,14 +116,6 @@ impl DJManager {
         self.state.clone()
     }
 
-    pub fn find_pool(&self, name: &str, require_playable: bool) -> anyhow::Result<()> {
-        let pool = self.bot_state.dj_config_manager.pools.require(name)?;
-        if require_playable && !pool.has_weighted_entry() {
-            bail!("pool {name:?} has no entry with weight above 0");
-        }
-        Ok(())
-    }
-
     /// Sends `command` to the running task, returning false when none is running.
     /// Fails with [`DjBusy`] instead of waiting when the DJ is starting,
     /// stopping, or has a full command queue.

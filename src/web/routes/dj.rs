@@ -23,8 +23,8 @@ pub async fn advance_dj_state(
 ) -> Result<StatusCode, ApiError> {
     if let Some(pool) = &request.state_type {
         bot_state
-            .dj_manager(guild_id)
-            .find_pool(pool, true)
+            .dj_config_manager
+            .get_pool(pool, true)
             .status(StatusCode::BAD_REQUEST)?;
     }
     send_dj_command(
@@ -80,8 +80,8 @@ pub async fn play_hex_message(
 ) -> Result<StatusCode, ApiError> {
     if let Some(pool) = &request.pool {
         bot_state
-            .dj_manager(guild_id)
-            .find_pool(pool, false)
+            .dj_config_manager
+            .get_pool(pool, false)
             .status(StatusCode::BAD_REQUEST)?;
     }
     let request = crate::audio::dj::manager::HexMessageRequest {

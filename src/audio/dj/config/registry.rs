@@ -50,4 +50,12 @@ impl DJConfigRegistry {
             .with_context(|| format!("DJ config {name:?}"))?;
         Ok((config, pools))
     }
+
+    pub fn get_pool(&self, name: &str, require_playable: bool) -> anyhow::Result<Arc<Pool>> {
+        let pool = self.pools.require(name)?;
+        if require_playable && !pool.has_weighted_entry() {
+            bail!("pool {name:?} has no entry with weight above 0");
+        }
+        Ok(pool)
+    }
 }
