@@ -472,6 +472,9 @@ impl DJStateMachine {
 
     /// Switches to the latest saved copy of the DJ's named config.
     fn reload_config(&mut self) {
+        if self.config_name.is_empty() {
+            return;
+        }
         let (config, pools) = match self.bot_state.dj_config_manager.get(&self.config_name) {
             Ok(loaded) => loaded,
             Err(e) => {

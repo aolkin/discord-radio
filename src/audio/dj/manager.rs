@@ -146,11 +146,7 @@ impl DJManager {
             .get(&config_name)
             .unwrap_or_else(|e| {
                 tracing::warn!(guild_id = %self.guild_id, "Starting DJ with an empty config: {e:#}");
-                let empty = DJConfig {
-                    name: config_name.clone(),
-                    ..DJConfig::default()
-                };
-                (Arc::new(empty), Arc::default())
+                (Arc::default(), Arc::default())
             });
         let guild_id = self.guild_id;
         let task_state = self.state.clone();
