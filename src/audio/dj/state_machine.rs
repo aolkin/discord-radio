@@ -180,7 +180,7 @@ pub struct DJStateMachine {
     announcement_channel: Option<ChannelId>,
     bot_state: Data,
     config_name: String,
-    config_changes: Vec<watch::Receiver<()>>,
+    config: Option<watch::Receiver<Arc<LoadedConfig>>>,
     pool_selector: WeightedSelector<ConfiguredPool>,
     entry_selectors: HashMap<String, WeightedSelector<PoolEntry>>,
     signal_profile_selector: WeightedSelector<SignalProfileEntry>,
@@ -194,7 +194,7 @@ impl DJStateMachine {
         guild_id: GuildId,
         saved: Option<crate::persistence::DJState>,
         state: Arc<RwLock<DJState>>,
-        config: LoadedConfig,
+        config: Option<watch::Receiver<Arc<LoadedConfig>>>,
         bot_state: Data,
     ) -> Self {
         let (announcement_channel, restored_state) = match saved {
@@ -212,7 +212,6 @@ impl DJStateMachine {
             }
             None => (None, None),
         };
-        tracing::info!("Starting DJ task with config {:?}", config.config.name);
 
         let initial_state = restored_state.unwrap_or_default();
 
@@ -229,15 +228,21 @@ impl DJStateMachine {
             guild_id,
             announcement_channel,
             bot_state,
-            config_name: config.config.name.clone(),
-            config_changes: Vec::new(),
+            config_name: String::new(),
+            config: None,
             pool_selector: WeightedSelector::new(Arc::default(), None),
             entry_selectors: HashMap::new(),
             signal_profile_selector: WeightedSelector::new(Arc::default(), None),
             applied_profile: None,
             applied_channel_status: None,
         };
-        state_machine.set_config(config);
+        if let Some(config) = config {
+            state_machine.switch_config(config);
+        }
+        tracing::info!(
+            "Starting DJ task with config {:?}",
+            state_machine.config_name
+        );
         state_machine
     }
 
@@ -473,32 +478,24 @@ impl DJStateMachine {
 
     /// Switches to the latest saved copy of the DJ's named config.
     fn reload_config(&mut self) {
-        if !self
-            .config_changes
-            .iter()
-            .any(|changes| changes.has_changed().unwrap_or(false))
-        {
+        let Some(config) = &mut self.config else {
+            return;
+        };
+        if !config.has_changed().unwrap_or(false) {
             return;
         }
-        let registry = &self.bot_state.dj_config_manager;
-        match registry.get(&self.config_name) {
-            Ok(config) => self.set_config(config),
-            Err(e) => {
-                tracing::warn!("DJ keeping its current config: {e:#}");
-                self.config_changes = registry.subscribe(&self.config_name);
-            }
-        }
+        let loaded = config.borrow_and_update().clone();
+        self.set_config(&loaded);
     }
 
-    fn set_config(
-        &mut self,
-        LoadedConfig {
-            config,
-            pools,
-            changes,
-        }: LoadedConfig,
-    ) {
-        self.config_changes = changes;
+    fn switch_config(&mut self, mut config: watch::Receiver<Arc<LoadedConfig>>) {
+        let loaded = config.borrow_and_update().clone();
+        self.config_name = loaded.config.name.clone();
+        self.config = Some(config);
+        self.set_config(&loaded);
+    }
+
+    fn set_config(&mut self, LoadedConfig { config, pools }: &LoadedConfig) {
         self.entry_selectors
             .retain(|name, _| pools.iter().any(|pool| pool.file.name == *name));
         for pool in pools.iter() {
@@ -510,7 +507,7 @@ impl DJStateMachine {
             }
         }
         self.pool_selector
-            .reconfigure(pools, config.pool_history_penalty_multiplier);
+            .reconfigure(pools.clone(), config.pool_history_penalty_multiplier);
         self.signal_profile_selector
             .set_pool(&config.signal_profiles);
     }
@@ -655,9 +652,8 @@ impl DJStateMachine {
                 return true;
             }
             DJCommand::SetConfig(config) => {
-                tracing::info!("DJ switching to config {:?}", config.config.name);
-                self.config_name = config.config.name.clone();
-                self.set_config(config);
+                self.switch_config(config);
+                tracing::info!("DJ switched to config {:?}", self.config_name);
                 Ok(())
             }
             DJCommand::SetAnnouncementChannel(new_channel) => {

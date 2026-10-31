@@ -8,7 +8,7 @@ use serenity::model::id::{ChannelId, GuildId};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::error::TrySendError;
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::{RwLock, mpsc, watch};
 use tokio::task::JoinHandle;
 use tracing::Instrument;
 
@@ -22,7 +22,7 @@ pub enum DJCommand {
     ForceTrack(TrackRequest),
     ForceIdle(IdleRequest),
     Stop,
-    SetConfig(LoadedConfig),
+    SetConfig(watch::Receiver<Arc<LoadedConfig>>),
     SetAnnouncementChannel(Option<ChannelId>),
     SetBackgroundProfile(Option<SignalProfilePlayback>),
     SetOverrideProfile(Option<SignalProfilePlayback>),
@@ -140,11 +140,11 @@ impl DJManager {
         let config = self
             .bot_state
             .dj_config_manager
-            .get(&config_name)
-            .unwrap_or_else(|e| {
+            .subscribe(&config_name)
+            .inspect_err(|e| {
                 tracing::warn!(guild_id = %self.guild_id, "Starting DJ with an empty config: {e:#}");
-                LoadedConfig::default()
-            });
+            })
+            .ok();
         let guild_id = self.guild_id;
         let task_state = self.state.clone();
         let bot_state = self.bot_state;

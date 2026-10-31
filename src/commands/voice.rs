@@ -700,7 +700,7 @@ pub async fn configure(
     if let Err(e) = ctx
         .data()
         .dj_config_manager
-        .get(&config)
+        .subscribe(&config)
         .and_then(|loaded| send_to_dj(ctx.data(), guild_id, DJCommand::SetConfig(loaded)))
     {
         ctx.say(format!("Failed to configure DJ: {e:#}")).await?;
