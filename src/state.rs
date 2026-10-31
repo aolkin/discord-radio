@@ -1,5 +1,5 @@
 use crate::activity::ActivityManager;
-use crate::audio::dj::config::DJConfigRegistry;
+use crate::audio::dj::config::registry::DJConfigRegistry;
 use crate::audio::dj::manager::DJManager;
 use crate::audio::duration::DurationCache;
 use crate::audio::processing::processor::{AudioProcessor, ProcessorRef};

@@ -15,9 +15,7 @@ use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::sync::{Arc, LazyLock};
 
-mod registry;
-
-pub use registry::DJConfigRegistry;
+pub mod registry;
 
 #[derive(Deserialize, Serialize, Debug, Default)]
 pub struct DJConfig {

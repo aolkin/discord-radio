@@ -12,7 +12,7 @@ mod startup;
 mod state;
 mod web;
 
-use crate::audio::dj::config::DJConfigRegistry;
+use crate::audio::dj::config::registry::DJConfigRegistry;
 use crate::bucket::registry::JsonRegistry;
 use crate::state::{BotState, Data};
 use anyhow::Context;
