@@ -45,6 +45,14 @@ pub async fn put_dj_config(
     Path(name): Path<String>,
     AxumJson(body): AxumJson<serde_json::Map<String, serde_json::Value>>,
 ) -> Result<StatusCode, ApiError> {
+    if let Some(pools) = body.get("pools").and_then(|pools| pools.as_object()) {
+        for pool in pools.keys() {
+            bot_state
+                .dj_config_manager
+                .get_pool(pool, true)
+                .map_err(|e| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, e))?;
+        }
+    }
     bot_state
         .dj_config_manager
         .configs

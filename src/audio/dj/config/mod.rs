@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::sync::{Arc, LazyLock};
+use tokio::sync::watch;
 
 pub mod registry;
 
@@ -38,6 +39,13 @@ pub struct ConfiguredPool {
     pub weight: u32,
     pub segment_defaults: SegmentDefaults,
     pub file: Arc<Pool>,
+}
+
+#[derive(Default)]
+pub struct LoadedConfig {
+    pub config: Arc<DJConfig>,
+    pub pools: Arc<[ConfiguredPool]>,
+    pub changes: Vec<watch::Receiver<()>>,
 }
 
 #[field_trait_impl(WeightedPool<SignalProfileEntry>)]

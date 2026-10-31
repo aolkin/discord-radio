@@ -1,8 +1,9 @@
-use crate::audio::dj::config::{ConfiguredPool, DJConfig, Pool};
+use crate::audio::dj::config::{ConfiguredPool, DJConfig, LoadedConfig, Pool};
 use crate::bucket::FileResolver;
 use crate::bucket::registry::JsonRegistry;
 use anyhow::{Context, bail};
 use std::sync::Arc;
+use tokio::sync::watch;
 
 pub struct DJConfigRegistry {
     pub configs: JsonRegistry<DJConfig>,
@@ -27,7 +28,8 @@ impl DJConfigRegistry {
         registry
     }
 
-    pub fn get(&self, name: &str) -> anyhow::Result<(Arc<DJConfig>, Arc<[ConfiguredPool]>)> {
+    pub fn get(&self, name: &str) -> anyhow::Result<LoadedConfig> {
+        let changes = self.subscribe(name);
         let config = self
             .configs
             .get(name)
@@ -36,10 +38,7 @@ impl DJConfigRegistry {
             .pools
             .iter()
             .map(|(pool_name, pool_config)| {
-                let file = self.pools.require(pool_name)?;
-                if !file.has_weighted_entry() {
-                    bail!("pool {pool_name:?} has no entry of weight above 0");
-                }
+                let file = self.get_pool(pool_name, true)?;
                 Ok(ConfiguredPool {
                     weight: pool_config.weight.get(),
                     segment_defaults: pool_config.segment_defaults.or(&file.segment_defaults),
@@ -48,7 +47,19 @@ impl DJConfigRegistry {
             })
             .collect::<anyhow::Result<_>>()
             .with_context(|| format!("DJ config {name:?}"))?;
-        Ok((config, pools))
+        Ok(LoadedConfig {
+            config,
+            pools,
+            changes,
+        })
+    }
+
+    pub fn subscribe(&self, name: &str) -> Vec<watch::Receiver<()>> {
+        let mut changes = vec![self.configs.subscribe(name)];
+        if let Some(config) = self.configs.get(name) {
+            changes.extend(config.pools.keys().map(|pool| self.pools.subscribe(pool)));
+        }
+        changes
     }
 
     pub fn get_pool(&self, name: &str, require_playable: bool) -> anyhow::Result<Arc<Pool>> {

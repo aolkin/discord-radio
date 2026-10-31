@@ -1,4 +1,4 @@
-use crate::audio::dj::config::{ConfiguredPool, DJConfig};
+use crate::audio::dj::config::LoadedConfig;
 use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::{DJState, DJStateMachine};
 use crate::state::Data;
@@ -22,10 +22,7 @@ pub enum DJCommand {
     ForceTrack(TrackRequest),
     ForceIdle(IdleRequest),
     Stop,
-    SetConfig {
-        config: Arc<DJConfig>,
-        pools: Arc<[ConfiguredPool]>,
-    },
+    SetConfig(LoadedConfig),
     SetAnnouncementChannel(Option<ChannelId>),
     SetBackgroundProfile(Option<SignalProfilePlayback>),
     SetOverrideProfile(Option<SignalProfilePlayback>),
@@ -140,13 +137,13 @@ impl DJManager {
             .as_ref()
             .and_then(|saved| saved.config_name.clone())
             .unwrap_or_else(|| DEFAULT_DJ_CONFIG.to_string());
-        let (config, pools) = self
+        let config = self
             .bot_state
             .dj_config_manager
             .get(&config_name)
             .unwrap_or_else(|e| {
                 tracing::warn!(guild_id = %self.guild_id, "Starting DJ with an empty config: {e:#}");
-                (Arc::default(), Arc::default())
+                LoadedConfig::default()
             });
         let guild_id = self.guild_id;
         let task_state = self.state.clone();
@@ -154,7 +151,7 @@ impl DJManager {
         let span = tracing::info_span!("dj", guild_id = %guild_id);
         let task_handle = tokio::spawn(
             async move {
-                DJStateMachine::new(guild_id, saved, task_state, config, pools, bot_state)
+                DJStateMachine::new(guild_id, saved, task_state, config, bot_state)
                     .await
                     .run(command_rx)
                     .await;

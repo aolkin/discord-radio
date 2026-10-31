@@ -701,13 +701,7 @@ pub async fn configure(
         .data()
         .dj_config_manager
         .get(&config)
-        .and_then(|(loaded, pools)| {
-            let command = DJCommand::SetConfig {
-                config: loaded,
-                pools,
-            };
-            send_to_dj(ctx.data(), guild_id, command)
-        })
+        .and_then(|loaded| send_to_dj(ctx.data(), guild_id, DJCommand::SetConfig(loaded)))
     {
         ctx.say(format!("Failed to configure DJ: {e:#}")).await?;
         return Ok(());

@@ -3,7 +3,8 @@ use anyhow::{Context, bail};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
+use tokio::sync::watch;
 
 /// A JSON document stored by name in a [`JsonRegistry`]. Its `name` field
 /// holds the name it is stored under.
@@ -31,6 +32,7 @@ pub enum RegistryError {
 
 pub struct JsonRegistry<T> {
     entries: RwLock<HashMap<String, Arc<T>>>,
+    changes: Mutex<HashMap<String, watch::Sender<()>>>,
     path: String,
     file_resolver: FileResolver,
 }
@@ -65,6 +67,7 @@ impl<T: RegistryEntry> JsonRegistry<T> {
 
         Self {
             entries: RwLock::new(entries),
+            changes: Mutex::default(),
             path,
             file_resolver,
         }
@@ -99,6 +102,25 @@ impl<T: RegistryEntry> JsonRegistry<T> {
         self.entries.read().unwrap().keys().cloned().collect()
     }
 
+    pub fn subscribe(&self, name: &str) -> watch::Receiver<()> {
+        self.changes
+            .lock()
+            .unwrap()
+            .entry(name.to_string())
+            .or_insert_with(|| watch::channel(()).0)
+            .subscribe()
+    }
+
+    fn insert(&self, name: &str, entry: Arc<T>) {
+        self.entries
+            .write()
+            .unwrap()
+            .insert(name.to_string(), entry);
+        if let Some(sender) = self.changes.lock().unwrap().get(name) {
+            sender.send_replace(());
+        }
+    }
+
     /// Writes `body` to object storage as the entry named `name`, replacing
     /// any entry of the same name.
     pub async fn save(
@@ -118,10 +140,7 @@ impl<T: RegistryEntry> JsonRegistry<T> {
             .upload(&key, &bytes, "application/json")
             .await?;
 
-        self.entries
-            .write()
-            .unwrap()
-            .insert(name.to_string(), Arc::new(entry));
+        self.insert(name, Arc::new(entry));
         Ok(())
     }
 
@@ -131,10 +150,7 @@ impl<T: RegistryEntry> JsonRegistry<T> {
         let key = self.remote_key(name)?;
         let bytes = self.file_resolver.bucket()?.fetch_bytes(&key).await?;
         let entry = Arc::new(parse::<T>(&bytes, name).map_err(RegistryError::Parse)?);
-        self.entries
-            .write()
-            .unwrap()
-            .insert(name.to_string(), entry.clone());
+        self.insert(name, entry.clone());
         Ok(entry)
     }
 }
