@@ -754,10 +754,9 @@ pub async fn skip(
 
     if let Err(e) = pool
         .as_deref()
-        .map_or(Ok(()), |pool| {
-            ctx.data().dj_config_manager.get_pool(pool, true).map(drop)
-        })
-        .and_then(|()| send_to_dj(ctx.data(), guild_id, DJCommand::ForceAdvance(pool.clone())))
+        .map(|pool| ctx.data().dj_config_manager.get_pool(pool, true))
+        .transpose()
+        .and_then(|_| send_to_dj(ctx.data(), guild_id, DJCommand::ForceAdvance(pool.clone())))
     {
         ctx.say(format!("Failed to skip: {e:#}")).await?;
         return Ok(());
