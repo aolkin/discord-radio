@@ -20,7 +20,9 @@ The Discord bot includes a built-in web portal for monitoring bot status and con
   - Set or clear the DJ's background profile and profile override
   - List, create, and edit signal profiles
 - **DJ config editing**
-  - List, create, and edit DJ configs in a form
+  - List, create, and edit DJ configs in a form, choosing the pool files each one references, their weights and segment defaults
+- **Pool editing**
+  - List, create, and edit pool files (entries, segment defaults, history penalty multiplier) in a form
 - **Audio file browser**
   - Browse the folders and files under `tracks/` in object storage, create folders, and upload audio files by choosing or dropping them
 - **Per-guild bot profile**
@@ -75,9 +77,11 @@ The Signal Profiles panel lists every profile by name. Saving a new or edited pr
 
 ### DJ Configs
 
-The bot loads DJ configs from the `DJ_CONFIGS_PATH` directory (default `dj_configs/`; the value must end with a slash), under both the content root and the object storage bucket root. A config in object storage replaces a local config of the same name. A DJ uses the config named `default` until one is chosen with `/dj configure`. The DJ Configs panel lists every config by name and opens a form with every field of the config, showing the server's reason when it rejects a save. Saving a config or a pool file writes it to object storage; a running DJ using that config switches to the saved copy the next time it advances to a new segment.
+The bot loads DJ configs from the `DJ_CONFIGS_PATH` directory (default `dj_configs/`; the value must end with a slash), under both the content root and the object storage bucket root. A config in object storage replaces a local config of the same name. A DJ uses the config named `default` until one is chosen with `/dj configure`.
 
 A config's `pools` maps pool names to settings, as `{"<name>": {"weight": <weight>}}`; the weight sets how often that config picks the pool and must be above 0. A pool's settings can also hold `segment_defaults`; each field set there replaces the same field of the pool file's segment defaults for that config. The bot loads pool files from the `POOLS_PATH` directory (default `pools/`; the value must end with a slash) in the same way as configs. A pool file holds `name`, `entries`, `segment_defaults` and `history_penalty_multiplier`; `/dj skip` and `/dj hex` match the `name`. Several configs can reference the same pool. A config fails to load when a pool it references is missing or invalid, or has no entry of weight above 0. The `name` stored in a config, pool or signal profile file must match its file name without `.json`; the bot skips a file where they differ.
+
+The DJ Configs panel lists every config by name and opens a form for it, showing the server's reason when it rejects a save. The Pools panel does the same for pool files. Saving a config or a pool file writes it to object storage; a running DJ using that config switches to the saved copy the next time it advances to a new segment.
 
 Each pool can set segment defaults (a hex config, a signal profile and a channel status). A segment from the pool uses its entry's own setting, then the pool's segment default, then the built-in hex config with no signal profile or channel status. The pool's signal profile overrides the rotating background profile while its tracks and hex messages play. The DJ config's pool history penalty multiplier applies only to choosing which pool plays next, and a pool's own history penalty multiplier applies only to choosing among its entries.
 
