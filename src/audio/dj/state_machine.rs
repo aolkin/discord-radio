@@ -180,7 +180,6 @@ pub struct DJStateMachine {
     announcement_channel: Option<ChannelId>,
     bot_state: Data,
     config_name: String,
-    config: Arc<parking_lot::RwLock<Arc<DJConfig>>>,
     pool_selector: WeightedSelector<ConfiguredPool>,
     entry_selectors: HashMap<String, WeightedSelector<PoolEntry>>,
     signal_profile_selector: WeightedSelector<SignalProfileEntry>,
@@ -195,7 +194,7 @@ impl DJStateMachine {
         saved: Option<crate::persistence::DJState>,
         state: Arc<RwLock<DJState>>,
         config_name: String,
-        config: Arc<parking_lot::RwLock<Arc<DJConfig>>>,
+        config: Arc<DJConfig>,
         pools: Arc<[ConfiguredPool]>,
         bot_state: Data,
     ) -> Self {
@@ -215,7 +214,6 @@ impl DJStateMachine {
             None => (None, None),
         };
         tracing::info!("Starting DJ task with config {:?}", config_name);
-        let loaded = config.read().clone();
 
         let initial_state = restored_state.unwrap_or_default();
 
@@ -236,11 +234,10 @@ impl DJStateMachine {
             pool_selector: WeightedSelector::new(Arc::default(), None),
             entry_selectors: HashMap::new(),
             signal_profile_selector: WeightedSelector::new(Arc::default(), None),
-            config,
             applied_profile: None,
             applied_channel_status: None,
         };
-        state_machine.set_config(loaded, pools);
+        state_machine.set_config(config, pools);
         state_machine
     }
 
@@ -438,24 +435,38 @@ impl DJStateMachine {
     ) -> anyhow::Result<Box<dyn Segment>> {
         let pool = match pool_name {
             Some(name) => Some(
-                self.pool_selector
+                match self
+                    .pool_selector
                     .items()
                     .iter()
                     .find(|pool| pool.file.name == name)
-                    .cloned()
-                    .with_context(|| format!("no pool named {name:?}"))?,
+                {
+                    Some(pool) => pool.clone(),
+                    None => {
+                        let file = bot_state.dj_config_manager.pools.require(name)?;
+                        ConfiguredPool {
+                            weight: 0,
+                            segment_defaults: file.segment_defaults.clone(),
+                            file,
+                        }
+                    }
+                },
             ),
             None => self.pool_selector.choose().cloned(),
         };
         match pool {
             Some(pool) => {
-                let entry = self
-                    .entry_selectors
-                    .get_mut(&pool.file.name)
-                    .and_then(WeightedSelector::choose)
-                    .with_context(|| {
-                        format!("pool {:?} has no entry with weight above 0", pool.file.name)
-                    })?;
+                let mut outside_selector;
+                let selector = match self.entry_selectors.get_mut(&pool.file.name) {
+                    Some(selector) => selector,
+                    None => {
+                        outside_selector = WeightedSelector::from(pool.file.as_ref());
+                        &mut outside_selector
+                    }
+                };
+                let entry = selector.choose().with_context(|| {
+                    format!("pool {:?} has no entry with weight above 0", pool.file.name)
+                })?;
                 Ok(entry.segment(&pool.segment_defaults, &bot_state).await)
             }
             None => Ok(Box::new(NoiseSegment::from_entry(
@@ -492,7 +503,6 @@ impl DJStateMachine {
             .reconfigure(pools, config.pool_history_penalty_multiplier);
         self.signal_profile_selector
             .set_pool(&config.signal_profiles);
-        *self.config.write() = config;
     }
 
     pub async fn force_hex_message(
@@ -506,15 +516,16 @@ impl DJStateMachine {
             request.message
         );
         let pools = self.pool_selector.items().clone();
+        let outside_config;
         let built_in_defaults = SegmentDefaults::default();
         let segment_defaults = match &request.pool {
-            Some(name) => {
-                &pools
-                    .iter()
-                    .find(|pool| pool.file.name == *name)
-                    .with_context(|| format!("no pool named {name:?}"))?
-                    .segment_defaults
-            }
+            Some(name) => match pools.iter().find(|pool| pool.file.name == *name) {
+                Some(pool) => &pool.segment_defaults,
+                None => {
+                    outside_config = bot_state.dj_config_manager.pools.require(name)?;
+                    &outside_config.segment_defaults
+                }
+            },
             None => &built_in_defaults,
         };
         let defaults = segment_defaults.hex_config();
