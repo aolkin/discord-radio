@@ -639,14 +639,10 @@ impl DJStateMachine {
                 self.stop(&bot_state).await;
                 return true;
             }
-            DJCommand::SetConfig {
-                name,
-                config,
-                pools,
-            } => {
-                tracing::info!("DJ switching to config {name:?}");
+            DJCommand::SetConfig { config, pools } => {
+                tracing::info!("DJ switching to config {:?}", config.name);
+                self.config_name = config.name.clone();
                 self.set_config(config, pools);
-                self.config_name = name;
                 Ok(())
             }
             DJCommand::SetAnnouncementChannel(new_channel) => {

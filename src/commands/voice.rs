@@ -686,7 +686,6 @@ pub async fn configure(
         .get(&config)
         .and_then(|(loaded, pools)| {
             let command = DJCommand::SetConfig {
-                name: config.clone(),
                 config: loaded,
                 pools,
             };

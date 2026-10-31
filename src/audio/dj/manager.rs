@@ -23,7 +23,6 @@ pub enum DJCommand {
     ForceIdle(IdleRequest),
     Stop,
     SetConfig {
-        name: String,
         config: Arc<DJConfig>,
         pools: Arc<[ConfiguredPool]>,
     },
