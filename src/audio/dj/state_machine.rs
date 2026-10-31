@@ -441,7 +441,7 @@ impl DJStateMachine {
                 self.pool_selector
                     .items()
                     .iter()
-                    .find(|pool| pool.name == name)
+                    .find(|pool| pool.file.name == name)
                     .cloned()
                     .with_context(|| format!("no pool named {name:?}"))?,
             ),
@@ -451,10 +451,10 @@ impl DJStateMachine {
             Some(pool) => {
                 let entry = self
                     .entry_selectors
-                    .get_mut(&pool.name)
+                    .get_mut(&pool.file.name)
                     .and_then(WeightedSelector::choose)
                     .with_context(|| {
-                        format!("pool {:?} has no entry with weight above 0", pool.name)
+                        format!("pool {:?} has no entry with weight above 0", pool.file.name)
                     })?;
                 Ok(entry.segment(&pool.segment_defaults, &bot_state).await)
             }
@@ -479,9 +479,9 @@ impl DJStateMachine {
 
     fn set_config(&mut self, config: Arc<DJConfig>, pools: Arc<[ConfiguredPool]>) {
         self.entry_selectors
-            .retain(|name, _| pools.iter().any(|pool| pool.name == *name));
+            .retain(|name, _| pools.iter().any(|pool| pool.file.name == *name));
         for pool in pools.iter() {
-            match self.entry_selectors.entry(pool.name.clone()) {
+            match self.entry_selectors.entry(pool.file.name.clone()) {
                 Entry::Occupied(mut selector) => selector.get_mut().set_pool(pool.file.as_ref()),
                 Entry::Vacant(slot) => {
                     slot.insert(pool.file.as_ref().into());
@@ -511,7 +511,7 @@ impl DJStateMachine {
             Some(name) => {
                 &pools
                     .iter()
-                    .find(|pool| pool.name == *name)
+                    .find(|pool| pool.file.name == *name)
                     .with_context(|| format!("no pool named {name:?}"))?
                     .segment_defaults
             }

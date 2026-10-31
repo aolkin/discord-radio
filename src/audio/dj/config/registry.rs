@@ -41,7 +41,6 @@ impl DJConfigRegistry {
                     bail!("pool {pool_name:?} has no entry of weight above 0");
                 }
                 Ok(ConfiguredPool {
-                    name: pool_name.clone(),
                     weight: pool_config.weight.get(),
                     segment_defaults: pool_config.segment_defaults.or(&file.segment_defaults),
                     file,

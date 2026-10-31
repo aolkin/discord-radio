@@ -37,7 +37,6 @@ pub struct PoolConfig {
 
 #[derive(Debug, Clone)]
 pub struct ConfiguredPool {
-    pub name: String,
     pub weight: u32,
     pub segment_defaults: SegmentDefaults,
     pub file: Arc<Pool>,
@@ -100,7 +99,7 @@ impl SegmentDefaults {
 #[field_trait_impl]
 impl Weighted for ConfiguredPool {
     fn identity(&self) -> Identity {
-        Identity::of(&self.name)
+        Identity::of(&self.file.name)
     }
 }
 
