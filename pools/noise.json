@@ -1,0 +1,36 @@
+{
+  "name": "noise",
+  "history_penalty_multiplier": 0.5,
+  "entries": [
+    {
+      "noise_profile": "noise_pink",
+      "min_duration_seconds": 0.5,
+      "max_duration_seconds": 1.5,
+      "weight": 20
+    },
+    {
+      "noise_profile": "noise_pink",
+      "min_duration_seconds": 1.0,
+      "max_duration_seconds": 3.0,
+      "weight": 5
+    },
+    {
+      "noise_profile": "noise_brown",
+      "min_duration_seconds": 2.0,
+      "max_duration_seconds": 4.0,
+      "weight": 2
+    },
+    {
+      "noise_profile": "noise_brown",
+      "min_duration_seconds": 0.5,
+      "max_duration_seconds": 1.5,
+      "weight": 8
+    },
+    {
+      "noise_profile": "noise_white",
+      "min_duration_seconds": 0.5,
+      "max_duration_seconds": 1.0,
+      "weight": 2
+    }
+  ]
+}

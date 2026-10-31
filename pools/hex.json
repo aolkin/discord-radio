@@ -1,0 +1,17 @@
+{
+  "name": "hex",
+  "segment_defaults": {
+    "signal_profile": "locked",
+    "hex_config": {
+      "loop_min": 2,
+      "loop_max": 3,
+      "announcements": []
+    }
+  },
+  "entries": [
+    {
+      "text": "hello world",
+      "weight": 1
+    }
+  ]
+}

@@ -1,4 +1,6 @@
-use crate::audio::dj::config::{DJConfig, Pool, PoolEntry, SegmentDefaults, SignalProfileEntry};
+use crate::audio::dj::config::{
+    ConfiguredPool, DJConfig, PoolEntry, SegmentDefaults, SignalProfileEntry,
+};
 use crate::audio::dj::manager::{
     ADVANCE_RETRY_DELAY, DJCommand, HexMessageRequest, IdleRequest, TrackRequest,
 };
@@ -178,8 +180,7 @@ pub struct DJStateMachine {
     announcement_channel: Option<ChannelId>,
     bot_state: Data,
     config_name: String,
-    config: Arc<parking_lot::RwLock<Arc<DJConfig>>>,
-    pool_selector: WeightedSelector<Arc<Pool>>,
+    pool_selector: WeightedSelector<ConfiguredPool>,
     entry_selectors: HashMap<String, WeightedSelector<PoolEntry>>,
     signal_profile_selector: WeightedSelector<SignalProfileEntry>,
     applied_profile: Option<(SignalProfilePlayback, ProfileSource)>,
@@ -192,8 +193,8 @@ impl DJStateMachine {
         guild_id: GuildId,
         saved: Option<crate::persistence::DJState>,
         state: Arc<RwLock<DJState>>,
-        config_name: String,
-        config: Arc<parking_lot::RwLock<Arc<DJConfig>>>,
+        config: Arc<DJConfig>,
+        pools: Arc<[ConfiguredPool]>,
         bot_state: Data,
     ) -> Self {
         let (announcement_channel, restored_state) = match saved {
@@ -211,8 +212,7 @@ impl DJStateMachine {
             }
             None => (None, None),
         };
-        tracing::info!("Starting DJ task with config {:?}", config_name);
-        let loaded = config.read().clone();
+        tracing::info!("Starting DJ task with config {:?}", config.name);
 
         let initial_state = restored_state.unwrap_or_default();
 
@@ -229,15 +229,14 @@ impl DJStateMachine {
             guild_id,
             announcement_channel,
             bot_state,
-            config_name,
+            config_name: config.name.clone(),
             pool_selector: WeightedSelector::new(Arc::default(), None),
             entry_selectors: HashMap::new(),
             signal_profile_selector: WeightedSelector::new(Arc::default(), None),
-            config,
             applied_profile: None,
             applied_channel_status: None,
         };
-        state_machine.set_config(loaded);
+        state_machine.set_config(config, pools);
         state_machine
     }
 
@@ -434,59 +433,73 @@ impl DJStateMachine {
         bot_state: Data,
     ) -> anyhow::Result<Box<dyn Segment>> {
         let pool = match pool_name {
-            Some(name) => Some(
-                self.config
-                    .read()
-                    .pools
-                    .iter()
-                    .find(|pool| pool.name == name)
-                    .cloned()
-                    .with_context(|| format!("no pool named {name:?}"))?,
-            ),
+            Some(name) => Some(self.pool_named(name)?),
             None => self.pool_selector.choose().cloned(),
         };
-        match pool {
-            Some(pool) => {
-                let entry = self
-                    .entry_selectors
-                    .get_mut(&pool.name)
-                    .and_then(WeightedSelector::choose)
-                    .with_context(|| {
-                        format!("pool {:?} has no entry with weight above 0", pool.name)
-                    })?;
-                Ok(entry.segment(&pool.segment_defaults, &bot_state).await)
-            }
-            None => Ok(Box::new(NoiseSegment::from_entry(
+        let Some(pool) = pool else {
+            return Ok(Box::new(NoiseSegment::from_entry(
                 &DEFAULT_NOISE_PERIOD,
                 &SegmentDefaults::default(),
-            ))),
+            )));
+        };
+        let entry = self
+            .entry_selectors
+            .entry(pool.file.name.clone())
+            .or_insert_with(|| pool.file.as_ref().into())
+            .choose()
+            .with_context(|| {
+                format!("pool {:?} has no entry with weight above 0", pool.file.name)
+            })?;
+        Ok(entry.segment(&pool.segment_defaults, &bot_state).await)
+    }
+
+    fn pool_named(&self, name: &str) -> anyhow::Result<ConfiguredPool> {
+        if let Some(pool) = self
+            .pool_selector
+            .items()
+            .iter()
+            .find(|pool| pool.file.name == name)
+        {
+            return Ok(pool.clone());
         }
+        let file = self.bot_state.dj_config_manager.pools.require(name)?;
+        Ok(ConfiguredPool {
+            weight: 0,
+            segment_defaults: file.segment_defaults.clone(),
+            file,
+        })
     }
 
     /// Switches to the latest saved copy of the DJ's named config.
     fn reload_config(&mut self) {
-        let Some(config) = self.bot_state.dj_config_manager.get(&self.config_name) else {
+        if self.config_name.is_empty() {
             return;
+        }
+        let (config, pools) = match self.bot_state.dj_config_manager.get(&self.config_name) {
+            Ok(loaded) => loaded,
+            Err(e) => {
+                tracing::warn!("DJ keeping its current config: {e:#}");
+                return;
+            }
         };
-        self.set_config(config);
+        self.set_config(config, pools);
     }
 
-    fn set_config(&mut self, config: Arc<DJConfig>) {
-        self.pool_selector
-            .reconfigure(config.pools.clone(), config.pool_history_penalty_multiplier);
+    fn set_config(&mut self, config: Arc<DJConfig>, pools: Arc<[ConfiguredPool]>) {
         self.entry_selectors
-            .retain(|name, _| config.pools.iter().any(|pool| pool.name == *name));
-        for pool in config.pools.iter() {
-            match self.entry_selectors.entry(pool.name.clone()) {
-                Entry::Occupied(mut selector) => selector.get_mut().set_pool(pool.as_ref()),
+            .retain(|name, _| pools.iter().any(|pool| pool.file.name == *name));
+        for pool in pools.iter() {
+            match self.entry_selectors.entry(pool.file.name.clone()) {
+                Entry::Occupied(mut selector) => selector.get_mut().set_pool(pool.file.as_ref()),
                 Entry::Vacant(slot) => {
-                    slot.insert(pool.as_ref().into());
+                    slot.insert(pool.file.as_ref().into());
                 }
             }
         }
+        self.pool_selector
+            .reconfigure(pools, config.pool_history_penalty_multiplier);
         self.signal_profile_selector
             .set_pool(&config.signal_profiles);
-        *self.config.write() = config;
     }
 
     pub async fn force_hex_message(
@@ -499,19 +512,13 @@ impl DJStateMachine {
             "DJ force transitioning to hex message with custom text: {}",
             request.message
         );
-        let config = self.config.read().clone();
-        let built_in_defaults = SegmentDefaults::default();
-        let segment_defaults = match &request.pool {
-            Some(name) => {
-                &config
-                    .pools
-                    .iter()
-                    .find(|pool| pool.name == *name)
-                    .with_context(|| format!("no pool named {name:?}"))?
-                    .segment_defaults
-            }
-            None => &built_in_defaults,
-        };
+        let segment_defaults = request
+            .pool
+            .as_deref()
+            .map(|name| self.pool_named(name))
+            .transpose()?
+            .map(|pool| pool.segment_defaults)
+            .unwrap_or_default();
         let defaults = segment_defaults.hex_config();
         let loops = request
             .loops
@@ -634,10 +641,10 @@ impl DJStateMachine {
                 self.stop(&bot_state).await;
                 return true;
             }
-            DJCommand::SetConfig { name, config } => {
-                tracing::info!("DJ switching to config {name:?}");
-                self.set_config(config);
-                self.config_name = name;
+            DJCommand::SetConfig { config, pools } => {
+                tracing::info!("DJ switching to config {:?}", config.name);
+                self.config_name = config.name.clone();
+                self.set_config(config, pools);
                 Ok(())
             }
             DJCommand::SetAnnouncementChannel(new_channel) => {

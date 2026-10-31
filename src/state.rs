@@ -1,5 +1,5 @@
 use crate::activity::ActivityManager;
-use crate::audio::dj::config::DJConfig;
+use crate::audio::dj::config::registry::DJConfigRegistry;
 use crate::audio::dj::manager::DJManager;
 use crate::audio::duration::DurationCache;
 use crate::audio::processing::processor::{AudioProcessor, ProcessorRef};
@@ -35,7 +35,7 @@ pub struct BotState {
     pub duration_cache: DurationCache,
     guilds: StdMutex<HashMap<GuildId, GuildRadio>>,
     pub profile_manager: JsonRegistry<SignalProfile>,
-    pub dj_config_manager: JsonRegistry<DJConfig>,
+    pub dj_config_manager: DJConfigRegistry,
     pub activity_manager: ActivityManager,
     pub file_resolver: FileResolver,
     pub bot_user_id: UserId,
@@ -47,7 +47,7 @@ impl BotState {
         state_store: Arc<dyn StateStore>,
         dj_settings: DjSettingsStore,
         profile_manager: JsonRegistry<SignalProfile>,
-        dj_config_manager: JsonRegistry<DJConfig>,
+        dj_config_manager: DJConfigRegistry,
         bot_user_id: UserId,
         songbird: Arc<Songbird>,
     ) -> Self {

@@ -1,5 +1,5 @@
 use crate::audio::connection::connect_voice_channel;
-use crate::audio::dj::manager::{DJCommand, load_dj_config};
+use crate::audio::dj::manager::DJCommand;
 use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
 use crate::audio::processing::processor::ProcessorRef;
@@ -122,7 +122,7 @@ pub async fn hex(
     #[description = "Times to loop the message (default from the pool's hex config)"] loops: Option<
         u32,
     >,
-    #[description = "Pool in the DJ config to take segment defaults from"] pool: Option<String>,
+    #[description = "Pool to take segment defaults from"] pool: Option<String>,
 ) -> anyhow::Result<()> {
     let guild_id = require_guild(ctx)?;
     let user_id = ctx.author().id;
@@ -134,7 +134,7 @@ pub async fn hex(
     );
 
     if let Some(pool) = &pool
-        && let Err(e) = ctx.data().dj_manager(guild_id).find_pool(pool, false)
+        && let Err(e) = ctx.data().dj_config_manager.get_pool(pool, false)
     {
         ctx.say(format!("Failed to play message: {e:#}")).await?;
         return Ok(());
@@ -680,13 +680,18 @@ pub async fn configure(
 
     ctx.defer_ephemeral().await?;
 
-    if let Err(e) = load_dj_config(ctx.data(), &config).and_then(|loaded| {
-        let command = DJCommand::SetConfig {
-            name: config.clone(),
-            config: loaded,
-        };
-        send_to_dj(ctx.data(), guild_id, command)
-    }) {
+    if let Err(e) = ctx
+        .data()
+        .dj_config_manager
+        .get(&config)
+        .and_then(|(loaded, pools)| {
+            let command = DJCommand::SetConfig {
+                config: loaded,
+                pools,
+            };
+            send_to_dj(ctx.data(), guild_id, command)
+        })
+    {
         ctx.say(format!("Failed to configure DJ: {e:#}")).await?;
         return Ok(());
     }
@@ -738,8 +743,7 @@ pub async fn announcements(
 #[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
 pub async fn skip(
     ctx: Context<'_>,
-    #[description = "Only advance to a segment from this pool in the DJ config (default: any)"]
-    pool: Option<String>,
+    #[description = "Only advance to a segment from this pool (default: any)"] pool: Option<String>,
 ) -> anyhow::Result<()> {
     let guild_id = require_guild(ctx)?;
 
@@ -749,10 +753,9 @@ pub async fn skip(
 
     if let Err(e) = pool
         .as_deref()
-        .map_or(Ok(()), |pool| {
-            ctx.data().dj_manager(guild_id).find_pool(pool, true)
-        })
-        .and_then(|()| send_to_dj(ctx.data(), guild_id, DJCommand::ForceAdvance(pool.clone())))
+        .map(|pool| ctx.data().dj_config_manager.get_pool(pool, true))
+        .transpose()
+        .and_then(|_| send_to_dj(ctx.data(), guild_id, DJCommand::ForceAdvance(pool.clone())))
     {
         ctx.say(format!("Failed to skip: {e:#}")).await?;
         return Ok(());

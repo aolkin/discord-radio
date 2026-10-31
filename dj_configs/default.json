@@ -1,72 +1,16 @@
 {
   "name": "default",
-  "pools": [
-    {
-      "name": "track",
-      "weight": 100,
-      "entries": [
-        {
-          "filename": "audio/example.mp3",
-          "weight": 1
-        }
-      ]
+  "pools": {
+    "hex": {
+      "weight": 2
     },
-    {
-      "name": "hex",
-      "weight": 2,
-      "segment_defaults": {
-        "signal_profile": "locked",
-        "hex_config": {
-          "loop_min": 2,
-          "loop_max": 3,
-          "announcements": []
-        }
-      },
-      "entries": [
-        {
-          "text": "hello world",
-          "weight": 1
-        }
-      ]
+    "noise": {
+      "weight": 50
     },
-    {
-      "name": "noise",
-      "weight": 50,
-      "history_penalty_multiplier": 0.5,
-      "entries": [
-        {
-          "noise_profile": "noise_pink",
-          "min_duration_seconds": 0.5,
-          "max_duration_seconds": 1.5,
-          "weight": 20
-        },
-        {
-          "noise_profile": "noise_pink",
-          "min_duration_seconds": 1.0,
-          "max_duration_seconds": 3.0,
-          "weight": 5
-        },
-        {
-          "noise_profile": "noise_brown",
-          "min_duration_seconds": 2.0,
-          "max_duration_seconds": 4.0,
-          "weight": 2
-        },
-        {
-          "noise_profile": "noise_brown",
-          "min_duration_seconds": 0.5,
-          "max_duration_seconds": 1.5,
-          "weight": 8
-        },
-        {
-          "noise_profile": "noise_white",
-          "min_duration_seconds": 0.5,
-          "max_duration_seconds": 1.0,
-          "weight": 2
-        }
-      ]
+    "track": {
+      "weight": 100
     }
-  ],
+  },
   "signal_profiles": {
     "history_penalty_multiplier": 0.3,
     "entries": [

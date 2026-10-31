@@ -1,5 +1,5 @@
 use crate::bucket::FileResolver;
-use anyhow::Context;
+use anyhow::{Context, bail};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
@@ -43,14 +43,15 @@ impl<T: RegistryEntry> JsonRegistry<T> {
 
         let filenames = file_resolver.list(&path).await;
         for filename in filenames.iter().filter(|f| f.ends_with(".json")) {
+            let name = file_name_stem(filename);
             let parsed = file_resolver
                 .resolve_contents(filename)
                 .await
-                .and_then(|bytes| parse::<T>(&bytes));
+                .and_then(|bytes| parse::<T>(&bytes, name));
             match parsed {
                 Ok(entry) => {
-                    tracing::info!("Loaded {} {} from {filename}", T::KIND, entry.name());
-                    entries.insert(entry.name().to_string(), Arc::new(entry));
+                    tracing::info!("Loaded {} {name} from {filename}", T::KIND);
+                    entries.insert(name.to_string(), Arc::new(entry));
                 }
                 Err(e) => tracing::warn!("Failed to load {} from {filename}: {e:#}", T::KIND),
             }
@@ -69,15 +70,29 @@ impl<T: RegistryEntry> JsonRegistry<T> {
         }
     }
 
+    fn key(&self, name: &str) -> String {
+        format!("{}{name}.json", self.path)
+    }
+
     fn remote_key(&self, name: &str) -> Result<String, RegistryError> {
         if !is_valid_name(name) {
             return Err(RegistryError::InvalidName);
         }
-        Ok(format!("{}{name}.json", self.path))
+        Ok(self.key(name))
     }
 
     pub fn get(&self, name: &str) -> Option<Arc<T>> {
         self.entries.read().unwrap().get(name).cloned()
+    }
+
+    pub fn require(&self, name: &str) -> anyhow::Result<Arc<T>> {
+        self.get(name).with_context(|| {
+            format!(
+                "{} {name:?} ({}) is missing or invalid",
+                T::KIND,
+                self.key(name)
+            )
+        })
     }
 
     pub fn list(&self) -> Vec<String> {
@@ -92,9 +107,10 @@ impl<T: RegistryEntry> JsonRegistry<T> {
         mut body: serde_json::Map<String, serde_json::Value>,
     ) -> Result<(), RegistryError> {
         let key = self.remote_key(name)?;
-        body.insert("name".to_string(), name.into());
+        body.entry("name").or_insert_with(|| name.into());
         let entry: T =
             serde_json::from_value(body.into()).map_err(|e| RegistryError::Invalid(e.into()))?;
+        ensure_name(&entry, name).map_err(RegistryError::Invalid)?;
         entry.validate().map_err(RegistryError::Invalid)?;
         let bytes = serde_json::to_vec_pretty(&entry).expect("a registry entry always serializes");
         self.file_resolver
@@ -114,17 +130,18 @@ impl<T: RegistryEntry> JsonRegistry<T> {
     pub async fn refresh(&self, name: &str) -> Result<Arc<T>, RegistryError> {
         let key = self.remote_key(name)?;
         let bytes = self.file_resolver.bucket()?.fetch_bytes(&key).await?;
-        let entry = Arc::new(parse::<T>(&bytes).map_err(RegistryError::Parse)?);
+        let entry = Arc::new(parse::<T>(&bytes, name).map_err(RegistryError::Parse)?);
         self.entries
             .write()
             .unwrap()
-            .insert(entry.name().to_string(), entry.clone());
+            .insert(name.to_string(), entry.clone());
         Ok(entry)
     }
 }
 
-fn parse<T: RegistryEntry>(bytes: &[u8]) -> anyhow::Result<T> {
+fn parse<T: RegistryEntry>(bytes: &[u8], name: &str) -> anyhow::Result<T> {
     let entry: T = serde_json::from_slice(bytes).context("parsing JSON")?;
+    ensure_name(&entry, name)?;
     entry.validate()?;
     Ok(entry)
 }
@@ -134,4 +151,19 @@ pub fn is_valid_name(name: &str) -> bool {
         && name
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+fn ensure_name<T: RegistryEntry>(entry: &T, name: &str) -> anyhow::Result<()> {
+    if entry.name() != name {
+        bail!(
+            "stored name {:?} does not match file name {name:?}",
+            entry.name()
+        );
+    }
+    Ok(())
+}
+
+fn file_name_stem(filename: &str) -> &str {
+    let file_name = filename.rsplit('/').next().unwrap_or(filename);
+    file_name.strip_suffix(".json").unwrap_or(file_name)
 }
