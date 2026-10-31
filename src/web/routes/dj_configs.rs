@@ -24,13 +24,14 @@ pub async fn get_dj_config(
     Query(params): Query<RefreshParams>,
 ) -> Result<AxumJson<Arc<DJConfig>>, ApiError> {
     if params.refresh {
-        return bot_state
+        let config = bot_state
             .dj_config_manager
             .configs
             .refresh(&name)
             .await
-            .map(AxumJson)
-            .map_err(registry_error);
+            .map_err(registry_error)?;
+        bot_state.dj_config_manager.publish(&name);
+        return Ok(AxumJson(config));
     }
     bot_state
         .dj_config_manager
@@ -45,11 +46,20 @@ pub async fn put_dj_config(
     Path(name): Path<String>,
     AxumJson(body): AxumJson<serde_json::Map<String, serde_json::Value>>,
 ) -> Result<StatusCode, ApiError> {
+    if let Some(pools) = body.get("pools").and_then(|pools| pools.as_object()) {
+        for pool in pools.keys() {
+            bot_state
+                .dj_config_manager
+                .get_pool(pool, true)
+                .map_err(|e| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, e))?;
+        }
+    }
     bot_state
         .dj_config_manager
         .configs
         .save(&name, body)
         .await
         .map_err(registry_error)?;
+    bot_state.dj_config_manager.publish(&name);
     Ok(StatusCode::OK)
 }

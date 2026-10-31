@@ -40,6 +40,11 @@ pub struct ConfiguredPool {
     pub file: Arc<Pool>,
 }
 
+pub struct LoadedConfig {
+    pub config: Arc<DJConfig>,
+    pub pools: Arc<[ConfiguredPool]>,
+}
+
 #[field_trait_impl(WeightedPool<SignalProfileEntry>)]
 #[derive(Deserialize, Serialize, Debug, Default)]
 pub struct SignalProfiles {
