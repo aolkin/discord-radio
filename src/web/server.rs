@@ -1,4 +1,7 @@
+use crate::audio::dj::config::{DJConfig, Pool};
+use crate::audio::profiles::SignalProfile;
 use crate::state::Data;
+use crate::web::routes::registries;
 use crate::web::{audio_stream, routes, websocket};
 use axum::{
     Router,
@@ -98,15 +101,20 @@ pub async fn run_web_server(bot_state: Data, port: u16) -> anyhow::Result<()> {
             "/api/guilds/{guild_id}/bot-profile",
             get(routes::discord::get_bot_profile).put(routes::discord::set_bot_profile),
         )
-        .route("/api/profiles", get(routes::profiles::get_profiles))
+        .route("/api/profiles", get(registries::list::<SignalProfile>))
         .route(
             "/api/profiles/{name}",
-            get(routes::profiles::get_profile).put(routes::profiles::put_profile),
+            get(registries::get::<SignalProfile>).put(registries::put::<SignalProfile>),
         )
-        .route("/api/dj-configs", get(routes::dj_configs::get_dj_configs))
+        .route("/api/dj-configs", get(registries::list::<DJConfig>))
         .route(
             "/api/dj-configs/{name}",
-            get(routes::dj_configs::get_dj_config).put(routes::dj_configs::put_dj_config),
+            get(registries::get::<DJConfig>).put(registries::put::<DJConfig>),
+        )
+        .route("/api/pools", get(registries::list::<Pool>))
+        .route(
+            "/api/pools/{name}",
+            get(registries::get::<Pool>).put(registries::put::<Pool>),
         )
         .route("/api/files", get(routes::files::browse_files))
         .route(
