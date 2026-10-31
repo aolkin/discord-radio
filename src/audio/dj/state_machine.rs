@@ -434,46 +434,41 @@ impl DJStateMachine {
         bot_state: Data,
     ) -> anyhow::Result<Box<dyn Segment>> {
         let pool = match pool_name {
-            Some(name) => Some(
-                match self
-                    .pool_selector
-                    .items()
-                    .iter()
-                    .find(|pool| pool.file.name == name)
-                {
-                    Some(pool) => pool.clone(),
-                    None => {
-                        let file = bot_state.dj_config_manager.pools.require(name)?;
-                        ConfiguredPool {
-                            weight: 0,
-                            segment_defaults: file.segment_defaults.clone(),
-                            file,
-                        }
-                    }
-                },
-            ),
+            Some(name) => Some(self.pool_named(name)?),
             None => self.pool_selector.choose().cloned(),
         };
-        match pool {
-            Some(pool) => {
-                let mut outside_selector;
-                let selector = match self.entry_selectors.get_mut(&pool.file.name) {
-                    Some(selector) => selector,
-                    None => {
-                        outside_selector = WeightedSelector::from(pool.file.as_ref());
-                        &mut outside_selector
-                    }
-                };
-                let entry = selector.choose().with_context(|| {
-                    format!("pool {:?} has no entry with weight above 0", pool.file.name)
-                })?;
-                Ok(entry.segment(&pool.segment_defaults, &bot_state).await)
-            }
-            None => Ok(Box::new(NoiseSegment::from_entry(
+        let Some(pool) = pool else {
+            return Ok(Box::new(NoiseSegment::from_entry(
                 &DEFAULT_NOISE_PERIOD,
                 &SegmentDefaults::default(),
-            ))),
+            )));
+        };
+        let entry = self
+            .entry_selectors
+            .entry(pool.file.name.clone())
+            .or_insert_with(|| pool.file.as_ref().into())
+            .choose()
+            .with_context(|| {
+                format!("pool {:?} has no entry with weight above 0", pool.file.name)
+            })?;
+        Ok(entry.segment(&pool.segment_defaults, &bot_state).await)
+    }
+
+    fn pool_named(&self, name: &str) -> anyhow::Result<ConfiguredPool> {
+        if let Some(pool) = self
+            .pool_selector
+            .items()
+            .iter()
+            .find(|pool| pool.file.name == name)
+        {
+            return Ok(pool.clone());
         }
+        let file = self.bot_state.dj_config_manager.pools.require(name)?;
+        Ok(ConfiguredPool {
+            weight: 0,
+            segment_defaults: file.segment_defaults.clone(),
+            file,
+        })
     }
 
     /// Switches to the latest saved copy of the DJ's named config.
@@ -515,19 +510,13 @@ impl DJStateMachine {
             "DJ force transitioning to hex message with custom text: {}",
             request.message
         );
-        let pools = self.pool_selector.items().clone();
-        let outside_config;
-        let built_in_defaults = SegmentDefaults::default();
-        let segment_defaults = match &request.pool {
-            Some(name) => match pools.iter().find(|pool| pool.file.name == *name) {
-                Some(pool) => &pool.segment_defaults,
-                None => {
-                    outside_config = bot_state.dj_config_manager.pools.require(name)?;
-                    &outside_config.segment_defaults
-                }
-            },
-            None => &built_in_defaults,
-        };
+        let segment_defaults = request
+            .pool
+            .as_deref()
+            .map(|name| self.pool_named(name))
+            .transpose()?
+            .map(|pool| pool.segment_defaults)
+            .unwrap_or_default();
         let defaults = segment_defaults.hex_config();
         let loops = request
             .loops
