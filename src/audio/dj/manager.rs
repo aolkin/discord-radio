@@ -146,7 +146,11 @@ impl DJManager {
             .get(&config_name)
             .unwrap_or_else(|e| {
                 tracing::warn!(guild_id = %self.guild_id, "Starting DJ with an empty config: {e:#}");
-                (Arc::default(), Arc::default())
+                let empty = DJConfig {
+                    name: config_name.clone(),
+                    ..DJConfig::default()
+                };
+                (Arc::new(empty), Arc::default())
             });
         let guild_id = self.guild_id;
         let task_state = self.state.clone();
@@ -154,18 +158,10 @@ impl DJManager {
         let span = tracing::info_span!("dj", guild_id = %guild_id);
         let task_handle = tokio::spawn(
             async move {
-                DJStateMachine::new(
-                    guild_id,
-                    saved,
-                    task_state,
-                    config_name,
-                    config,
-                    pools,
-                    bot_state,
-                )
-                .await
-                .run(command_rx)
-                .await;
+                DJStateMachine::new(guild_id, saved, task_state, config, pools, bot_state)
+                    .await
+                    .run(command_rx)
+                    .await;
             }
             .instrument(span),
         );

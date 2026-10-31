@@ -193,7 +193,6 @@ impl DJStateMachine {
         guild_id: GuildId,
         saved: Option<crate::persistence::DJState>,
         state: Arc<RwLock<DJState>>,
-        config_name: String,
         config: Arc<DJConfig>,
         pools: Arc<[ConfiguredPool]>,
         bot_state: Data,
@@ -213,7 +212,7 @@ impl DJStateMachine {
             }
             None => (None, None),
         };
-        tracing::info!("Starting DJ task with config {:?}", config_name);
+        tracing::info!("Starting DJ task with config {:?}", config.name);
 
         let initial_state = restored_state.unwrap_or_default();
 
@@ -230,7 +229,7 @@ impl DJStateMachine {
             guild_id,
             announcement_channel,
             bot_state,
-            config_name,
+            config_name: config.name.clone(),
             pool_selector: WeightedSelector::new(Arc::default(), None),
             entry_selectors: HashMap::new(),
             signal_profile_selector: WeightedSelector::new(Arc::default(), None),
