@@ -15,6 +15,7 @@ export function connection() {
             // Load audio files and profiles
             this.loadAudioFiles();
             this.loadProfiles();
+            this.loadPools();
             this.loadDjConfigs();
             // Update current time every 500ms for smooth progress bars
             setInterval(() => {
