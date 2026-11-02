@@ -105,6 +105,7 @@ impl<T: RegistryEntry> JsonRegistry<T> {
         &self,
         name: &str,
         mut body: serde_json::Map<String, serde_json::Value>,
+        check: impl FnOnce(&T) -> anyhow::Result<()>,
     ) -> Result<(), RegistryError> {
         let key = self.remote_key(name)?;
         body.entry("name").or_insert_with(|| name.into());
@@ -112,6 +113,7 @@ impl<T: RegistryEntry> JsonRegistry<T> {
             serde_json::from_value(body.into()).map_err(|e| RegistryError::Invalid(e.into()))?;
         ensure_name(&entry, name).map_err(RegistryError::Invalid)?;
         entry.validate().map_err(RegistryError::Invalid)?;
+        check(&entry).map_err(RegistryError::Invalid)?;
         let bytes = serde_json::to_vec_pretty(&entry).expect("a registry entry always serializes");
         self.file_resolver
             .bucket()?

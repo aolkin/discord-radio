@@ -3,6 +3,7 @@ use crate::audio::profiles::SignalProfile;
 use crate::bucket::registry::{JsonRegistry, RegistryEntry, RegistryError};
 use crate::state::Data;
 use crate::web::error::ApiError;
+use anyhow::bail;
 use axum::Json as AxumJson;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
@@ -14,6 +15,12 @@ pub trait RoutedEntry: RegistryEntry + 'static {
     const LIST_KEY: &'static str;
 
     fn registry(bot_state: Data) -> &'static JsonRegistry<Self>;
+
+    fn check(_bot_state: Data, _entry: &Self) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn changed(_bot_state: Data, _name: &str) {}
 }
 
 impl RoutedEntry for SignalProfile {
@@ -30,6 +37,17 @@ impl RoutedEntry for DJConfig {
     fn registry(bot_state: Data) -> &'static JsonRegistry<Self> {
         &bot_state.dj_config_manager.configs
     }
+
+    fn check(bot_state: Data, entry: &Self) -> anyhow::Result<()> {
+        for pool in entry.pools.keys() {
+            bot_state.dj_config_manager.get_pool(pool, true)?;
+        }
+        Ok(())
+    }
+
+    fn changed(bot_state: Data, name: &str) {
+        bot_state.dj_config_manager.publish(name);
+    }
 }
 
 impl RoutedEntry for Pool {
@@ -37,6 +55,18 @@ impl RoutedEntry for Pool {
 
     fn registry(bot_state: Data) -> &'static JsonRegistry<Self> {
         &bot_state.dj_config_manager.pools
+    }
+
+    fn check(bot_state: Data, entry: &Self) -> anyhow::Result<()> {
+        let configs = bot_state.dj_config_manager.configs_referencing(&entry.name);
+        if !configs.is_empty() && !entry.has_weighted_entry() {
+            bail!("pool has no entry with weight above 0, but DJ configs {configs:?} use it");
+        }
+        Ok(())
+    }
+
+    fn changed(bot_state: Data, name: &str) {
+        bot_state.dj_config_manager.publish_pool(name);
     }
 }
 
@@ -62,11 +92,9 @@ pub async fn get<T: RoutedEntry>(
 ) -> Result<AxumJson<Arc<T>>, ApiError> {
     let registry = T::registry(bot_state);
     if params.refresh {
-        return registry
-            .refresh(&name)
-            .await
-            .map(AxumJson)
-            .map_err(registry_error);
+        let entry = registry.refresh(&name).await.map_err(registry_error)?;
+        T::changed(bot_state, &name);
+        return Ok(AxumJson(entry));
     }
     registry
         .get(&name)
@@ -80,9 +108,10 @@ pub async fn put<T: RoutedEntry>(
     AxumJson(body): AxumJson<serde_json::Map<String, serde_json::Value>>,
 ) -> Result<StatusCode, ApiError> {
     T::registry(bot_state)
-        .save(&name, body)
+        .save(&name, body, |entry| T::check(bot_state, entry))
         .await
         .map_err(registry_error)?;
+    T::changed(bot_state, &name);
     Ok(StatusCode::OK)
 }
 
