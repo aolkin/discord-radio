@@ -213,7 +213,6 @@ async fn main() -> anyhow::Result<()> {
         bot_user_id,
         songbird.clone(),
     )));
-    data.dj_config_manager.spawn_publisher();
 
     // Start gauge update task if metrics are configured
     if let Some(bot_metrics) = metrics::get() {

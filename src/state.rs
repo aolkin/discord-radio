@@ -35,7 +35,7 @@ pub struct BotState {
     pub duration_cache: DurationCache,
     guilds: StdMutex<HashMap<GuildId, GuildRadio>>,
     pub profile_manager: JsonRegistry<SignalProfile>,
-    pub dj_config_manager: DJConfigRegistry,
+    pub dj_config_manager: &'static DJConfigRegistry,
     pub activity_manager: ActivityManager,
     pub file_resolver: FileResolver,
     pub bot_user_id: UserId,
@@ -47,7 +47,7 @@ impl BotState {
         state_store: Arc<dyn StateStore>,
         dj_settings: DjSettingsStore,
         profile_manager: JsonRegistry<SignalProfile>,
-        dj_config_manager: DJConfigRegistry,
+        dj_config_manager: &'static DJConfigRegistry,
         bot_user_id: UserId,
         songbird: Arc<Songbird>,
     ) -> Self {

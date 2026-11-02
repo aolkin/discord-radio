@@ -18,14 +18,6 @@ pub trait RegistryEntry: Serialize + DeserializeOwned {
     fn validate(&self) -> anyhow::Result<()> {
         Ok(())
     }
-
-    fn from_body(
-        name: &str,
-        mut body: serde_json::Map<String, serde_json::Value>,
-    ) -> Result<Self, RegistryError> {
-        body.entry("name").or_insert_with(|| name.into());
-        serde_json::from_value(body.into()).map_err(|e| RegistryError::Invalid(e.into()))
-    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -112,10 +104,17 @@ impl<T: RegistryEntry> JsonRegistry<T> {
         self.entries.read().unwrap().keys().cloned().collect()
     }
 
-    /// Writes `entry` to object storage under `name`, replacing any entry of
-    /// the same name.
-    pub async fn save(&self, name: &str, entry: T) -> Result<(), RegistryError> {
+    /// Writes `body` to object storage as the entry named `name`, replacing
+    /// any entry of the same name.
+    pub async fn save(
+        &self,
+        name: &str,
+        mut body: serde_json::Map<String, serde_json::Value>,
+    ) -> Result<(), RegistryError> {
         let key = self.remote_key(name)?;
+        body.entry("name").or_insert_with(|| name.into());
+        let entry: T =
+            serde_json::from_value(body.into()).map_err(|e| RegistryError::Invalid(e.into()))?;
         ensure_name(&entry, name).map_err(RegistryError::Invalid)?;
         entry.validate().map_err(RegistryError::Invalid)?;
         let bytes = serde_json::to_vec_pretty(&entry).expect("a registry entry always serializes");

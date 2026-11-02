@@ -19,15 +19,16 @@ impl DJConfigRegistry {
         configs_path: String,
         pools_path: String,
         file_resolver: FileResolver,
-    ) -> Self {
-        let registry = Self {
+    ) -> &'static Self {
+        let registry: &'static Self = Box::leak(Box::new(Self {
             configs: JsonRegistry::from_storage(configs_path, file_resolver.clone()).await,
             pools: JsonRegistry::from_storage(pools_path, file_resolver).await,
             loaded: Mutex::default(),
-        };
+        }));
         for name in registry.configs.list() {
             registry.publish(&name);
         }
+        registry.spawn_publisher();
         registry
     }
 
@@ -43,7 +44,7 @@ impl DJConfigRegistry {
             .subscribe())
     }
 
-    pub fn spawn_publisher(&'static self) {
+    fn spawn_publisher(&'static self) {
         let mut configs = self.configs.subscribe();
         let mut pools = self.pools.subscribe();
         tokio::spawn(async move {

@@ -109,7 +109,7 @@ pub async fn run_web_server(bot_state: Data, port: u16) -> anyhow::Result<()> {
         .route("/api/dj-configs", get(registries::list::<DJConfig>))
         .route(
             "/api/dj-configs/{name}",
-            get(registries::get::<DJConfig>).put(registries::put::<DJConfig>),
+            get(registries::get::<DJConfig>).put(registries::put_dj_config),
         )
         .route("/api/pools", get(registries::list::<Pool>))
         .route(
