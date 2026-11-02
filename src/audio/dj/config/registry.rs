@@ -1,10 +1,11 @@
 use crate::audio::dj::config::{ConfiguredPool, DJConfig, LoadedConfig, Pool};
 use crate::bucket::FileResolver;
-use crate::bucket::registry::{JsonRegistry, RegistryError};
+use crate::bucket::registry::JsonRegistry;
 use anyhow::Context;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::sync::{Arc, Mutex};
+use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::watch;
 
 pub struct DJConfigRegistry {
@@ -42,31 +43,26 @@ impl DJConfigRegistry {
             .subscribe())
     }
 
-    pub async fn save_config(&self, name: &str, config: DJConfig) -> Result<(), RegistryError> {
-        for pool in config.pools.keys() {
-            self.pools.require(pool).map_err(RegistryError::Invalid)?;
-        }
-        self.configs.save(name, config).await?;
-        self.publish(name);
-        Ok(())
-    }
-
-    pub async fn refresh_config(&self, name: &str) -> Result<Arc<DJConfig>, RegistryError> {
-        let config = self.configs.refresh(name).await?;
-        self.publish(name);
-        Ok(config)
-    }
-
-    pub async fn save_pool(&self, name: &str, pool: Pool) -> Result<(), RegistryError> {
-        self.pools.save(name, pool).await?;
-        self.publish_pool(name);
-        Ok(())
-    }
-
-    pub async fn refresh_pool(&self, name: &str) -> Result<Arc<Pool>, RegistryError> {
-        let pool = self.pools.refresh(name).await?;
-        self.publish_pool(name);
-        Ok(pool)
+    pub fn spawn_publisher(&'static self) {
+        let mut configs = self.configs.subscribe();
+        let mut pools = self.pools.subscribe();
+        tokio::spawn(async move {
+            loop {
+                let changed = tokio::select! {
+                    name = configs.recv() => name.map(|name| self.publish(&name)),
+                    name = pools.recv() => name.map(|name| self.publish_pool(&name)),
+                };
+                match changed {
+                    Ok(()) => {}
+                    Err(RecvError::Lagged(_)) => {
+                        for name in self.configs.list() {
+                            self.publish(&name);
+                        }
+                    }
+                    Err(RecvError::Closed) => return,
+                }
+            }
+        });
     }
 
     fn publish(&self, name: &str) {

@@ -10,24 +10,13 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-pub trait RoutedEntry: RegistryEntry + Send + Sync + 'static {
+pub trait RoutedEntry: RegistryEntry + 'static {
     const LIST_KEY: &'static str;
 
     fn registry(bot_state: Data) -> &'static JsonRegistry<Self>;
 
-    fn save(
-        bot_state: Data,
-        name: &str,
-        entry: Self,
-    ) -> impl Future<Output = Result<(), RegistryError>> + Send {
-        Self::registry(bot_state).save(name, entry)
-    }
-
-    fn refresh(
-        bot_state: Data,
-        name: &str,
-    ) -> impl Future<Output = Result<Arc<Self>, RegistryError>> + Send {
-        Self::registry(bot_state).refresh(name)
+    fn check(_bot_state: Data, _entry: &Self) -> anyhow::Result<()> {
+        Ok(())
     }
 }
 
@@ -46,19 +35,11 @@ impl RoutedEntry for DJConfig {
         &bot_state.dj_config_manager.configs
     }
 
-    fn save(
-        bot_state: Data,
-        name: &str,
-        entry: Self,
-    ) -> impl Future<Output = Result<(), RegistryError>> + Send {
-        bot_state.dj_config_manager.save_config(name, entry)
-    }
-
-    fn refresh(
-        bot_state: Data,
-        name: &str,
-    ) -> impl Future<Output = Result<Arc<Self>, RegistryError>> + Send {
-        bot_state.dj_config_manager.refresh_config(name)
+    fn check(bot_state: Data, entry: &Self) -> anyhow::Result<()> {
+        for pool in entry.pools.keys() {
+            bot_state.dj_config_manager.pools.require(pool)?;
+        }
+        Ok(())
     }
 }
 
@@ -67,21 +48,6 @@ impl RoutedEntry for Pool {
 
     fn registry(bot_state: Data) -> &'static JsonRegistry<Self> {
         &bot_state.dj_config_manager.pools
-    }
-
-    fn save(
-        bot_state: Data,
-        name: &str,
-        entry: Self,
-    ) -> impl Future<Output = Result<(), RegistryError>> + Send {
-        bot_state.dj_config_manager.save_pool(name, entry)
-    }
-
-    fn refresh(
-        bot_state: Data,
-        name: &str,
-    ) -> impl Future<Output = Result<Arc<Self>, RegistryError>> + Send {
-        bot_state.dj_config_manager.refresh_pool(name)
     }
 }
 
@@ -105,13 +71,15 @@ pub async fn get<T: RoutedEntry>(
     Path(name): Path<String>,
     Query(params): Query<RefreshParams>,
 ) -> Result<AxumJson<Arc<T>>, ApiError> {
+    let registry = T::registry(bot_state);
     if params.refresh {
-        return T::refresh(bot_state, &name)
+        return registry
+            .refresh(&name)
             .await
             .map(AxumJson)
             .map_err(registry_error);
     }
-    T::registry(bot_state)
+    registry
         .get(&name)
         .map(AxumJson)
         .ok_or_else(|| ApiError::not_found(format!("No {} {name:?}", T::KIND)))
@@ -123,7 +91,9 @@ pub async fn put<T: RoutedEntry>(
     AxumJson(body): AxumJson<serde_json::Map<String, serde_json::Value>>,
 ) -> Result<StatusCode, ApiError> {
     let entry = T::from_body(&name, body).map_err(registry_error)?;
-    T::save(bot_state, &name, entry)
+    T::check(bot_state, &entry).map_err(|e| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, e))?;
+    T::registry(bot_state)
+        .save(&name, entry)
         .await
         .map_err(registry_error)?;
     Ok(StatusCode::OK)
