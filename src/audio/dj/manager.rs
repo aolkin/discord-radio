@@ -131,20 +131,17 @@ impl DJManager {
         }
     }
 
-    fn spawn(&self, running: &mut Option<Running>, saved: Option<crate::persistence::DJState>) {
-        let (command_tx, command_rx) = mpsc::channel(10);
+    fn spawn(
+        &self,
+        running: &mut Option<Running>,
+        saved: Option<crate::persistence::DJState>,
+    ) -> anyhow::Result<()> {
         let config_name = saved
             .as_ref()
             .and_then(|saved| saved.config_name.clone())
             .unwrap_or_else(|| DEFAULT_DJ_CONFIG.to_string());
-        let config = self
-            .bot_state
-            .dj_config_manager
-            .subscribe(&config_name)
-            .inspect_err(|e| {
-                tracing::warn!(guild_id = %self.guild_id, "Starting DJ with an empty config: {e:#}");
-            })
-            .ok();
+        let config = self.bot_state.dj_config_manager.subscribe(&config_name)?;
+        let (command_tx, command_rx) = mpsc::channel(10);
         let guild_id = self.guild_id;
         let task_state = self.state.clone();
         let bot_state = self.bot_state;
@@ -162,6 +159,7 @@ impl DJManager {
             task_handle,
             command_tx,
         });
+        Ok(())
     }
 
     #[tracing::instrument(skip_all, fields(guild_id = %self.guild_id))]
@@ -215,8 +213,7 @@ impl DJManager {
             .remove(&self.guild_id);
 
         tracing::info!("Starting DJ");
-        self.spawn(&mut running, saved);
-        Ok(())
+        self.spawn(&mut running, saved)
     }
 }
 

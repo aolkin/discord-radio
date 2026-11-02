@@ -179,8 +179,7 @@ pub struct DJStateMachine {
     guild_id: GuildId,
     announcement_channel: Option<ChannelId>,
     bot_state: Data,
-    config_name: String,
-    config: Option<watch::Receiver<Arc<LoadedConfig>>>,
+    config: watch::Receiver<Arc<LoadedConfig>>,
     pool_selector: WeightedSelector<ConfiguredPool>,
     entry_selectors: HashMap<String, WeightedSelector<PoolEntry>>,
     signal_profile_selector: WeightedSelector<SignalProfileEntry>,
@@ -194,7 +193,7 @@ impl DJStateMachine {
         guild_id: GuildId,
         saved: Option<crate::persistence::DJState>,
         state: Arc<RwLock<DJState>>,
-        config: Option<watch::Receiver<Arc<LoadedConfig>>>,
+        mut config: watch::Receiver<Arc<LoadedConfig>>,
         bot_state: Data,
     ) -> Self {
         let (announcement_channel, restored_state) = match saved {
@@ -223,26 +222,21 @@ impl DJStateMachine {
 
         *state.write().await = initial_state;
 
+        let loaded = config.borrow_and_update().clone();
+        tracing::info!("Starting DJ task with config {:?}", loaded.config.name);
         let mut state_machine = Self {
             state,
             guild_id,
             announcement_channel,
             bot_state,
-            config_name: String::new(),
-            config: None,
+            config,
             pool_selector: WeightedSelector::new(Arc::default(), None),
             entry_selectors: HashMap::new(),
             signal_profile_selector: WeightedSelector::new(Arc::default(), None),
             applied_profile: None,
             applied_channel_status: None,
         };
-        if let Some(config) = config {
-            state_machine.switch_config(config);
-        }
-        tracing::info!(
-            "Starting DJ task with config {:?}",
-            state_machine.config_name
-        );
+        state_machine.set_config(&loaded);
         state_machine
     }
 
@@ -372,8 +366,9 @@ impl DJStateMachine {
 
     async fn persist_state(&self, stopped: bool) {
         let current_state = self.current_state().await;
+        let config = self.config.borrow().clone();
         let persist_state = crate::persistence::DJStateSnapshot {
-            config_name: &self.config_name,
+            config_name: &config.config.name,
             announcement_channel_id: self.announcement_channel.map(|id| id.get()),
             state_machine: &current_state,
             saved_at: SystemTime::now(),
@@ -478,21 +473,10 @@ impl DJStateMachine {
 
     /// Switches to the latest saved copy of the DJ's named config.
     fn reload_config(&mut self) {
-        let Some(config) = &mut self.config else {
-            return;
-        };
-        if !config.has_changed().unwrap_or(false) {
-            return;
+        if self.config.has_changed().unwrap_or(false) {
+            let loaded = self.config.borrow_and_update().clone();
+            self.set_config(&loaded);
         }
-        let loaded = config.borrow_and_update().clone();
-        self.set_config(&loaded);
-    }
-
-    fn switch_config(&mut self, mut config: watch::Receiver<Arc<LoadedConfig>>) {
-        let loaded = config.borrow_and_update().clone();
-        self.config_name = loaded.config.name.clone();
-        self.config = Some(config);
-        self.set_config(&loaded);
     }
 
     fn set_config(&mut self, LoadedConfig { config, pools }: &LoadedConfig) {
@@ -651,9 +635,11 @@ impl DJStateMachine {
                 self.stop(&bot_state).await;
                 return true;
             }
-            DJCommand::SetConfig(config) => {
-                self.switch_config(config);
-                tracing::info!("DJ switched to config {:?}", self.config_name);
+            DJCommand::SetConfig(mut config) => {
+                let loaded = config.borrow_and_update().clone();
+                tracing::info!("DJ switching to config {:?}", loaded.config.name);
+                self.config = config;
+                self.set_config(&loaded);
                 Ok(())
             }
             DJCommand::SetAnnouncementChannel(new_channel) => {

@@ -1,7 +1,7 @@
 use crate::audio::dj::config::{ConfiguredPool, DJConfig, LoadedConfig, Pool};
 use crate::bucket::FileResolver;
-use crate::bucket::registry::JsonRegistry;
-use anyhow::{Context, bail};
+use crate::bucket::registry::{JsonRegistry, RegistryError};
+use anyhow::Context;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::sync::{Arc, Mutex};
@@ -42,7 +42,34 @@ impl DJConfigRegistry {
             .subscribe())
     }
 
-    pub fn publish(&self, name: &str) {
+    pub async fn save_config(&self, name: &str, config: DJConfig) -> Result<(), RegistryError> {
+        for pool in config.pools.keys() {
+            self.pools.require(pool).map_err(RegistryError::Invalid)?;
+        }
+        self.configs.save(name, config).await?;
+        self.publish(name);
+        Ok(())
+    }
+
+    pub async fn refresh_config(&self, name: &str) -> Result<Arc<DJConfig>, RegistryError> {
+        let config = self.configs.refresh(name).await?;
+        self.publish(name);
+        Ok(config)
+    }
+
+    pub async fn save_pool(&self, name: &str, pool: Pool) -> Result<(), RegistryError> {
+        self.pools.save(name, pool).await?;
+        self.publish_pool(name);
+        Ok(())
+    }
+
+    pub async fn refresh_pool(&self, name: &str) -> Result<Arc<Pool>, RegistryError> {
+        let pool = self.pools.refresh(name).await?;
+        self.publish_pool(name);
+        Ok(pool)
+    }
+
+    fn publish(&self, name: &str) {
         let mut loaded = self.loaded.lock().unwrap();
         let config = match self.load(name) {
             Ok(config) => Arc::new(config),
@@ -61,22 +88,16 @@ impl DJConfigRegistry {
         }
     }
 
-    pub fn publish_pool(&self, pool: &str) {
-        for name in self.configs_referencing(pool) {
-            self.publish(&name);
+    fn publish_pool(&self, pool: &str) {
+        for name in self.configs.list() {
+            if self
+                .configs
+                .get(&name)
+                .is_some_and(|config| config.pools.contains_key(pool))
+            {
+                self.publish(&name);
+            }
         }
-    }
-
-    pub fn configs_referencing(&self, pool: &str) -> Vec<String> {
-        self.configs
-            .list()
-            .into_iter()
-            .filter(|name| {
-                self.configs
-                    .get(name)
-                    .is_some_and(|config| config.pools.contains_key(pool))
-            })
-            .collect()
     }
 
     fn load(&self, name: &str) -> anyhow::Result<LoadedConfig> {
@@ -88,7 +109,7 @@ impl DJConfigRegistry {
             .pools
             .iter()
             .map(|(pool_name, pool_config)| {
-                let file = self.get_pool(pool_name, true)?;
+                let file = self.pools.require(pool_name)?;
                 Ok(ConfiguredPool {
                     weight: pool_config.weight.get(),
                     segment_defaults: pool_config.segment_defaults.or(&file.segment_defaults),
@@ -98,13 +119,5 @@ impl DJConfigRegistry {
             .collect::<anyhow::Result<_>>()
             .with_context(|| format!("DJ config {name:?}"))?;
         Ok(LoadedConfig { config, pools })
-    }
-
-    pub fn get_pool(&self, name: &str, require_playable: bool) -> anyhow::Result<Arc<Pool>> {
-        let pool = self.pools.require(name)?;
-        if require_playable && !pool.has_weighted_entry() {
-            bail!("pool {name:?} has no entry with weight above 0");
-        }
-        Ok(pool)
     }
 }

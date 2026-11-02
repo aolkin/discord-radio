@@ -3,7 +3,6 @@ use crate::audio::profiles::SignalProfile;
 use crate::bucket::registry::{JsonRegistry, RegistryEntry, RegistryError};
 use crate::state::Data;
 use crate::web::error::ApiError;
-use anyhow::bail;
 use axum::Json as AxumJson;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
@@ -11,16 +10,25 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-pub trait RoutedEntry: RegistryEntry + 'static {
+pub trait RoutedEntry: RegistryEntry + Send + Sync + 'static {
     const LIST_KEY: &'static str;
 
     fn registry(bot_state: Data) -> &'static JsonRegistry<Self>;
 
-    fn check(_bot_state: Data, _entry: &Self) -> anyhow::Result<()> {
-        Ok(())
+    fn save(
+        bot_state: Data,
+        name: &str,
+        entry: Self,
+    ) -> impl Future<Output = Result<(), RegistryError>> + Send {
+        Self::registry(bot_state).save(name, entry)
     }
 
-    fn changed(_bot_state: Data, _name: &str) {}
+    fn refresh(
+        bot_state: Data,
+        name: &str,
+    ) -> impl Future<Output = Result<Arc<Self>, RegistryError>> + Send {
+        Self::registry(bot_state).refresh(name)
+    }
 }
 
 impl RoutedEntry for SignalProfile {
@@ -38,15 +46,19 @@ impl RoutedEntry for DJConfig {
         &bot_state.dj_config_manager.configs
     }
 
-    fn check(bot_state: Data, entry: &Self) -> anyhow::Result<()> {
-        for pool in entry.pools.keys() {
-            bot_state.dj_config_manager.get_pool(pool, true)?;
-        }
-        Ok(())
+    fn save(
+        bot_state: Data,
+        name: &str,
+        entry: Self,
+    ) -> impl Future<Output = Result<(), RegistryError>> + Send {
+        bot_state.dj_config_manager.save_config(name, entry)
     }
 
-    fn changed(bot_state: Data, name: &str) {
-        bot_state.dj_config_manager.publish(name);
+    fn refresh(
+        bot_state: Data,
+        name: &str,
+    ) -> impl Future<Output = Result<Arc<Self>, RegistryError>> + Send {
+        bot_state.dj_config_manager.refresh_config(name)
     }
 }
 
@@ -57,16 +69,19 @@ impl RoutedEntry for Pool {
         &bot_state.dj_config_manager.pools
     }
 
-    fn check(bot_state: Data, entry: &Self) -> anyhow::Result<()> {
-        let configs = bot_state.dj_config_manager.configs_referencing(&entry.name);
-        if !configs.is_empty() && !entry.has_weighted_entry() {
-            bail!("pool has no entry with weight above 0, but DJ configs {configs:?} use it");
-        }
-        Ok(())
+    fn save(
+        bot_state: Data,
+        name: &str,
+        entry: Self,
+    ) -> impl Future<Output = Result<(), RegistryError>> + Send {
+        bot_state.dj_config_manager.save_pool(name, entry)
     }
 
-    fn changed(bot_state: Data, name: &str) {
-        bot_state.dj_config_manager.publish_pool(name);
+    fn refresh(
+        bot_state: Data,
+        name: &str,
+    ) -> impl Future<Output = Result<Arc<Self>, RegistryError>> + Send {
+        bot_state.dj_config_manager.refresh_pool(name)
     }
 }
 
@@ -90,13 +105,13 @@ pub async fn get<T: RoutedEntry>(
     Path(name): Path<String>,
     Query(params): Query<RefreshParams>,
 ) -> Result<AxumJson<Arc<T>>, ApiError> {
-    let registry = T::registry(bot_state);
     if params.refresh {
-        let entry = registry.refresh(&name).await.map_err(registry_error)?;
-        T::changed(bot_state, &name);
-        return Ok(AxumJson(entry));
+        return T::refresh(bot_state, &name)
+            .await
+            .map(AxumJson)
+            .map_err(registry_error);
     }
-    registry
+    T::registry(bot_state)
         .get(&name)
         .map(AxumJson)
         .ok_or_else(|| ApiError::not_found(format!("No {} {name:?}", T::KIND)))
@@ -107,11 +122,10 @@ pub async fn put<T: RoutedEntry>(
     Path(name): Path<String>,
     AxumJson(body): AxumJson<serde_json::Map<String, serde_json::Value>>,
 ) -> Result<StatusCode, ApiError> {
-    T::registry(bot_state)
-        .save(&name, body, |entry| T::check(bot_state, entry))
+    let entry = T::from_body(&name, body).map_err(registry_error)?;
+    T::save(bot_state, &name, entry)
         .await
         .map_err(registry_error)?;
-    T::changed(bot_state, &name);
     Ok(StatusCode::OK)
 }
 

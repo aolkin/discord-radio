@@ -136,7 +136,7 @@ pub async fn hex(
     );
 
     if let Some(pool) = &pool
-        && let Err(e) = ctx.data().dj_config_manager.get_pool(pool, false)
+        && let Err(e) = ctx.data().dj_config_manager.pools.require(pool)
     {
         ctx.say(format!("Failed to play message: {e:#}")).await?;
         return Ok(());
@@ -766,7 +766,7 @@ pub async fn skip(
 
     if let Err(e) = pool
         .as_deref()
-        .map(|pool| ctx.data().dj_config_manager.get_pool(pool, true))
+        .map(|pool| ctx.data().dj_config_manager.pools.require(pool))
         .transpose()
         .and_then(|_| send_to_dj(ctx.data(), guild_id, DJCommand::ForceAdvance(pool.clone())))
     {
