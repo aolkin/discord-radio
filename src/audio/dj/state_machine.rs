@@ -248,6 +248,7 @@ impl DJStateMachine {
             self.update_channel_status().await;
             let rotation_due = self.current_state().await.background_profile.completed();
             self.persist_state(false).await;
+            let mut config = self.config.clone();
 
             tokio::select! {
                 command = command_rx.recv() => {
@@ -264,6 +265,10 @@ impl DJStateMachine {
                     }
                 }
                 _ = rotation_due => self.rotate_profile().await,
+                Ok(()) = config.changed() => {
+                    let loaded = self.config.borrow_and_update().clone();
+                    self.set_config(&loaded);
+                }
             }
         }
 
@@ -420,7 +425,6 @@ impl DJStateMachine {
         bot_state: &Data,
         pool_name: Option<&str>,
     ) -> anyhow::Result<()> {
-        self.reload_config();
         let next_state = self.next_segment(pool_name, bot_state).await?;
         tracing::info!("DJ transitioning to state: {}", next_state.state_name());
         self.enter_state(next_state.into(), bot_state).await
@@ -471,14 +475,6 @@ impl DJStateMachine {
         })
     }
 
-    /// Switches to the latest saved copy of the DJ's named config.
-    fn reload_config(&mut self) {
-        if self.config.has_changed().unwrap_or(false) {
-            let loaded = self.config.borrow_and_update().clone();
-            self.set_config(&loaded);
-        }
-    }
-
     fn set_config(&mut self, LoadedConfig { config, pools }: &LoadedConfig) {
         self.entry_selectors
             .retain(|name, _| pools.iter().any(|pool| pool.file.name == *name));
@@ -501,7 +497,6 @@ impl DJStateMachine {
         bot_state: &Data,
         request: HexMessageRequest,
     ) -> anyhow::Result<()> {
-        self.reload_config();
         tracing::info!(
             "DJ force transitioning to hex message with custom text: {}",
             request.message
