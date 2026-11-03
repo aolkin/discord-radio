@@ -1,5 +1,5 @@
 use crate::audio::dj::config::{
-    ConfiguredPool, DJConfig, PoolEntry, SegmentDefaults, SignalProfileEntry,
+    ConfiguredPool, LoadedConfig, PoolEntry, SegmentDefaults, SignalProfileEntry,
 };
 use crate::audio::dj::manager::{
     ADVANCE_RETRY_DELAY, DJCommand, HexMessageRequest, IdleRequest, TrackRequest,
@@ -20,7 +20,7 @@ use std::collections::hash_map::Entry;
 use std::ops::Deref;
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant, SystemTime};
-use tokio::sync::{RwLock, RwLockReadGuard, mpsc};
+use tokio::sync::{RwLock, RwLockReadGuard, mpsc, watch};
 
 pub const DEFAULT_PROFILE_FADE: Duration = Duration::from_secs(2);
 
@@ -179,7 +179,7 @@ pub struct DJStateMachine {
     guild_id: GuildId,
     announcement_channel: Option<ChannelId>,
     bot_state: Data,
-    config_name: String,
+    config: watch::Receiver<Arc<LoadedConfig>>,
     pool_selector: WeightedSelector<ConfiguredPool>,
     entry_selectors: HashMap<String, WeightedSelector<PoolEntry>>,
     signal_profile_selector: WeightedSelector<SignalProfileEntry>,
@@ -193,8 +193,7 @@ impl DJStateMachine {
         guild_id: GuildId,
         saved: Option<crate::persistence::DJState>,
         state: Arc<RwLock<DJState>>,
-        config: Arc<DJConfig>,
-        pools: Arc<[ConfiguredPool]>,
+        mut config: watch::Receiver<Arc<LoadedConfig>>,
         bot_state: Data,
     ) -> Self {
         let (announcement_channel, restored_state) = match saved {
@@ -212,7 +211,6 @@ impl DJStateMachine {
             }
             None => (None, None),
         };
-        tracing::info!("Starting DJ task with config {:?}", config.name);
 
         let initial_state = restored_state.unwrap_or_default();
 
@@ -224,19 +222,21 @@ impl DJStateMachine {
 
         *state.write().await = initial_state;
 
+        let loaded = config.borrow_and_update().clone();
+        tracing::info!("Starting DJ task with config {:?}", loaded.config.name);
         let mut state_machine = Self {
             state,
             guild_id,
             announcement_channel,
             bot_state,
-            config_name: config.name.clone(),
+            config,
             pool_selector: WeightedSelector::new(Arc::default(), None),
             entry_selectors: HashMap::new(),
             signal_profile_selector: WeightedSelector::new(Arc::default(), None),
             applied_profile: None,
             applied_channel_status: None,
         };
-        state_machine.set_config(config, pools);
+        state_machine.set_config(&loaded);
         state_machine
     }
 
@@ -248,6 +248,7 @@ impl DJStateMachine {
             self.update_channel_status().await;
             let rotation_due = self.current_state().await.background_profile.completed();
             self.persist_state(false).await;
+            let mut config = self.config.clone();
 
             tokio::select! {
                 command = command_rx.recv() => {
@@ -264,6 +265,10 @@ impl DJStateMachine {
                     }
                 }
                 _ = rotation_due => self.rotate_profile().await,
+                Ok(()) = config.changed() => {
+                    let loaded = self.config.borrow_and_update().clone();
+                    self.set_config(&loaded);
+                }
             }
         }
 
@@ -366,8 +371,9 @@ impl DJStateMachine {
 
     async fn persist_state(&self, stopped: bool) {
         let current_state = self.current_state().await;
+        let config = self.config.borrow().clone();
         let persist_state = crate::persistence::DJStateSnapshot {
-            config_name: &self.config_name,
+            config_name: &config.config.name,
             announcement_channel_id: self.announcement_channel.map(|id| id.get()),
             state_machine: &current_state,
             saved_at: SystemTime::now(),
@@ -419,7 +425,6 @@ impl DJStateMachine {
         bot_state: &Data,
         pool_name: Option<&str>,
     ) -> anyhow::Result<()> {
-        self.reload_config();
         let next_state = self.next_segment(pool_name, bot_state).await?;
         tracing::info!("DJ transitioning to state: {}", next_state.state_name());
         self.enter_state(next_state.into(), bot_state).await
@@ -470,22 +475,7 @@ impl DJStateMachine {
         })
     }
 
-    /// Switches to the latest saved copy of the DJ's named config.
-    fn reload_config(&mut self) {
-        if self.config_name.is_empty() {
-            return;
-        }
-        let (config, pools) = match self.bot_state.dj_config_manager.get(&self.config_name) {
-            Ok(loaded) => loaded,
-            Err(e) => {
-                tracing::warn!("DJ keeping its current config: {e:#}");
-                return;
-            }
-        };
-        self.set_config(config, pools);
-    }
-
-    fn set_config(&mut self, config: Arc<DJConfig>, pools: Arc<[ConfiguredPool]>) {
+    fn set_config(&mut self, LoadedConfig { config, pools }: &LoadedConfig) {
         self.entry_selectors
             .retain(|name, _| pools.iter().any(|pool| pool.file.name == *name));
         for pool in pools.iter() {
@@ -497,7 +487,7 @@ impl DJStateMachine {
             }
         }
         self.pool_selector
-            .reconfigure(pools, config.pool_history_penalty_multiplier);
+            .reconfigure(pools.clone(), config.pool_history_penalty_multiplier);
         self.signal_profile_selector
             .set_pool(&config.signal_profiles);
     }
@@ -507,7 +497,6 @@ impl DJStateMachine {
         bot_state: &Data,
         request: HexMessageRequest,
     ) -> anyhow::Result<()> {
-        self.reload_config();
         tracing::info!(
             "DJ force transitioning to hex message with custom text: {}",
             request.message
@@ -641,10 +630,11 @@ impl DJStateMachine {
                 self.stop(&bot_state).await;
                 return true;
             }
-            DJCommand::SetConfig { config, pools } => {
-                tracing::info!("DJ switching to config {:?}", config.name);
-                self.config_name = config.name.clone();
-                self.set_config(config, pools);
+            DJCommand::SetConfig(mut config) => {
+                let loaded = config.borrow_and_update().clone();
+                tracing::info!("DJ switching to config {:?}", loaded.config.name);
+                self.config = config;
+                self.set_config(&loaded);
                 Ok(())
             }
             DJCommand::SetAnnouncementChannel(new_channel) => {

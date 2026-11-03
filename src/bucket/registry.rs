@@ -4,6 +4,9 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
+use tokio::sync::broadcast;
+
+const CHANGE_CAPACITY: usize = 64;
 
 /// A JSON document stored by name in a [`JsonRegistry`]. Its `name` field
 /// holds the name it is stored under.
@@ -31,6 +34,7 @@ pub enum RegistryError {
 
 pub struct JsonRegistry<T> {
     entries: RwLock<HashMap<String, Arc<T>>>,
+    changes: broadcast::Sender<String>,
     path: String,
     file_resolver: FileResolver,
 }
@@ -65,6 +69,7 @@ impl<T: RegistryEntry> JsonRegistry<T> {
 
         Self {
             entries: RwLock::new(entries),
+            changes: broadcast::channel(CHANGE_CAPACITY).0,
             path,
             file_resolver,
         }
@@ -118,10 +123,7 @@ impl<T: RegistryEntry> JsonRegistry<T> {
             .upload(&key, &bytes, "application/json")
             .await?;
 
-        self.entries
-            .write()
-            .unwrap()
-            .insert(name.to_string(), Arc::new(entry));
+        self.publish(name, Arc::new(entry));
         Ok(())
     }
 
@@ -131,11 +133,20 @@ impl<T: RegistryEntry> JsonRegistry<T> {
         let key = self.remote_key(name)?;
         let bytes = self.file_resolver.bucket()?.fetch_bytes(&key).await?;
         let entry = Arc::new(parse::<T>(&bytes, name).map_err(RegistryError::Parse)?);
+        self.publish(name, entry.clone());
+        Ok(entry)
+    }
+
+    pub fn subscribe(&self) -> broadcast::Receiver<String> {
+        self.changes.subscribe()
+    }
+
+    fn publish(&self, name: &str, entry: Arc<T>) {
         self.entries
             .write()
             .unwrap()
-            .insert(name.to_string(), entry.clone());
-        Ok(entry)
+            .insert(name.to_string(), entry);
+        self.changes.send(name.to_string()).ok();
     }
 }
 

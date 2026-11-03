@@ -1,4 +1,4 @@
-use crate::audio::dj::config::{ConfiguredPool, DJConfig};
+use crate::audio::dj::config::LoadedConfig;
 use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::{DJState, DJStateMachine};
 use crate::state::Data;
@@ -8,7 +8,7 @@ use serenity::model::id::{ChannelId, GuildId};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::error::TrySendError;
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::{RwLock, mpsc, watch};
 use tokio::task::JoinHandle;
 use tracing::Instrument;
 
@@ -22,10 +22,7 @@ pub enum DJCommand {
     ForceTrack(TrackRequest),
     ForceIdle(IdleRequest),
     Stop,
-    SetConfig {
-        config: Arc<DJConfig>,
-        pools: Arc<[ConfiguredPool]>,
-    },
+    SetConfig(watch::Receiver<Arc<LoadedConfig>>),
     SetAnnouncementChannel(Option<ChannelId>),
     SetBackgroundProfile(Option<SignalProfilePlayback>),
     SetOverrideProfile(Option<SignalProfilePlayback>),
@@ -134,27 +131,24 @@ impl DJManager {
         }
     }
 
-    fn spawn(&self, running: &mut Option<Running>, saved: Option<crate::persistence::DJState>) {
-        let (command_tx, command_rx) = mpsc::channel(10);
+    fn spawn(
+        &self,
+        running: &mut Option<Running>,
+        saved: Option<crate::persistence::DJState>,
+    ) -> anyhow::Result<()> {
         let config_name = saved
             .as_ref()
             .and_then(|saved| saved.config_name.clone())
             .unwrap_or_else(|| DEFAULT_DJ_CONFIG.to_string());
-        let (config, pools) = self
-            .bot_state
-            .dj_config_manager
-            .get(&config_name)
-            .unwrap_or_else(|e| {
-                tracing::warn!(guild_id = %self.guild_id, "Starting DJ with an empty config: {e:#}");
-                (Arc::default(), Arc::default())
-            });
+        let config = self.bot_state.dj_config_manager.subscribe(&config_name)?;
+        let (command_tx, command_rx) = mpsc::channel(10);
         let guild_id = self.guild_id;
         let task_state = self.state.clone();
         let bot_state = self.bot_state;
         let span = tracing::info_span!("dj", guild_id = %guild_id);
         let task_handle = tokio::spawn(
             async move {
-                DJStateMachine::new(guild_id, saved, task_state, config, pools, bot_state)
+                DJStateMachine::new(guild_id, saved, task_state, config, bot_state)
                     .await
                     .run(command_rx)
                     .await;
@@ -165,6 +159,7 @@ impl DJManager {
             task_handle,
             command_tx,
         });
+        Ok(())
     }
 
     #[tracing::instrument(skip_all, fields(guild_id = %self.guild_id))]
@@ -218,8 +213,7 @@ impl DJManager {
             .remove(&self.guild_id);
 
         tracing::info!("Starting DJ");
-        self.spawn(&mut running, saved);
-        Ok(())
+        self.spawn(&mut running, saved)
     }
 }
 

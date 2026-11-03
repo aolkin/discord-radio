@@ -2,7 +2,7 @@ use crate::audio::dj::config::{DJConfig, Pool};
 use crate::audio::profiles::SignalProfile;
 use crate::bucket::registry::{JsonRegistry, RegistryEntry, RegistryError};
 use crate::state::Data;
-use crate::web::error::ApiError;
+use crate::web::error::{ApiError, WithStatus};
 use axum::Json as AxumJson;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
@@ -84,6 +84,23 @@ pub async fn put<T: RoutedEntry>(
         .await
         .map_err(registry_error)?;
     Ok(StatusCode::OK)
+}
+
+pub async fn put_dj_config(
+    State(bot_state): State<Data>,
+    name: Path<String>,
+    body: AxumJson<serde_json::Map<String, serde_json::Value>>,
+) -> Result<StatusCode, ApiError> {
+    if let Some(pools) = body.get("pools").and_then(|pools| pools.as_object()) {
+        for pool in pools.keys() {
+            bot_state
+                .dj_config_manager
+                .pools
+                .require(pool)
+                .status(StatusCode::UNPROCESSABLE_ENTITY)?;
+        }
+    }
+    put::<DJConfig>(State(bot_state), name, body).await
 }
 
 fn registry_error(e: RegistryError) -> ApiError {

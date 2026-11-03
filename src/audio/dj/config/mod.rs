@@ -40,6 +40,11 @@ pub struct ConfiguredPool {
     pub file: Arc<Pool>,
 }
 
+pub struct LoadedConfig {
+    pub config: Arc<DJConfig>,
+    pub pools: Arc<[ConfiguredPool]>,
+}
+
 #[field_trait_impl(WeightedPool<SignalProfileEntry>)]
 #[derive(Deserialize, Serialize, Debug, Default)]
 pub struct SignalProfiles {
@@ -118,6 +123,9 @@ impl RegistryEntry for Pool {
         let defaults = self.segment_defaults.hex_config();
         ensure_loops(defaults.loop_min, defaults.loop_max).context("hex_config")?;
         ensure_penalty_multiplier(self.history_penalty_multiplier)?;
+        if !self.has_weighted_entry() {
+            bail!("pool has no entry with weight above 0");
+        }
         self.entries
             .iter()
             .try_for_each(|entry| entry.validate(defaults))
