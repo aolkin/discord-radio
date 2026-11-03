@@ -1,7 +1,7 @@
 use crate::audio::connection::connect_voice_channel;
 use crate::audio::dj::manager::DJCommand;
 use crate::audio::dj::segments::SignalProfilePlayback;
-use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
+use crate::audio::dj::state_machine::{ChannelStatus, DEFAULT_PROFILE_FADE};
 use crate::audio::processing::processor::ProcessorRef;
 use crate::commands::utils;
 use crate::commands::utils::{Context, require_guild};
@@ -631,28 +631,90 @@ pub async fn override_profile(
     .await
 }
 
-/// Turn the DJ's management of the voice channel status on or off
+/// Set or clear the DJ's background channel status, which replaces rotation
 #[poise::command(slash_command, guild_only)]
 pub async fn channel_status(
     ctx: Context<'_>,
-    #[description = "Whether the DJ sets the voice channel status"] enabled: bool,
+    #[description = "Channel status (omit to return to rotation)"] status: Option<String>,
 ) -> anyhow::Result<()> {
     ctx.defer_ephemeral().await?;
 
     let guild_id = require_guild(ctx)?;
 
-    ctx.data()
-        .dj_settings
-        .update(guild_id, |settings| {
-            settings.channel_status_disabled = !enabled;
-            Ok(())
-        })
-        .await?;
-    let message = if enabled {
-        "DJ channel status management enabled"
-    } else {
-        "DJ channel status management disabled; the current status stays as it is"
+    let message = match &status {
+        Some(status) => format!("DJ background channel status set to {status:?}"),
+        None => "DJ background channel status cleared".to_string(),
     };
+    if let Err(e) = send_to_dj(
+        ctx.data(),
+        guild_id,
+        DJCommand::SetBackgroundChannelStatus(status),
+    ) {
+        ctx.say(format!(
+            "Failed to update DJ background channel status: {e:#}"
+        ))
+        .await?;
+        return Ok(());
+    }
+    ctx.say(message).await?;
+
+    Ok(())
+}
+
+#[derive(poise::ChoiceParameter)]
+pub enum ChannelStatusOverrideMode {
+    #[name = "Clear (use the background channel status)"]
+    Clear,
+    #[name = "Unmanaged (leave the channel status as it is)"]
+    Unmanaged,
+    #[name = "Fixed (set the status given)"]
+    Fixed,
+}
+
+/// Set or clear the DJ's channel status override, which beats every other channel status
+#[poise::command(slash_command, guild_only, rename = "channel_status_override")]
+pub async fn override_channel_status(
+    ctx: Context<'_>,
+    #[description = "What the override does"] mode: ChannelStatusOverrideMode,
+    #[description = "Channel status for the fixed mode"] status: Option<String>,
+) -> anyhow::Result<()> {
+    ctx.defer_ephemeral().await?;
+
+    let guild_id = require_guild(ctx)?;
+
+    let (status_override, message) = match (mode, status) {
+        (ChannelStatusOverrideMode::Fixed, Some(status)) => (
+            Some(ChannelStatus::Fixed(status.clone())),
+            format!("DJ channel status override set to {status:?}"),
+        ),
+        (ChannelStatusOverrideMode::Fixed, None) => {
+            ctx.say("The fixed mode needs a status").await?;
+            return Ok(());
+        }
+        (_, Some(_)) => {
+            ctx.say("A status only applies to the fixed mode").await?;
+            return Ok(());
+        }
+        (ChannelStatusOverrideMode::Unmanaged, None) => (
+            Some(ChannelStatus::Unmanaged),
+            "DJ channel status override set to unmanaged; the current status stays as it is"
+                .to_string(),
+        ),
+        (ChannelStatusOverrideMode::Clear, None) => {
+            (None, "DJ channel status override cleared".to_string())
+        }
+    };
+    if let Err(e) = send_to_dj(
+        ctx.data(),
+        guild_id,
+        DJCommand::SetOverrideChannelStatus(status_override),
+    ) {
+        ctx.say(format!(
+            "Failed to update DJ channel status override: {e:#}"
+        ))
+        .await?;
+        return Ok(());
+    }
     ctx.say(message).await?;
 
     Ok(())
@@ -673,7 +735,8 @@ pub async fn channel_status(
         "announcements",
         "profile",
         "override_profile",
-        "channel_status"
+        "channel_status",
+        "override_channel_status"
     )
 )]
 pub async fn dj(_ctx: Context<'_>) -> anyhow::Result<()> {

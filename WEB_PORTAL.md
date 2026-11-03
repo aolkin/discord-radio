@@ -73,6 +73,10 @@ Control audio tracks for any guild through the "Manage Tracks" button:
 
 The DJ plays the profile override if set, else the current segment's profile, else its background profile. The background profile is either one set by hand or a rotating pick from the DJ config; clearing a hand-set background profile returns the DJ to rotation. The DJ saves both settings with its state.
 
+### Voice Channel Status
+
+The DJ picks the voice channel status the same way: the override if set, else the current segment's channel status, else its background channel status, which is either one set by hand or a rotating pick from the DJ config's `channel_statuses`. The override either sets a fixed status or leaves the channel status unmanaged, so the DJ does not touch it. The DJ saves the override and the background channel status with its state.
+
 The Signal Profiles panel lists every profile by name. Saving a new or edited profile writes it to object storage; a DJ picks up the new parameters the next time it transitions to that profile.
 
 ### DJ Configs
@@ -111,7 +115,8 @@ Each guild card's Bot Profile button opens the bot's current nickname, avatar an
 - `POST /api/guilds/:guild_id/tracks` - Manage track state (start, stop, update)
 - `POST /api/guilds/:guild_id/dj/profile` - Set the DJ background profile with an optional `fade_duration` in seconds, used to fade in and out of it, or clear it (`{"profile": null}`)
 - `POST /api/guilds/:guild_id/dj/profile-override` - Set the DJ profile override with an optional `fade_duration` in seconds, used to fade in and out of it (default 2), or clear it (`{"profile": null}`)
-- `POST /api/guilds/:guild_id/dj/channel-status` - Turn the DJ's management of the voice channel status on or off (`{"enabled": false}`); turning it off leaves the current status as it is
+- `POST /api/guilds/:guild_id/dj/channel-status` - Set the DJ background channel status (`{"status": "..."}`), or clear it to return to rotation (`{"status": null}`)
+- `POST /api/guilds/:guild_id/dj/channel-status-override` - Override the channel status with a fixed status (`{"status": {"fixed": "..."}}`), leave it unmanaged (`{"status": "unmanaged"}`), or clear the override (`{"status": null}`)
 - `GET /api/guilds/:guild_id/bot-profile` - Get the bot's current per-guild profile from Discord (`{"nick", "avatar_url", "banner_url"}`)
 - `PUT /api/guilds/:guild_id/bot-profile` - Set the bot's per-guild profile on Discord. Body fields `nick`, `avatar`, `banner` are each optional; omitted fields are left unchanged, and at least one is required. `avatar` and `banner` are file references resolved like track filenames. Returns 429 when Discord rate limits the request
 - `GET /api/profiles` - List available signal profiles

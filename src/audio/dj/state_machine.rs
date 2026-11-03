@@ -1,4 +1,6 @@
-use crate::audio::dj::config::{ConfiguredPool, LoadedConfig, PoolEntry, SegmentDefaults};
+use crate::audio::dj::config::{
+    ChannelStatusEntry, ConfiguredPool, LoadedConfig, PoolEntry, SegmentDefaults,
+};
 use crate::audio::dj::manager::{
     ADVANCE_RETRY_DELAY, DJCommand, HexMessageRequest, IdleRequest, TrackRequest,
 };
@@ -66,11 +68,18 @@ impl From<Box<dyn Segment>> for SegmentContainer {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ChannelStatus {
+    Unmanaged,
+    Fixed(String),
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DJState {
     pub segment: SegmentContainer,
     pub signal_profile: TieredStateMachine<NoiseEntry, SignalProfilePlayback>,
-    pub override_channel_status: Option<String>,
+    pub channel_status: TieredStateMachine<ChannelStatusEntry, ChannelStatus>,
 }
 
 impl Default for DJState {
@@ -78,7 +87,7 @@ impl Default for DJState {
         Self {
             segment: NoiseSegment::quiet(Duration::from_secs(1)).into(),
             signal_profile: TieredStateMachine::new(&NoiseEntry::default()),
-            override_channel_status: None,
+            channel_status: TieredStateMachine::new(&ChannelStatusEntry::default()),
         }
     }
 }
@@ -87,16 +96,15 @@ impl DJState {
     pub fn shift_back(&mut self, by: Duration) {
         self.segment.started_at.shift_back(by);
         self.signal_profile.shift_back(by);
-    }
-
-    pub fn effective_channel_status(&self) -> Option<String> {
-        self.override_channel_status
-            .clone()
-            .or_else(|| self.segment.channel_status())
+        self.channel_status.shift_back(by);
     }
 
     pub fn signal_profile(&self) -> TieredValue<SignalProfilePlayback> {
         self.signal_profile.value()
+    }
+
+    pub fn channel_status(&self) -> TieredValue<ChannelStatus> {
+        self.channel_status.value()
     }
 }
 
@@ -168,7 +176,13 @@ impl DJStateMachine {
         'dj: loop {
             self.update_profile().await;
             self.update_channel_status().await;
-            let profile_due = self.current_state().await.signal_profile.completed();
+            let (profile_due, channel_status_due) = {
+                let state = self.current_state().await;
+                (
+                    state.signal_profile.completed(),
+                    state.channel_status.completed(),
+                )
+            };
             self.persist_state(false).await;
             let mut config = self.config.clone();
 
@@ -187,6 +201,7 @@ impl DJStateMachine {
                     }
                 }
                 _ = profile_due => self.state.write().await.signal_profile.advance(),
+                _ = channel_status_due => self.state.write().await.channel_status.advance(),
                 Ok(()) = config.changed() => {
                     let loaded = self.config.borrow_and_update().clone();
                     self.set_config(&loaded).await;
@@ -223,27 +238,12 @@ impl DJStateMachine {
         }
     }
 
-    async fn channel_status_enabled(&self) -> bool {
-        !self
-            .bot_state
-            .dj_settings
-            .get(self.guild_id)
-            .await
-            .channel_status_disabled
-    }
-
     async fn update_channel_status(&mut self) {
-        if !self.channel_status_enabled().await {
-            self.applied_channel_status = None;
-            return;
+        let target = self.state.read().await.channel_status().value;
+        match target {
+            ChannelStatus::Unmanaged => self.applied_channel_status = None,
+            ChannelStatus::Fixed(status) => self.apply_channel_status(status).await,
         }
-        let target = self
-            .state
-            .read()
-            .await
-            .effective_channel_status()
-            .unwrap_or_default();
-        self.apply_channel_status(target).await;
     }
 
     async fn apply_channel_status(&mut self, target: String) {
@@ -307,7 +307,8 @@ impl DJStateMachine {
 
     pub async fn stop(&mut self, bot_state: &Data) {
         self.cleanup_current_state().await;
-        if self.channel_status_enabled().await {
+        let target = self.state.read().await.channel_status().value;
+        if let ChannelStatus::Fixed(_) = target {
             self.apply_channel_status(String::new()).await;
         }
 
@@ -388,11 +389,9 @@ impl DJStateMachine {
         }
         self.pool_selector
             .reconfigure(pools.clone(), config.pool_history_penalty_multiplier);
-        self.state
-            .write()
-            .await
-            .signal_profile
-            .set_pool(&config.signal_profiles);
+        let mut state = self.state.write().await;
+        state.signal_profile.set_pool(&config.signal_profiles);
+        state.channel_status.set_pool(&config.channel_statuses);
     }
 
     pub async fn force_hex_message(
@@ -493,6 +492,11 @@ impl DJStateMachine {
         state
             .signal_profile
             .update_forced(segment.signal_profile().map(TimedValue::permanent));
+        state.channel_status.update_forced(
+            segment
+                .channel_status()
+                .map(|status| TimedValue::permanent(ChannelStatus::Fixed(status))),
+        );
         state.segment = segment;
         drop(state);
         if let Some(metrics) = crate::metrics::get() {
@@ -564,6 +568,20 @@ impl DJStateMachine {
                     .await
                     .signal_profile
                     .update_override(profile_override.map(TimedValue::permanent));
+                Ok(())
+            }
+            DJCommand::SetBackgroundChannelStatus(status) => {
+                self.state.write().await.channel_status.update_manual(
+                    status.map(|status| TimedValue::permanent(ChannelStatus::Fixed(status))),
+                );
+                Ok(())
+            }
+            DJCommand::SetOverrideChannelStatus(status_override) => {
+                self.state
+                    .write()
+                    .await
+                    .channel_status
+                    .update_override(status_override.map(TimedValue::permanent));
                 Ok(())
             }
         };

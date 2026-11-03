@@ -43,5 +43,8 @@
         "max_duration_seconds": 20.0
       }
     ]
+  },
+  "channel_statuses": {
+    "entries": []
   }
 }

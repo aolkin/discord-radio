@@ -8,7 +8,7 @@ use crate::audio::tracks::TrackManager;
 use crate::bucket::FileResolver;
 use crate::bucket::registry::JsonRegistry;
 use crate::logging::JsonLogger;
-use crate::persistence::{DjSettingsStore, StateStore};
+use crate::persistence::StateStore;
 use serde::Serialize;
 use serenity::all::{ChannelId, UserId};
 use serenity::model::id::GuildId;
@@ -31,7 +31,6 @@ pub struct GuildRadio {
 pub struct BotState {
     pub songbird: Arc<Songbird>,
     pub state_store: Arc<dyn StateStore>,
-    pub dj_settings: DjSettingsStore,
     pub duration_cache: DurationCache,
     guilds: StdMutex<HashMap<GuildId, GuildRadio>>,
     pub profile_manager: JsonRegistry<SignalProfile>,
@@ -45,7 +44,6 @@ impl BotState {
     pub fn new(
         file_resolver: FileResolver,
         state_store: Arc<dyn StateStore>,
-        dj_settings: DjSettingsStore,
         profile_manager: JsonRegistry<SignalProfile>,
         dj_config_manager: &'static DJConfigRegistry,
         bot_user_id: UserId,
@@ -55,7 +53,6 @@ impl BotState {
             songbird,
             duration_cache: DurationCache::new(file_resolver.clone()),
             state_store: state_store.clone(),
-            dj_settings,
             guilds: StdMutex::new(HashMap::new()),
             profile_manager,
             dj_config_manager,

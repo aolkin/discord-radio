@@ -1,6 +1,6 @@
 use crate::audio::dj::config::LoadedConfig;
 use crate::audio::dj::segments::SignalProfilePlayback;
-use crate::audio::dj::state_machine::{DJState, DJStateMachine};
+use crate::audio::dj::state_machine::{ChannelStatus, DJState, DJStateMachine};
 use crate::state::Data;
 use anyhow::{Context, bail};
 use serde::Deserialize;
@@ -26,6 +26,8 @@ pub enum DJCommand {
     SetAnnouncementChannel(Option<ChannelId>),
     SetBackgroundProfile(Option<SignalProfilePlayback>),
     SetOverrideProfile(Option<SignalProfilePlayback>),
+    SetBackgroundChannelStatus(Option<String>),
+    SetOverrideChannelStatus(Option<ChannelStatus>),
 }
 
 /// A hex message for the DJ to play, with hex defaults from the pool named

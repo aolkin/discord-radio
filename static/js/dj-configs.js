@@ -7,6 +7,7 @@ import {
     fieldToServer,
     historyPenaltyMultiplier,
     noiseEntryFields,
+    seconds,
     segmentDefaultsBlocks,
     segmentDefaultsFromServer,
     segmentDefaultsToServer,
@@ -35,9 +36,39 @@ const poolReferenceFields = [
     { ...weight, min: 1 },
 ];
 
-const signalProfilesFields = [historyPenaltyMultiplier];
+const rotationFields = [historyPenaltyMultiplier];
 
-const signalProfileFields = noiseEntryFields;
+const rotations = [
+    {
+        key: 'signal_profiles',
+        label: 'Signal Profile Rotation',
+        addLabel: '+ Add Signal Profile',
+        entryFields: noiseEntryFields,
+    },
+    {
+        key: 'channel_statuses',
+        label: 'Channel Status Rotation',
+        addLabel: '+ Add Channel Status',
+        entryFields: [
+            { key: 'status', label: 'Status', type: 'text' },
+            weight,
+            seconds('min_duration_seconds', 'Min Duration (s)'),
+            seconds('max_duration_seconds', 'Max Duration (s)'),
+        ],
+    },
+];
+
+function convertRotations(source, convert) {
+    return Object.fromEntries(
+        rotations.map(({ key, entryFields }) => [
+            key,
+            {
+                ...convertObject(rotationFields, source[key], convert),
+                entries: source[key].entries.map((row) => convertObject(entryFields, row, convert)),
+            },
+        ]),
+    );
+}
 
 function toForm(config) {
     return {
@@ -47,12 +78,7 @@ function toForm(config) {
             ...convertObject(poolReferenceFields, { pool, ...reference }, fieldFromServer),
             segment_defaults: segmentDefaultsFromServer(reference.segment_defaults),
         })),
-        signal_profiles: {
-            ...convertObject(signalProfilesFields, config.signal_profiles, fieldFromServer),
-            entries: config.signal_profiles.entries.map((row) =>
-                convertObject(signalProfileFields, row, fieldFromServer),
-            ),
-        },
+        ...convertRotations(config, fieldFromServer),
     };
 }
 
@@ -65,10 +91,7 @@ function toBody(form) {
                 return [pool, { ...settings, segment_defaults: segmentDefaultsToServer(reference.segment_defaults) }];
             }),
         ),
-        signal_profiles: {
-            ...convertObject(signalProfilesFields, form.signal_profiles, fieldToServer),
-            entries: form.signal_profiles.entries.map((row) => convertObject(signalProfileFields, row, fieldToServer)),
-        },
+        ...convertRotations(form, fieldToServer),
     };
 }
 
@@ -77,7 +100,7 @@ function blankForm() {
         name: '',
         ...blankRow(generalFields),
         pools: [],
-        signal_profiles: { ...blankRow(signalProfilesFields), entries: [] },
+        ...Object.fromEntries(rotations.map(({ key }) => [key, { ...blankRow(rotationFields), entries: [] }])),
     };
 }
 
@@ -91,8 +114,8 @@ export function djConfigs() {
         djConfigEditorMessage: { text: '', type: '' },
         djConfigForm: blankForm(),
         djConfigGeneralFields: generalFields,
-        djConfigSignalProfilesFields: signalProfilesFields,
-        djConfigSignalProfileFields: signalProfileFields,
+        djConfigRotationFields: rotationFields,
+        djConfigRotations: rotations,
 
         async loadDjConfigs() {
             try {
@@ -126,8 +149,8 @@ export function djConfigs() {
             toggleHexConfig(reference.segment_defaults);
         },
 
-        addDjConfigSignalProfile() {
-            this.djConfigForm.signal_profiles.entries.push(blankRow(signalProfileFields));
+        addDjConfigRotationEntry(rotation) {
+            this.djConfigForm[rotation.key].entries.push(blankRow(rotation.entryFields));
         },
 
         async openDjConfigEditor(name) {

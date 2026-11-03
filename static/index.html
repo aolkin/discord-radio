@@ -255,17 +255,25 @@
 
                             <div class="section">
                                 <div class="section-title">Voice Channel Status</div>
-                                <!-- biome-ignore lint/a11y/noLabelWithoutControl: the checkbox is nested and the text comes from x-text -->
-                                <label class="checkbox-label">
-                                    <input
-                                        type="checkbox"
-                                        :checked="guild.channel_status_enabled"
-                                        @change="setChannelStatusEnabled(guild.guild_id, $event.target.checked)"
-                                    >
-                                    <span
-                                        x-text="guild.channel_status_enabled ? 'Managed by the DJ' : 'Not managed (left as it is)'"
-                                    ></span>
-                                </label>
+                                <div class="info-item">
+                                    <div class="grow">
+                                        <div
+                                            class="track-name"
+                                            x-text="guild.channel_status.status === null ? 'Unmanaged (left as it is)' : (guild.channel_status.status || 'Cleared')"
+                                        ></div>
+                                        <div
+                                            class="track-details"
+                                            x-text="'Source: ' + guild.channel_status.source"
+                                        ></div>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    class="btn btn-secondary mt-12 w-full"
+                                    @click="openModal('channelStatus', guild.guild_id)"
+                                >
+                                    Change Channel Status
+                                </button>
                             </div>
 
                             <!-- Activity Logs-->
@@ -527,6 +535,36 @@
                     min="0"
                     step="0.1"
                     :placeholder="profileSetting === 'profile-override' ? '2.0' : 'default'"
+                >
+            </div>
+        </template>
+
+        <template
+            x-modal
+            data-modal="channelStatus"
+            data-title="Change Channel Status"
+            data-message="channelStatusMessage"
+            data-submit="changeChannelStatus()"
+            data-saving="channelStatusSaving"
+            data-submit-label="Apply Channel Status"
+            data-busy-label="Applying..."
+        >
+            <div class="form-group">
+                <label class="form-label" for="channel-status-setting">Setting</label>
+                <select id="channel-status-setting" class="form-input" x-model="channelStatusSetting">
+                    <option value="background">Background (replaces rotation)</option>
+                    <option value="override">Override with a fixed status (beats everything)</option>
+                    <option value="unmanaged">Override: leave the channel status unmanaged</option>
+                </select>
+            </div>
+            <div class="form-group" x-show="channelStatusSetting !== 'unmanaged'">
+                <label class="form-label" for="channel-status-text">Status</label>
+                <input
+                    id="channel-status-text"
+                    type="text"
+                    class="form-input"
+                    x-model="channelStatusText"
+                    placeholder="Leave blank to clear"
                 >
             </div>
         </template>
@@ -954,75 +992,80 @@
                 <button type="button" class="btn btn-secondary" @click="addDjConfigPool()">+ Add Pool</button>
             </div>
 
-            <div class="modal-section">
-                <div class="modal-section-title">Signal Profile Rotation</div>
-                <div class="form-row">
-                    <template x-for="field in djConfigSignalProfilesFields" :key="field.key">
-                        <div class="form-group">
-                            <!-- biome-ignore lint/a11y/noLabelWithoutControl: the input is rendered inside the label -->
-                            <label class="form-label">
-                                <span x-text="field.label"></span>
-                                <input
-                                    type="number"
-                                    class="form-input"
-                                    x-model.number="djConfigForm.signal_profiles[field.key]"
-                                    :step="field.step"
-                                    :min="field.min"
-                                    :max="field.max"
-                                    placeholder="Optional"
-                                >
-                            </label>
+            <template x-for="rotation in djConfigRotations" :key="rotation.key">
+                <div class="modal-section">
+                    <div class="modal-section-title" x-text="rotation.label"></div>
+                    <div class="form-row">
+                        <template x-for="field in djConfigRotationFields" :key="field.key">
+                            <div class="form-group">
+                                <!-- biome-ignore lint/a11y/noLabelWithoutControl: the input is rendered inside the label -->
+                                <label class="form-label">
+                                    <span x-text="field.label"></span>
+                                    <input
+                                        type="number"
+                                        class="form-input"
+                                        x-model.number="djConfigForm[rotation.key][field.key]"
+                                        :step="field.step"
+                                        :min="field.min"
+                                        :max="field.max"
+                                        placeholder="Optional"
+                                    >
+                                </label>
+                            </div>
+                        </template>
+                    </div>
+                    <template x-for="(row, index) in djConfigForm[rotation.key].entries" :key="index">
+                        <div class="list-row">
+                            <div class="form-row">
+                                <template x-for="field in rotation.entryFields" :key="field.key">
+                                    <div class="form-group">
+                                        <!-- biome-ignore lint/a11y/noLabelWithoutControl: the input is rendered by a template inside the label -->
+                                        <label class="form-label">
+                                            <span x-text="field.label"></span>
+                                            <template x-if="field.type === 'number'">
+                                                <input
+                                                    type="number"
+                                                    class="form-input"
+                                                    x-model.number="row[field.key]"
+                                                    :step="field.step"
+                                                    :min="field.min"
+                                                    :max="field.max"
+                                                    :required="!field.optional"
+                                                    :placeholder="field.optional ? 'Optional' : ''"
+                                                >
+                                            </template>
+                                            <template x-if="field.type === 'text'">
+                                                <input
+                                                    type="text"
+                                                    class="form-input"
+                                                    x-model="row[field.key]"
+                                                    :list="field.profile ? 'dj-config-profile-options' : null"
+                                                    :required="!field.optional"
+                                                    :placeholder="field.optional ? 'Optional' : ''"
+                                                >
+                                            </template>
+                                        </label>
+                                    </div>
+                                </template>
+                            </div>
+                            <button
+                                type="button"
+                                class="btn btn-secondary"
+                                @click="djConfigForm[rotation.key].entries.splice(index, 1)"
+                            >
+                                Remove
+                            </button>
                         </div>
                     </template>
+                    <div class="empty-state" x-show="djConfigForm[rotation.key].entries.length === 0">No entries</div>
+                    <button
+                        type="button"
+                        class="btn btn-secondary"
+                        @click="addDjConfigRotationEntry(rotation)"
+                        x-text="rotation.addLabel"
+                    ></button>
                 </div>
-                <template x-for="(row, index) in djConfigForm.signal_profiles.entries" :key="index">
-                    <div class="list-row">
-                        <div class="form-row">
-                            <template x-for="field in djConfigSignalProfileFields" :key="field.key">
-                                <div class="form-group">
-                                    <!-- biome-ignore lint/a11y/noLabelWithoutControl: the input is rendered by a template inside the label -->
-                                    <label class="form-label">
-                                        <span x-text="field.label"></span>
-                                        <template x-if="field.type === 'number'">
-                                            <input
-                                                type="number"
-                                                class="form-input"
-                                                x-model.number="row[field.key]"
-                                                :step="field.step"
-                                                :min="field.min"
-                                                :max="field.max"
-                                                :required="!field.optional"
-                                                :placeholder="field.optional ? 'Optional' : ''"
-                                            >
-                                        </template>
-                                        <template x-if="field.type === 'text'">
-                                            <input
-                                                type="text"
-                                                class="form-input"
-                                                x-model="row[field.key]"
-                                                :list="field.profile ? 'dj-config-profile-options' : null"
-                                                :required="!field.optional"
-                                                :placeholder="field.optional ? 'Optional' : ''"
-                                            >
-                                        </template>
-                                    </label>
-                                </div>
-                            </template>
-                        </div>
-                        <button
-                            type="button"
-                            class="btn btn-secondary"
-                            @click="djConfigForm.signal_profiles.entries.splice(index, 1)"
-                        >
-                            Remove
-                        </button>
-                    </div>
-                </template>
-                <div class="empty-state" x-show="djConfigForm.signal_profiles.entries.length === 0">No entries</div>
-                <button type="button" class="btn btn-secondary" @click="addDjConfigSignalProfile()">
-                    + Add Signal Profile
-                </button>
-            </div>
+            </template>
         </template>
 
         <template

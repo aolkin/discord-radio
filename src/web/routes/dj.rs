@@ -1,6 +1,6 @@
 use crate::audio::dj::manager::{DJCommand, DjBusy, IdleRequest, TrackRequest};
 use crate::audio::dj::segments::SignalProfilePlayback;
-use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
+use crate::audio::dj::state_machine::{ChannelStatus, DEFAULT_PROFILE_FADE};
 use crate::state::Data;
 use crate::web::error::{ApiError, WithStatus};
 use anyhow::Context;
@@ -189,20 +189,34 @@ async fn set_dj_profile(
 
 #[derive(Debug, Deserialize)]
 pub struct DjChannelStatusRequest {
-    pub enabled: bool,
+    pub status: Option<String>,
 }
 
-pub async fn set_dj_channel_status(
+pub async fn set_dj_background_channel_status(
     State(bot_state): State<Data>,
     Path(guild_id): Path<GuildId>,
     AxumJson(request): AxumJson<DjChannelStatusRequest>,
 ) -> Result<StatusCode, ApiError> {
-    bot_state
-        .dj_settings
-        .update(guild_id, |settings| {
-            settings.channel_status_disabled = !request.enabled;
-            Ok(())
-        })
-        .await?;
-    Ok(StatusCode::OK)
+    send_dj_command(
+        &bot_state,
+        guild_id,
+        DJCommand::SetBackgroundChannelStatus(request.status),
+    )
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DjChannelStatusOverrideRequest {
+    pub status: Option<ChannelStatus>,
+}
+
+pub async fn set_dj_override_channel_status(
+    State(bot_state): State<Data>,
+    Path(guild_id): Path<GuildId>,
+    AxumJson(request): AxumJson<DjChannelStatusOverrideRequest>,
+) -> Result<StatusCode, ApiError> {
+    send_dj_command(
+        &bot_state,
+        guild_id,
+        DJCommand::SetOverrideChannelStatus(request.status),
+    )
 }
