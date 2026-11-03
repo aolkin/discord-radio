@@ -1,13 +1,11 @@
-use crate::audio::dj::config::{
-    ConfiguredPool, LoadedConfig, PoolEntry, SegmentDefaults, SignalProfileEntry,
-};
+use crate::audio::dj::config::{ConfiguredPool, LoadedConfig, PoolEntry, SegmentDefaults};
 use crate::audio::dj::manager::{
     ADVANCE_RETRY_DELAY, DJCommand, HexMessageRequest, IdleRequest, TrackRequest,
 };
 use crate::audio::dj::segments::{
     Completed, HexSegment, Segment, SignalProfilePlayback, TrackSegment,
 };
-use crate::audio::dj::segments::{NoisePeriodEntry, NoiseSegment, SegmentCtx};
+use crate::audio::dj::segments::{NoiseEntry, NoiseSegment, SegmentCtx};
 use crate::audio::dj::serde::{deser_instant, ser_instant};
 use crate::audio::dj::weighted_choice::WeightedSelector;
 use crate::state::Data;
@@ -182,7 +180,7 @@ pub struct DJStateMachine {
     config: watch::Receiver<Arc<LoadedConfig>>,
     pool_selector: WeightedSelector<ConfiguredPool>,
     entry_selectors: HashMap<String, WeightedSelector<PoolEntry>>,
-    signal_profile_selector: WeightedSelector<SignalProfileEntry>,
+    signal_profile_selector: WeightedSelector<NoiseEntry>,
     applied_profile: Option<(SignalProfilePlayback, ProfileSource)>,
     /// An empty status is how Discord clears it.
     applied_channel_status: Option<String>,
@@ -281,7 +279,9 @@ impl DJStateMachine {
             .choose()
             .unwrap_or(&DEFAULT_SIGNAL_PROFILE)
             .to_owned();
-        let fade = Duration::from_secs_f32(entry.fade_duration_seconds);
+        let fade = entry
+            .fade_duration_seconds
+            .map_or(DEFAULT_PROFILE_FADE, Duration::from_secs_f32);
         let hold_secs =
             rand::rng().random_range(entry.min_duration_seconds..entry.max_duration_seconds);
         self.state.write().await.background_profile = BackgroundProfile::Rotating {
@@ -678,7 +678,7 @@ impl DJStateMachine {
     }
 }
 
-static DEFAULT_NOISE_PERIOD: LazyLock<NoisePeriodEntry> = LazyLock::new(|| NoisePeriodEntry {
+static DEFAULT_NOISE_PERIOD: LazyLock<NoiseEntry> = LazyLock::new(|| NoiseEntry {
     noise_profile: "default".to_string(),
     min_duration_seconds: 2.0,
     max_duration_seconds: 2.0,
@@ -686,11 +686,10 @@ static DEFAULT_NOISE_PERIOD: LazyLock<NoisePeriodEntry> = LazyLock::new(|| Noise
     fade_duration_seconds: None,
 });
 
-static DEFAULT_SIGNAL_PROFILE: LazyLock<SignalProfileEntry> =
-    LazyLock::new(|| SignalProfileEntry {
-        noise_profile: "clear".to_string(),
-        weight: 1,
-        fade_duration_seconds: 3.0,
-        min_duration_seconds: 60.0,
-        max_duration_seconds: 120.0,
-    });
+static DEFAULT_SIGNAL_PROFILE: LazyLock<NoiseEntry> = LazyLock::new(|| NoiseEntry {
+    noise_profile: "clear".to_string(),
+    weight: 1,
+    fade_duration_seconds: Some(3.0),
+    min_duration_seconds: 60.0,
+    max_duration_seconds: 120.0,
+});

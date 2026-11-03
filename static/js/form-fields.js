@@ -4,6 +4,14 @@ export const optionalSeconds = (key, label) => ({ ...seconds(key, label), option
 export const profileText = (key, label, optional = false) => ({ key, label, type: 'text', optional, profile: true });
 export const optionalText = (key, label) => ({ key, label, type: 'text', optional: true });
 
+export const noiseEntryFields = [
+    profileText('noise_profile', 'Noise Profile'),
+    seconds('min_duration_seconds', 'Min Duration (s)'),
+    seconds('max_duration_seconds', 'Max Duration (s)'),
+    weight,
+    optionalSeconds('fade_duration_seconds', 'Fade Duration (s)'),
+];
+
 export const historyPenaltyMultiplier = {
     key: 'history_penalty_multiplier',
     label: 'History penalty multiplier',
