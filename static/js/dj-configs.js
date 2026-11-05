@@ -6,8 +6,7 @@ import {
     fieldFromServer,
     fieldToServer,
     historyPenaltyMultiplier,
-    profileText,
-    seconds,
+    noiseEntryFields,
     segmentDefaultsBlocks,
     segmentDefaultsFromServer,
     segmentDefaultsToServer,
@@ -38,13 +37,7 @@ const poolReferenceFields = [
 
 const signalProfilesFields = [historyPenaltyMultiplier];
 
-const signalProfileFields = [
-    profileText('noise_profile', 'Noise Profile'),
-    weight,
-    seconds('fade_duration_seconds', 'Fade Duration (s)'),
-    seconds('min_duration_seconds', 'Min Duration (s)'),
-    seconds('max_duration_seconds', 'Max Duration (s)'),
-];
+const signalProfileFields = noiseEntryFields;
 
 function toForm(config) {
     return {

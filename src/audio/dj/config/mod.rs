@@ -1,6 +1,6 @@
 use crate::audio::dj::segments::{
-    HexMessageDefaults, HexMessageEntry, HexSegment, NoisePeriodEntry, NoiseSegment, Segment,
-    TrackEntry, TrackSegment, ensure_loops,
+    HexMessageDefaults, HexMessageEntry, HexSegment, NoiseEntry, NoiseSegment, Segment, TrackEntry,
+    TrackSegment, ensure_loops,
 };
 use crate::audio::dj::weighted_choice::{
     Identity, Weighted, WeightedPool, ambassador_impl_Weighted,
@@ -45,12 +45,12 @@ pub struct LoadedConfig {
     pub pools: Arc<[ConfiguredPool]>,
 }
 
-#[field_trait_impl(WeightedPool<SignalProfileEntry>)]
+#[field_trait_impl(WeightedPool<NoiseEntry>)]
 #[derive(Deserialize, Serialize, Debug, Default)]
 pub struct SignalProfiles {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub history_penalty_multiplier: Option<f32>,
-    pub entries: Arc<[SignalProfileEntry]>,
+    pub entries: Arc<[NoiseEntry]>,
 }
 
 #[field_trait_impl(WeightedPool<PoolEntry>)]
@@ -139,7 +139,7 @@ impl RegistryEntry for Pool {
 pub enum PoolEntry {
     Track(TrackEntry),
     Hex(HexMessageEntry),
-    Noise(NoisePeriodEntry),
+    Noise(NoiseEntry),
 }
 
 impl PoolEntry {
@@ -189,27 +189,6 @@ impl PoolEntry {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct SignalProfileEntry {
-    pub noise_profile: String,
-    pub weight: u32,
-    pub fade_duration_seconds: f32,
-    pub min_duration_seconds: f32,
-    pub max_duration_seconds: f32,
-}
-
-#[field_trait_impl]
-impl Weighted for SignalProfileEntry {
-    fn identity(&self) -> Identity {
-        Identity::of((
-            &self.noise_profile,
-            self.fade_duration_seconds.to_bits(),
-            self.min_duration_seconds.to_bits(),
-            self.max_duration_seconds.to_bits(),
-        ))
-    }
-}
-
 impl RegistryEntry for DJConfig {
     const KIND: &'static str = "DJ config";
 
@@ -224,7 +203,9 @@ impl RegistryEntry for DJConfig {
             .context("signal_profiles")?;
         for profile in self.signal_profiles.entries.iter() {
             let context = || format!("signal profile {:?}", profile.noise_profile);
-            ensure_seconds(profile.fade_duration_seconds, context)?;
+            if let Some(seconds) = profile.fade_duration_seconds {
+                ensure_seconds(seconds, context)?;
+            }
             ensure_seconds(profile.min_duration_seconds, context)?;
             if profile.min_duration_seconds >= profile.max_duration_seconds {
                 bail!(

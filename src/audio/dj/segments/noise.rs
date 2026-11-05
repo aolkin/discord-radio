@@ -12,8 +12,8 @@ use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use std::time::{Duration, Instant};
 
-#[derive(Deserialize, Serialize, Debug)]
-pub struct NoisePeriodEntry {
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct NoiseEntry {
     pub noise_profile: String,
     pub min_duration_seconds: f32,
     pub max_duration_seconds: f32,
@@ -22,7 +22,7 @@ pub struct NoisePeriodEntry {
 }
 
 #[field_trait_impl]
-impl Weighted for NoisePeriodEntry {
+impl Weighted for NoiseEntry {
     fn identity(&self) -> Identity {
         Identity::of((
             &self.noise_profile,
@@ -133,7 +133,7 @@ impl Segment for NoiseSegment {
 }
 
 impl NoiseSegment {
-    pub fn from_entry(noise_entry: &NoisePeriodEntry, segment_defaults: &SegmentDefaults) -> Self {
+    pub fn from_entry(noise_entry: &NoiseEntry, segment_defaults: &SegmentDefaults) -> Self {
         let duration_secs = if noise_entry.min_duration_seconds >= noise_entry.max_duration_seconds
         {
             noise_entry.min_duration_seconds

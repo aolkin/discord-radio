@@ -6,10 +6,10 @@ import {
     fieldFromServer,
     fieldToServer,
     historyPenaltyMultiplier,
+    noiseEntryFields,
     optionalSeconds,
     optionalText,
     profileText,
-    seconds,
     segmentDefaultsBlocks,
     segmentDefaultsFromServer,
     segmentDefaultsToServer,
@@ -54,13 +54,7 @@ const kinds = {
     noise: {
         label: 'Noise',
         identifier: 'noise_profile',
-        entryFields: [
-            profileText('noise_profile', 'Noise Profile'),
-            seconds('min_duration_seconds', 'Min Duration (s)'),
-            seconds('max_duration_seconds', 'Max Duration (s)'),
-            weight,
-            optionalSeconds('fade_duration_seconds', 'Fade Duration (s)'),
-        ],
+        entryFields: noiseEntryFields,
     },
 };
 

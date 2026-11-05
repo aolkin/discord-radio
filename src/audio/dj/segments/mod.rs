@@ -4,7 +4,7 @@ mod signals;
 mod track;
 
 pub use hex::{HexMessageDefaults, HexMessageEntry, HexSegment, ensure_loops};
-pub use noise::{NoisePeriodEntry, NoiseSegment};
+pub use noise::{NoiseEntry, NoiseSegment};
 pub use track::{TrackEntry, TrackSegment};
 
 use crate::audio::processing::mixer::{TrackCommand, TrackHandle};
