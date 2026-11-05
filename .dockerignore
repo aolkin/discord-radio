@@ -1,0 +1,14 @@
+target/
+.git/
+.github/
+.claude/
+CLAUDE.md
+node_modules/
+bot-state/
+bucket-cache/
+cache/
+content/
+.env
+.env.*
+Dockerfile
+.dockerignore
