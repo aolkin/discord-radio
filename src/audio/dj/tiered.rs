@@ -1,5 +1,5 @@
 use crate::audio::dj::segments::Completed;
-use crate::audio::dj::serde::{deser_instant, ser_instant};
+use crate::audio::dj::serde::{ShiftBack, deser_instant, ser_instant};
 use crate::audio::dj::weighted_choice::{Weighted, WeightedPool, WeightedSelector};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -62,13 +62,9 @@ impl<T: Clone> Background<T> {
 
     pub fn shift_back(&mut self, by: Duration) {
         if let Self::Rotating { started_at, .. } = self {
-            shift_instant_back(started_at, by);
+            started_at.shift_back(by);
         }
     }
-}
-
-pub fn shift_instant_back(instant: &mut Instant, by: Duration) {
-    *instant = instant.checked_sub(by).unwrap_or_else(Instant::now);
 }
 
 /// Ordered from lowest to highest priority.
@@ -86,26 +82,37 @@ pub struct Resolved<T> {
     pub tier: Tier,
 }
 
-pub fn resolve<T: Clone, U: From<T>>(
-    override_value: Option<U>,
-    segment: Option<T>,
-    background: &Background<T>,
-) -> Resolved<U> {
-    if let Some(value) = override_value {
-        return Resolved {
-            value,
-            tier: Tier::Override,
-        };
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TieredResolver<T, U = T> {
+    pub background: Background<T>,
+    pub override_value: Option<U>,
+}
+
+impl<T: Clone, U: Clone + From<T>> TieredResolver<T, U> {
+    pub fn new(background: Background<T>) -> Self {
+        Self {
+            background,
+            override_value: None,
+        }
     }
-    if let Some(value) = segment {
-        return Resolved {
-            value: value.into(),
-            tier: Tier::Segment,
-        };
-    }
-    Resolved {
-        value: background.value().clone().into(),
-        tier: background.tier(),
+
+    pub fn resolve(&self, segment: Option<T>) -> Resolved<U> {
+        if let Some(value) = &self.override_value {
+            return Resolved {
+                value: value.clone(),
+                tier: Tier::Override,
+            };
+        }
+        if let Some(value) = segment {
+            return Resolved {
+                value: value.into(),
+                tier: Tier::Segment,
+            };
+        }
+        Resolved {
+            value: self.background.value().clone().into(),
+            tier: self.background.tier(),
+        }
     }
 }
 

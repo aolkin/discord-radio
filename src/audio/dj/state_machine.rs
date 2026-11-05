@@ -1,6 +1,3 @@
-use crate::audio::dj::background::{
-    Background, Resolved, Rotation, Tier, resolve, shift_instant_back,
-};
 use crate::audio::dj::config::{ConfiguredPool, LoadedConfig, PoolEntry, SegmentDefaults};
 use crate::audio::dj::manager::{
     ADVANCE_RETRY_DELAY, DJCommand, HexMessageRequest, IdleRequest, TrackRequest,
@@ -9,7 +6,8 @@ use crate::audio::dj::segments::{
     Completed, HexSegment, Segment, SignalProfilePlayback, TrackSegment,
 };
 use crate::audio::dj::segments::{NoiseEntry, NoiseSegment, SegmentCtx};
-use crate::audio::dj::serde::{deser_instant, ser_instant};
+use crate::audio::dj::serde::{ShiftBack, deser_instant, ser_instant};
+use crate::audio::dj::tiered::{Background, Resolved, Rotation, Tier, TieredResolver};
 use crate::audio::dj::weighted_choice::WeightedSelector;
 use crate::state::Data;
 use anyhow::Context;
@@ -71,8 +69,7 @@ impl From<Box<dyn Segment>> for SegmentContainer {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DJState {
     pub segment: SegmentContainer,
-    pub background_profile: Background<SignalProfilePlayback>,
-    pub override_profile: Option<SignalProfilePlayback>,
+    pub profile_tiers: TieredResolver<SignalProfilePlayback>,
     pub override_channel_status: Option<String>,
 }
 
@@ -80,8 +77,7 @@ impl Default for DJState {
     fn default() -> Self {
         Self {
             segment: NoiseSegment::quiet(Duration::from_secs(1)).into(),
-            background_profile: Background::due_now("clear".to_string().into()),
-            override_profile: None,
+            profile_tiers: TieredResolver::new(Background::due_now("clear".to_string().into())),
             override_channel_status: None,
         }
     }
@@ -89,8 +85,8 @@ impl Default for DJState {
 
 impl DJState {
     pub fn shift_back(&mut self, by: Duration) {
-        shift_instant_back(&mut self.segment.started_at, by);
-        self.background_profile.shift_back(by);
+        self.segment.started_at.shift_back(by);
+        self.profile_tiers.background.shift_back(by);
     }
 
     pub fn effective_channel_status(&self) -> Option<String> {
@@ -100,11 +96,7 @@ impl DJState {
     }
 
     pub fn signal_profile(&self) -> Resolved<SignalProfilePlayback> {
-        resolve(
-            self.override_profile.clone(),
-            self.segment.signal_profile(),
-            &self.background_profile,
-        )
+        self.profile_tiers.resolve(self.segment.signal_profile())
     }
 }
 
@@ -180,7 +172,12 @@ impl DJStateMachine {
         'dj: loop {
             self.update_profile().await;
             self.update_channel_status().await;
-            let profile_rotation_due = self.current_state().await.background_profile.completed();
+            let profile_rotation_due = self
+                .current_state()
+                .await
+                .profile_tiers
+                .background
+                .completed();
             self.persist_state(false).await;
             let mut config = self.config.clone();
 
@@ -200,7 +197,7 @@ impl DJStateMachine {
                 }
                 _ = profile_rotation_due => {
                     self.profile_rotation
-                        .step(&mut self.state.write().await.background_profile);
+                        .step(&mut self.state.write().await.profile_tiers.background);
                 }
                 Ok(()) = config.changed() => {
                     let loaded = self.config.borrow_and_update().clone();
@@ -563,12 +560,13 @@ impl DJStateMachine {
                 self.state
                     .write()
                     .await
-                    .background_profile
+                    .profile_tiers
+                    .background
                     .set_manual(profile);
                 Ok(())
             }
             DJCommand::SetOverrideProfile(profile_override) => {
-                self.state.write().await.override_profile = profile_override;
+                self.state.write().await.profile_tiers.override_value = profile_override;
                 Ok(())
             }
         };

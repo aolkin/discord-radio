@@ -1,9 +1,9 @@
-use crate::audio::dj::background::RotationEntry;
 use crate::audio::dj::segments::{
     HexMessageDefaults, HexMessageEntry, HexSegment, NoiseEntry, NoiseSegment, Segment,
     SignalProfilePlayback, TrackEntry, TrackSegment, ensure_loops,
 };
 use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
+use crate::audio::dj::tiered::RotationEntry;
 use crate::audio::dj::weighted_choice::{
     Identity, Weighted, WeightedPool, ambassador_impl_Weighted,
 };

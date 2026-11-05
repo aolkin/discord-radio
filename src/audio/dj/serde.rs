@@ -15,5 +15,17 @@ where
     D: Deserializer<'de>,
 {
     let age = Duration::deserialize(deserializer)?;
-    Ok(Instant::now().checked_sub(age).unwrap_or_else(Instant::now))
+    let mut instant = Instant::now();
+    instant.shift_back(age);
+    Ok(instant)
+}
+
+pub trait ShiftBack {
+    fn shift_back(&mut self, by: Duration);
+}
+
+impl ShiftBack for Instant {
+    fn shift_back(&mut self, by: Duration) {
+        *self = self.checked_sub(by).unwrap_or_else(Instant::now);
+    }
 }
