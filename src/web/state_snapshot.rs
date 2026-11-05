@@ -71,14 +71,10 @@ impl BotSnapshot {
                 })
                 .collect();
 
-            let (dj_state, expected_name, source) = {
+            let (dj_state, profile) = {
                 let dj_state_lock = guild.dj_manager.state();
                 let state = dj_state_lock.read().await;
-                (
-                    dj_state_to_info(&state),
-                    state.effective_profile().name,
-                    state.profile_source().to_string(),
-                )
+                (dj_state_to_info(&state), state.signal_profile())
             };
 
             // Get audio profile info
@@ -87,9 +83,9 @@ impl BotSnapshot {
 
             let audio_profile = AudioProfileInfo {
                 name: profile_name,
-                expected_name,
+                expected_name: profile.value.name,
                 transitioning: processor.is_transitioning(),
-                source,
+                source: profile.tier.to_string(),
             };
 
             guilds.push(GuildState {

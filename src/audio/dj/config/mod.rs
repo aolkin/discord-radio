@@ -1,7 +1,9 @@
+use crate::audio::dj::background::RotationEntry;
 use crate::audio::dj::segments::{
-    HexMessageDefaults, HexMessageEntry, HexSegment, NoiseEntry, NoiseSegment, Segment, TrackEntry,
-    TrackSegment, ensure_loops,
+    HexMessageDefaults, HexMessageEntry, HexSegment, NoiseEntry, NoiseSegment, Segment,
+    SignalProfilePlayback, TrackEntry, TrackSegment, ensure_loops,
 };
+use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
 use crate::audio::dj::weighted_choice::{
     Identity, Weighted, WeightedPool, ambassador_impl_Weighted,
 };
@@ -10,10 +12,12 @@ use crate::state::Data;
 use ambassador::Delegate;
 use anyhow::{Context, bail};
 use field_trait::field_trait_impl;
+use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::sync::{Arc, LazyLock};
+use std::time::Duration;
 
 pub mod registry;
 
@@ -187,6 +191,26 @@ impl PoolEntry {
             PoolEntry::Noise(noise) => Box::new(NoiseSegment::from_entry(noise, segment_defaults)),
         }
     }
+}
+
+impl RotationEntry for NoiseEntry {
+    type Value = SignalProfilePlayback;
+
+    fn pick(&self) -> (SignalProfilePlayback, Duration) {
+        let fade = self
+            .fade_duration_seconds
+            .map_or(DEFAULT_PROFILE_FADE, Duration::from_secs_f32);
+        let profile = SignalProfilePlayback {
+            fade_in_duration: Some(fade),
+            ..self.noise_profile.clone().into()
+        };
+        let hold = random_seconds(self.min_duration_seconds, self.max_duration_seconds);
+        (profile, fade + hold)
+    }
+}
+
+fn random_seconds(min: f32, max: f32) -> Duration {
+    Duration::from_secs_f32(rand::rng().random_range(min..max))
 }
 
 impl RegistryEntry for DJConfig {

@@ -1,3 +1,6 @@
+use crate::audio::dj::background::{
+    Background, Resolved, Rotation, Tier, resolve, shift_instant_back,
+};
 use crate::audio::dj::config::{ConfiguredPool, LoadedConfig, PoolEntry, SegmentDefaults};
 use crate::audio::dj::manager::{
     ADVANCE_RETRY_DELAY, DJCommand, HexMessageRequest, IdleRequest, TrackRequest,
@@ -66,53 +69,9 @@ impl From<Box<dyn Segment>> for SegmentContainer {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub enum BackgroundProfile {
-    Manual(SignalProfilePlayback),
-    Rotating {
-        profile: SignalProfilePlayback,
-        #[serde(serialize_with = "ser_instant", deserialize_with = "deser_instant")]
-        started_at: Instant,
-        duration: Duration,
-    },
-}
-
-impl BackgroundProfile {
-    pub fn completed(&self) -> Completed {
-        match self {
-            Self::Manual(_) => Completed::never(),
-            Self::Rotating {
-                started_at,
-                duration,
-                ..
-            } => Completed::at(*started_at + *duration),
-        }
-    }
-}
-
-impl Default for BackgroundProfile {
-    fn default() -> Self {
-        Self::Rotating {
-            profile: "clear".to_string().into(),
-            started_at: Instant::now(),
-            duration: Duration::ZERO,
-        }
-    }
-}
-
-/// Ordered from lowest to highest priority.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, strum::Display)]
-#[strum(serialize_all = "lowercase")]
-pub enum ProfileSource {
-    Rotating,
-    Manual,
-    Forced,
-    Override,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 pub struct DJState {
     pub segment: SegmentContainer,
-    pub background_profile: BackgroundProfile,
+    pub background_profile: Background<SignalProfilePlayback>,
     pub override_profile: Option<SignalProfilePlayback>,
     pub override_channel_status: Option<String>,
 }
@@ -121,7 +80,7 @@ impl Default for DJState {
     fn default() -> Self {
         Self {
             segment: NoiseSegment::quiet(Duration::from_secs(1)).into(),
-            background_profile: BackgroundProfile::default(),
+            background_profile: Background::due_now("clear".to_string().into()),
             override_profile: None,
             override_channel_status: None,
         }
@@ -130,13 +89,8 @@ impl Default for DJState {
 
 impl DJState {
     pub fn shift_back(&mut self, by: Duration) {
-        let shift = |instant: &mut Instant| {
-            *instant = instant.checked_sub(by).unwrap_or_else(Instant::now);
-        };
-        shift(&mut self.segment.started_at);
-        if let BackgroundProfile::Rotating { started_at, .. } = &mut self.background_profile {
-            shift(started_at);
-        }
+        shift_instant_back(&mut self.segment.started_at, by);
+        self.background_profile.shift_back(by);
     }
 
     pub fn effective_channel_status(&self) -> Option<String> {
@@ -145,30 +99,12 @@ impl DJState {
             .or_else(|| self.segment.channel_status())
     }
 
-    pub fn effective_profile(&self) -> SignalProfilePlayback {
-        if let Some(profile) = &self.override_profile {
-            return profile.clone();
-        }
-        if let Some(forced) = self.segment.signal_profile() {
-            return forced;
-        }
-        match &self.background_profile {
-            BackgroundProfile::Manual(profile) | BackgroundProfile::Rotating { profile, .. } => {
-                profile.clone()
-            }
-        }
-    }
-
-    pub fn profile_source(&self) -> ProfileSource {
-        if self.override_profile.is_some() {
-            ProfileSource::Override
-        } else if self.segment.signal_profile().is_some() {
-            ProfileSource::Forced
-        } else if let BackgroundProfile::Manual(_) = self.background_profile {
-            ProfileSource::Manual
-        } else {
-            ProfileSource::Rotating
-        }
+    pub fn signal_profile(&self) -> Resolved<SignalProfilePlayback> {
+        resolve(
+            self.override_profile.clone(),
+            self.segment.signal_profile(),
+            &self.background_profile,
+        )
     }
 }
 
@@ -180,8 +116,8 @@ pub struct DJStateMachine {
     config: watch::Receiver<Arc<LoadedConfig>>,
     pool_selector: WeightedSelector<ConfiguredPool>,
     entry_selectors: HashMap<String, WeightedSelector<PoolEntry>>,
-    signal_profile_selector: WeightedSelector<NoiseEntry>,
-    applied_profile: Option<(SignalProfilePlayback, ProfileSource)>,
+    profile_rotation: Rotation<NoiseEntry>,
+    applied_profile: Option<(SignalProfilePlayback, Tier)>,
     /// An empty status is how Discord clears it.
     applied_channel_status: Option<String>,
 }
@@ -230,7 +166,7 @@ impl DJStateMachine {
             config,
             pool_selector: WeightedSelector::new(Arc::default(), None),
             entry_selectors: HashMap::new(),
-            signal_profile_selector: WeightedSelector::new(Arc::default(), None),
+            profile_rotation: Rotation::new(&DEFAULT_SIGNAL_PROFILE),
             applied_profile: None,
             applied_channel_status: None,
         };
@@ -244,7 +180,7 @@ impl DJStateMachine {
         'dj: loop {
             self.update_profile().await;
             self.update_channel_status().await;
-            let rotation_due = self.current_state().await.background_profile.completed();
+            let profile_rotation_due = self.current_state().await.background_profile.completed();
             self.persist_state(false).await;
             let mut config = self.config.clone();
 
@@ -262,7 +198,10 @@ impl DJStateMachine {
                         tokio::time::sleep(ADVANCE_RETRY_DELAY).await;
                     }
                 }
-                _ = rotation_due => self.rotate_profile().await,
+                _ = profile_rotation_due => {
+                    self.profile_rotation
+                        .step(&mut self.state.write().await.background_profile);
+                }
                 Ok(()) = config.changed() => {
                     let loaded = self.config.borrow_and_update().clone();
                     self.set_config(&loaded);
@@ -273,32 +212,11 @@ impl DJStateMachine {
         tracing::info!("DJ task terminated");
     }
 
-    async fn rotate_profile(&mut self) {
-        let entry = self
-            .signal_profile_selector
-            .choose()
-            .unwrap_or(&DEFAULT_SIGNAL_PROFILE)
-            .to_owned();
-        let fade = entry
-            .fade_duration_seconds
-            .map_or(DEFAULT_PROFILE_FADE, Duration::from_secs_f32);
-        let hold_secs =
-            rand::rng().random_range(entry.min_duration_seconds..entry.max_duration_seconds);
-        self.state.write().await.background_profile = BackgroundProfile::Rotating {
-            profile: SignalProfilePlayback {
-                fade_in_duration: Some(fade),
-                ..entry.noise_profile.into()
-            },
-            started_at: Instant::now(),
-            duration: fade + Duration::from_secs_f32(hold_secs),
-        };
-    }
-
     async fn update_profile(&mut self) {
-        let state = self.state.read().await;
-        let source = state.profile_source();
-        let target = state.effective_profile();
-        drop(state);
+        let Resolved {
+            value: target,
+            tier: source,
+        } = self.state.read().await.signal_profile();
 
         let previous = self.applied_profile.as_ref();
         if previous.map(|(p, _)| &p.name) != Some(&target.name) {
@@ -488,8 +406,7 @@ impl DJStateMachine {
         }
         self.pool_selector
             .reconfigure(pools.clone(), config.pool_history_penalty_multiplier);
-        self.signal_profile_selector
-            .set_pool(&config.signal_profiles);
+        self.profile_rotation.set_pool(&config.signal_profiles);
     }
 
     pub async fn force_hex_message(
@@ -643,14 +560,11 @@ impl DJStateMachine {
                 Ok(())
             }
             DJCommand::SetBackgroundProfile(profile) => {
-                let mut state = self.state.write().await;
-                match profile {
-                    Some(profile) => state.background_profile = BackgroundProfile::Manual(profile),
-                    None if matches!(state.background_profile, BackgroundProfile::Manual(_)) => {
-                        state.background_profile = BackgroundProfile::default();
-                    }
-                    None => {}
-                }
+                self.state
+                    .write()
+                    .await
+                    .background_profile
+                    .set_manual(profile);
                 Ok(())
             }
             DJCommand::SetOverrideProfile(profile_override) => {
