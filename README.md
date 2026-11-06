@@ -4,13 +4,12 @@ A Discord bot built with Rust using Serenity and Songbird for voice functionalit
 
 ## Features
 
-The bot turns a voice channel into a radio station that runs by itself.
-
-- Chooses what to play next from audio files the server uploads, steering away from whatever played recently.
-- Puts written messages on the air as repeating audio transmissions, between recorded tracks and stretches of quiet.
-- Gives everything the sound of a weak signal, with static, dropouts and wobble that ease from one setting to the next.
-- Posts announcements in a chosen text channel and can set the voice channel status line to match.
-- Picks up where it left off after a restart, and a web page lets admins change every setting live.
+- Broadcast an automated "radio station" into a Discord voice channel.
+- Shuffle across uploaded audio files with repeat avoidance.
+- Play messages as read-aloud voicing of their hexadecimal ASCII encoding.
+- Add static and signal processing to simulate an intermittent or weak connection.
+- Dynamically update the voice channel status based on the currently playing segment.
+- Post "announcements" to a text channel at the start of selected segments.
 
 ## Prerequisites
 
