@@ -31,13 +31,6 @@ impl<T: Clone> Background<T> {
         }
     }
 
-    pub fn tier(&self) -> Tier {
-        match self {
-            Self::Manual(_) => Tier::Manual,
-            Self::Rotating { .. } => Tier::Rotating,
-        }
-    }
-
     pub fn completed(&self) -> Completed {
         match self {
             Self::Manual(_) => Completed::never(),
@@ -109,9 +102,13 @@ impl<T: Clone, U: Clone + From<T>> TieredResolver<T, U> {
                 tier: Tier::Segment,
             };
         }
+        let tier = match self.background {
+            Background::Manual(_) => Tier::Manual,
+            Background::Rotating { .. } => Tier::Rotating,
+        };
         Resolved {
             value: self.background.value().clone().into(),
-            tier: self.background.tier(),
+            tier,
         }
     }
 }
