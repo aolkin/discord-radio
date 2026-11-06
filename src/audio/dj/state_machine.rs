@@ -7,7 +7,7 @@ use crate::audio::dj::segments::{
 };
 use crate::audio::dj::segments::{NoiseEntry, NoiseSegment, SegmentCtx};
 use crate::audio::dj::serde::{ShiftBack, deser_instant, ser_instant};
-use crate::audio::dj::tiered::{Background, Resolved, Rotation, Tier, TieredResolver};
+use crate::audio::dj::tiered::{Resolved, Rotation, Tier, TieredResolver};
 use crate::audio::dj::weighted_choice::WeightedSelector;
 use crate::state::Data;
 use anyhow::Context;
@@ -69,7 +69,7 @@ impl From<Box<dyn Segment>> for SegmentContainer {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DJState {
     pub segment: SegmentContainer,
-    pub profile_tiers: TieredResolver<SignalProfilePlayback>,
+    pub profile_tiers: TieredResolver<NoiseEntry>,
     pub override_channel_status: Option<String>,
 }
 
@@ -77,7 +77,7 @@ impl Default for DJState {
     fn default() -> Self {
         Self {
             segment: NoiseSegment::quiet(Duration::from_secs(1)).into(),
-            profile_tiers: TieredResolver::new(Background::due_now("clear".to_string().into())),
+            profile_tiers: TieredResolver::new(Rotation::new("clear".to_string().into())),
             override_channel_status: None,
         }
     }
@@ -86,7 +86,7 @@ impl Default for DJState {
 impl DJState {
     pub fn shift_back(&mut self, by: Duration) {
         self.segment.started_at.shift_back(by);
-        self.profile_tiers.background.shift_back(by);
+        self.profile_tiers.rotation.shift_back(by);
     }
 
     pub fn effective_channel_status(&self) -> Option<String> {
@@ -108,7 +108,6 @@ pub struct DJStateMachine {
     config: watch::Receiver<Arc<LoadedConfig>>,
     pool_selector: WeightedSelector<ConfiguredPool>,
     entry_selectors: HashMap<String, WeightedSelector<PoolEntry>>,
-    profile_rotation: Rotation<NoiseEntry>,
     applied_profile: Option<(SignalProfilePlayback, Tier)>,
     /// An empty status is how Discord clears it.
     applied_channel_status: Option<String>,
@@ -158,11 +157,10 @@ impl DJStateMachine {
             config,
             pool_selector: WeightedSelector::new(Arc::default(), None),
             entry_selectors: HashMap::new(),
-            profile_rotation: Rotation::new(&DEFAULT_SIGNAL_PROFILE),
             applied_profile: None,
             applied_channel_status: None,
         };
-        state_machine.set_config(&loaded);
+        state_machine.set_config(&loaded).await;
         state_machine
     }
 
@@ -176,7 +174,7 @@ impl DJStateMachine {
                 .current_state()
                 .await
                 .profile_tiers
-                .background
+                .rotation
                 .completed();
             self.persist_state(false).await;
             let mut config = self.config.clone();
@@ -196,12 +194,11 @@ impl DJStateMachine {
                     }
                 }
                 _ = profile_rotation_due => {
-                    self.profile_rotation
-                        .step(&mut self.state.write().await.profile_tiers.background);
+                    self.state.write().await.profile_tiers.rotation.step();
                 }
                 Ok(()) = config.changed() => {
                     let loaded = self.config.borrow_and_update().clone();
-                    self.set_config(&loaded);
+                    self.set_config(&loaded).await;
                 }
             }
         }
@@ -390,7 +387,7 @@ impl DJStateMachine {
         })
     }
 
-    fn set_config(&mut self, LoadedConfig { config, pools }: &LoadedConfig) {
+    async fn set_config(&mut self, LoadedConfig { config, pools }: &LoadedConfig) {
         self.entry_selectors
             .retain(|name, _| pools.iter().any(|pool| pool.file.name == *name));
         for pool in pools.iter() {
@@ -403,7 +400,12 @@ impl DJStateMachine {
         }
         self.pool_selector
             .reconfigure(pools.clone(), config.pool_history_penalty_multiplier);
-        self.profile_rotation.set_pool(&config.signal_profiles);
+        self.state
+            .write()
+            .await
+            .profile_tiers
+            .rotation
+            .set_pool(&config.signal_profiles);
     }
 
     pub async fn force_hex_message(
@@ -548,7 +550,7 @@ impl DJStateMachine {
                 let loaded = config.borrow_and_update().clone();
                 tracing::info!("DJ switching to config {:?}", loaded.config.name);
                 self.config = config;
-                self.set_config(&loaded);
+                self.set_config(&loaded).await;
                 Ok(())
             }
             DJCommand::SetAnnouncementChannel(new_channel) => {
@@ -561,7 +563,7 @@ impl DJStateMachine {
                     .write()
                     .await
                     .profile_tiers
-                    .background
+                    .rotation
                     .set_manual(profile);
                 Ok(())
             }
@@ -596,12 +598,4 @@ static DEFAULT_NOISE_PERIOD: LazyLock<NoiseEntry> = LazyLock::new(|| NoiseEntry 
     max_duration_seconds: 2.0,
     weight: 1,
     fade_duration_seconds: None,
-});
-
-static DEFAULT_SIGNAL_PROFILE: LazyLock<NoiseEntry> = LazyLock::new(|| NoiseEntry {
-    noise_profile: "clear".to_string(),
-    weight: 1,
-    fade_duration_seconds: Some(3.0),
-    min_duration_seconds: 60.0,
-    max_duration_seconds: 120.0,
 });

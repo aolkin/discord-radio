@@ -193,8 +193,20 @@ impl PoolEntry {
     }
 }
 
+static DEFAULT_SIGNAL_PROFILE: LazyLock<NoiseEntry> = LazyLock::new(|| NoiseEntry {
+    noise_profile: "clear".to_string(),
+    weight: 1,
+    fade_duration_seconds: Some(3.0),
+    min_duration_seconds: 60.0,
+    max_duration_seconds: 120.0,
+});
+
 impl RotationEntry for NoiseEntry {
     type Value = SignalProfilePlayback;
+
+    fn fallback() -> &'static Self {
+        &DEFAULT_SIGNAL_PROFILE
+    }
 
     fn pick(&self) -> (SignalProfilePlayback, Duration) {
         let fade = self

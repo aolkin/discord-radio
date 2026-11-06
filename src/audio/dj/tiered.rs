@@ -1,7 +1,9 @@
 use crate::audio::dj::segments::Completed;
 use crate::audio::dj::serde::{ShiftBack, deser_instant, ser_instant};
 use crate::audio::dj::weighted_choice::{Weighted, WeightedPool, WeightedSelector};
-use serde::{Deserialize, Serialize};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::fmt::{self, Debug, Formatter};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -22,12 +24,6 @@ impl<T: Clone> Background<T> {
             value,
             started_at: Instant::now(),
             duration: Duration::ZERO,
-        }
-    }
-
-    pub fn value(&self) -> &T {
-        match self {
-            Self::Manual(value) | Self::Rotating { value, .. } => value,
         }
     }
 
@@ -76,20 +72,21 @@ pub struct Resolved<T> {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct TieredResolver<T, U = T> {
-    pub background: Background<T>,
+#[serde(bound(serialize = "U: Serialize", deserialize = "U: Deserialize<'de>"))]
+pub struct TieredResolver<E: RotationEntry, U = <E as RotationEntry>::Value> {
+    pub rotation: Rotation<E>,
     pub override_value: Option<U>,
 }
 
-impl<T: Clone, U: Clone + From<T>> TieredResolver<T, U> {
-    pub fn new(background: Background<T>) -> Self {
+impl<E: RotationEntry, U: Clone + From<E::Value>> TieredResolver<E, U> {
+    pub fn new(rotation: Rotation<E>) -> Self {
         Self {
-            background,
+            rotation,
             override_value: None,
         }
     }
 
-    pub fn resolve(&self, segment: Option<T>) -> Resolved<U> {
+    pub fn resolve(&self, segment: Option<E::Value>) -> Resolved<U> {
         if let Some(value) = &self.override_value {
             return Resolved {
                 value: value.clone(),
@@ -102,46 +99,88 @@ impl<T: Clone, U: Clone + From<T>> TieredResolver<T, U> {
                 tier: Tier::Segment,
             };
         }
-        let tier = match self.background {
-            Background::Manual(_) => Tier::Manual,
-            Background::Rotating { .. } => Tier::Rotating,
+        let (value, tier) = match self.rotation.background() {
+            Background::Manual(value) => (value, Tier::Manual),
+            Background::Rotating { value, .. } => (value, Tier::Rotating),
         };
         Resolved {
-            value: self.background.value().clone().into(),
+            value: value.clone().into(),
             tier,
         }
     }
 }
 
-pub trait RotationEntry: Weighted + 'static {
-    type Value: Clone;
+pub trait RotationEntry: Weighted + Sized + 'static {
+    type Value: Clone + Debug + Serialize + DeserializeOwned;
+
+    fn fallback() -> &'static Self;
 
     fn pick(&self) -> (Self::Value, Duration);
 }
 
-pub struct Rotation<E: 'static> {
+pub struct Rotation<E: RotationEntry> {
+    background: Background<E::Value>,
     selector: WeightedSelector<E>,
-    fallback: &'static E,
 }
 
 impl<E: RotationEntry> Rotation<E> {
-    pub fn new(fallback: &'static E) -> Self {
-        Self {
-            selector: WeightedSelector::new(Arc::default(), None),
-            fallback,
-        }
+    pub fn new(initial: E::Value) -> Self {
+        Self::from(Background::due_now(initial))
+    }
+
+    pub fn background(&self) -> &Background<E::Value> {
+        &self.background
+    }
+
+    pub fn completed(&self) -> Completed {
+        self.background.completed()
+    }
+
+    pub fn set_manual(&mut self, value: Option<E::Value>) {
+        self.background.set_manual(value);
+    }
+
+    pub fn shift_back(&mut self, by: Duration) {
+        self.background.shift_back(by);
     }
 
     pub fn set_pool<P: WeightedPool<E>>(&mut self, pool: &P) {
         self.selector.set_pool(pool);
     }
 
-    pub fn step(&mut self, background: &mut Background<E::Value>) {
-        let (value, duration) = self.selector.choose().unwrap_or(self.fallback).pick();
-        *background = Background::Rotating {
+    pub fn step(&mut self) {
+        let (value, duration) = self.selector.choose().unwrap_or(E::fallback()).pick();
+        self.background = Background::Rotating {
             value,
             started_at: Instant::now(),
             duration,
         };
+    }
+}
+
+impl<E: RotationEntry> From<Background<E::Value>> for Rotation<E> {
+    fn from(background: Background<E::Value>) -> Self {
+        Self {
+            background,
+            selector: WeightedSelector::new(Arc::default(), None),
+        }
+    }
+}
+
+impl<E: RotationEntry> Debug for Rotation<E> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.background.fmt(f)
+    }
+}
+
+impl<E: RotationEntry> Serialize for Rotation<E> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.background.serialize(serializer)
+    }
+}
+
+impl<'de, E: RotationEntry> Deserialize<'de> for Rotation<E> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Background::deserialize(deserializer).map(Self::from)
     }
 }
