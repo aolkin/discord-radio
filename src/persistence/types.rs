@@ -52,6 +52,6 @@ pub struct RegisteredChannel {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ActivityState {
-    pub activity_type: String,
+    pub activity_type: crate::activity::ActivityType,
     pub status: String,
 }

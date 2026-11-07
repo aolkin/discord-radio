@@ -1,36 +1,30 @@
-use std::fmt::{Display, Formatter};
+use serde::{Deserialize, Serialize};
 use std::sync::{Arc, OnceLock};
 use tokio::sync::RwLock;
 
 /// Activity type enum that supports equality comparison
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    strum::Display,
+    poise::ChoiceParameter,
+)]
+#[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
 pub enum ActivityType {
+    #[name = "listening"]
     Listening,
+    #[name = "playing"]
     Playing,
+    #[name = "streaming"]
     Streaming,
+    #[name = "custom"]
     Custom,
-}
-
-impl ActivityType {
-    pub fn from_str(s: &str) -> Self {
-        match s {
-            "listening" => ActivityType::Listening,
-            "playing" => ActivityType::Playing,
-            "streaming" => ActivityType::Streaming,
-            _ => ActivityType::Custom,
-        }
-    }
-}
-
-impl Display for ActivityType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ActivityType::Listening => write!(f, "listening"),
-            ActivityType::Playing => write!(f, "playing"),
-            ActivityType::Streaming => write!(f, "streaming"),
-            ActivityType::Custom => write!(f, "custom"),
-        }
-    }
 }
 
 /// Activity type and status text
@@ -103,7 +97,7 @@ impl ActivityManager {
 
         self.update_activity(Some(&entry));
         let state = crate::persistence::ActivityState {
-            activity_type: entry.activity_type.to_string(),
+            activity_type: entry.activity_type,
             status: entry.status,
         };
         if let Err(e) = self.state_store.save_activity_state(Some(&state)).await {
@@ -121,10 +115,7 @@ impl ActivityManager {
             tracing::info!("No saved activity state found");
             return Ok(());
         };
-        let entry = ActivityEntry::new(
-            ActivityType::from_str(&saved_state.activity_type),
-            saved_state.status,
-        );
+        let entry = ActivityEntry::new(saved_state.activity_type, saved_state.status);
         *self.current.write().await = Some(entry.clone());
         self.update_activity(Some(&entry));
         tracing::info!("Restored activity state from disk");

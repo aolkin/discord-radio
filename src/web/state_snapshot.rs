@@ -43,7 +43,7 @@ pub struct BotSnapshot {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CurrentActivity {
-    pub activity_type: String,
+    pub activity_type: crate::activity::ActivityType,
     pub status: String,
 }
 
@@ -95,18 +95,15 @@ impl BotSnapshot {
         }
 
         // Get current bot activity
-        let current_activity = bot_state.activity_manager.current().await.map(|entry| {
-            let activity_type = match entry.activity_type {
-                crate::activity::ActivityType::Listening => "listening",
-                crate::activity::ActivityType::Playing => "playing",
-                crate::activity::ActivityType::Streaming => "streaming",
-                crate::activity::ActivityType::Custom => "custom",
-            };
-            CurrentActivity {
-                activity_type: activity_type.to_string(),
-                status: entry.status,
-            }
-        });
+        let current_activity =
+            bot_state
+                .activity_manager
+                .current()
+                .await
+                .map(|entry| CurrentActivity {
+                    activity_type: entry.activity_type,
+                    status: entry.status,
+                });
 
         BotSnapshot {
             guilds,
