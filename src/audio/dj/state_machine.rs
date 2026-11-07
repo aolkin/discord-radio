@@ -82,7 +82,7 @@ fn deser_signal_profile<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<TieredStateMachine<NoiseEntry, SignalProfilePlayback>, D::Error> {
     TieredValueState::deserialize(deserializer)
-        .map(|state| TieredStateMachine::restore(state, &DEFAULT_SIGNAL_PROFILE))
+        .map(|state| TieredStateMachine::restore(state, &*DEFAULT_SIGNAL_PROFILE))
 }
 
 impl Default for DJState {
@@ -91,7 +91,7 @@ impl Default for DJState {
             segment: NoiseSegment::quiet(Duration::from_secs(1)).into(),
             signal_profile: TieredStateMachine::new(
                 "clear".to_string().into(),
-                &DEFAULT_SIGNAL_PROFILE,
+                &*DEFAULT_SIGNAL_PROFILE,
             ),
             override_channel_status: None,
         }
