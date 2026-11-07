@@ -1,5 +1,6 @@
+use crate::activity::ActivityType;
 use crate::commands::utils::{Context, require_guild};
-use anyhow::{Context as _, bail};
+use anyhow::Context as _;
 use poise::serenity_prelude as serenity;
 
 pub fn build_message(
@@ -95,9 +96,9 @@ pub async fn register_channel(
 pub async fn set_status(
     ctx: Context<'_>,
     #[description = "Custom status text"] status: String,
-    #[description = "Activity type (listening, playing, streaming, or custom)"]
+    #[description = "Activity type (defaults to custom)"]
     #[rename = "type"]
-    activity_type: Option<String>,
+    activity_type: Option<ActivityType>,
 ) -> anyhow::Result<()> {
     let user_id = ctx.author().id;
 
@@ -109,25 +110,14 @@ pub async fn set_status(
 
     ctx.defer_ephemeral().await?;
 
-    // Parse the activity type
-    let activity_type_enum = match activity_type.as_deref() {
-        Some("listening") => crate::activity::ActivityType::Listening,
-        Some("playing") => crate::activity::ActivityType::Playing,
-        Some("streaming") => crate::activity::ActivityType::Streaming,
-        Some("custom") | None => crate::activity::ActivityType::Custom,
-        Some(invalid) => bail!(
-            "Invalid activity type '{}'. Valid types: listening, playing, streaming, custom",
-            invalid
-        ),
-    };
+    let activity_type = activity_type.unwrap_or(ActivityType::Custom);
 
     ctx.data()
         .activity_manager
-        .set_activity(activity_type_enum, status.clone())
+        .set_activity(activity_type, status.clone())
         .await;
 
-    let type_str = activity_type.as_deref().unwrap_or("custom");
-    ctx.say(format!("Status set to: {} ({})", status, type_str))
+    ctx.say(format!("Status set to: {} ({})", status, activity_type))
         .await?;
 
     Ok(())
