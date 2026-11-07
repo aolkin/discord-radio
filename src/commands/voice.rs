@@ -737,18 +737,14 @@ pub async fn override_channel_status(
             ctx.say("The fixed mode needs a status").await?;
             return Ok(());
         }
-        (_, Some(_)) => {
-            ctx.say("A status only applies to the fixed mode").await?;
-            return Ok(());
-        }
-        (ChannelStatusOverrideMode::Unmanaged, None) => (
+        (ChannelStatusOverrideMode::Unmanaged, _) => (
             Some(ChannelStatus::Unmanaged),
             format!(
                 "DJ channel status override set to unmanaged{}; the current status stays as it is",
                 for_duration(duration)
             ),
         ),
-        (ChannelStatusOverrideMode::Clear, None) => {
+        (ChannelStatusOverrideMode::Clear, _) => {
             (None, "DJ channel status override cleared".to_string())
         }
     };
