@@ -111,6 +111,7 @@ async fn bucket(cache_dir: PathBuf, backend: Arc<dyn ObjectBackend>) -> Bucket {
     let policy = EvictionPolicy {
         entry_ttl: None,
         max_bytes: None,
+        sweep_interval: Duration::from_secs(300),
     };
     Bucket::build(cache_dir, backend, policy).await.unwrap()
 }
@@ -193,6 +194,7 @@ async fn new_deletes_a_file_unread_for_longer_than_the_ttl() {
         EvictionPolicy {
             entry_ttl: Some(Duration::from_secs(600)),
             max_bytes: None,
+            sweep_interval: Duration::from_secs(300),
         },
     )
     .await

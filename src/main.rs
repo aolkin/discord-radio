@@ -173,9 +173,20 @@ async fn main() -> anyhow::Result<()> {
         .filter(|bytes| *bytes > 0);
     tracing::info!("Using file cache max bytes: {:?}", file_cache_max_bytes);
 
+    let file_cache_sweep_interval_secs = std::env::var("FILE_CACHE_SWEEP_INTERVAL_SECS")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .filter(|secs| *secs > 0)
+        .unwrap_or(5 * 60);
+    tracing::info!(
+        "Using file cache sweep interval: {}s",
+        file_cache_sweep_interval_secs
+    );
+
     let file_cache_policy = bucket::EvictionPolicy {
         entry_ttl: file_cache_ttl,
         max_bytes: file_cache_max_bytes,
+        sweep_interval: Duration::from_secs(file_cache_sweep_interval_secs),
     };
 
     let bucket = match bucket {

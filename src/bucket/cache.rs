@@ -1,5 +1,6 @@
 use anyhow::{Context, anyhow, bail};
 use async_trait::async_trait;
+use rand::RngExt;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -24,7 +25,7 @@ const MAX_TRACKED_LISTINGS: u64 = 1_000;
 
 const TEMP_SUFFIX: &str = ".tmp";
 
-const SWEEP_INTERVAL: Duration = Duration::from_secs(10 * 60);
+const MAX_SWEEP_JITTER: f64 = 0.1;
 
 const RECENT_USE_GRACE: Duration = Duration::from_secs(5 * 60);
 
@@ -191,6 +192,7 @@ pub struct Bucket {
 pub struct EvictionPolicy {
     pub entry_ttl: Option<Duration>,
     pub max_bytes: Option<u64>,
+    pub sweep_interval: Duration,
 }
 
 struct SweepTask(tokio::task::JoinHandle<()>);
@@ -206,7 +208,7 @@ impl Bucket {
     /// yet, and adopts the files already in it.
     ///
     /// Files the `policy` evicts are deleted rather than adopted, and the same
-    /// eviction repeats every [`SWEEP_INTERVAL`] while the cache lives.
+    /// eviction repeats every `policy.sweep_interval` while the cache lives.
     pub async fn new(
         cache_dir: PathBuf,
         bucket: Arc<s3::Bucket>,
@@ -444,33 +446,86 @@ impl Drop for KeyGuard {
     }
 }
 
+#[derive(Default)]
+pub struct SweepStats {
+    pub expired: u64,
+    pub size_capped: u64,
+    pub bytes_freed: u64,
+    pub skipped_in_use: u64,
+    pub delete_failures: u64,
+    pub read_failures: u64,
+}
+
+#[derive(Default)]
+struct Listing {
+    files: Vec<CachedFile>,
+    partial_bytes: u64,
+    stats: SweepStats,
+}
+
+enum Eviction {
+    Removed,
+    Skipped,
+    Failed,
+}
+
 impl Sweeper {
     async fn run(&self, remove_partial_downloads: bool) -> anyhow::Result<SweepOutcome> {
+        let started = std::time::Instant::now();
+        let mut stats = SweepStats::default();
+        let result = self.sweep(remove_partial_downloads, &mut stats).await;
+        if result.is_err() {
+            stats.read_failures += 1;
+        }
+        if let Some(metrics) = crate::metrics::get() {
+            metrics.record_file_cache_sweep(started.elapsed().as_secs_f64(), &stats);
+        }
+        result
+    }
+
+    async fn sweep(
+        &self,
+        remove_partial_downloads: bool,
+        stats: &mut SweepStats,
+    ) -> anyhow::Result<SweepOutcome> {
         let cache_dir = self.cache_dir.clone();
-        let (files, partial_bytes) = tokio::task::spawn_blocking(move || {
-            let mut files = Vec::new();
-            let mut partial_bytes = 0;
+        let listing = tokio::task::spawn_blocking(move || {
+            let mut listing = Listing::default();
             list_cached_files(
                 &cache_dir,
                 &cache_dir,
                 remove_partial_downloads,
-                &mut files,
-                &mut partial_bytes,
+                &mut listing,
             )
-            .map(|()| (files, partial_bytes))
+            .map(|()| listing)
         })
         .await
         .context("joining the cache sweep")?
         .context("sweeping the cache dir")?;
+        let partial_bytes = listing.partial_bytes;
+        stats.delete_failures += listing.stats.delete_failures;
+        stats.read_failures += listing.stats.read_failures;
 
         let mut outcome = SweepOutcome::default();
         let mut live = Vec::new();
-        for file in files {
-            if !file.in_use && is_expired(&file, self.policy.entry_ttl) && self.evict(&file).await {
-                outcome.removed.push(file.key);
-            } else {
-                live.push(file);
+        for file in listing.files {
+            if is_expired(&file, self.policy.entry_ttl) {
+                if file.in_use {
+                    stats.skipped_in_use += 1;
+                } else {
+                    match self.evict(&file).await {
+                        Eviction::Removed => {
+                            stats.expired += 1;
+                            stats.bytes_freed += file.size;
+                            outcome.removed.push(file.key);
+                            continue;
+                        }
+                        Eviction::Skipped => stats.skipped_in_use += 1,
+                        Eviction::Failed => stats.delete_failures += 1,
+                    }
+                }
             }
+            live.push(file);
         }
 
         let Some(max_bytes) = self.policy.max_bytes else {
@@ -481,43 +536,54 @@ impl Sweeper {
         let mut total = partial_bytes + live.iter().map(|file| file.size).sum::<u64>();
         live.sort_by_key(|file| (file.accessed.is_none(), file.accessed));
         for file in live {
-            if total > max_bytes && !file.in_use && self.evict(&file).await {
-                total -= file.size;
-                outcome.removed.push(file.key);
-            } else {
-                outcome.kept.push(file.key);
+            if total > max_bytes {
+                if file.in_use {
+                    stats.skipped_in_use += 1;
+                } else {
+                    match self.evict(&file).await {
+                        Eviction::Removed => {
+                            total -= file.size;
+                            stats.size_capped += 1;
+                            stats.bytes_freed += file.size;
+                            outcome.removed.push(file.key);
+                            continue;
+                        }
+                        Eviction::Skipped => stats.skipped_in_use += 1,
+                        Eviction::Failed => stats.delete_failures += 1,
+                    }
+                }
             }
+            outcome.kept.push(file.key);
         }
 
         Ok(outcome)
     }
 
-    async fn evict(&self, file: &CachedFile) -> bool {
+    async fn evict(&self, file: &CachedFile) -> Eviction {
         let Some(_guard) = self.locks.try_lock(&file.key) else {
-            return false;
+            return Eviction::Skipped;
         };
         match std::fs::metadata(&file.path) {
             Ok(metadata) if !is_in_use(&file.path, &metadata) => {}
-            Ok(_) => return false,
+            Ok(_) => return Eviction::Skipped,
             Err(e) => {
                 if e.kind() == std::io::ErrorKind::NotFound {
                     self.present.invalidate(&file.key).await;
                 }
-                return false;
+                return Eviction::Skipped;
             }
         }
         if !remove_best_effort(&file.path) {
-            return false;
+            return Eviction::Failed;
         }
         self.present.invalidate(&file.key).await;
-        true
+        Eviction::Removed
     }
 
     async fn run_periodically(self) {
-        let mut interval =
-            tokio::time::interval_at(tokio::time::Instant::now() + SWEEP_INTERVAL, SWEEP_INTERVAL);
         loop {
-            interval.tick().await;
+            let jitter = rand::rng().random_range(0.0..MAX_SWEEP_JITTER);
+            tokio::time::sleep(self.policy.sweep_interval.mul_f64(1.0 + jitter)).await;
             match self.run(false).await {
                 Ok(outcome) if !outcome.removed.is_empty() => {
                     tracing::info!(
@@ -554,13 +620,12 @@ fn is_in_use(path: &Path, metadata: &std::fs::Metadata) -> bool {
 
 /// Collects every cached file under `dir`, recursing into subdirectories.
 /// Partial downloads are deleted or skipped, never collected; the size of each
-/// one skipped is added to `partial_bytes`.
+/// one skipped is added to `listing.partial_bytes`.
 fn list_cached_files(
     dir: &Path,
     cache_dir: &Path,
     remove_partial_downloads: bool,
-    files: &mut Vec<CachedFile>,
-    partial_bytes: &mut u64,
+    listing: &mut Listing,
 ) -> std::io::Result<()> {
     for entry in std::fs::read_dir(dir)? {
         let entry = entry?;
@@ -568,13 +633,7 @@ fn list_cached_files(
         let file_type = entry.file_type()?;
 
         if file_type.is_dir() {
-            list_cached_files(
-                &path,
-                cache_dir,
-                remove_partial_downloads,
-                files,
-                partial_bytes,
-            )?;
+            list_cached_files(&path, cache_dir, remove_partial_downloads, listing)?;
             continue;
         }
 
@@ -590,9 +649,11 @@ fn list_cached_files(
 
         if key.ends_with(TEMP_SUFFIX) {
             if remove_partial_downloads {
-                remove_best_effort(&path);
+                if !remove_best_effort(&path) {
+                    listing.stats.delete_failures += 1;
+                }
             } else if let Ok(metadata) = entry.metadata() {
-                *partial_bytes += metadata.len();
+                listing.partial_bytes += metadata.len();
             }
             continue;
         }
@@ -601,6 +662,7 @@ fn list_cached_files(
             Ok(metadata) => metadata,
             Err(e) => {
                 tracing::warn!("Keeping {path:?}, its metadata is unreadable: {e}");
+                listing.stats.read_failures += 1;
                 continue;
             }
         };
@@ -608,11 +670,12 @@ fn list_cached_files(
             Ok(accessed) => Some(accessed),
             Err(e) => {
                 tracing::warn!("Keeping {path:?}, its access time is unreadable: {e}");
+                listing.stats.read_failures += 1;
                 None
             }
         };
 
-        files.push(CachedFile {
+        listing.files.push(CachedFile {
             in_use: is_in_use(&path, &metadata),
             size: metadata.len(),
             accessed,

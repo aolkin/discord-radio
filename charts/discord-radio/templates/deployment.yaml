@@ -43,6 +43,8 @@ spec:
               value: {{ .Values.cache.ttlSecs | int64 | quote }}
             - name: FILE_CACHE_MAX_BYTES
               value: {{ .Values.cache.maxBytes | int64 | quote }}
+            - name: FILE_CACHE_SWEEP_INTERVAL_SECS
+              value: {{ .Values.cache.sweepIntervalSecs | int64 | quote }}
             - name: METRICS_INTERVAL_SECONDS
               value: {{ .Values.metrics.intervalSeconds | int64 | quote }}
             {{- with .Values.web.corsAllowedOrigins }}

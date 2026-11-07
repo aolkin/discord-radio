@@ -23,6 +23,13 @@ pub struct BotMetrics {
     // Hex message metrics
     hex_message_loops: Histogram<u64>,
 
+    // File cache sweep metrics
+    file_cache_sweep_duration: Histogram<f64>,
+    file_cache_evictions: Counter<u64>,
+    file_cache_bytes_freed: Counter<u64>,
+    file_cache_skipped_in_use: Counter<u64>,
+    file_cache_failures: Counter<u64>,
+
     // Liveness metric
     heartbeat: Counter<u64>,
 
@@ -51,6 +58,36 @@ impl BotMetrics {
             .with_unit("loops")
             .build();
 
+        let file_cache_sweep_duration = meter
+            .f64_histogram("file_cache_sweep_duration")
+            .with_description("Duration of each file cache sweep")
+            .with_unit("s")
+            .build();
+
+        let file_cache_evictions = meter
+            .u64_counter("file_cache_evictions")
+            .with_description("Files evicted from the file cache")
+            .with_unit("files")
+            .build();
+
+        let file_cache_bytes_freed = meter
+            .u64_counter("file_cache_bytes_freed")
+            .with_description("Bytes freed by evicting files from the file cache")
+            .with_unit("bytes")
+            .build();
+
+        let file_cache_skipped_in_use = meter
+            .u64_counter("file_cache_skipped_in_use")
+            .with_description("Files a sweep skipped because they were in use")
+            .with_unit("files")
+            .build();
+
+        let file_cache_failures = meter
+            .u64_counter("file_cache_failures")
+            .with_description("Failures to read or delete files during a file cache sweep")
+            .with_unit("failures")
+            .build();
+
         let heartbeat = meter
             .u64_counter("bot_heartbeat")
             .with_description("Bot liveness heartbeat")
@@ -68,6 +105,11 @@ impl BotMetrics {
             dj_state_transitions,
             dj_state_duration,
             hex_message_loops,
+            file_cache_sweep_duration,
+            file_cache_evictions,
+            file_cache_bytes_freed,
+            file_cache_skipped_in_use,
+            file_cache_failures,
             heartbeat,
             active_voice_connections,
         }
@@ -106,6 +148,29 @@ impl BotMetrics {
     pub fn record_hex_message_loops(&self, guild_id: u64, loops: u64) {
         self.hex_message_loops
             .record(loops, &[KeyValue::new("guild_id", guild_id.to_string())]);
+    }
+
+    // File cache sweep metrics
+    pub fn record_file_cache_sweep(
+        &self,
+        duration_secs: f64,
+        stats: &crate::bucket::cache::SweepStats,
+    ) {
+        self.file_cache_sweep_duration.record(duration_secs, &[]);
+        for (reason, count) in [("expired", stats.expired), ("size_cap", stats.size_capped)] {
+            self.file_cache_evictions
+                .add(count, &[KeyValue::new("reason", reason)]);
+        }
+        self.file_cache_bytes_freed.add(stats.bytes_freed, &[]);
+        self.file_cache_skipped_in_use
+            .add(stats.skipped_in_use, &[]);
+        for (kind, count) in [
+            ("delete", stats.delete_failures),
+            ("read", stats.read_failures),
+        ] {
+            self.file_cache_failures
+                .add(count, &[KeyValue::new("kind", kind)]);
+        }
     }
 
     // Liveness metric
