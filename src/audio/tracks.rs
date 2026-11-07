@@ -20,10 +20,6 @@ pub struct TrackSnapshot {
     pub volume: f32,
     pub loops: bool,
     pub start_time: SystemTime,
-    #[serde(
-        rename = "duration_secs",
-        with = "crate::audio::dj::serde::optional_duration_secs"
-    )]
     pub duration: Option<Duration>,
 }
 
