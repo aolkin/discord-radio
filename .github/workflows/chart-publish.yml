@@ -32,7 +32,7 @@ jobs:
       - name: Lint chart
         run: >-
           helm lint charts/discord-radio
-          --set image.repository=example --set image.tag=lint --set existingSecret=example
+          --set image.tag=lint --set secret.name=example
 
   publish:
     name: Publish Chart
@@ -54,7 +54,7 @@ jobs:
       - name: Lint chart
         run: >-
           helm lint charts/discord-radio
-          --set image.repository=example --set image.tag=lint --set existingSecret=example
+          --set image.tag=lint --set secret.name=example
 
       - name: Package chart
         run: helm package charts/discord-radio --version "0.0.${{ github.run_number }}" --destination dist

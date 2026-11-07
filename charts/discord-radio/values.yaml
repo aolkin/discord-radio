@@ -1,34 +1,35 @@
 image:
-  repository: ""
+  repository: ghcr.io/aolkin/discord-radio
   tag: ""
   digest: ""
   pullPolicy: IfNotPresent
 imagePullSecrets: []
-nameOverride: ""
-fullnameOverride: ""
-existingSecret: ""
-secretKeys:
-  discordToken: DISCORD_TOKEN
-  bucketEndpoint: BUCKET_ENDPOINT
-  bucketAccessKeyId: BUCKET_ACCESS_KEY_ID
-  bucketSecretAccessKey: BUCKET_SECRET_ACCESS_KEY
-  bucketName: BUCKET_NAME
-  grafanaMetricsUrl: GRAFANA_METRICS_URL
-  grafanaApiKey: GRAFANA_API_KEY
-env:
-  webPort: 3000
-  webCorsAllowedOrigins: ""
-  fileCacheTtlSecs: 2592000
-  metricsIntervalSeconds: 60
-  logLevel: ""
+secret:
+  name: ""
+  keys:
+    discordToken: DISCORD_TOKEN
+    bucketEndpoint: BUCKET_ENDPOINT
+    bucketAccessKeyId: BUCKET_ACCESS_KEY_ID
+    bucketSecretAccessKey: BUCKET_SECRET_ACCESS_KEY
+    bucketName: BUCKET_NAME
+    grafanaMetricsUrl: GRAFANA_METRICS_URL
+    grafanaApiKey: GRAFANA_API_KEY
+web:
+  port: 3000
+  corsAllowedOrigins: ""
+cache:
+  ttlSecs: 2592000
+  sizeLimit: ""
+metrics:
+  intervalSeconds: 60
+logging:
+  level: ""
 persistence:
   size: 256Mi
   storageClass: ""
   accessModes:
     - ReadWriteOnce
   existingClaim: ""
-cache:
-  sizeLimit: ""
 service:
   type: ClusterIP
   port: 80
@@ -39,7 +40,10 @@ httpRoute:
     namespace: ""
     sectionName: ""
   hostnames: []
-resources: {}
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
 podAnnotations: {}
 nodeSelector: {}
 tolerations: []

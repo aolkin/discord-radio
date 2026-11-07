@@ -30,7 +30,7 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
-              containerPort: {{ .Values.env.webPort }}
+              containerPort: {{ .Values.web.port }}
               protocol: TCP
           env:
             - name: STATE_STORE_PATH
@@ -38,26 +38,26 @@ spec:
             - name: FILE_CACHE_DIR
               value: /data/cache
             - name: WEB_PORT
-              value: {{ .Values.env.webPort | quote }}
+              value: {{ .Values.web.port | quote }}
             - name: FILE_CACHE_TTL_SECS
-              value: {{ .Values.env.fileCacheTtlSecs | int64 | quote }}
+              value: {{ .Values.cache.ttlSecs | int64 | quote }}
             - name: METRICS_INTERVAL_SECONDS
-              value: {{ .Values.env.metricsIntervalSeconds | int64 | quote }}
-            {{- with .Values.env.webCorsAllowedOrigins }}
+              value: {{ .Values.metrics.intervalSeconds | int64 | quote }}
+            {{- with .Values.web.corsAllowedOrigins }}
             - name: WEB_CORS_ALLOWED_ORIGINS
               value: {{ . | quote }}
             {{- end }}
-            {{- with .Values.env.logLevel }}
+            {{- with .Values.logging.level }}
             - name: RUST_LOG
               value: {{ . | quote }}
             {{- end }}
-            {{- include "discord-radio.secretEnv" (dict "root" . "env" "DISCORD_TOKEN" "key" .Values.secretKeys.discordToken "optional" false) | nindent 12 }}
-            {{- include "discord-radio.secretEnv" (dict "root" . "env" "BUCKET_ENDPOINT" "key" .Values.secretKeys.bucketEndpoint "optional" true) | nindent 12 }}
-            {{- include "discord-radio.secretEnv" (dict "root" . "env" "BUCKET_ACCESS_KEY_ID" "key" .Values.secretKeys.bucketAccessKeyId "optional" true) | nindent 12 }}
-            {{- include "discord-radio.secretEnv" (dict "root" . "env" "BUCKET_SECRET_ACCESS_KEY" "key" .Values.secretKeys.bucketSecretAccessKey "optional" true) | nindent 12 }}
-            {{- include "discord-radio.secretEnv" (dict "root" . "env" "BUCKET_NAME" "key" .Values.secretKeys.bucketName "optional" true) | nindent 12 }}
-            {{- include "discord-radio.secretEnv" (dict "root" . "env" "GRAFANA_METRICS_URL" "key" .Values.secretKeys.grafanaMetricsUrl "optional" true) | nindent 12 }}
-            {{- include "discord-radio.secretEnv" (dict "root" . "env" "GRAFANA_API_KEY" "key" .Values.secretKeys.grafanaApiKey "optional" true) | nindent 12 }}
+            {{- include "discord-radio.secretEnv" (dict "root" . "env" "DISCORD_TOKEN" "key" .Values.secret.keys.discordToken "optional" false) | nindent 12 }}
+            {{- include "discord-radio.secretEnv" (dict "root" . "env" "BUCKET_ENDPOINT" "key" .Values.secret.keys.bucketEndpoint "optional" true) | nindent 12 }}
+            {{- include "discord-radio.secretEnv" (dict "root" . "env" "BUCKET_ACCESS_KEY_ID" "key" .Values.secret.keys.bucketAccessKeyId "optional" true) | nindent 12 }}
+            {{- include "discord-radio.secretEnv" (dict "root" . "env" "BUCKET_SECRET_ACCESS_KEY" "key" .Values.secret.keys.bucketSecretAccessKey "optional" true) | nindent 12 }}
+            {{- include "discord-radio.secretEnv" (dict "root" . "env" "BUCKET_NAME" "key" .Values.secret.keys.bucketName "optional" true) | nindent 12 }}
+            {{- include "discord-radio.secretEnv" (dict "root" . "env" "GRAFANA_METRICS_URL" "key" .Values.secret.keys.grafanaMetricsUrl "optional" true) | nindent 12 }}
+            {{- include "discord-radio.secretEnv" (dict "root" . "env" "GRAFANA_API_KEY" "key" .Values.secret.keys.grafanaApiKey "optional" true) | nindent 12 }}
           livenessProbe:
             httpGet:
               path: /api/health
