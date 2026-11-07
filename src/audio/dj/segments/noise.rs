@@ -1,4 +1,4 @@
-use crate::audio::dj::config::{DurationRange, SegmentDefaults};
+use crate::audio::dj::config::{DurationRange, SegmentDefaults, SharedEntryFields};
 use crate::audio::dj::segments::signals::Completed;
 use crate::audio::dj::segments::{
     CommonSegmentPlaybackConfig, Segment, SegmentPlaybackConfig, SignalProfilePlayback,
@@ -20,6 +20,8 @@ pub struct NoiseEntry {
     pub duration: DurationRange,
     pub weight: u32,
     pub fade_duration_seconds: Option<f32>,
+    #[serde(flatten)]
+    pub shared: SharedEntryFields,
 }
 
 #[field_trait_impl]
@@ -30,6 +32,7 @@ impl Weighted for NoiseEntry {
             self.duration.min_duration_seconds.to_bits(),
             self.duration.max_duration_seconds.to_bits(),
             self.fade_duration_seconds.map(f32::to_bits),
+            &self.shared.announcement,
         ))
     }
 }
@@ -41,6 +44,7 @@ impl Default for NoiseEntry {
             weight: 1,
             fade_duration_seconds: Some(3.0),
             duration: DurationRange::default(),
+            shared: SharedEntryFields::default(),
         }
     }
 }
@@ -74,7 +78,7 @@ impl NoiseSegment {
         noise_profile: String,
         duration: Option<Duration>,
         fade: Option<Duration>,
-        channel_status: Option<String>,
+        config: CommonSegmentPlaybackConfig,
     ) -> Self {
         let config = CommonSegmentPlaybackConfig {
             signal_profile: Some(SignalProfilePlayback {
@@ -82,7 +86,7 @@ impl NoiseSegment {
                 fade_in_duration: fade.or_else(|| duration.map(|duration| duration.div_f32(2.0))),
                 fade_out_duration: None,
             }),
-            channel_status,
+            ..config
         };
         match duration {
             Some(duration) => Self::Timed { config, duration },
@@ -165,7 +169,7 @@ impl NoiseSegment {
             noise_entry
                 .fade_duration_seconds
                 .map(Duration::from_secs_f32),
-            segment_defaults.channel_status.clone(),
+            segment_defaults.playback_config(None, None, noise_entry.shared.clone()),
         )
     }
 }

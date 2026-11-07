@@ -2,7 +2,7 @@ use super::{
     CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
     TrackSlot,
 };
-use crate::audio::dj::config::SegmentDefaults;
+use crate::audio::dj::config::{SegmentDefaults, SharedEntryFields};
 use crate::audio::dj::segments::signals::{Completed, CompletedSignal};
 use crate::audio::dj::weighted_choice::{Identity, Weighted};
 use crate::audio::duration::DurationCache;
@@ -35,6 +35,8 @@ pub struct TrackEntry {
     /// compared to linear scaling.
     pub volume: Option<f32>,
     pub channel_status: Option<String>,
+    #[serde(flatten)]
+    pub shared: SharedEntryFields,
 }
 
 #[field_trait_impl]
@@ -47,6 +49,7 @@ impl Weighted for TrackEntry {
             &self.signal_profile,
             self.volume.map(f32::to_bits),
             &self.channel_status,
+            &self.shared.announcement,
         ))
     }
 }
@@ -77,13 +80,8 @@ impl TrackSegment {
         volume: f32,
         start_position: Option<Duration>,
         duration: Duration,
-        signal_profile: Option<String>,
-        channel_status: Option<String>,
+        config: CommonSegmentPlaybackConfig,
     ) -> Self {
-        let config = CommonSegmentPlaybackConfig {
-            signal_profile: signal_profile.map(Into::into),
-            channel_status,
-        };
         Self {
             config,
             duration,
@@ -167,14 +165,11 @@ impl TrackSegment {
             volume,
             start_position,
             play_duration,
-            track_entry
-                .signal_profile
-                .or_else(|| segment_defaults.signal_profile.clone()),
-            track_entry
-                .channel_status
-                .as_deref()
-                .map(with_status_emoji)
-                .or_else(|| segment_defaults.channel_status.clone()),
+            segment_defaults.playback_config(
+                track_entry.signal_profile,
+                track_entry.channel_status.as_deref().map(with_status_emoji),
+                track_entry.shared,
+            ),
         )
     }
 }

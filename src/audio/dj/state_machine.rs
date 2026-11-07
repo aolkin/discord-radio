@@ -1,13 +1,16 @@
 use crate::audio::dj::config::{
     ChannelStatusEntry, ConfiguredPool, DurationRange, LoadedConfig, PoolEntry, SegmentDefaults,
+    SharedEntryFields,
 };
 use crate::audio::dj::manager::{
     ADVANCE_RETRY_DELAY, DJCommand, HexMessageRequest, IdleRequest, TrackRequest,
 };
 use crate::audio::dj::segments::{
+    CommonSegmentPlaybackConfig, NoiseEntry, NoiseSegment, SegmentCtx,
+};
+use crate::audio::dj::segments::{
     Completed, HexSegment, Segment, SignalProfilePlayback, TrackSegment,
 };
-use crate::audio::dj::segments::{NoiseEntry, NoiseSegment, SegmentCtx};
 use crate::audio::dj::serde::{ShiftBack, deser_instant, ser_instant};
 use crate::audio::dj::tiered::{
     ConfigurableTier, TieredChange, TieredStateMachine, TieredValue, TimedValue,
@@ -425,8 +428,7 @@ impl DJStateMachine {
             request.message,
             request.volume.unwrap_or(1.0),
             loops,
-            defaults.pick_random_announcement(),
-            segment_defaults.signal_profile.clone(),
+            segment_defaults.playback_config(None, None, SharedEntryFields::default()),
         )
         .into();
         self.enter_state(next_state, bot_state).await
@@ -451,8 +453,7 @@ impl DJStateMachine {
             request.volume.unwrap_or(1.0),
             start_position,
             duration,
-            None,
-            None,
+            CommonSegmentPlaybackConfig::default(),
         )
         .into();
         self.enter_state(next_state, bot_state).await
@@ -469,9 +470,12 @@ impl DJStateMachine {
             .map(Duration::try_from_secs_f32)
             .transpose()?;
         let next_state = match (request.noise_profile, duration) {
-            (Some(noise_profile), duration) => {
-                NoiseSegment::new(noise_profile, duration, None, None)
-            }
+            (Some(noise_profile), duration) => NoiseSegment::new(
+                noise_profile,
+                duration,
+                None,
+                CommonSegmentPlaybackConfig::default(),
+            ),
             (None, Some(duration)) => NoiseSegment::quiet(duration),
             (None, None) => NoiseSegment::idle(),
         };
@@ -601,4 +605,5 @@ static DEFAULT_NOISE_PERIOD: LazyLock<NoiseEntry> = LazyLock::new(|| NoiseEntry 
     },
     weight: 1,
     fade_duration_seconds: None,
+    shared: SharedEntryFields::default(),
 });

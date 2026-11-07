@@ -89,6 +89,10 @@ pub trait SegmentPlaybackConfig {
     fn channel_status(&self) -> Option<String> {
         None
     }
+
+    fn announcement(&self) -> Option<String> {
+        None
+    }
 }
 
 pub struct StateDisplay {
@@ -110,10 +114,6 @@ pub trait Segment: Send + Sync + Debug + SegmentPlaybackConfig {
     }
     async fn exit(&self, _ctx: &SegmentCtx) {}
 
-    fn announcement(&self) -> &Option<String> {
-        &None
-    }
-
     fn loggable_properties(&self) -> serde_json::Value {
         serde_json::json!({})
     }
@@ -126,6 +126,7 @@ pub trait Segment: Send + Sync + Debug + SegmentPlaybackConfig {
 pub struct CommonSegmentPlaybackConfig {
     pub signal_profile: Option<SignalProfilePlayback>,
     pub channel_status: Option<String>,
+    pub announcement: Option<String>,
 }
 
 impl<T: Deref<Target = CommonSegmentPlaybackConfig>> SegmentPlaybackConfig for T {
@@ -135,6 +136,10 @@ impl<T: Deref<Target = CommonSegmentPlaybackConfig>> SegmentPlaybackConfig for T
 
     fn channel_status(&self) -> Option<String> {
         self.deref().channel_status.to_owned()
+    }
+
+    fn announcement(&self) -> Option<String> {
+        self.deref().announcement.to_owned()
     }
 }
 

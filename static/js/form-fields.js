@@ -62,13 +62,10 @@ const loops = (key, label) => ({ key, label, type: 'number', step: 1, min: 0, de
 const segmentDefaultsFields = [
     profileText('signal_profile', 'Signal Profile', true),
     optionalText('channel_status', 'Channel Status'),
-];
-
-const hexConfigFields = [
-    loops('loop_min', 'Loop Min'),
-    loops('loop_max', 'Loop Max'),
     { key: 'announcements', label: 'Announcements', type: 'strings' },
 ];
+
+const hexConfigFields = [loops('loop_min', 'Loop Min'), loops('loop_max', 'Loop Max')];
 
 export function segmentDefaultsFromServer(segmentDefaults) {
     const source = segmentDefaults ?? {};

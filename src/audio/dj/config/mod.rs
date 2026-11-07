@@ -1,6 +1,6 @@
 use crate::audio::dj::segments::{
-    HexMessageDefaults, HexMessageEntry, HexSegment, NoiseEntry, NoiseSegment, Segment, TrackEntry,
-    TrackSegment, ensure_loops,
+    CommonSegmentPlaybackConfig, HexMessageDefaults, HexMessageEntry, HexSegment, NoiseEntry,
+    NoiseSegment, Segment, TrackEntry, TrackSegment, ensure_loops,
 };
 use crate::audio::dj::state_machine::ChannelStatus;
 use crate::audio::dj::tiered::TimedValue;
@@ -13,6 +13,7 @@ use ambassador::Delegate;
 use anyhow::{Context, bail};
 use field_trait::field_trait_impl;
 use rand::RngExt;
+use rand::seq::IndexedRandom;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
@@ -85,6 +86,8 @@ pub struct SegmentDefaults {
     pub signal_profile: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub channel_status: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub announcements: Vec<String>,
 }
 
 static BUILT_IN_HEX_DEFAULTS: LazyLock<HexMessageDefaults> = LazyLock::new(Default::default);
@@ -92,6 +95,25 @@ static BUILT_IN_HEX_DEFAULTS: LazyLock<HexMessageDefaults> = LazyLock::new(Defau
 impl SegmentDefaults {
     pub fn hex_config(&self) -> &HexMessageDefaults {
         self.hex_config.as_ref().unwrap_or(&BUILT_IN_HEX_DEFAULTS)
+    }
+
+    pub fn pick_announcement(&self, own: Option<String>) -> Option<String> {
+        own.or_else(|| self.announcements.choose(&mut rand::rng()).cloned())
+    }
+
+    pub fn playback_config(
+        &self,
+        signal_profile: Option<String>,
+        channel_status: Option<String>,
+        shared: SharedEntryFields,
+    ) -> CommonSegmentPlaybackConfig {
+        CommonSegmentPlaybackConfig {
+            signal_profile: signal_profile
+                .or_else(|| self.signal_profile.clone())
+                .map(Into::into),
+            channel_status: channel_status.or_else(|| self.channel_status.clone()),
+            announcement: self.pick_announcement(shared.announcement),
+        }
     }
 
     pub fn or(&self, fallback: &Self) -> Self {
@@ -108,6 +130,11 @@ impl SegmentDefaults {
                 .channel_status
                 .clone()
                 .or_else(|| fallback.channel_status.clone()),
+            announcements: if self.announcements.is_empty() {
+                fallback.announcements.clone()
+            } else {
+                self.announcements.clone()
+            },
         }
     }
 }
@@ -267,6 +294,11 @@ impl RegistryEntry for DJConfig {
         }
         Ok(())
     }
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct SharedEntryFields {
+    pub announcement: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Copy, Debug)]

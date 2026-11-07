@@ -26,6 +26,8 @@ export const modals = {
     },
 };
 
+const announcementField = optionalText('announcement', 'Announcement');
+
 const kinds = {
     track: {
         label: 'Track',
@@ -38,6 +40,7 @@ const kinds = {
             profileText('signal_profile', 'Signal Profile', true),
             { key: 'volume', label: 'Volume (0-2)', type: 'number', step: 'any', min: 0, max: 2, optional: true },
             optionalText('channel_status', 'Channel Status'),
+            announcementField,
         ],
     },
     hex: {
@@ -49,13 +52,13 @@ const kinds = {
             profileText('signal_profile', 'Signal Profile', true),
             { key: 'loop_min', label: 'Loop Min', type: 'number', step: 1, min: 0, optional: true },
             { key: 'loop_max', label: 'Loop Max', type: 'number', step: 1, min: 0, optional: true },
-            optionalText('announcement', 'Announcement'),
+            announcementField,
         ],
     },
     noise: {
         label: 'Noise',
         identifier: 'noise_profile',
-        entryFields: noiseEntryFields,
+        entryFields: [...noiseEntryFields, announcementField],
     },
 };
 
