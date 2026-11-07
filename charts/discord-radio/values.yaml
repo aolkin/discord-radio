@@ -1,6 +1,5 @@
 image:
   repository: ghcr.io/aolkin/discord-radio
-  # Empty uses the chart's appVersion.
   tag: ""
   # When set, the image is pinned to this digest, which takes precedence over the tag.
   digest: ""
@@ -20,29 +19,27 @@ secret:
     grafanaApiKey: GRAFANA_API_KEY
 web:
   port: 3000
-  # Comma-separated list. Empty allows localhost only.
+  # Comma-separated origins allowed to call the web API.
   corsAllowedOrigins: ""
 # Scratch space for downloaded files, kept in an emptyDir that is lost on restart.
 cache:
   # Cached files older than this are removed at startup. 0 keeps them forever.
   ttlSecs: 2592000
-  # Empty means no limit.
   sizeLimit: ""
 metrics:
   intervalSeconds: 60
 logging:
-  # Sets RUST_LOG. Empty uses the bot's built-in filters.
+  # Sets RUST_LOG.
   level: ""
 # Volume for the bot's saved state.
 persistence:
   size: 256Mi
-  # Empty uses the cluster default.
   storageClass: ""
   accessModes:
     - ReadWriteOnce
   # Use this claim instead of creating one.
   existingClaim: ""
-# Optional pre-existing volume mounted at /data/content. Nothing is mounted when existingClaim is empty.
+# Optional pre-existing volume mounted at /data/content.
 content:
   existingClaim: ""
   readOnly: true
@@ -58,10 +55,9 @@ httpRoute:
   parentRef:
     name: ""
     namespace: ""
-    # Attach to one listener of the Gateway. Empty attaches to all of them.
+    # Attach to one listener of the Gateway.
     sectionName: ""
   hostnames: []
-# Starting values, not measured.
 resources:
   requests:
     cpu: 100m
