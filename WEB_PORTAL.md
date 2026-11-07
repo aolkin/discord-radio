@@ -52,7 +52,7 @@ When the bot is in a guild's voice channel, you can control that guild's DJ dire
 
 - **Advance DJ State**: Force the DJ to advance to the next state, optionally from the DJ config pool named `track`, `hex` or `noise`
 
-- **Play Hex Message**: Queue a custom hex message to play via the DJ with default settings
+- **Play Hex Message**: Queue a custom hex message to play via the DJ with default settings, or with the segment defaults of a chosen pool
 
 - **Play Track**: Force the DJ to play a chosen audio file now, with optional volume, start position, and duration
 
