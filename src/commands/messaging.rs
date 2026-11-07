@@ -1,4 +1,5 @@
 use crate::commands::utils::{Context, require_guild};
+use anyhow::{Context as _, bail};
 use poise::serenity_prelude as serenity;
 
 /// Register a channel for sending messages from the web portal
@@ -41,16 +42,11 @@ pub async fn register_channel(
     };
 
     // Save to persistent storage
-    if let Err(e) = ctx
-        .data()
+    ctx.data()
         .state_store
         .save_registered_channel(&registered_channel)
         .await
-    {
-        tracing::error!("Failed to save registered channel: {}", e);
-        ctx.say("Failed to register channel").await?;
-        return Ok(());
-    }
+        .context("Failed to register channel")?;
 
     ctx.say(format!(
         "Channel '{}' (type: {}) has been registered for web portal messaging",
@@ -91,14 +87,10 @@ pub async fn set_status(
         Some("playing") => crate::activity::ActivityType::Playing,
         Some("streaming") => crate::activity::ActivityType::Streaming,
         Some("custom") | None => crate::activity::ActivityType::Custom,
-        Some(invalid) => {
-            ctx.say(format!(
-                "Invalid activity type '{}'. Valid types: listening, playing, streaming, custom",
-                invalid
-            ))
-            .await?;
-            return Ok(());
-        }
+        Some(invalid) => bail!(
+            "Invalid activity type '{}'. Valid types: listening, playing, streaming, custom",
+            invalid
+        ),
     };
 
     ctx.data()
@@ -154,10 +146,10 @@ pub async fn speak(
         create_message = create_message.embed(embed);
     }
 
-    if let Err(e) = channel_id.send_message(crate::http(), create_message).await {
-        ctx.say(format!("Failed to send message: {}", e)).await?;
-        return Ok(());
-    }
+    channel_id
+        .send_message(crate::http(), create_message)
+        .await
+        .context("Failed to send message")?;
 
     ctx.say("Message sent").await?;
 
