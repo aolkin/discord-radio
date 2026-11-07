@@ -1,6 +1,8 @@
-use crate::audio::dj::config::LoadedConfig;
+use crate::audio::dj::config::{LoadedConfig, optional_seconds};
 use crate::audio::dj::segments::SignalProfilePlayback;
-use crate::audio::dj::state_machine::{ChannelStatus, DJState, DJStateMachine};
+use crate::audio::dj::state_machine::{
+    ChannelStatus, DJState, DJStateMachine, default_profile_fade,
+};
 use crate::audio::dj::tiered::{ConfigurableTier, TimedValue};
 use crate::state::Data;
 use anyhow::{Context, bail};
@@ -29,13 +31,40 @@ pub enum DJCommand {
     SetChannelStatus(ConfigurableTier, Option<TimedValue<ChannelStatus>>),
 }
 
+#[derive(Debug, thiserror::Error)]
+#[error("signal profile {0:?} not found")]
+pub struct ProfileNotFound(pub String);
+
+pub fn ensure_pool(bot_state: Data, pool: Option<&str>) -> anyhow::Result<()> {
+    if let Some(pool) = pool {
+        bot_state.dj_config_manager.pools.require(pool)?;
+    }
+    Ok(())
+}
+
+pub fn ensure_profile(bot_state: Data, profile: Option<&str>) -> anyhow::Result<()> {
+    if let Some(profile) = profile
+        && bot_state.profile_manager.get(profile).is_none()
+    {
+        return Err(ProfileNotFound(profile.to_string()).into());
+    }
+    Ok(())
+}
+
 /// A hex message for the DJ to play, with hex defaults from the pool named
 /// `pool` when set. `volume` and `loops` replace the defaults when set.
+#[derive(Debug, Deserialize)]
 pub struct HexMessageRequest {
     pub message: String,
     pub volume: Option<f32>,
     pub loops: Option<u32>,
     pub pool: Option<String>,
+}
+
+impl HexMessageRequest {
+    pub fn validate(&self, bot_state: Data) -> anyhow::Result<()> {
+        ensure_pool(bot_state, self.pool.as_deref())
+    }
 }
 
 /// A track for the DJ to play. `start_position` and `duration` are in seconds.
@@ -49,16 +78,8 @@ pub struct TrackRequest {
 
 impl TrackRequest {
     pub fn validate(&self) -> anyhow::Result<()> {
-        for (name, value) in [
-            ("start_position", self.start_position),
-            ("duration", self.duration),
-        ] {
-            if let Some(seconds) = value
-                && !(seconds.is_finite() && seconds >= 0.0)
-            {
-                bail!("{name} must be a non-negative number of seconds");
-            }
-        }
+        optional_seconds(self.start_position, "start_position")?;
+        optional_seconds(self.duration, "duration")?;
         Ok(())
     }
 }
@@ -72,13 +93,56 @@ pub struct IdleRequest {
 }
 
 impl IdleRequest {
-    pub fn validate(&self) -> anyhow::Result<()> {
-        if let Some(seconds) = self.duration
-            && !(seconds.is_finite() && seconds >= 0.0)
-        {
-            bail!("duration must be a non-negative number of seconds");
-        }
-        Ok(())
+    pub fn validate(&self, bot_state: Data) -> anyhow::Result<()> {
+        optional_seconds(self.duration, "duration")?;
+        ensure_profile(bot_state, self.noise_profile.as_deref())
+    }
+}
+
+/// Sets (or, with `profile` unset, clears) the signal profile of `tier`.
+/// `fade_duration` and `duration` are in seconds and apply only when setting.
+#[derive(Debug, Deserialize)]
+pub struct SignalProfileRequest {
+    pub tier: ConfigurableTier,
+    pub profile: Option<String>,
+    pub fade_duration: Option<f32>,
+    pub duration: Option<f32>,
+}
+
+impl SignalProfileRequest {
+    pub fn into_command(self, bot_state: Data) -> anyhow::Result<DJCommand> {
+        ensure_profile(bot_state, self.profile.as_deref())?;
+        let fade = optional_seconds(self.fade_duration, "fade_duration")?
+            .or(default_profile_fade(self.tier));
+        let duration = optional_seconds(self.duration, "duration")?;
+        let playback = self.profile.map(|name| {
+            TimedValue::new(
+                SignalProfilePlayback {
+                    name,
+                    fade_in_duration: fade,
+                    fade_out_duration: fade,
+                },
+                duration,
+            )
+        });
+        Ok(DJCommand::SetSignalProfile(self.tier, playback))
+    }
+}
+
+/// Sets (or, with `status` unset, clears) the channel status of `tier`.
+/// `duration` is in seconds and applies only when setting.
+#[derive(Debug, Deserialize)]
+pub struct ChannelStatusRequest {
+    pub tier: ConfigurableTier,
+    pub status: Option<ChannelStatus>,
+    pub duration: Option<f32>,
+}
+
+impl ChannelStatusRequest {
+    pub fn into_command(self) -> anyhow::Result<DJCommand> {
+        let duration = optional_seconds(self.duration, "duration")?;
+        let status = self.status.map(|status| TimedValue::new(status, duration));
+        Ok(DJCommand::SetChannelStatus(self.tier, status))
     }
 }
 
