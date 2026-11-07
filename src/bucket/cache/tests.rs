@@ -108,9 +108,11 @@ fn write_cached_file(path: &Path, contents: &[u8]) {
 }
 
 async fn bucket(cache_dir: PathBuf, backend: Arc<dyn ObjectBackend>) -> Bucket {
-    Bucket::build(cache_dir, backend, EvictionPolicy::default())
-        .await
-        .unwrap()
+    let policy = EvictionPolicy {
+        entry_ttl: None,
+        max_bytes: None,
+    };
+    Bucket::build(cache_dir, backend, policy).await.unwrap()
 }
 
 #[tokio::test]
