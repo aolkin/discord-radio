@@ -49,6 +49,11 @@ fn default_loops() -> u32 {
 }
 
 impl HexMessageDefaults {
+    pub fn pick_loops(&self, loop_min: Option<u32>, loop_max: Option<u32>) -> u32 {
+        rand::rng()
+            .random_range(loop_min.unwrap_or(self.loop_min)..=loop_max.unwrap_or(self.loop_max))
+    }
+
     pub fn pick_random_announcement(&self) -> Option<String> {
         self.announcements.choose(&mut rand::rng()).cloned()
     }
@@ -158,15 +163,13 @@ impl HexSegment {
 
     pub fn from_entry(hex_entry: HexMessageEntry, segment_defaults: &SegmentDefaults) -> Self {
         let defaults = segment_defaults.hex_config();
-        let loop_min = hex_entry.loop_min.unwrap_or(defaults.loop_min);
-        let loop_max = hex_entry.loop_max.unwrap_or(defaults.loop_max);
         let signal_profile = hex_entry
             .signal_profile
             .or_else(|| segment_defaults.signal_profile.clone());
         let announcement = hex_entry
             .announcement
             .or_else(|| defaults.pick_random_announcement());
-        let loops = rand::rng().random_range(loop_min..=loop_max) as usize;
+        let loops = defaults.pick_loops(hex_entry.loop_min, hex_entry.loop_max) as usize;
 
         Self::new(hex_entry.text, 1.0, loops, announcement, signal_profile)
     }

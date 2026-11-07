@@ -333,3 +333,13 @@ pub fn optional_seconds(seconds: Option<f32>, name: &str) -> anyhow::Result<Opti
         })
         .transpose()
 }
+
+impl WeightedPool<ConfiguredPool> for LoadedConfig {
+    fn entries(&self) -> &Arc<[ConfiguredPool]> {
+        &self.pools
+    }
+
+    fn history_penalty_multiplier(&self) -> Option<f32> {
+        self.config.pool_history_penalty_multiplier
+    }
+}
