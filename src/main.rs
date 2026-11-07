@@ -38,6 +38,12 @@ async fn on_error(error: poise::FrameworkError<'_, Data, anyhow::Error>) {
     match error {
         poise::FrameworkError::Command { error, ctx, .. } => {
             tracing::error!("Error in command '{}': {:?}", ctx.command().name, error);
+            let reply = poise::CreateReply::default()
+                .content(format!("{error:#}"))
+                .ephemeral(true);
+            if let Err(e) = ctx.send(reply).await {
+                tracing::error!("Failed to reply with the error: {e:#}");
+            }
         }
         poise::FrameworkError::CommandCheckFailed { error, ctx, .. } => {
             tracing::error!(
