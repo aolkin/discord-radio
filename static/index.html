@@ -522,8 +522,8 @@
             <div class="form-group">
                 <label class="form-label" for="signal-profile-setting">Setting</label>
                 <select id="signal-profile-setting" class="form-input" x-model="profileSetting">
-                    <option value="profile">Background (replaces rotation)</option>
-                    <option value="profile-override">Override (beats everything)</option>
+                    <option value="manual">Background (replaces rotation)</option>
+                    <option value="override">Override (beats everything)</option>
                 </select>
             </div>
             <div class="form-group">
@@ -544,7 +544,7 @@
                     x-model.number="profileFadeDuration"
                     min="0"
                     step="0.1"
-                    :placeholder="profileSetting === 'profile-override' ? '2.0' : 'default'"
+                    :placeholder="profileSetting === 'override' ? '2.0' : 'default'"
                 >
             </div>
             <div class="form-group" x-show="selectedProfile">

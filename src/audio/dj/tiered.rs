@@ -56,6 +56,22 @@ pub enum Tier {
 
 const TIERS: [Tier; 3] = [Tier::Override, Tier::Forced, Tier::Manual];
 
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ConfigurableTier {
+    Manual,
+    Override,
+}
+
+impl From<ConfigurableTier> for Tier {
+    fn from(tier: ConfigurableTier) -> Self {
+        match tier {
+            ConfigurableTier::Manual => Tier::Manual,
+            ConfigurableTier::Override => Tier::Override,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct TieredValue<T> {
     pub value: T,
@@ -131,16 +147,12 @@ where
         self.state.completed()
     }
 
-    pub fn update_override(&mut self, value: Option<TimedValue<V>>) {
-        self.state.update(Tier::Override, value);
+    pub fn update(&mut self, tier: ConfigurableTier, value: Option<TimedValue<V>>) {
+        self.state.update(tier.into(), value);
     }
 
     pub fn update_forced(&mut self, value: Option<TimedValue<V>>) {
         self.state.update(Tier::Forced, value);
-    }
-
-    pub fn update_manual(&mut self, value: Option<TimedValue<V>>) {
-        self.state.update(Tier::Manual, value);
     }
 
     pub fn set_pool<P: WeightedPool<E>>(&mut self, pool: &P) {

@@ -1,8 +1,8 @@
 use crate::audio::connection::connect_voice_channel;
 use crate::audio::dj::manager::DJCommand;
 use crate::audio::dj::segments::SignalProfilePlayback;
-use crate::audio::dj::state_machine::{ChannelStatus, DEFAULT_PROFILE_FADE};
-use crate::audio::dj::tiered::TimedValue;
+use crate::audio::dj::state_machine::{ChannelStatus, default_profile_fade};
+use crate::audio::dj::tiered::{ConfigurableTier, TimedValue};
 use crate::audio::processing::processor::ProcessorRef;
 use crate::commands::utils;
 use crate::commands::utils::{Context, require_guild};
@@ -557,21 +557,13 @@ async fn set_dj_profile(
     profile: Option<String>,
     fade_duration: Option<f32>,
     duration: Option<f32>,
-    default_fade: Option<Duration>,
     label: &str,
-    command: fn(Option<TimedValue<SignalProfilePlayback>>) -> DJCommand,
+    tier: ConfigurableTier,
 ) -> anyhow::Result<()> {
     ctx.defer_ephemeral().await?;
 
     let guild_id = require_guild(ctx)?;
 
-    if profile.is_none() && (fade_duration.is_some() || duration.is_some()) {
-        ctx.say(format!(
-            "Fade duration and duration only apply when setting a {label}"
-        ))
-        .await?;
-        return Ok(());
-    }
     let (fade, duration) = match optional_seconds(fade_duration, "Fade duration")
         .and_then(|fade| Ok((fade, optional_seconds(duration, "Duration")?)))
     {
@@ -581,7 +573,7 @@ async fn set_dj_profile(
             return Ok(());
         }
     };
-    let fade = fade.or(default_fade);
+    let fade = fade.or(default_profile_fade(tier));
 
     if let Some(profile) = &profile
         && ctx.data().profile_manager.get(profile).is_none()
@@ -604,7 +596,11 @@ async fn set_dj_profile(
             duration,
         )
     });
-    if let Err(e) = send_to_dj(ctx.data(), guild_id, command(playback)) {
+    if let Err(e) = send_to_dj(
+        ctx.data(),
+        guild_id,
+        DJCommand::SetSignalProfile(tier, playback),
+    ) {
         ctx.say(format!("Failed to update DJ {label}: {e:#}"))
             .await?;
         return Ok(());
@@ -629,9 +625,8 @@ pub async fn profile(
         profile,
         fade_duration,
         duration,
-        None,
         "background profile",
-        DJCommand::SetBackgroundProfile,
+        ConfigurableTier::Manual,
     )
     .await
 }
@@ -653,9 +648,8 @@ pub async fn override_profile(
         profile,
         fade_duration,
         duration,
-        Some(DEFAULT_PROFILE_FADE),
         "profile override",
-        DJCommand::SetOverrideProfile,
+        ConfigurableTier::Override,
     )
     .await
 }
@@ -671,11 +665,6 @@ pub async fn channel_status(
 
     let guild_id = require_guild(ctx)?;
 
-    if status.is_none() && duration.is_some() {
-        ctx.say("Duration only applies when setting a background channel status")
-            .await?;
-        return Ok(());
-    }
     let duration = match optional_seconds(duration, "Duration") {
         Ok(duration) => duration,
         Err(e) => {
@@ -694,7 +683,7 @@ pub async fn channel_status(
     if let Err(e) = send_to_dj(
         ctx.data(),
         guild_id,
-        DJCommand::SetBackgroundChannelStatus(status),
+        DJCommand::SetChannelStatus(ConfigurableTier::Manual, status),
     ) {
         ctx.say(format!(
             "Failed to update DJ background channel status: {e:#}"
@@ -729,11 +718,6 @@ pub async fn override_channel_status(
 
     let guild_id = require_guild(ctx)?;
 
-    if matches!(mode, ChannelStatusOverrideMode::Clear) && duration.is_some() {
-        ctx.say("Duration only applies when setting an override")
-            .await?;
-        return Ok(());
-    }
     let duration = match optional_seconds(duration, "Duration") {
         Ok(duration) => duration,
         Err(e) => {
@@ -773,7 +757,7 @@ pub async fn override_channel_status(
     if let Err(e) = send_to_dj(
         ctx.data(),
         guild_id,
-        DJCommand::SetOverrideChannelStatus(status_override),
+        DJCommand::SetChannelStatus(ConfigurableTier::Override, status_override),
     ) {
         ctx.say(format!(
             "Failed to update DJ channel status override: {e:#}"

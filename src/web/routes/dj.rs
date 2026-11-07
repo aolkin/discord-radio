@@ -1,7 +1,7 @@
 use crate::audio::dj::manager::{DJCommand, DjBusy, IdleRequest, TrackRequest};
 use crate::audio::dj::segments::SignalProfilePlayback;
-use crate::audio::dj::state_machine::{ChannelStatus, DEFAULT_PROFILE_FADE};
-use crate::audio::dj::tiered::TimedValue;
+use crate::audio::dj::state_machine::{ChannelStatus, default_profile_fade};
+use crate::audio::dj::tiered::{ConfigurableTier, TimedValue};
 use crate::state::Data;
 use crate::web::error::{ApiError, WithStatus};
 use anyhow::Context;
@@ -126,6 +126,7 @@ pub async fn force_dj_idle(
 /// (seconds) apply only when setting one.
 #[derive(Debug, Deserialize)]
 pub struct DjProfileRequest {
+    pub tier: ConfigurableTier,
     pub profile: Option<String>,
     pub fade_duration: Option<f32>,
     pub duration: Option<f32>,
@@ -141,52 +142,15 @@ fn optional_seconds(seconds: Option<f32>, name: &str) -> Result<Option<Duration>
         .transpose()
 }
 
-pub async fn set_dj_background_profile(
+pub async fn set_dj_profile(
     State(bot_state): State<Data>,
     Path(guild_id): Path<GuildId>,
     AxumJson(request): AxumJson<DjProfileRequest>,
 ) -> Result<StatusCode, ApiError> {
-    set_dj_profile(
-        &bot_state,
-        guild_id,
-        request,
-        None,
-        DJCommand::SetBackgroundProfile,
-    )
-    .await
-}
-
-pub async fn set_dj_override_profile(
-    State(bot_state): State<Data>,
-    Path(guild_id): Path<GuildId>,
-    AxumJson(request): AxumJson<DjProfileRequest>,
-) -> Result<StatusCode, ApiError> {
-    set_dj_profile(
-        &bot_state,
-        guild_id,
-        request,
-        Some(DEFAULT_PROFILE_FADE),
-        DJCommand::SetOverrideProfile,
-    )
-    .await
-}
-
-async fn set_dj_profile(
-    bot_state: &Data,
-    guild_id: GuildId,
-    request: DjProfileRequest,
-    default_fade: Option<Duration>,
-    command: fn(Option<TimedValue<SignalProfilePlayback>>) -> DJCommand,
-) -> Result<StatusCode, ApiError> {
-    if request.profile.is_none() && (request.fade_duration.is_some() || request.duration.is_some())
-    {
-        return Err(ApiError::bad_request(
-            "fade_duration and duration need a profile",
-        ));
-    }
-    let fade = optional_seconds(request.fade_duration, "fade_duration")?.or(default_fade);
+    let fade = optional_seconds(request.fade_duration, "fade_duration")?
+        .or(default_profile_fade(request.tier));
     let duration = optional_seconds(request.duration, "duration")?;
-    ensure_profile_exists(bot_state, request.profile.as_deref())?;
+    ensure_profile_exists(&bot_state, request.profile.as_deref())?;
 
     let playback = request.profile.map(|profile| {
         TimedValue::new(
@@ -198,52 +162,32 @@ async fn set_dj_profile(
             duration,
         )
     });
-    send_dj_command(bot_state, guild_id, command(playback))
-}
-
-#[derive(Debug, Deserialize)]
-pub struct DjChannelStatusRequest<T> {
-    pub status: Option<T>,
-    pub duration: Option<f32>,
-}
-
-impl<T> DjChannelStatusRequest<T> {
-    fn timed(
-        self,
-        into_status: impl FnOnce(T) -> ChannelStatus,
-    ) -> Result<Option<TimedValue<ChannelStatus>>, ApiError> {
-        if self.status.is_none() && self.duration.is_some() {
-            return Err(ApiError::bad_request("duration needs a status"));
-        }
-        let duration = optional_seconds(self.duration, "duration")?;
-        Ok(self
-            .status
-            .map(|status| TimedValue::new(into_status(status), duration)))
-    }
-}
-
-pub async fn set_dj_background_channel_status(
-    State(bot_state): State<Data>,
-    Path(guild_id): Path<GuildId>,
-    AxumJson(request): AxumJson<DjChannelStatusRequest<String>>,
-) -> Result<StatusCode, ApiError> {
-    let status = request.timed(ChannelStatus::Fixed)?;
     send_dj_command(
         &bot_state,
         guild_id,
-        DJCommand::SetBackgroundChannelStatus(status),
+        DJCommand::SetSignalProfile(request.tier, playback),
     )
 }
 
-pub async fn set_dj_override_channel_status(
+#[derive(Debug, Deserialize)]
+pub struct DjChannelStatusRequest {
+    pub tier: ConfigurableTier,
+    pub status: Option<ChannelStatus>,
+    pub duration: Option<f32>,
+}
+
+pub async fn set_dj_channel_status(
     State(bot_state): State<Data>,
     Path(guild_id): Path<GuildId>,
-    AxumJson(request): AxumJson<DjChannelStatusRequest<ChannelStatus>>,
+    AxumJson(request): AxumJson<DjChannelStatusRequest>,
 ) -> Result<StatusCode, ApiError> {
-    let status = request.timed(|status| status)?;
+    let duration = optional_seconds(request.duration, "duration")?;
+    let status = request
+        .status
+        .map(|status| TimedValue::new(status, duration));
     send_dj_command(
         &bot_state,
         guild_id,
-        DJCommand::SetOverrideChannelStatus(status),
+        DJCommand::SetChannelStatus(request.tier, status),
     )
 }
