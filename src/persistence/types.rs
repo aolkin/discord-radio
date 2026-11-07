@@ -1,3 +1,4 @@
+use crate::activity::ActivityType;
 use serde::{Deserialize, Serialize};
 use serenity::model::id::{ChannelId, GuildId};
 use std::time::SystemTime;
@@ -52,6 +53,6 @@ pub struct RegisteredChannel {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ActivityState {
-    pub activity_type: crate::activity::ActivityType,
+    pub activity_type: ActivityType,
     pub status: String,
 }

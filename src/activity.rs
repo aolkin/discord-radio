@@ -1,19 +1,11 @@
+use poise::ChoiceParameter;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, OnceLock};
+use strum::Display;
 use tokio::sync::RwLock;
 
 /// Activity type enum that supports equality comparison
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    Serialize,
-    Deserialize,
-    strum::Display,
-    poise::ChoiceParameter,
-)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Display, ChoiceParameter)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum ActivityType {

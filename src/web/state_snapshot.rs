@@ -1,3 +1,4 @@
+use crate::activity::ActivityType;
 use crate::audio::dj::state_machine::ChannelStatus;
 use crate::audio::tracks::TrackSnapshot;
 use crate::state::Data;
@@ -43,7 +44,7 @@ pub struct BotSnapshot {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CurrentActivity {
-    pub activity_type: crate::activity::ActivityType,
+    pub activity_type: ActivityType,
     pub status: String,
 }
 

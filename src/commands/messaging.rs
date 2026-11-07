@@ -1,3 +1,4 @@
+use crate::activity::ActivityType;
 use crate::commands::utils::{Context, require_guild};
 use anyhow::Context as _;
 use poise::serenity_prelude as serenity;
@@ -97,7 +98,7 @@ pub async fn set_status(
     #[description = "Custom status text"] status: String,
     #[description = "Activity type (defaults to custom)"]
     #[rename = "type"]
-    activity_type: Option<crate::activity::ActivityType>,
+    activity_type: Option<ActivityType>,
 ) -> anyhow::Result<()> {
     let user_id = ctx.author().id;
 
@@ -109,7 +110,7 @@ pub async fn set_status(
 
     ctx.defer_ephemeral().await?;
 
-    let activity_type = activity_type.unwrap_or(crate::activity::ActivityType::Custom);
+    let activity_type = activity_type.unwrap_or(ActivityType::Custom);
 
     ctx.data()
         .activity_manager

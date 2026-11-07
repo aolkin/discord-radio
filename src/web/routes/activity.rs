@@ -1,3 +1,4 @@
+use crate::activity::ActivityType;
 use crate::state::Data;
 use crate::web::error::ApiError;
 use axum::Json as AxumJson;
@@ -7,7 +8,7 @@ use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct ActivityRequest {
-    pub activity_type: crate::activity::ActivityType,
+    pub activity_type: ActivityType,
     pub status: String,
 }
 
