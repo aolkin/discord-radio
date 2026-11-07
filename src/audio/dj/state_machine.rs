@@ -1,13 +1,11 @@
-use crate::audio::dj::config::{
-    ConfiguredPool, DEFAULT_SIGNAL_PROFILE, LoadedConfig, PoolEntry, SegmentDefaults,
-};
+use crate::audio::dj::config::{ConfiguredPool, LoadedConfig, PoolEntry, SegmentDefaults};
 use crate::audio::dj::manager::{
     ADVANCE_RETRY_DELAY, DJCommand, HexMessageRequest, IdleRequest, TrackRequest,
 };
 use crate::audio::dj::segments::{
     Completed, HexSegment, Segment, SignalProfilePlayback, TrackSegment,
 };
-use crate::audio::dj::segments::{NoiseEntry, NoiseSegment, SegmentCtx};
+use crate::audio::dj::segments::{DEFAULT_SIGNAL_PROFILE, NoiseEntry, NoiseSegment, SegmentCtx};
 use crate::audio::dj::serde::{ShiftBack, deser_instant, ser_instant};
 use crate::audio::dj::tiered::{
     TieredChange, TieredStateMachine, TieredValue, TieredValueState, TimedValue,

@@ -4,12 +4,15 @@ use crate::audio::dj::segments::{
     CommonSegmentPlaybackConfig, Segment, SegmentPlaybackConfig, SignalProfilePlayback,
     StateDisplay,
 };
+use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
+use crate::audio::dj::tiered::TimedValue;
 use crate::audio::dj::weighted_choice::{Identity, Weighted};
 use async_trait::async_trait;
 use field_trait::field_trait_impl;
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
+use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -30,6 +33,28 @@ impl Weighted for NoiseEntry {
             self.max_duration_seconds.to_bits(),
             self.fade_duration_seconds.map(f32::to_bits),
         ))
+    }
+}
+
+pub static DEFAULT_SIGNAL_PROFILE: LazyLock<NoiseEntry> = LazyLock::new(|| NoiseEntry {
+    noise_profile: "clear".to_string(),
+    weight: 1,
+    fade_duration_seconds: Some(3.0),
+    min_duration_seconds: 60.0,
+    max_duration_seconds: 120.0,
+});
+
+impl From<&NoiseEntry> for TimedValue<SignalProfilePlayback> {
+    fn from(entry: &NoiseEntry) -> Self {
+        let fade = entry
+            .fade_duration_seconds
+            .map_or(DEFAULT_PROFILE_FADE, Duration::from_secs_f32);
+        let profile = SignalProfilePlayback {
+            fade_in_duration: Some(fade),
+            ..entry.noise_profile.clone().into()
+        };
+        let hold = rand::rng().random_range(entry.min_duration_seconds..entry.max_duration_seconds);
+        TimedValue::temporary(profile, fade + Duration::from_secs_f32(hold))
     }
 }
 
