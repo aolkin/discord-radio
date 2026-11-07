@@ -6,7 +6,8 @@ use crate::audio::dj::segments::{
     Completed, HexSegment, Segment, SignalProfilePlayback, TrackSegment,
 };
 use crate::audio::dj::segments::{NoiseEntry, NoiseSegment, SegmentCtx};
-use crate::audio::dj::serde::{deser_instant, ser_instant};
+use crate::audio::dj::serde::{ShiftBack, deser_instant, ser_instant};
+use crate::audio::dj::tiered::{TieredChange, TieredStateMachine, TieredValue, TimedValue};
 use crate::audio::dj::weighted_choice::WeightedSelector;
 use crate::state::Data;
 use anyhow::Context;
@@ -66,54 +67,9 @@ impl From<Box<dyn Segment>> for SegmentContainer {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub enum BackgroundProfile {
-    Manual(SignalProfilePlayback),
-    Rotating {
-        profile: SignalProfilePlayback,
-        #[serde(serialize_with = "ser_instant", deserialize_with = "deser_instant")]
-        started_at: Instant,
-        duration: Duration,
-    },
-}
-
-impl BackgroundProfile {
-    pub fn completed(&self) -> Completed {
-        match self {
-            Self::Manual(_) => Completed::never(),
-            Self::Rotating {
-                started_at,
-                duration,
-                ..
-            } => Completed::at(*started_at + *duration),
-        }
-    }
-}
-
-impl Default for BackgroundProfile {
-    fn default() -> Self {
-        Self::Rotating {
-            profile: "clear".to_string().into(),
-            started_at: Instant::now(),
-            duration: Duration::ZERO,
-        }
-    }
-}
-
-/// Ordered from lowest to highest priority.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, strum::Display)]
-#[strum(serialize_all = "lowercase")]
-pub enum ProfileSource {
-    Rotating,
-    Manual,
-    Forced,
-    Override,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 pub struct DJState {
     pub segment: SegmentContainer,
-    pub background_profile: BackgroundProfile,
-    pub override_profile: Option<SignalProfilePlayback>,
+    pub signal_profile: TieredStateMachine<NoiseEntry, SignalProfilePlayback>,
     pub override_channel_status: Option<String>,
 }
 
@@ -121,8 +77,7 @@ impl Default for DJState {
     fn default() -> Self {
         Self {
             segment: NoiseSegment::quiet(Duration::from_secs(1)).into(),
-            background_profile: BackgroundProfile::default(),
-            override_profile: None,
+            signal_profile: TieredStateMachine::new(&NoiseEntry::default()),
             override_channel_status: None,
         }
     }
@@ -130,13 +85,8 @@ impl Default for DJState {
 
 impl DJState {
     pub fn shift_back(&mut self, by: Duration) {
-        let shift = |instant: &mut Instant| {
-            *instant = instant.checked_sub(by).unwrap_or_else(Instant::now);
-        };
-        shift(&mut self.segment.started_at);
-        if let BackgroundProfile::Rotating { started_at, .. } = &mut self.background_profile {
-            shift(started_at);
-        }
+        self.segment.started_at.shift_back(by);
+        self.signal_profile.shift_back(by);
     }
 
     pub fn effective_channel_status(&self) -> Option<String> {
@@ -145,30 +95,8 @@ impl DJState {
             .or_else(|| self.segment.channel_status())
     }
 
-    pub fn effective_profile(&self) -> SignalProfilePlayback {
-        if let Some(profile) = &self.override_profile {
-            return profile.clone();
-        }
-        if let Some(forced) = self.segment.signal_profile() {
-            return forced;
-        }
-        match &self.background_profile {
-            BackgroundProfile::Manual(profile) | BackgroundProfile::Rotating { profile, .. } => {
-                profile.clone()
-            }
-        }
-    }
-
-    pub fn profile_source(&self) -> ProfileSource {
-        if self.override_profile.is_some() {
-            ProfileSource::Override
-        } else if self.segment.signal_profile().is_some() {
-            ProfileSource::Forced
-        } else if let BackgroundProfile::Manual(_) = self.background_profile {
-            ProfileSource::Manual
-        } else {
-            ProfileSource::Rotating
-        }
+    pub fn signal_profile(&self) -> TieredValue<SignalProfilePlayback> {
+        self.signal_profile.value()
     }
 }
 
@@ -180,8 +108,6 @@ pub struct DJStateMachine {
     config: watch::Receiver<Arc<LoadedConfig>>,
     pool_selector: WeightedSelector<ConfiguredPool>,
     entry_selectors: HashMap<String, WeightedSelector<PoolEntry>>,
-    signal_profile_selector: WeightedSelector<NoiseEntry>,
-    applied_profile: Option<(SignalProfilePlayback, ProfileSource)>,
     /// An empty status is how Discord clears it.
     applied_channel_status: Option<String>,
 }
@@ -230,11 +156,9 @@ impl DJStateMachine {
             config,
             pool_selector: WeightedSelector::new(Arc::default(), None),
             entry_selectors: HashMap::new(),
-            signal_profile_selector: WeightedSelector::new(Arc::default(), None),
-            applied_profile: None,
             applied_channel_status: None,
         };
-        state_machine.set_config(&loaded);
+        state_machine.set_config(&loaded).await;
         state_machine
     }
 
@@ -244,7 +168,7 @@ impl DJStateMachine {
         'dj: loop {
             self.update_profile().await;
             self.update_channel_status().await;
-            let rotation_due = self.current_state().await.background_profile.completed();
+            let profile_due = self.current_state().await.signal_profile.completed();
             self.persist_state(false).await;
             let mut config = self.config.clone();
 
@@ -262,10 +186,10 @@ impl DJStateMachine {
                         tokio::time::sleep(ADVANCE_RETRY_DELAY).await;
                     }
                 }
-                _ = rotation_due => self.rotate_profile().await,
+                _ = profile_due => self.state.write().await.signal_profile.advance(),
                 Ok(()) = config.changed() => {
                     let loaded = self.config.borrow_and_update().clone();
-                    self.set_config(&loaded);
+                    self.set_config(&loaded).await;
                 }
             }
         }
@@ -273,53 +197,29 @@ impl DJStateMachine {
         tracing::info!("DJ task terminated");
     }
 
-    async fn rotate_profile(&mut self) {
-        let entry = self
-            .signal_profile_selector
-            .choose()
-            .unwrap_or(&DEFAULT_SIGNAL_PROFILE)
-            .to_owned();
-        let fade = entry
-            .fade_duration_seconds
-            .map_or(DEFAULT_PROFILE_FADE, Duration::from_secs_f32);
-        let hold_secs =
-            rand::rng().random_range(entry.min_duration_seconds..entry.max_duration_seconds);
-        self.state.write().await.background_profile = BackgroundProfile::Rotating {
-            profile: SignalProfilePlayback {
-                fade_in_duration: Some(fade),
-                ..entry.noise_profile.into()
-            },
-            started_at: Instant::now(),
-            duration: fade + Duration::from_secs_f32(hold_secs),
-        };
-    }
-
     async fn update_profile(&mut self) {
-        let state = self.state.read().await;
-        let source = state.profile_source();
-        let target = state.effective_profile();
-        drop(state);
+        let Some(TieredChange {
+            previous,
+            current: target,
+        }) = self.state.write().await.signal_profile.changed()
+        else {
+            return;
+        };
+        let fade = match previous {
+            None => Duration::ZERO,
+            Some(previous) if target.tier <= previous.tier => target.value.fade_in(),
+            Some(previous) => previous.value.fade_out(),
+        };
+        let processor_arc = self.bot_state.audio_processor(self.guild_id).await;
+        if let Some(new_profile) = self.bot_state.profile_manager.get(&target.value.name) {
+            let mut processor = processor_arc.write().await;
+            processor.start_profile_transition((*new_profile).clone(), fade.as_secs_f32() * 1000.0);
 
-        let previous = self.applied_profile.as_ref();
-        if previous.map(|(p, _)| &p.name) != Some(&target.name) {
-            let fade = match previous {
-                None => Duration::ZERO,
-                Some((_, previous_source)) if source >= *previous_source => target.fade_in(),
-                Some((previous, _)) => previous.fade_out(),
-            };
-            let processor_arc = self.bot_state.audio_processor(self.guild_id).await;
-            if let Some(new_profile) = self.bot_state.profile_manager.get(&target.name) {
-                let mut processor = processor_arc.write().await;
-                processor
-                    .start_profile_transition((*new_profile).clone(), fade.as_secs_f32() * 1000.0);
-
-                tracing::info!(
-                    "DJ transitioning to profile '{}' over {:.1}s",
-                    target.name,
-                    fade.as_secs_f32(),
-                );
-            }
-            self.applied_profile = Some((target, source));
+            tracing::info!(
+                "DJ transitioning to profile '{}' over {:.1}s",
+                target.value.name,
+                fade.as_secs_f32(),
+            );
         }
     }
 
@@ -475,7 +375,7 @@ impl DJStateMachine {
         })
     }
 
-    fn set_config(&mut self, LoadedConfig { config, pools }: &LoadedConfig) {
+    async fn set_config(&mut self, LoadedConfig { config, pools }: &LoadedConfig) {
         self.entry_selectors
             .retain(|name, _| pools.iter().any(|pool| pool.file.name == *name));
         for pool in pools.iter() {
@@ -488,7 +388,10 @@ impl DJStateMachine {
         }
         self.pool_selector
             .reconfigure(pools.clone(), config.pool_history_penalty_multiplier);
-        self.signal_profile_selector
+        self.state
+            .write()
+            .await
+            .signal_profile
             .set_pool(&config.signal_profiles);
     }
 
@@ -586,7 +489,12 @@ impl DJStateMachine {
         }
 
         let to_state = segment.state_name().to_string();
-        self.state.write().await.segment = segment;
+        let mut state = self.state.write().await;
+        state
+            .signal_profile
+            .update_forced(segment.signal_profile().map(TimedValue::permanent));
+        state.segment = segment;
+        drop(state);
         if let Some(metrics) = crate::metrics::get() {
             metrics.record_dj_state_transition(self.guild_id.get(), &from_state, &to_state);
         }
@@ -634,7 +542,7 @@ impl DJStateMachine {
                 let loaded = config.borrow_and_update().clone();
                 tracing::info!("DJ switching to config {:?}", loaded.config.name);
                 self.config = config;
-                self.set_config(&loaded);
+                self.set_config(&loaded).await;
                 Ok(())
             }
             DJCommand::SetAnnouncementChannel(new_channel) => {
@@ -643,18 +551,19 @@ impl DJStateMachine {
                 Ok(())
             }
             DJCommand::SetBackgroundProfile(profile) => {
-                let mut state = self.state.write().await;
-                match profile {
-                    Some(profile) => state.background_profile = BackgroundProfile::Manual(profile),
-                    None if matches!(state.background_profile, BackgroundProfile::Manual(_)) => {
-                        state.background_profile = BackgroundProfile::default();
-                    }
-                    None => {}
-                }
+                self.state
+                    .write()
+                    .await
+                    .signal_profile
+                    .update_manual(profile.map(TimedValue::permanent));
                 Ok(())
             }
             DJCommand::SetOverrideProfile(profile_override) => {
-                self.state.write().await.override_profile = profile_override;
+                self.state
+                    .write()
+                    .await
+                    .signal_profile
+                    .update_override(profile_override.map(TimedValue::permanent));
                 Ok(())
             }
         };
@@ -684,12 +593,4 @@ static DEFAULT_NOISE_PERIOD: LazyLock<NoiseEntry> = LazyLock::new(|| NoiseEntry 
     max_duration_seconds: 2.0,
     weight: 1,
     fade_duration_seconds: None,
-});
-
-static DEFAULT_SIGNAL_PROFILE: LazyLock<NoiseEntry> = LazyLock::new(|| NoiseEntry {
-    noise_profile: "clear".to_string(),
-    weight: 1,
-    fade_duration_seconds: Some(3.0),
-    min_duration_seconds: 60.0,
-    max_duration_seconds: 120.0,
 });

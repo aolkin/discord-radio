@@ -71,7 +71,7 @@ Control audio tracks for any guild through the "Manage Tracks" button:
 
 ### Signal Profile Management
 
-The DJ plays the profile override if set, else the current segment's forced profile, else its background profile. The background profile is either one set by hand or a rotating pick from the DJ config; clearing a hand-set background profile returns the DJ to rotation. The DJ saves both settings with its state.
+The DJ plays the profile override if set, else the current segment's profile, else its background profile. The background profile is either one set by hand or a rotating pick from the DJ config; clearing a hand-set background profile returns the DJ to rotation. The DJ saves both settings with its state.
 
 The Signal Profiles panel lists every profile by name. Saving a new or edited profile writes it to object storage; a DJ picks up the new parameters the next time it transitions to that profile.
 

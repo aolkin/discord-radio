@@ -799,9 +799,11 @@ pub async fn status(ctx: Context<'_>) -> anyhow::Result<()> {
     let state = state_arc.read().await;
 
     // Get current signal profile information
-    let profile = state.effective_profile().name;
-    let source = state.profile_source();
-    let profile_info = format!("\nSignal Profile: **{profile}** ({source})");
+    let profile = state.signal_profile();
+    let profile_info = format!(
+        "\nSignal Profile: **{}** ({})",
+        profile.value.name, profile.tier
+    );
 
     let display = state.segment.state_display();
     let elapsed = state.segment.elapsed().as_secs();
