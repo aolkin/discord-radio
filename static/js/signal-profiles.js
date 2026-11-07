@@ -1,4 +1,6 @@
-import { apiRequest, bodyOrStatus, emptyMessage } from './api.js';
+import { apiRequest, emptyMessage } from './api.js';
+import { blankRow, convertObject, fieldFromServer, fieldToServer } from './form-fields.js';
+import { registryEditor } from './registry-editor.js';
 
 export const modals = {
     signalProfile: {
@@ -19,9 +21,56 @@ export const modals = {
     },
 };
 
+const profileFields = [
+    { key: 'bandpass_low', label: 'Bandpass Low (Hz)', type: 'number', step: 'any', min: 0, default: 20 },
+    { key: 'bandpass_high', label: 'Bandpass High (Hz)', type: 'number', step: 'any', min: 0, default: 20000 },
+    { key: 'white_noise_level', label: 'White Noise Level (0-2)', type: 'number', step: 'any', min: 0, max: 2 },
+    { key: 'pink_noise_level', label: 'Pink Noise Level (0-2)', type: 'number', step: 'any', min: 0, max: 2 },
+    { key: 'brown_noise_level', label: 'Brown Noise Level (0-2)', type: 'number', step: 'any', min: 0, max: 2 },
+    { key: 'tremolo_depth', label: 'Tremolo Depth', type: 'number', step: 'any' },
+    { key: 'tremolo_rate', label: 'Tremolo Rate (Hz)', type: 'number', step: 'any' },
+    { key: 'tremolo_jitter', label: 'Tremolo Jitter', type: 'number', step: 'any' },
+    { key: 'clip_pregain', label: 'Clip Pregain', type: 'number', step: 'any', default: 1 },
+    { key: 'clip_threshold', label: 'Clip Threshold', type: 'number', step: 'any', default: 1 },
+    { key: 'bitcrush_bits', label: 'Bitcrush Bits', type: 'number', step: 1, min: 1, max: 255, optional: true },
+    { key: 'dropout_probability', label: 'Dropout Probability', type: 'number', step: 'any', min: 0 },
+    { key: 'frequency_warble_hz', label: 'Frequency Warble (Hz)', type: 'number', step: 'any', optional: true },
+];
+
+function toForm(name, profile) {
+    return {
+        name,
+        ...convertObject(profileFields, profile, fieldFromServer),
+        dropout_duration_ms: [...profile.dropout_duration_ms],
+    };
+}
+
+function toBody(form) {
+    return {
+        ...convertObject(profileFields, form, fieldToServer),
+        dropout_duration_ms: form.dropout_duration_ms,
+    };
+}
+
+function blankForm() {
+    return { name: '', ...blankRow(profileFields), dropout_duration_ms: [0, 0] };
+}
+
+const profileEditor = registryEditor({
+    path: '/api/profiles',
+    prefix: 'profile',
+    list: 'profiles',
+    listKey: 'profiles',
+    label: 'signal profile',
+    toForm,
+    toBody,
+    blankForm,
+});
+
 export function signalProfiles() {
     return {
-        // Signal Profile Modal state
+        ...profileEditor.state(),
+        ...profileEditor.methods,
         showSignalProfileModal: false,
         selectedProfile: '',
         profileSetting: 'manual',
@@ -29,119 +78,8 @@ export function signalProfiles() {
         profileDuration: null,
         profileSaving: false,
         profileMessage: emptyMessage(),
-        profiles: [],
-        // Signal Profile Editor state
-        showProfileEditor: false,
-        profileEditorIsNew: false,
-        profileEditorLoading: false,
-        profileEditorSaving: false,
-        profileEditorMessage: emptyMessage(),
-        profileForm: { dropout_duration_ms: [0, 0] },
-        profileFields: [
-            { key: 'bandpass_low', label: 'Bandpass Low (Hz)', step: 'any', min: 0 },
-            { key: 'bandpass_high', label: 'Bandpass High (Hz)', step: 'any', min: 0 },
-            { key: 'white_noise_level', label: 'White Noise Level (0-2)', step: 'any', min: 0, max: 2 },
-            { key: 'pink_noise_level', label: 'Pink Noise Level (0-2)', step: 'any', min: 0, max: 2 },
-            { key: 'brown_noise_level', label: 'Brown Noise Level (0-2)', step: 'any', min: 0, max: 2 },
-            { key: 'tremolo_depth', label: 'Tremolo Depth', step: 'any' },
-            { key: 'tremolo_rate', label: 'Tremolo Rate (Hz)', step: 'any' },
-            { key: 'tremolo_jitter', label: 'Tremolo Jitter', step: 'any' },
-            { key: 'clip_pregain', label: 'Clip Pregain', step: 'any' },
-            { key: 'clip_threshold', label: 'Clip Threshold', step: 'any' },
-            { key: 'bitcrush_bits', label: 'Bitcrush Bits', step: 1, min: 1, max: 255, optional: true },
-            { key: 'dropout_probability', label: 'Dropout Probability', step: 'any', min: 0 },
-            { key: 'frequency_warble_hz', label: 'Frequency Warble (Hz)', step: 'any', optional: true },
-        ],
+        profileFields,
 
-        async loadProfiles() {
-            try {
-                const response = await apiRequest('/api/profiles');
-                const data = await response.json();
-                this.profiles = data.profiles.sort();
-            } catch (error) {
-                console.error('Failed to load profiles:', error);
-            }
-        },
-
-        async openProfileEditor(name) {
-            this.profileEditorIsNew = name === null;
-            this.openModal('profileEditor');
-
-            if (this.profileEditorIsNew) {
-                this.profileForm = {
-                    name: '',
-                    bandpass_low: 20,
-                    bandpass_high: 20000,
-                    white_noise_level: 0,
-                    pink_noise_level: 0,
-                    brown_noise_level: 0,
-                    tremolo_depth: 0,
-                    tremolo_rate: 0,
-                    tremolo_jitter: 0,
-                    clip_pregain: 1,
-                    clip_threshold: 1,
-                    bitcrush_bits: '',
-                    dropout_probability: 0,
-                    dropout_duration_ms: [0, 0],
-                    frequency_warble_hz: '',
-                };
-                return;
-            }
-
-            this.profileEditorLoading = true;
-            try {
-                const response = await apiRequest(`/api/profiles/${encodeURIComponent(name)}`, {
-                    errorMessage: (failed) => `HTTP ${failed.status}`,
-                });
-                const profile = await response.json();
-                for (const field of this.profileFields) {
-                    if (profile[field.key] === null) {
-                        profile[field.key] = '';
-                    }
-                }
-                this.profileForm = profile;
-            } catch (error) {
-                console.error('Failed to load signal profile:', error);
-                this.profileEditorMessage = { text: `Failed to load profile: ${error.message}`, type: 'error' };
-            } finally {
-                this.profileEditorLoading = false;
-            }
-        },
-
-        async saveProfile() {
-            const name = this.profileForm.name;
-            if (this.profileEditorIsNew && this.profiles.includes(name)) {
-                this.profileEditorMessage = { text: `A profile named "${name}" already exists`, type: 'error' };
-                return;
-            }
-
-            const { name: _, ...body } = this.profileForm;
-            for (const field of this.profileFields) {
-                if (field.optional && body[field.key] === '') {
-                    body[field.key] = null;
-                }
-            }
-
-            await this.runAction({
-                saving: 'profileEditorSaving',
-                message: 'profileEditorMessage',
-                label: 'saving signal profile',
-                request: () =>
-                    apiRequest(`/api/profiles/${encodeURIComponent(name)}`, {
-                        method: 'PUT',
-                        body,
-                        errorMessage: bodyOrStatus,
-                    }),
-                onSuccess: async () => {
-                    this.profileEditorIsNew = false;
-                    await this.loadProfiles();
-                },
-                success: 'Signal profile saved',
-                failure: 'Failed to save profile',
-            });
-        },
-
-        // Signal Profile Modal Functions
         async changeSignalProfile() {
             const body = {
                 tier: this.profileSetting,
