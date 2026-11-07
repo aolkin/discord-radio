@@ -1,4 +1,4 @@
-import { apiRequest, bodyOrStatus, emptyMessage } from './api.js';
+import { emptyMessage } from './api.js';
 import {
     blankRow,
     blankSegmentDefaults,
@@ -14,6 +14,7 @@ import {
     toggleHexConfig,
     weight,
 } from './form-fields.js';
+import { registryEditor } from './registry-editor.js';
 
 export const modals = {
     djConfigEditor: {
@@ -70,9 +71,9 @@ function convertRotations(source, convert) {
     );
 }
 
-function toForm(config) {
+function toForm(name, config) {
     return {
-        name: config.name,
+        name,
         ...convertObject(generalFields, config, fieldFromServer),
         pools: Object.entries(config.pools).map(([pool, reference]) => ({
             ...convertObject(poolReferenceFields, { pool, ...reference }, fieldFromServer),
@@ -104,28 +105,24 @@ function blankForm() {
     };
 }
 
+const djConfigEditor = registryEditor({
+    path: '/api/dj-configs',
+    prefix: 'djConfig',
+    list: 'djConfigs',
+    listKey: 'configs',
+    label: 'DJ config',
+    toForm,
+    toBody,
+    blankForm,
+});
+
 export function djConfigs() {
     return {
-        djConfigs: [],
-        showDjConfigEditor: false,
-        djConfigEditorIsNew: false,
-        djConfigEditorLoading: false,
-        djConfigEditorSaving: false,
-        djConfigEditorMessage: emptyMessage(),
-        djConfigForm: blankForm(),
+        ...djConfigEditor.state(),
+        ...djConfigEditor.methods,
         djConfigGeneralFields: generalFields,
         djConfigRotationFields: rotationFields,
         djConfigRotations: rotations,
-
-        async loadDjConfigs() {
-            try {
-                const response = await apiRequest('/api/dj-configs');
-                const data = await response.json();
-                this.djConfigs = data.configs.sort();
-            } catch (error) {
-                console.error('Failed to load DJ configs:', error);
-            }
-        },
 
         djConfigPoolOptions(reference) {
             return this.pools.includes(reference.pool) || reference.pool === ''
@@ -151,55 +148,6 @@ export function djConfigs() {
 
         addDjConfigRotationEntry(rotation) {
             this.djConfigForm[rotation.key].entries.push(blankRow(rotation.entryFields));
-        },
-
-        async openDjConfigEditor(name) {
-            this.djConfigEditorIsNew = name === null;
-            this.openModal('djConfigEditor');
-
-            if (this.djConfigEditorIsNew) {
-                this.djConfigForm = blankForm();
-                return;
-            }
-
-            this.djConfigEditorLoading = true;
-            try {
-                const response = await apiRequest(`/api/dj-configs/${encodeURIComponent(name)}`, {
-                    errorMessage: bodyOrStatus,
-                });
-                this.djConfigForm = toForm(await response.json());
-            } catch (error) {
-                console.error('Failed to load DJ config:', error);
-                this.djConfigEditorMessage = { text: `Failed to load DJ config: ${error.message}`, type: 'error' };
-            } finally {
-                this.djConfigEditorLoading = false;
-            }
-        },
-
-        async saveDjConfig() {
-            const name = this.djConfigForm.name;
-            if (this.djConfigEditorIsNew && this.djConfigs.includes(name)) {
-                this.djConfigEditorMessage = { text: `A DJ config named "${name}" already exists`, type: 'error' };
-                return;
-            }
-
-            await this.runAction({
-                saving: 'djConfigEditorSaving',
-                message: 'djConfigEditorMessage',
-                label: 'saving DJ config',
-                request: () =>
-                    apiRequest(`/api/dj-configs/${encodeURIComponent(name)}`, {
-                        method: 'PUT',
-                        body: toBody(this.djConfigForm),
-                        errorMessage: bodyOrStatus,
-                    }),
-                onSuccess: async () => {
-                    this.djConfigEditorIsNew = false;
-                    await this.loadDjConfigs();
-                },
-                success: 'DJ config saved',
-                failure: 'Failed to save DJ config',
-            });
         },
     };
 }
