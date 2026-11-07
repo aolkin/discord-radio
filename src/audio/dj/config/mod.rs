@@ -3,7 +3,7 @@ use crate::audio::dj::segments::{
     SignalProfilePlayback, TrackEntry, TrackSegment, ensure_loops,
 };
 use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
-use crate::audio::dj::tiered::RotationEntry;
+use crate::audio::dj::tiered::TimedValue;
 use crate::audio::dj::weighted_choice::{
     Identity, Weighted, WeightedPool, ambassador_impl_Weighted,
 };
@@ -193,7 +193,7 @@ impl PoolEntry {
     }
 }
 
-static DEFAULT_SIGNAL_PROFILE: LazyLock<NoiseEntry> = LazyLock::new(|| NoiseEntry {
+pub static DEFAULT_SIGNAL_PROFILE: LazyLock<NoiseEntry> = LazyLock::new(|| NoiseEntry {
     noise_profile: "clear".to_string(),
     weight: 1,
     fade_duration_seconds: Some(3.0),
@@ -201,23 +201,17 @@ static DEFAULT_SIGNAL_PROFILE: LazyLock<NoiseEntry> = LazyLock::new(|| NoiseEntr
     max_duration_seconds: 120.0,
 });
 
-impl RotationEntry for NoiseEntry {
-    type Value = SignalProfilePlayback;
-
-    fn fallback() -> &'static Self {
-        &DEFAULT_SIGNAL_PROFILE
-    }
-
-    fn pick(&self) -> (SignalProfilePlayback, Duration) {
-        let fade = self
+impl From<&NoiseEntry> for TimedValue<SignalProfilePlayback> {
+    fn from(entry: &NoiseEntry) -> Self {
+        let fade = entry
             .fade_duration_seconds
             .map_or(DEFAULT_PROFILE_FADE, Duration::from_secs_f32);
         let profile = SignalProfilePlayback {
             fade_in_duration: Some(fade),
-            ..self.noise_profile.clone().into()
+            ..entry.noise_profile.clone().into()
         };
-        let hold = random_seconds(self.min_duration_seconds, self.max_duration_seconds);
-        (profile, fade + hold)
+        let hold = random_seconds(entry.min_duration_seconds, entry.max_duration_seconds);
+        TimedValue::temporary(profile, fade + hold)
     }
 }
 

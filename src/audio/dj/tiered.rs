@@ -1,8 +1,7 @@
 use crate::audio::dj::segments::Completed;
 use crate::audio::dj::serde::{ShiftBack, deser_instant, ser_instant};
 use crate::audio::dj::weighted_choice::{Weighted, WeightedPool, WeightedSelector};
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize, Serializer};
 use std::fmt::{self, Debug, Formatter};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -102,29 +101,37 @@ impl<T> TieredValueState<T> {
     }
 }
 
-pub trait RotationEntry: Weighted + Sized + 'static {
-    type Value: Clone + PartialEq + Debug + Serialize + DeserializeOwned;
-
-    fn fallback() -> &'static Self;
-
-    fn pick(&self) -> (Self::Value, Duration);
-}
-
-pub struct TieredStateMachine<E: RotationEntry> {
-    state: TieredValueState<E::Value>,
+pub struct TieredStateMachine<E: 'static, V> {
+    state: TieredValueState<V>,
     background_rotation: WeightedSelector<E>,
-    last_applied: Option<TieredValue<E::Value>>,
+    fallback: &'static E,
+    last_applied: Option<TieredValue<V>>,
 }
 
-impl<E: RotationEntry> TieredStateMachine<E> {
-    pub fn new(initial: E::Value) -> Self {
-        Self::from(TieredValueState {
-            tiered_values: [None, None, None],
-            background_value: TimedValue::temporary(initial, Duration::ZERO),
-        })
+impl<E: Weighted, V: Clone + PartialEq> TieredStateMachine<E, V>
+where
+    for<'a> &'a E: Into<TimedValue<V>>,
+{
+    pub fn new(initial: V, fallback: &'static E) -> Self {
+        Self::restore(
+            TieredValueState {
+                tiered_values: [None, None, None],
+                background_value: TimedValue::temporary(initial, Duration::ZERO),
+            },
+            fallback,
+        )
     }
 
-    pub fn value(&self) -> TieredValue<E::Value> {
+    pub fn restore(state: TieredValueState<V>, fallback: &'static E) -> Self {
+        Self {
+            state,
+            background_rotation: WeightedSelector::new(Arc::default(), None),
+            fallback,
+            last_applied: None,
+        }
+    }
+
+    pub fn value(&self) -> TieredValue<V> {
         let (tier, value) = self.state.controlling();
         TieredValue {
             value: value.value.clone(),
@@ -136,15 +143,15 @@ impl<E: RotationEntry> TieredStateMachine<E> {
         self.state.completed()
     }
 
-    pub fn update_override(&mut self, value: Option<TimedValue<E::Value>>) {
+    pub fn update_override(&mut self, value: Option<TimedValue<V>>) {
         self.state.update(Tier::Override, value);
     }
 
-    pub fn update_forced(&mut self, value: Option<TimedValue<E::Value>>) {
+    pub fn update_forced(&mut self, value: Option<TimedValue<V>>) {
         self.state.update(Tier::Forced, value);
     }
 
-    pub fn update_manual(&mut self, value: Option<TimedValue<E::Value>>) {
+    pub fn update_manual(&mut self, value: Option<TimedValue<V>>) {
         self.state.update(Tier::Manual, value);
     }
 
@@ -159,18 +166,14 @@ impl<E: RotationEntry> TieredStateMachine<E> {
     pub fn advance(&mut self) {
         match self.state.controlling().0 {
             Tier::Background => {
-                let (value, duration) = self
-                    .background_rotation
-                    .choose()
-                    .unwrap_or(E::fallback())
-                    .pick();
-                self.state.background_value = TimedValue::temporary(value, duration);
+                let entry = self.background_rotation.choose().unwrap_or(self.fallback);
+                self.state.background_value = entry.into();
             }
             tier => self.state.update(tier, None),
         }
     }
 
-    pub fn changed(&mut self) -> Option<TieredChange<E::Value>> {
+    pub fn changed(&mut self) -> Option<TieredChange<V>> {
         let current = self.value();
         let previous = self.last_applied.replace(current.clone());
         match &previous {
@@ -180,30 +183,14 @@ impl<E: RotationEntry> TieredStateMachine<E> {
     }
 }
 
-impl<E: RotationEntry> From<TieredValueState<E::Value>> for TieredStateMachine<E> {
-    fn from(state: TieredValueState<E::Value>) -> Self {
-        Self {
-            state,
-            background_rotation: WeightedSelector::new(Arc::default(), None),
-            last_applied: None,
-        }
-    }
-}
-
-impl<E: RotationEntry> Debug for TieredStateMachine<E> {
+impl<E, V: Debug> Debug for TieredStateMachine<E, V> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.state.fmt(f)
     }
 }
 
-impl<E: RotationEntry> Serialize for TieredStateMachine<E> {
+impl<E, V: Serialize> Serialize for TieredStateMachine<E, V> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         self.state.serialize(serializer)
-    }
-}
-
-impl<'de, E: RotationEntry> Deserialize<'de> for TieredStateMachine<E> {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        TieredValueState::deserialize(deserializer).map(Self::from)
     }
 }
