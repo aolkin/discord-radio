@@ -447,10 +447,17 @@ impl Drop for KeyGuard {
 impl Sweeper {
     async fn run(&self, remove_partial_downloads: bool) -> anyhow::Result<SweepOutcome> {
         let cache_dir = self.cache_dir.clone();
-        let files = tokio::task::spawn_blocking(move || {
+        let (files, partial_bytes) = tokio::task::spawn_blocking(move || {
             let mut files = Vec::new();
-            list_cached_files(&cache_dir, &cache_dir, remove_partial_downloads, &mut files)
-                .map(|()| files)
+            let mut partial_bytes = 0;
+            list_cached_files(
+                &cache_dir,
+                &cache_dir,
+                remove_partial_downloads,
+                &mut files,
+                &mut partial_bytes,
+            )
+            .map(|()| (files, partial_bytes))
         })
         .await
         .context("joining the cache sweep")?
@@ -471,7 +478,7 @@ impl Sweeper {
             return Ok(outcome);
         };
 
-        let mut total: u64 = live.iter().map(|file| file.size).sum();
+        let mut total = partial_bytes + live.iter().map(|file| file.size).sum::<u64>();
         live.sort_by_key(|file| (file.accessed.is_none(), file.accessed));
         for file in live {
             if total > max_bytes && !file.in_use && self.evict(&file).await {
@@ -546,12 +553,14 @@ fn is_in_use(path: &Path, metadata: &std::fs::Metadata) -> bool {
 }
 
 /// Collects every cached file under `dir`, recursing into subdirectories.
-/// Partial downloads are deleted or skipped, never collected.
+/// Partial downloads are deleted or skipped, never collected; the size of each
+/// one skipped is added to `partial_bytes`.
 fn list_cached_files(
     dir: &Path,
     cache_dir: &Path,
     remove_partial_downloads: bool,
     files: &mut Vec<CachedFile>,
+    partial_bytes: &mut u64,
 ) -> std::io::Result<()> {
     for entry in std::fs::read_dir(dir)? {
         let entry = entry?;
@@ -559,7 +568,13 @@ fn list_cached_files(
         let file_type = entry.file_type()?;
 
         if file_type.is_dir() {
-            list_cached_files(&path, cache_dir, remove_partial_downloads, files)?;
+            list_cached_files(
+                &path,
+                cache_dir,
+                remove_partial_downloads,
+                files,
+                partial_bytes,
+            )?;
             continue;
         }
 
@@ -576,6 +591,8 @@ fn list_cached_files(
         if key.ends_with(TEMP_SUFFIX) {
             if remove_partial_downloads {
                 remove_best_effort(&path);
+            } else if let Ok(metadata) = entry.metadata() {
+                *partial_bytes += metadata.len();
             }
             continue;
         }
