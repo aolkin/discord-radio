@@ -1,4 +1,4 @@
-import { apiRequest, bodyOrStatus } from './api.js';
+import { apiRequest, bodyOrStatus, emptyMessage } from './api.js';
 
 export const modals = {
     fileBrowser: {
@@ -17,7 +17,7 @@ export function fileBrowser() {
             folders: [],
             files: [],
             loading: false,
-            message: { text: '', type: '' },
+            message: emptyMessage(),
             newFolderName: '',
             creatingFolder: false,
             dragging: false,
@@ -75,7 +75,7 @@ export function fileBrowser() {
 
         async loadFileBrowser(prefix) {
             this.fileBrowser.loading = true;
-            this.fileBrowser.message = { text: '', type: '' };
+            this.fileBrowser.message = emptyMessage();
             try {
                 const response = await apiRequest(`/api/files?prefix=${encodeURIComponent(prefix)}`, {
                     errorMessage: bodyOrStatus,
@@ -94,7 +94,7 @@ export function fileBrowser() {
 
         async createFileBrowserFolder() {
             this.fileBrowser.creatingFolder = true;
-            this.fileBrowser.message = { text: '', type: '' };
+            this.fileBrowser.message = emptyMessage();
             try {
                 await apiRequest('/api/files/folders', {
                     method: 'POST',

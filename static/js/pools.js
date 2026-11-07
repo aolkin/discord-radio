@@ -96,7 +96,7 @@ export function pools() {
         poolEditorIsNew: false,
         poolEditorLoading: false,
         poolEditorSaving: false,
-        poolEditorMessage: { text: '', type: '' },
+        poolEditorMessage: emptyMessage(),
         poolForm: blankForm(),
         poolNewEntryKind: 'track',
         poolKinds: kinds,
@@ -164,23 +164,23 @@ export function pools() {
                 return;
             }
 
-            this.poolEditorSaving = true;
-            this.poolEditorMessage = emptyMessage();
-            try {
-                await apiRequest(`/api/pools/${encodeURIComponent(name)}`, {
-                    method: 'PUT',
-                    body: toBody(this.poolForm),
-                    errorMessage: bodyOrStatus,
-                });
-                this.poolEditorIsNew = false;
-                this.poolEditorMessage = { text: 'Pool saved', type: 'success' };
-                await this.loadPools();
-            } catch (error) {
-                console.error('Failed to save pool:', error);
-                this.poolEditorMessage = { text: `Failed to save pool: ${error.message}`, type: 'error' };
-            } finally {
-                this.poolEditorSaving = false;
-            }
+            await this.runAction({
+                saving: 'poolEditorSaving',
+                message: 'poolEditorMessage',
+                label: 'saving pool',
+                request: () =>
+                    apiRequest(`/api/pools/${encodeURIComponent(name)}`, {
+                        method: 'PUT',
+                        body: toBody(this.poolForm),
+                        errorMessage: bodyOrStatus,
+                    }),
+                onSuccess: async () => {
+                    this.poolEditorIsNew = false;
+                    await this.loadPools();
+                },
+                success: 'Pool saved',
+                failure: 'Failed to save pool',
+            });
         },
     };
 }

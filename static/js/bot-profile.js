@@ -17,7 +17,7 @@ export function botProfile() {
         showBotProfileModal: false,
         botProfileLoading: false,
         botProfileSaving: false,
-        botProfileMessage: { text: '', type: '' },
+        botProfileMessage: emptyMessage(),
         botProfileCurrent: { nick: null, avatar_url: null, banner_url: null },
         botProfileForm: { nick: '', avatar: '', banner: '' },
 
@@ -71,24 +71,24 @@ export function botProfile() {
                 return;
             }
 
-            this.botProfileSaving = true;
-            this.botProfileMessage = { text: '', type: '' };
-            try {
-                await apiRequest(`/api/guilds/${this.currentGuildId}/bot-profile`, {
-                    method: 'PUT',
-                    body,
-                    errorMessage: bodyOrStatus,
-                });
-                this.botProfileMessage = { text: 'Profile saved', type: 'success' };
-                this.botProfileForm.avatar = '';
-                this.botProfileForm.banner = '';
-                await this.loadBotProfile();
-            } catch (error) {
-                console.error('Failed to save bot profile:', error);
-                this.botProfileMessage = { text: `Failed to save the profile: ${error.message}`, type: 'error' };
-            } finally {
-                this.botProfileSaving = false;
-            }
+            await this.runAction({
+                saving: 'botProfileSaving',
+                message: 'botProfileMessage',
+                label: 'saving bot profile',
+                request: () =>
+                    apiRequest(`/api/guilds/${this.currentGuildId}/bot-profile`, {
+                        method: 'PUT',
+                        body,
+                        errorMessage: bodyOrStatus,
+                    }),
+                onSuccess: async () => {
+                    this.botProfileForm.avatar = '';
+                    this.botProfileForm.banner = '';
+                    await this.loadBotProfile();
+                },
+                success: 'Profile saved',
+                failure: 'Failed to save the profile',
+            });
         },
     };
 }

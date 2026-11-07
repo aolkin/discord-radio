@@ -36,7 +36,7 @@ export function tracks() {
         playTrackStart: null,
         playTrackDuration: null,
         playTrackSaving: false,
-        playTrackMessage: { text: '', type: '' },
+        playTrackMessage: emptyMessage(),
         // Track State Modal state
         showTrackStateModal: false,
         trackName: '',
@@ -46,7 +46,7 @@ export function tracks() {
         trackLoops: '',
         trackFadeTime: null,
         trackSaving: false,
-        trackMessage: { text: '', type: '' },
+        trackMessage: emptyMessage(),
         audioFiles: [],
 
         getTrackProgress(track) {
@@ -114,7 +114,7 @@ export function tracks() {
                         body,
                     }),
                 success: 'Track started successfully!',
-                failure: 'Failed to play track. Please try again.',
+                failure: 'Failed to play track',
                 afterFn: () => this.closeModal('playTrack'),
                 afterMs: 1500,
             });
@@ -160,7 +160,7 @@ export function tracks() {
                         body,
                     }),
                 success: 'Track state updated successfully!',
-                failure: 'Failed to change track state. Please try again.',
+                failure: 'Failed to change track state',
                 afterFn: () => this.closeModal('trackState'),
                 afterMs: 1500,
             });

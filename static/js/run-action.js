@@ -1,3 +1,5 @@
+import { emptyMessage } from './api.js';
+
 export function actionMethods() {
     return {
         // Runs a save request with the shared flow: set `saving`, clear
@@ -5,7 +7,7 @@ export function actionMethods() {
         // success, `afterFn` runs once `afterMs` has elapsed.
         async runAction({ saving, message, request, success, failure, label, onSuccess, afterFn, afterMs }) {
             this[saving] = true;
-            this[message] = { text: '', type: '' };
+            this[message] = emptyMessage();
 
             try {
                 await request();
@@ -18,7 +20,7 @@ export function actionMethods() {
                 }
             } catch (error) {
                 console.error(`Error ${label}:`, error);
-                this[message] = { text: failure, type: 'error' };
+                this[message] = { text: `${failure}: ${error.message}`, type: 'error' };
             } finally {
                 this[saving] = false;
             }

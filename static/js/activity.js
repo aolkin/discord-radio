@@ -16,7 +16,7 @@ export function activity() {
         newActivityType: 'playing',
         newActivityStatus: '',
         activitySaving: false,
-        activityMessage: { text: '', type: '' },
+        activityMessage: emptyMessage(),
 
         getActivityIcon(activityType) {
             const icons = {
@@ -48,9 +48,9 @@ export function activity() {
                     }
                 },
                 success: successMessage,
-                failure: 'Failed to perform action. Please try again.',
+                failure: 'Failed to perform action',
                 afterFn: () => {
-                    this.activityMessage = { text: '', type: '' };
+                    this.activityMessage = emptyMessage();
                 },
                 afterMs: 2000,
             });

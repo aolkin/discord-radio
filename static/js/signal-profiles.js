@@ -28,14 +28,14 @@ export function signalProfiles() {
         profileFadeDuration: null,
         profileDuration: null,
         profileSaving: false,
-        profileMessage: { text: '', type: '' },
+        profileMessage: emptyMessage(),
         profiles: [],
         // Signal Profile Editor state
         showProfileEditor: false,
         profileEditorIsNew: false,
         profileEditorLoading: false,
         profileEditorSaving: false,
-        profileEditorMessage: { text: '', type: '' },
+        profileEditorMessage: emptyMessage(),
         profileForm: { dropout_duration_ms: [0, 0] },
         profileFields: [
             { key: 'bandpass_low', label: 'Bandpass Low (Hz)', step: 'any', min: 0 },
@@ -122,23 +122,23 @@ export function signalProfiles() {
                 }
             }
 
-            this.profileEditorSaving = true;
-            this.profileEditorMessage = { text: '', type: '' };
-            try {
-                await apiRequest(`/api/profiles/${encodeURIComponent(name)}`, {
-                    method: 'PUT',
-                    body,
-                    errorMessage: bodyOrStatus,
-                });
-                this.profileEditorIsNew = false;
-                this.profileEditorMessage = { text: 'Signal profile saved', type: 'success' };
-                await this.loadProfiles();
-            } catch (error) {
-                console.error('Failed to save signal profile:', error);
-                this.profileEditorMessage = { text: `Failed to save profile: ${error.message}`, type: 'error' };
-            } finally {
-                this.profileEditorSaving = false;
-            }
+            await this.runAction({
+                saving: 'profileEditorSaving',
+                message: 'profileEditorMessage',
+                label: 'saving signal profile',
+                request: () =>
+                    apiRequest(`/api/profiles/${encodeURIComponent(name)}`, {
+                        method: 'PUT',
+                        body,
+                        errorMessage: bodyOrStatus,
+                    }),
+                onSuccess: async () => {
+                    this.profileEditorIsNew = false;
+                    await this.loadProfiles();
+                },
+                success: 'Signal profile saved',
+                failure: 'Failed to save profile',
+            });
         },
 
         // Signal Profile Modal Functions
@@ -165,7 +165,7 @@ export function signalProfiles() {
                         body,
                     }),
                 success: 'Signal profile changed successfully!',
-                failure: 'Failed to change signal profile. Please try again.',
+                failure: 'Failed to change signal profile',
                 afterFn: () => this.closeModal('signalProfile'),
                 afterMs: 1500,
             });

@@ -1,4 +1,4 @@
-import { apiRequest, emptyMessage } from './api.js';
+import { apiRequest, bodyOrStatus, emptyMessage } from './api.js';
 
 export const modals = {
     channelMessage: {
@@ -26,7 +26,7 @@ export function channels() {
         channelMessageTitle: '',
         channelMessageDescription: '',
         channelMessageSaving: false,
-        channelMessage: { text: '', type: '' },
+        channelMessage: emptyMessage(),
 
         // Channel Message Functions
         async openChannelMessageModal() {
@@ -53,58 +53,49 @@ export function channels() {
         },
 
         async sendChannelMessage() {
-            this.channelMessageSaving = true;
-            this.channelMessage = emptyMessage();
+            if (!this.channelMessageText && !this.channelMessageTitle && !this.channelMessageDescription) {
+                this.channelMessage = {
+                    type: 'error',
+                    text: 'Please provide at least a message, title, or description.',
+                };
+                return;
+            }
 
-            try {
-                // Validate at least one field is filled
-                if (!this.channelMessageText && !this.channelMessageTitle && !this.channelMessageDescription) {
-                    this.channelMessage = {
-                        type: 'error',
-                        text: 'Please provide at least a message, title, or description.',
-                    };
-                    return;
-                }
+            const body = {};
+            if (this.channelMessageText) {
+                body.message = this.channelMessageText;
+            }
+            if (this.channelMessageTitle) {
+                body.title = this.channelMessageTitle;
+            }
+            if (this.channelMessageDescription) {
+                body.description = this.channelMessageDescription;
+            }
 
-                const body = {};
-                if (this.channelMessageText) {
-                    body.message = this.channelMessageText;
-                }
-                if (this.channelMessageTitle) {
-                    body.title = this.channelMessageTitle;
-                }
-                if (this.channelMessageDescription) {
-                    body.description = this.channelMessageDescription;
-                }
-
-                await apiRequest(`/api/registered-channels/${this.selectedChannelId}/send`, {
-                    method: 'POST',
-                    body,
-                    errorMessage: 'Failed to send message',
-                    includeStatus: true,
-                });
-
-                this.channelMessage = { type: 'success', text: 'Message sent successfully!' };
-
-                // Clear form fields after successful send
-                this.channelMessageText = '';
-                this.channelMessageTitle = '';
-                this.channelMessageDescription = '';
-
-                setTimeout(() => {
+            await this.runAction({
+                saving: 'channelMessageSaving',
+                message: 'channelMessage',
+                label: 'sending message',
+                request: () =>
+                    apiRequest(`/api/registered-channels/${this.selectedChannelId}/send`, {
+                        method: 'POST',
+                        body,
+                        errorMessage: bodyOrStatus,
+                    }),
+                onSuccess: () => {
+                    this.channelMessageText = '';
+                    this.channelMessageTitle = '';
+                    this.channelMessageDescription = '';
+                },
+                success: 'Message sent successfully!',
+                failure: 'Failed to send message',
+                afterFn: () => {
                     if (this.channelMessage.type === 'success') {
                         this.channelMessage = emptyMessage();
                     }
-                }, 3000);
-            } catch (error) {
-                console.error('Error sending message:', error);
-                this.channelMessage = {
-                    type: 'error',
-                    text: error.message || 'Failed to send message. Please try again.',
-                };
-            } finally {
-                this.channelMessageSaving = false;
-            }
+                },
+                afterMs: 3000,
+            });
         },
     };
 }
