@@ -45,19 +45,19 @@ spec:
               value: {{ .Values.metrics.intervalSeconds | int64 | quote }}
             {{- with .Values.web.corsAllowedOrigins }}
             - name: WEB_CORS_ALLOWED_ORIGINS
-              value: {{ . | quote }}
+              value: {{ join "," . | quote }}
             {{- end }}
             {{- with .Values.logging.rustLog }}
             - name: RUST_LOG
               value: {{ . | quote }}
             {{- end }}
-            {{- include "discord-radio.secretEnv" (dict "root" . "env" "DISCORD_TOKEN" "key" .Values.secret.keyNames.discordToken "optional" false) | nindent 12 }}
-            {{- include "discord-radio.secretEnv" (dict "root" . "env" "BUCKET_ENDPOINT" "key" .Values.secret.keyNames.bucketEndpoint "optional" true) | nindent 12 }}
-            {{- include "discord-radio.secretEnv" (dict "root" . "env" "BUCKET_ACCESS_KEY_ID" "key" .Values.secret.keyNames.bucketAccessKeyId "optional" true) | nindent 12 }}
-            {{- include "discord-radio.secretEnv" (dict "root" . "env" "BUCKET_SECRET_ACCESS_KEY" "key" .Values.secret.keyNames.bucketSecretAccessKey "optional" true) | nindent 12 }}
-            {{- include "discord-radio.secretEnv" (dict "root" . "env" "BUCKET_NAME" "key" .Values.secret.keyNames.bucketName "optional" true) | nindent 12 }}
-            {{- include "discord-radio.secretEnv" (dict "root" . "env" "GRAFANA_METRICS_URL" "key" .Values.secret.keyNames.grafanaMetricsUrl "optional" true) | nindent 12 }}
-            {{- include "discord-radio.secretEnv" (dict "root" . "env" "GRAFANA_API_KEY" "key" .Values.secret.keyNames.grafanaApiKey "optional" true) | nindent 12 }}
+            {{- include "discord-radio.secretEnv" (dict "root" . "env" "DISCORD_TOKEN" "key" .Values.secret.keys.discordToken "optional" false) | nindent 12 }}
+            {{- include "discord-radio.secretEnv" (dict "root" . "env" "BUCKET_ENDPOINT" "key" .Values.secret.keys.bucketEndpoint "optional" true) | nindent 12 }}
+            {{- include "discord-radio.secretEnv" (dict "root" . "env" "BUCKET_ACCESS_KEY_ID" "key" .Values.secret.keys.bucketAccessKeyId "optional" true) | nindent 12 }}
+            {{- include "discord-radio.secretEnv" (dict "root" . "env" "BUCKET_SECRET_ACCESS_KEY" "key" .Values.secret.keys.bucketSecretAccessKey "optional" true) | nindent 12 }}
+            {{- include "discord-radio.secretEnv" (dict "root" . "env" "BUCKET_NAME" "key" .Values.secret.keys.bucketName "optional" true) | nindent 12 }}
+            {{- include "discord-radio.secretEnv" (dict "root" . "env" "GRAFANA_METRICS_URL" "key" .Values.secret.keys.grafanaMetricsUrl "optional" true) | nindent 12 }}
+            {{- include "discord-radio.secretEnv" (dict "root" . "env" "GRAFANA_API_KEY" "key" .Values.secret.keys.grafanaApiKey "optional" true) | nindent 12 }}
           livenessProbe:
             httpGet:
               path: /api/health
@@ -82,7 +82,7 @@ spec:
       volumes:
         - name: state
           persistentVolumeClaim:
-            claimName: {{ default (include "discord-radio.fullname" .) .Values.statePersistence.existingClaim }}
+            claimName: {{ default (include "discord-radio.fullname" .) .Values.persistence.existingClaim }}
         - name: cache
           emptyDir:
             {{- if not .Values.cache.sizeLimit }} {}{{- end }}
