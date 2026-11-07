@@ -2,7 +2,7 @@ pub mod cache;
 pub mod registry;
 pub mod resolve;
 
-pub use cache::{Bucket, NotFound};
+pub use cache::{Bucket, EvictionPolicy, NotFound};
 pub use resolve::{FileResolver, NoBucket};
 
 use s3::creds::Credentials;

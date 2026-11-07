@@ -41,6 +41,10 @@ spec:
               value: {{ .Values.web.port | quote }}
             - name: FILE_CACHE_TTL_SECS
               value: {{ .Values.cache.ttlSecs | int64 | quote }}
+            {{- with .Values.cache.maxBytes }}
+            - name: FILE_CACHE_MAX_BYTES
+              value: {{ . | int64 | quote }}
+            {{- end }}
             - name: METRICS_INTERVAL_SECONDS
               value: {{ .Values.metrics.intervalSeconds | int64 | quote }}
             {{- with .Values.web.corsAllowedOrigins }}

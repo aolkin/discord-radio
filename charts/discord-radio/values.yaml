@@ -20,6 +20,7 @@ web:
   corsAllowedOrigins: []
 cache:
   ttlSecs: 2592000
+  maxBytes: ""
   sizeLimit: ""
 metrics:
   intervalSeconds: 60

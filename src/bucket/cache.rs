@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 /// Evicting an entry costs a redundant download, since this cache is the only
 /// record of what is on disk.
@@ -22,6 +22,10 @@ const REMOTE_LISTING_TTL: Duration = Duration::from_secs(30);
 const MAX_TRACKED_LISTINGS: u64 = 1_000;
 
 const TEMP_SUFFIX: &str = ".tmp";
+
+const SWEEP_INTERVAL: Duration = Duration::from_secs(10 * 60);
+
+const RECENT_USE_GRACE: Duration = Duration::from_secs(5 * 60);
 
 /// Marks a download failure as specifically meaning the key doesn't exist in
 /// object storage, distinct from a network or auth failure.
@@ -178,48 +182,72 @@ pub struct Bucket {
     present: moka::future::Cache<String, ()>,
     /// `list_remote` results, keyed by prefix.
     remote_listings: moka::future::Cache<String, Vec<String>>,
+    _sweeper: Option<Arc<SweepTask>>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct EvictionPolicy {
+    pub entry_ttl: Option<Duration>,
+    pub max_bytes: Option<u64>,
+}
+
+struct SweepTask(tokio::task::JoinHandle<()>);
+
+impl Drop for SweepTask {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
 }
 
 impl Bucket {
     /// Creates the cache, creating `cache_dir` on disk if it doesn't exist
     /// yet, and adopts the files already in it.
     ///
-    /// A file whose last access is older than `entry_ttl` is deleted rather
-    /// than adopted; `None` keeps every file forever.
+    /// Files the `policy` evicts are deleted rather than adopted, and the same
+    /// eviction repeats every [`SWEEP_INTERVAL`] while the cache lives.
     pub async fn new(
         cache_dir: PathBuf,
         bucket: Arc<s3::Bucket>,
-        entry_ttl: Option<Duration>,
+        policy: EvictionPolicy,
     ) -> anyhow::Result<Self> {
-        Self::build(cache_dir, bucket, entry_ttl).await
+        Self::build(cache_dir, bucket, policy).await
     }
 
     async fn build(
         cache_dir: PathBuf,
         backend: Arc<dyn ObjectBackend>,
-        entry_ttl: Option<Duration>,
+        policy: EvictionPolicy,
     ) -> anyhow::Result<Self> {
         std::fs::create_dir_all(&cache_dir)
             .with_context(|| format!("creating cache dir {cache_dir:?}"))?;
 
-        let cache = Self {
+        let present = moka::future::Cache::new(MAX_TRACKED_KEYS);
+
+        let outcome = run_sweep(&cache_dir, policy, true)
+            .await
+            .context("adopting cached files")?;
+        for key in outcome.kept {
+            present.insert(key, ()).await;
+        }
+
+        let sweeper = (policy.entry_ttl.is_some() || policy.max_bytes.is_some()).then(|| {
+            Arc::new(SweepTask(tokio::spawn(sweep_periodically(
+                cache_dir.clone(),
+                present.clone(),
+                policy,
+            ))))
+        });
+
+        Ok(Self {
             cache_dir,
             backend,
-            present: moka::future::Cache::new(MAX_TRACKED_KEYS),
+            present,
             remote_listings: moka::future::Cache::builder()
                 .max_capacity(MAX_TRACKED_LISTINGS)
                 .time_to_live(REMOTE_LISTING_TTL)
                 .build(),
-        };
-
-        let mut keys = Vec::new();
-        collect_cached_keys(&cache.cache_dir, &cache.cache_dir, entry_ttl, &mut keys)
-            .context("adopting cached files")?;
-        for key in keys {
-            cache.present.insert(key, ()).await;
-        }
-
-        Ok(cache)
+            _sweeper: sweeper,
+        })
     }
 
     /// The local path for a key, regardless of whether it's actually cached
@@ -323,14 +351,102 @@ fn temp_path(dest: &Path) -> PathBuf {
     PathBuf::from(temp)
 }
 
-/// Collects the key of every cached file under `dir`, recursing into
-/// subdirectories. Deletes rather than collects a partial download and, when
-/// `entry_ttl` is set, a file that hasn't been read within it.
-fn collect_cached_keys(
+struct CachedFile {
+    path: PathBuf,
+    key: String,
+    size: u64,
+    accessed: Option<SystemTime>,
+    in_use: bool,
+}
+
+#[derive(Default)]
+struct SweepOutcome {
+    kept: Vec<String>,
+    removed: Vec<String>,
+}
+
+async fn run_sweep(
+    cache_dir: &Path,
+    policy: EvictionPolicy,
+    remove_partial_downloads: bool,
+) -> anyhow::Result<SweepOutcome> {
+    let cache_dir = cache_dir.to_path_buf();
+    tokio::task::spawn_blocking(move || sweep(&cache_dir, policy, remove_partial_downloads))
+        .await
+        .context("joining the cache sweep")?
+        .context("sweeping the cache dir")
+}
+
+async fn sweep_periodically(
+    cache_dir: PathBuf,
+    present: moka::future::Cache<String, ()>,
+    policy: EvictionPolicy,
+) {
+    let mut interval =
+        tokio::time::interval_at(tokio::time::Instant::now() + SWEEP_INTERVAL, SWEEP_INTERVAL);
+    loop {
+        interval.tick().await;
+        match run_sweep(&cache_dir, policy, false).await {
+            Ok(outcome) => {
+                for key in &outcome.removed {
+                    present.invalidate(key).await;
+                }
+                if !outcome.removed.is_empty() {
+                    tracing::info!(
+                        "Evicted {} files from the file cache",
+                        outcome.removed.len()
+                    );
+                }
+            }
+            Err(e) => tracing::warn!("File cache sweep failed: {e:#}"),
+        }
+    }
+}
+
+fn sweep(
+    cache_dir: &Path,
+    policy: EvictionPolicy,
+    remove_partial_downloads: bool,
+) -> std::io::Result<SweepOutcome> {
+    let mut files = Vec::new();
+    list_cached_files(cache_dir, cache_dir, remove_partial_downloads, &mut files)?;
+
+    let mut outcome = SweepOutcome::default();
+    let mut live = Vec::new();
+    for file in files {
+        if !file.in_use && is_expired(&file, policy.entry_ttl) && remove_best_effort(&file.path) {
+            outcome.removed.push(file.key);
+        } else {
+            live.push(file);
+        }
+    }
+
+    let Some(max_bytes) = policy.max_bytes else {
+        outcome.kept = live.into_iter().map(|file| file.key).collect();
+        return Ok(outcome);
+    };
+
+    let mut total: u64 = live.iter().map(|file| file.size).sum();
+    live.sort_by_key(|file| (file.accessed.is_none(), file.accessed));
+    for file in live {
+        if total > max_bytes && !file.in_use && remove_best_effort(&file.path) {
+            total -= file.size;
+            outcome.removed.push(file.key);
+        } else {
+            outcome.kept.push(file.key);
+        }
+    }
+
+    Ok(outcome)
+}
+
+/// Collects every cached file under `dir`, recursing into subdirectories.
+/// Partial downloads are deleted or skipped, never collected.
+fn list_cached_files(
     dir: &Path,
     cache_dir: &Path,
-    entry_ttl: Option<Duration>,
-    keys: &mut Vec<String>,
+    remove_partial_downloads: bool,
+    files: &mut Vec<CachedFile>,
 ) -> std::io::Result<()> {
     for entry in std::fs::read_dir(dir)? {
         let entry = entry?;
@@ -338,7 +454,7 @@ fn collect_cached_keys(
         let file_type = entry.file_type()?;
 
         if file_type.is_dir() {
-            collect_cached_keys(&path, cache_dir, entry_ttl, keys)?;
+            list_cached_files(&path, cache_dir, remove_partial_downloads, files)?;
             continue;
         }
 
@@ -352,17 +468,43 @@ fn collect_cached_keys(
             continue;
         };
 
-        if key.ends_with(TEMP_SUFFIX) || is_expired(&path, entry_ttl) {
-            remove_best_effort(&path);
+        if key.ends_with(TEMP_SUFFIX) {
+            if remove_partial_downloads {
+                remove_best_effort(&path);
+            }
             continue;
         }
 
-        keys.push(key);
+        let metadata = match entry.metadata() {
+            Ok(metadata) => metadata,
+            Err(e) => {
+                tracing::warn!("Keeping {path:?}, its metadata is unreadable: {e}");
+                continue;
+            }
+        };
+        let accessed = match metadata.accessed() {
+            Ok(accessed) => Some(accessed),
+            Err(e) => {
+                tracing::warn!("Keeping {path:?}, its access time is unreadable: {e}");
+                None
+            }
+        };
+        let used_recently = [accessed, metadata.modified().ok()]
+            .into_iter()
+            .flatten()
+            .any(|time| time.elapsed().is_ok_and(|age| age < RECENT_USE_GRACE));
+
+        files.push(CachedFile {
+            in_use: used_recently || temp_path(&path).exists(),
+            size: metadata.len(),
+            accessed,
+            key,
+            path,
+        });
     }
 
     Ok(())
 }
-
 /// The object storage key a cached file came from: its path relative to
 /// `cache_dir`, always `/`-separated. `None` for a path that isn't valid
 /// UTF-8, which no key can be.
@@ -377,26 +519,25 @@ fn cache_key(cache_dir: &Path, path: &Path) -> Option<String> {
     Some(key)
 }
 
-/// Whether `path` hasn't been read within `ttl`. Filesystems mounted
+/// Whether `file` hasn't been read within `ttl`. Filesystems mounted
 /// `noatime` or `relatime` report access times coarsely or not at all, so a
 /// file can outlive its ttl. An unreadable access time keeps the file.
-fn is_expired(path: &Path, ttl: Option<Duration>) -> bool {
+fn is_expired(file: &CachedFile, ttl: Option<Duration>) -> bool {
     let Some(ttl) = ttl else {
         return false;
     };
 
-    match std::fs::metadata(path).and_then(|metadata| metadata.accessed()) {
-        Ok(accessed) => accessed.elapsed().is_ok_and(|age| age > ttl),
-        Err(e) => {
-            tracing::warn!("Keeping {path:?}, its access time is unreadable: {e}");
-            false
-        }
-    }
+    file.accessed
+        .is_some_and(|accessed| accessed.elapsed().is_ok_and(|age| age > ttl))
 }
 
-fn remove_best_effort(path: &Path) {
-    if let Err(e) = std::fs::remove_file(path) {
-        tracing::warn!("Failed to remove {path:?} from the cache dir: {e}");
+fn remove_best_effort(path: &Path) -> bool {
+    match std::fs::remove_file(path) {
+        Ok(()) => true,
+        Err(e) => {
+            tracing::warn!("Failed to remove {path:?} from the cache dir: {e}");
+            false
+        }
     }
 }
 
