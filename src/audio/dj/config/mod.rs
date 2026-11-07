@@ -170,8 +170,7 @@ impl PoolEntry {
             .with_context(|| format!("hex message {:?}", message.text))?,
             PoolEntry::Noise(noise) => {
                 let context = || format!("noise period {:?}", noise.noise_profile);
-                ensure_seconds(noise.min_duration_seconds, context)?;
-                ensure_seconds(noise.max_duration_seconds, context)?;
+                noise.duration.validate(context)?;
                 if let Some(seconds) = noise.fade_duration_seconds {
                     ensure_seconds(seconds, context)?;
                 }
@@ -206,8 +205,8 @@ impl PoolEntry {
 pub struct ChannelStatusEntry {
     pub status: String,
     pub weight: u32,
-    pub min_duration_seconds: f32,
-    pub max_duration_seconds: f32,
+    #[serde(flatten)]
+    pub duration: DurationRange,
 }
 
 #[field_trait_impl]
@@ -215,8 +214,8 @@ impl Weighted for ChannelStatusEntry {
     fn identity(&self) -> Identity {
         Identity::of((
             &self.status,
-            self.min_duration_seconds.to_bits(),
-            self.max_duration_seconds.to_bits(),
+            self.duration.min_duration_seconds.to_bits(),
+            self.duration.max_duration_seconds.to_bits(),
         ))
     }
 }
@@ -226,19 +225,16 @@ impl Default for ChannelStatusEntry {
         Self {
             status: String::new(),
             weight: 1,
-            min_duration_seconds: 60.0,
-            max_duration_seconds: 120.0,
+            duration: DurationRange::default(),
         }
     }
 }
 
 impl From<&ChannelStatusEntry> for TimedValue<ChannelStatus> {
     fn from(entry: &ChannelStatusEntry) -> Self {
-        let seconds =
-            rand::rng().random_range(entry.min_duration_seconds..entry.max_duration_seconds);
         TimedValue::temporary(
             ChannelStatus::Fixed(entry.status.clone()),
-            Duration::from_secs_f32(seconds),
+            entry.duration.sample(),
         )
     }
 }
@@ -260,34 +256,54 @@ impl RegistryEntry for DJConfig {
             if let Some(seconds) = profile.fade_duration_seconds {
                 ensure_seconds(seconds, context)?;
             }
-            ensure_duration_range(
-                profile.min_duration_seconds,
-                profile.max_duration_seconds,
-                context,
-            )?;
+            profile.duration.validate(context)?;
         }
         ensure_penalty_multiplier(self.channel_statuses.history_penalty_multiplier)
             .context("channel_statuses")?;
         for status in self.channel_statuses.entries.iter() {
-            ensure_duration_range(
-                status.min_duration_seconds,
-                status.max_duration_seconds,
-                || format!("channel status {:?}", status.status),
-            )?;
+            status
+                .duration
+                .validate(|| format!("channel status {:?}", status.status))?;
         }
         Ok(())
     }
 }
 
-fn ensure_duration_range(min: f32, max: f32, context: impl Fn() -> String) -> anyhow::Result<()> {
-    ensure_seconds(min, &context)?;
-    if min >= max {
-        bail!(
-            "{}: min_duration_seconds must be less than max_duration_seconds",
-            context()
-        );
+#[derive(Deserialize, Serialize, Clone, Copy, Debug)]
+pub struct DurationRange {
+    pub min_duration_seconds: f32,
+    pub max_duration_seconds: f32,
+}
+
+impl DurationRange {
+    pub fn sample(&self) -> Duration {
+        let seconds = if self.min_duration_seconds >= self.max_duration_seconds {
+            self.min_duration_seconds
+        } else {
+            rand::rng().random_range(self.min_duration_seconds..self.max_duration_seconds)
+        };
+        Duration::from_secs_f32(seconds)
     }
-    Ok(())
+
+    pub fn validate(&self, context: impl Fn() -> String) -> anyhow::Result<()> {
+        ensure_seconds(self.min_duration_seconds, &context)?;
+        if self.min_duration_seconds >= self.max_duration_seconds {
+            bail!(
+                "{}: min_duration_seconds must be less than max_duration_seconds",
+                context()
+            );
+        }
+        Ok(())
+    }
+}
+
+impl Default for DurationRange {
+    fn default() -> Self {
+        Self {
+            min_duration_seconds: 60.0,
+            max_duration_seconds: 120.0,
+        }
+    }
 }
 
 fn ensure_penalty_multiplier(multiplier: Option<f32>) -> anyhow::Result<()> {

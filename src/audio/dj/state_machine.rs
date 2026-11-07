@@ -1,5 +1,5 @@
 use crate::audio::dj::config::{
-    ChannelStatusEntry, ConfiguredPool, LoadedConfig, PoolEntry, SegmentDefaults,
+    ChannelStatusEntry, ConfiguredPool, DurationRange, LoadedConfig, PoolEntry, SegmentDefaults,
 };
 use crate::audio::dj::manager::{
     ADVANCE_RETRY_DELAY, DJCommand, HexMessageRequest, IdleRequest, TrackRequest,
@@ -598,8 +598,10 @@ impl DJStateMachine {
 
 static DEFAULT_NOISE_PERIOD: LazyLock<NoiseEntry> = LazyLock::new(|| NoiseEntry {
     noise_profile: "default".to_string(),
-    min_duration_seconds: 2.0,
-    max_duration_seconds: 2.0,
+    duration: DurationRange {
+        min_duration_seconds: 2.0,
+        max_duration_seconds: 2.0,
+    },
     weight: 1,
     fade_duration_seconds: None,
 });
