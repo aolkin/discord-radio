@@ -110,13 +110,8 @@ pub struct SignalProfileRequest {
 }
 
 impl SignalProfileRequest {
-    pub fn validate(&self, bot_state: Data) -> anyhow::Result<()> {
-        optional_seconds(self.fade_duration, "fade_duration")?;
-        optional_seconds(self.duration, "duration")?;
-        ensure_profile(bot_state, self.profile.as_deref())
-    }
-
-    pub fn into_command(self) -> anyhow::Result<DJCommand> {
+    pub fn into_command(self, bot_state: Data) -> anyhow::Result<DJCommand> {
+        ensure_profile(bot_state, self.profile.as_deref())?;
         let fade = optional_seconds(self.fade_duration, "fade_duration")?
             .or(default_profile_fade(self.tier));
         let duration = optional_seconds(self.duration, "duration")?;
@@ -144,11 +139,6 @@ pub struct ChannelStatusRequest {
 }
 
 impl ChannelStatusRequest {
-    pub fn validate(&self) -> anyhow::Result<()> {
-        optional_seconds(self.duration, "duration")?;
-        Ok(())
-    }
-
     pub fn into_command(self) -> anyhow::Result<DJCommand> {
         let duration = optional_seconds(self.duration, "duration")?;
         let status = self.status.map(|status| TimedValue::new(status, duration));

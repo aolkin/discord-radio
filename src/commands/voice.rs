@@ -463,8 +463,7 @@ async fn set_dj_profile(
         fade_duration,
         duration,
     };
-    request.validate(ctx.data())?;
-    send_to_dj(ctx.data(), guild_id, request.into_command()?)
+    send_to_dj(ctx.data(), guild_id, request.into_command(ctx.data())?)
         .with_context(|| format!("Failed to update DJ {label}"))?;
     ctx.say(message).await?;
 
@@ -538,7 +537,6 @@ pub async fn channel_status(
         status: status.map(ChannelStatus::Fixed),
         duration,
     };
-    request.validate()?;
     send_to_dj(ctx.data(), guild_id, request.into_command()?)
         .context("Failed to update DJ background channel status")?;
     ctx.say(message).await?;
@@ -593,7 +591,6 @@ pub async fn override_channel_status(
         status: status_override,
         duration,
     };
-    request.validate()?;
     send_to_dj(ctx.data(), guild_id, request.into_command()?)
         .context("Failed to update DJ channel status override")?;
     ctx.say(message).await?;

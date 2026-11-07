@@ -97,8 +97,7 @@ pub async fn set_dj_profile(
     Path(guild_id): Path<GuildId>,
     AxumJson(request): AxumJson<SignalProfileRequest>,
 ) -> Result<StatusCode, ApiError> {
-    request.validate(bot_state).map_err(invalid_request)?;
-    let command = request.into_command().map_err(invalid_request)?;
+    let command = request.into_command(bot_state).map_err(invalid_request)?;
     send_dj_command(&bot_state, guild_id, command)
 }
 
@@ -107,7 +106,6 @@ pub async fn set_dj_channel_status(
     Path(guild_id): Path<GuildId>,
     AxumJson(request): AxumJson<ChannelStatusRequest>,
 ) -> Result<StatusCode, ApiError> {
-    request.validate().map_err(invalid_request)?;
     let command = request.into_command().map_err(invalid_request)?;
     send_dj_command(&bot_state, guild_id, command)
 }
