@@ -23,14 +23,11 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 
 {{- define "discord-radio.image" -}}
 {{- $repo := required "image.repository is required" .Values.image.repository -}}
+{{- $tag := default .Chart.AppVersion (toString .Values.image.tag) -}}
 {{- if .Values.image.digest -}}
-{{- if .Values.image.tag -}}
-{{- printf "%s:%s@%s" $repo (toString .Values.image.tag) .Values.image.digest -}}
+{{- printf "%s:%s@%s" $repo $tag .Values.image.digest -}}
 {{- else -}}
-{{- printf "%s@%s" $repo .Values.image.digest -}}
-{{- end -}}
-{{- else -}}
-{{- printf "%s:%s" $repo (required "image.tag or image.digest is required" .Values.image.tag | toString) -}}
+{{- printf "%s:%s" $repo $tag -}}
 {{- end -}}
 {{- end -}}
 
