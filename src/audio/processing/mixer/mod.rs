@@ -121,8 +121,6 @@ impl TrackHandle {
 pub trait AudioSource: Send + Sync {
     fn next_frame(&mut self) -> Option<[f32; 2]>;
     fn seek(&mut self, position: Duration) -> anyhow::Result<()>;
-    #[allow(dead_code)]
-    fn duration(&self) -> Option<Duration>;
     fn reset(&mut self);
 }
 
@@ -395,15 +393,6 @@ impl Mixer {
             played_frames,
             commands: commands_tx,
         }
-    }
-
-    /// Removes the track at once. Returns false if the track does not exist.
-    #[allow(dead_code)]
-    pub fn remove_track(&mut self, handle: TrackId) -> bool {
-        self.tracks
-            .remove(&handle)
-            .map(|mut track| track.end(StopReason::Removed))
-            .is_some()
     }
 
     /// Applies the edits sent through each track's [`TrackHandle`].
