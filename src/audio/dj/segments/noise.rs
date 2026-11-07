@@ -1,4 +1,4 @@
-use crate::audio::dj::config::SegmentDefaults;
+use crate::audio::dj::config::{DurationRange, SegmentDefaults};
 use crate::audio::dj::segments::signals::Completed;
 use crate::audio::dj::segments::{
     CommonSegmentPlaybackConfig, Segment, SegmentPlaybackConfig, SignalProfilePlayback,
@@ -9,7 +9,6 @@ use crate::audio::dj::tiered::TimedValue;
 use crate::audio::dj::weighted_choice::{Identity, Weighted};
 use async_trait::async_trait;
 use field_trait::field_trait_impl;
-use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use std::time::{Duration, Instant};
@@ -17,8 +16,8 @@ use std::time::{Duration, Instant};
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct NoiseEntry {
     pub noise_profile: String,
-    pub min_duration_seconds: f32,
-    pub max_duration_seconds: f32,
+    #[serde(flatten)]
+    pub duration: DurationRange,
     pub weight: u32,
     pub fade_duration_seconds: Option<f32>,
 }
@@ -28,8 +27,8 @@ impl Weighted for NoiseEntry {
     fn identity(&self) -> Identity {
         Identity::of((
             &self.noise_profile,
-            self.min_duration_seconds.to_bits(),
-            self.max_duration_seconds.to_bits(),
+            self.duration.min_duration_seconds.to_bits(),
+            self.duration.max_duration_seconds.to_bits(),
             self.fade_duration_seconds.map(f32::to_bits),
         ))
     }
@@ -41,8 +40,7 @@ impl Default for NoiseEntry {
             noise_profile: "clear".to_string(),
             weight: 1,
             fade_duration_seconds: Some(3.0),
-            min_duration_seconds: 60.0,
-            max_duration_seconds: 120.0,
+            duration: DurationRange::default(),
         }
     }
 }
@@ -56,8 +54,7 @@ impl From<&NoiseEntry> for TimedValue<SignalProfilePlayback> {
             fade_in_duration: Some(fade),
             ..entry.noise_profile.clone().into()
         };
-        let hold = rand::rng().random_range(entry.min_duration_seconds..entry.max_duration_seconds);
-        TimedValue::temporary(profile, fade + Duration::from_secs_f32(hold))
+        TimedValue::temporary(profile, fade + entry.duration.sample())
     }
 }
 
@@ -162,17 +159,9 @@ impl Segment for NoiseSegment {
 
 impl NoiseSegment {
     pub fn from_entry(noise_entry: &NoiseEntry, segment_defaults: &SegmentDefaults) -> Self {
-        let duration_secs = if noise_entry.min_duration_seconds >= noise_entry.max_duration_seconds
-        {
-            noise_entry.min_duration_seconds
-        } else {
-            rand::rng()
-                .random_range(noise_entry.min_duration_seconds..noise_entry.max_duration_seconds)
-        };
-
         Self::new(
             noise_entry.noise_profile.clone(),
-            Some(Duration::from_secs_f32(duration_secs)),
+            Some(noise_entry.duration.sample()),
             noise_entry
                 .fade_duration_seconds
                 .map(Duration::from_secs_f32),
