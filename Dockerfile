@@ -20,7 +20,7 @@ RUN touch src/main.rs crates/field-trait/src/lib.rs \
 
 FROM debian:bookworm-slim
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates libopus0 \
+    && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --uid 10001 --home-dir /app radio \
     && mkdir -p /app/content /data/state /data/cache \
