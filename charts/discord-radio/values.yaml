@@ -8,13 +8,13 @@ secret:
   name: ""
   # Only the Discord token is required.
   keys:
-    discordToken: DISCORD_TOKEN
-    bucketEndpoint: BUCKET_ENDPOINT
-    bucketAccessKeyId: BUCKET_ACCESS_KEY_ID
-    bucketSecretAccessKey: BUCKET_SECRET_ACCESS_KEY
-    bucketName: BUCKET_NAME
-    grafanaMetricsUrl: GRAFANA_METRICS_URL
-    grafanaApiKey: GRAFANA_API_KEY
+    DISCORD_TOKEN: DISCORD_TOKEN
+    BUCKET_ENDPOINT: BUCKET_ENDPOINT
+    BUCKET_ACCESS_KEY_ID: BUCKET_ACCESS_KEY_ID
+    BUCKET_SECRET_ACCESS_KEY: BUCKET_SECRET_ACCESS_KEY
+    BUCKET_NAME: BUCKET_NAME
+    GRAFANA_METRICS_URL: GRAFANA_METRICS_URL
+    GRAFANA_API_KEY: GRAFANA_API_KEY
 web:
   port: 3000
   corsAllowedOrigins: []
