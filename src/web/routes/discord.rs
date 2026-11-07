@@ -73,25 +73,11 @@ pub async fn send_channel_message(
         ));
     }
 
-    let mut create_message = serenity::all::CreateMessage::new();
-
-    if let Some(msg) = request.message {
-        create_message = create_message.content(msg);
-    }
-
-    if request.title.is_some() || request.description.is_some() {
-        let mut embed = serenity::all::CreateEmbed::new();
-
-        if let Some(t) = request.title {
-            embed = embed.title(t);
-        }
-
-        if let Some(d) = request.description {
-            embed = embed.description(d);
-        }
-
-        create_message = create_message.embed(embed);
-    }
+    let create_message = crate::commands::messaging::build_message(
+        request.message,
+        request.title,
+        request.description,
+    );
 
     channel_id
         .send_message(crate::web::http(), create_message)

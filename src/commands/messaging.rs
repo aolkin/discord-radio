@@ -2,6 +2,34 @@ use crate::commands::utils::{Context, require_guild};
 use anyhow::{Context as _, bail};
 use poise::serenity_prelude as serenity;
 
+pub fn build_message(
+    message: Option<String>,
+    title: Option<String>,
+    description: Option<String>,
+) -> serenity::all::CreateMessage {
+    let mut create_message = serenity::all::CreateMessage::new();
+
+    if let Some(msg) = message {
+        create_message = create_message.content(msg);
+    }
+
+    if title.is_some() || description.is_some() {
+        let mut embed = serenity::all::CreateEmbed::new();
+
+        if let Some(t) = title {
+            embed = embed.title(t);
+        }
+
+        if let Some(d) = description {
+            embed = embed.description(d);
+        }
+
+        create_message = create_message.embed(embed);
+    }
+
+    create_message
+}
+
 /// Register a channel for sending messages from the web portal
 #[poise::command(
     slash_command,
@@ -126,25 +154,7 @@ pub async fn speak(
 
     let channel_id = ctx.channel_id();
 
-    let mut create_message = serenity::all::CreateMessage::new();
-
-    if let Some(msg) = message {
-        create_message = create_message.content(msg);
-    }
-
-    if title.is_some() || description.is_some() {
-        let mut embed = serenity::all::CreateEmbed::new();
-
-        if let Some(t) = title {
-            embed = embed.title(t);
-        }
-
-        if let Some(d) = description {
-            embed = embed.description(d);
-        }
-
-        create_message = create_message.embed(embed);
-    }
+    let create_message = build_message(message, title, description);
 
     channel_id
         .send_message(crate::http(), create_message)
