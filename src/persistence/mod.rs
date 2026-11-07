@@ -2,15 +2,15 @@ mod file_store;
 mod types;
 mod utils;
 
-pub use file_store::FileStore;
-pub use types::{ActivityState, DJState, MultiTrackPlaybackState, RegisteredChannel, TrackState};
-
-pub(crate) use crate::persistence::types::DJStateSnapshot;
 use anyhow::Result;
 use async_trait::async_trait;
+pub use file_store::FileStore;
 use serenity::model::id::{ChannelId, GuildId};
 use std::collections::HashMap;
 use std::path::PathBuf;
+pub use types::{
+    ActivityState, DJState, DJStateSnapshot, MultiTrackPlaybackState, RegisteredChannel, TrackState,
+};
 
 #[async_trait]
 pub trait StateStore: Send + Sync {
