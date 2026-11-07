@@ -17,6 +17,7 @@ export const modals = {
         reset: () => ({
             channelStatusSetting: 'background',
             channelStatusText: '',
+            channelStatusDuration: null,
             channelStatusMessage: emptyMessage(),
         }),
     },
@@ -39,6 +40,7 @@ export function dj() {
         showChannelStatusModal: false,
         channelStatusSetting: 'background',
         channelStatusText: '',
+        channelStatusDuration: null,
         channelStatusSaving: false,
         channelStatusMessage: { text: '', type: '' },
 
@@ -82,18 +84,21 @@ export function dj() {
 
         async changeChannelStatus() {
             const status = this.channelStatusText || null;
-            const [path, body] = {
-                background: ['channel-status', { status }],
-                override: ['channel-status-override', { status: status && { fixed: status } }],
-                unmanaged: ['channel-status-override', { status: 'unmanaged' }],
+            const body = {
+                background: { tier: 'manual', status: status && { fixed: status } },
+                override: { tier: 'override', status: status && { fixed: status } },
+                unmanaged: { tier: 'override', status: 'unmanaged' },
             }[this.channelStatusSetting];
+            if (body.status && this.channelStatusDuration !== null && this.channelStatusDuration !== '') {
+                body.duration = Number.parseFloat(this.channelStatusDuration);
+            }
 
             await this.runAction({
                 saving: 'channelStatusSaving',
                 message: 'channelStatusMessage',
                 label: 'changing channel status',
                 request: () =>
-                    apiRequest(`/api/guilds/${this.currentGuildId}/dj/${path}`, {
+                    apiRequest(`/api/guilds/${this.currentGuildId}/dj/channel-status`, {
                         method: 'POST',
                         body,
                     }),

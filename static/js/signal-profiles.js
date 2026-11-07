@@ -6,8 +6,9 @@ export const modals = {
         perGuild: true,
         reset: () => ({
             selectedProfile: '',
-            profileSetting: 'profile',
+            profileSetting: 'manual',
             profileFadeDuration: null,
+            profileDuration: null,
             profileMessage: emptyMessage(),
         }),
     },
@@ -23,8 +24,9 @@ export function signalProfiles() {
         // Signal Profile Modal state
         showSignalProfileModal: false,
         selectedProfile: '',
-        profileSetting: 'profile',
+        profileSetting: 'manual',
         profileFadeDuration: null,
+        profileDuration: null,
         profileSaving: false,
         profileMessage: { text: '', type: '' },
         profiles: [],
@@ -142,11 +144,15 @@ export function signalProfiles() {
         // Signal Profile Modal Functions
         async changeSignalProfile() {
             const body = {
+                tier: this.profileSetting,
                 profile: this.selectedProfile || null,
             };
 
             if (body.profile && this.profileFadeDuration !== null && this.profileFadeDuration !== '') {
                 body.fade_duration = Number.parseFloat(this.profileFadeDuration);
+            }
+            if (body.profile && this.profileDuration !== null && this.profileDuration !== '') {
+                body.duration = Number.parseFloat(this.profileDuration);
             }
 
             await this.runAction({
@@ -154,7 +160,7 @@ export function signalProfiles() {
                 message: 'profileMessage',
                 label: 'changing signal profile',
                 request: () =>
-                    apiRequest(`/api/guilds/${this.currentGuildId}/dj/${this.profileSetting}`, {
+                    apiRequest(`/api/guilds/${this.currentGuildId}/dj/profile`, {
                         method: 'POST',
                         body,
                     }),

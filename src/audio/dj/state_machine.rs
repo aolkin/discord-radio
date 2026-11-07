@@ -9,7 +9,9 @@ use crate::audio::dj::segments::{
 };
 use crate::audio::dj::segments::{NoiseEntry, NoiseSegment, SegmentCtx};
 use crate::audio::dj::serde::{ShiftBack, deser_instant, ser_instant};
-use crate::audio::dj::tiered::{TieredChange, TieredStateMachine, TieredValue, TimedValue};
+use crate::audio::dj::tiered::{
+    ConfigurableTier, TieredChange, TieredStateMachine, TieredValue, TimedValue,
+};
 use crate::audio::dj::weighted_choice::WeightedSelector;
 use crate::state::Data;
 use anyhow::Context;
@@ -24,6 +26,13 @@ use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::{RwLock, RwLockReadGuard, mpsc, watch};
 
 pub const DEFAULT_PROFILE_FADE: Duration = Duration::from_secs(2);
+
+pub fn default_profile_fade(tier: ConfigurableTier) -> Option<Duration> {
+    match tier {
+        ConfigurableTier::Manual => None,
+        ConfigurableTier::Override => Some(DEFAULT_PROFILE_FADE),
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SegmentContainer {
@@ -554,34 +563,16 @@ impl DJStateMachine {
                 self.set_announcement_channel(new_channel);
                 Ok(())
             }
-            DJCommand::SetBackgroundProfile(profile) => {
+            DJCommand::SetSignalProfile(tier, profile) => {
                 self.state
                     .write()
                     .await
                     .signal_profile
-                    .update_manual(profile.map(TimedValue::permanent));
+                    .update(tier, profile);
                 Ok(())
             }
-            DJCommand::SetOverrideProfile(profile_override) => {
-                self.state
-                    .write()
-                    .await
-                    .signal_profile
-                    .update_override(profile_override.map(TimedValue::permanent));
-                Ok(())
-            }
-            DJCommand::SetBackgroundChannelStatus(status) => {
-                self.state.write().await.channel_status.update_manual(
-                    status.map(|status| TimedValue::permanent(ChannelStatus::Fixed(status))),
-                );
-                Ok(())
-            }
-            DJCommand::SetOverrideChannelStatus(status_override) => {
-                self.state
-                    .write()
-                    .await
-                    .channel_status
-                    .update_override(status_override.map(TimedValue::permanent));
+            DJCommand::SetChannelStatus(tier, status) => {
+                self.state.write().await.channel_status.update(tier, status);
                 Ok(())
             }
         };

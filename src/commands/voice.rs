@@ -1,11 +1,12 @@
 use crate::audio::connection::connect_voice_channel;
 use crate::audio::dj::manager::DJCommand;
 use crate::audio::dj::segments::SignalProfilePlayback;
-use crate::audio::dj::state_machine::{ChannelStatus, DEFAULT_PROFILE_FADE};
+use crate::audio::dj::state_machine::{ChannelStatus, default_profile_fade};
+use crate::audio::dj::tiered::{ConfigurableTier, TimedValue};
 use crate::audio::processing::processor::ProcessorRef;
 use crate::commands::utils;
 use crate::commands::utils::{Context, require_guild};
-use anyhow::bail;
+use anyhow::{anyhow, bail};
 use serenity::all::{ChannelId, ChannelType, CreateAutocompleteResponse, GuildId};
 use std::path::Path;
 use std::time::Duration;
@@ -536,32 +537,43 @@ async fn autocomplete_profile(ctx: Context<'_>, partial: &'_ str) -> CreateAutoc
     autocomplete_response(profiles)
 }
 
+fn optional_seconds(seconds: Option<f32>, name: &str) -> anyhow::Result<Option<Duration>> {
+    seconds
+        .map(|seconds| {
+            Duration::try_from_secs_f32(seconds)
+                .map_err(|_| anyhow!("{name} must be a non-negative number of seconds"))
+        })
+        .transpose()
+}
+
+fn for_duration(duration: Option<Duration>) -> String {
+    duration
+        .map(|duration| format!(" for {}s", duration.as_secs_f32()))
+        .unwrap_or_default()
+}
+
 async fn set_dj_profile(
     ctx: Context<'_>,
     profile: Option<String>,
     fade_duration: Option<f32>,
-    default_fade: Option<Duration>,
+    duration: Option<f32>,
     label: &str,
-    command: fn(Option<SignalProfilePlayback>) -> DJCommand,
+    tier: ConfigurableTier,
 ) -> anyhow::Result<()> {
     ctx.defer_ephemeral().await?;
 
     let guild_id = require_guild(ctx)?;
 
-    if profile.is_none() && fade_duration.is_some() {
-        ctx.say(format!("Fade duration only applies when setting a {label}"))
-            .await?;
-        return Ok(());
-    }
-    let fade = match fade_duration.map(Duration::try_from_secs_f32) {
-        Some(Ok(fade)) => Some(fade),
-        Some(Err(_)) => {
-            ctx.say("Fade duration must be a non-negative number of seconds")
-                .await?;
+    let (fade, duration) = match optional_seconds(fade_duration, "Fade duration")
+        .and_then(|fade| Ok((fade, optional_seconds(duration, "Duration")?)))
+    {
+        Ok(parsed) => parsed,
+        Err(e) => {
+            ctx.say(format!("{e:#}")).await?;
             return Ok(());
         }
-        None => default_fade,
     };
+    let fade = fade.or(default_profile_fade(tier));
 
     if let Some(profile) = &profile
         && ctx.data().profile_manager.get(profile).is_none()
@@ -571,15 +583,24 @@ async fn set_dj_profile(
     }
 
     let message = match &profile {
-        Some(profile) => format!("DJ {label} set to '{profile}'"),
+        Some(profile) => format!("DJ {label} set to '{profile}'{}", for_duration(duration)),
         None => format!("DJ {label} cleared"),
     };
-    let playback = profile.map(|profile| SignalProfilePlayback {
-        name: profile,
-        fade_in_duration: fade,
-        fade_out_duration: fade,
+    let playback = profile.map(|profile| {
+        TimedValue::new(
+            SignalProfilePlayback {
+                name: profile,
+                fade_in_duration: fade,
+                fade_out_duration: fade,
+            },
+            duration,
+        )
     });
-    if let Err(e) = send_to_dj(ctx.data(), guild_id, command(playback)) {
+    if let Err(e) = send_to_dj(
+        ctx.data(),
+        guild_id,
+        DJCommand::SetSignalProfile(tier, playback),
+    ) {
         ctx.say(format!("Failed to update DJ {label}: {e:#}"))
             .await?;
         return Ok(());
@@ -597,14 +618,15 @@ pub async fn profile(
     #[autocomplete = "autocomplete_profile"]
     profile: Option<String>,
     #[description = "Fade duration in seconds when setting"] fade_duration: Option<f32>,
+    #[description = "Seconds the profile lasts (default: until cleared)"] duration: Option<f32>,
 ) -> anyhow::Result<()> {
     set_dj_profile(
         ctx,
         profile,
         fade_duration,
-        None,
+        duration,
         "background profile",
-        DJCommand::SetBackgroundProfile,
+        ConfigurableTier::Manual,
     )
     .await
 }
@@ -619,14 +641,15 @@ pub async fn override_profile(
     #[description = "Fade duration in seconds when setting (default: 2.0)"] fade_duration: Option<
         f32,
     >,
+    #[description = "Seconds the override lasts (default: until cleared)"] duration: Option<f32>,
 ) -> anyhow::Result<()> {
     set_dj_profile(
         ctx,
         profile,
         fade_duration,
-        Some(DEFAULT_PROFILE_FADE),
+        duration,
         "profile override",
-        DJCommand::SetOverrideProfile,
+        ConfigurableTier::Override,
     )
     .await
 }
@@ -636,19 +659,31 @@ pub async fn override_profile(
 pub async fn channel_status(
     ctx: Context<'_>,
     #[description = "Channel status (omit to return to rotation)"] status: Option<String>,
+    #[description = "Seconds the status lasts (default: until cleared)"] duration: Option<f32>,
 ) -> anyhow::Result<()> {
     ctx.defer_ephemeral().await?;
 
     let guild_id = require_guild(ctx)?;
 
+    let duration = match optional_seconds(duration, "Duration") {
+        Ok(duration) => duration,
+        Err(e) => {
+            ctx.say(format!("{e:#}")).await?;
+            return Ok(());
+        }
+    };
     let message = match &status {
-        Some(status) => format!("DJ background channel status set to {status:?}"),
+        Some(status) => format!(
+            "DJ background channel status set to {status:?}{}",
+            for_duration(duration)
+        ),
         None => "DJ background channel status cleared".to_string(),
     };
+    let status = status.map(|status| TimedValue::new(ChannelStatus::Fixed(status), duration));
     if let Err(e) = send_to_dj(
         ctx.data(),
         guild_id,
-        DJCommand::SetBackgroundChannelStatus(status),
+        DJCommand::SetChannelStatus(ConfigurableTier::Manual, status),
     ) {
         ctx.say(format!(
             "Failed to update DJ background channel status: {e:#}"
@@ -677,37 +712,48 @@ pub async fn override_channel_status(
     ctx: Context<'_>,
     #[description = "What the override does"] mode: ChannelStatusOverrideMode,
     #[description = "Channel status for the fixed mode"] status: Option<String>,
+    #[description = "Seconds the override lasts (default: until cleared)"] duration: Option<f32>,
 ) -> anyhow::Result<()> {
     ctx.defer_ephemeral().await?;
 
     let guild_id = require_guild(ctx)?;
 
+    let duration = match optional_seconds(duration, "Duration") {
+        Ok(duration) => duration,
+        Err(e) => {
+            ctx.say(format!("{e:#}")).await?;
+            return Ok(());
+        }
+    };
     let (status_override, message) = match (mode, status) {
         (ChannelStatusOverrideMode::Fixed, Some(status)) => (
             Some(ChannelStatus::Fixed(status.clone())),
-            format!("DJ channel status override set to {status:?}"),
+            format!(
+                "DJ channel status override set to {status:?}{}",
+                for_duration(duration)
+            ),
         ),
         (ChannelStatusOverrideMode::Fixed, None) => {
             ctx.say("The fixed mode needs a status").await?;
             return Ok(());
         }
-        (_, Some(_)) => {
-            ctx.say("A status only applies to the fixed mode").await?;
-            return Ok(());
-        }
-        (ChannelStatusOverrideMode::Unmanaged, None) => (
+        (ChannelStatusOverrideMode::Unmanaged, _) => (
             Some(ChannelStatus::Unmanaged),
-            "DJ channel status override set to unmanaged; the current status stays as it is"
-                .to_string(),
+            format!(
+                "DJ channel status override set to unmanaged{}; the current status stays as it is",
+                for_duration(duration)
+            ),
         ),
-        (ChannelStatusOverrideMode::Clear, None) => {
+        (ChannelStatusOverrideMode::Clear, _) => {
             (None, "DJ channel status override cleared".to_string())
         }
     };
+    let status_override =
+        status_override.map(|status_override| TimedValue::new(status_override, duration));
     if let Err(e) = send_to_dj(
         ctx.data(),
         guild_id,
-        DJCommand::SetOverrideChannelStatus(status_override),
+        DJCommand::SetChannelStatus(ConfigurableTier::Override, status_override),
     ) {
         ctx.say(format!(
             "Failed to update DJ channel status override: {e:#}"
