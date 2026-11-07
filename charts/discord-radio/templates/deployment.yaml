@@ -52,7 +52,7 @@ spec:
               value: {{ . | quote }}
             {{- end }}
             {{- include "discord-radio.secretEnv" (dict "root" . "env" "DISCORD_TOKEN" "optional" false) | nindent 12 }}
-            {{- range .Values.secret.optionalKeys }}
+            {{- range (list "BUCKET_ENDPOINT" "BUCKET_ACCESS_KEY_ID" "BUCKET_SECRET_ACCESS_KEY" "BUCKET_NAME" "GRAFANA_METRICS_URL" "GRAFANA_API_KEY") }}
             {{- include "discord-radio.secretEnv" (dict "root" $ "env" . "optional" true) | nindent 12 }}
             {{- end }}
           livenessProbe:

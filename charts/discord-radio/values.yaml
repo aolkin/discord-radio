@@ -7,13 +7,6 @@ imagePullSecrets: []
 secret:
   name: ""
   # Only the Discord token is required.
-  optionalKeys:
-    - BUCKET_ENDPOINT
-    - BUCKET_ACCESS_KEY_ID
-    - BUCKET_SECRET_ACCESS_KEY
-    - BUCKET_NAME
-    - GRAFANA_METRICS_URL
-    - GRAFANA_API_KEY
 web:
   port: 3000
   corsAllowedOrigins: []
