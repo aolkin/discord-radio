@@ -29,20 +29,20 @@ export function dj() {
         showAdvanceDJModal: false,
         djStateType: '',
         djSaving: false,
-        djMessage: { text: '', type: '' },
+        djMessage: emptyMessage(),
         // Hex Message Modal state
         showPlayHexModal: false,
         hexMessageText: '',
         hexMessagePool: '',
         hexSaving: false,
-        hexMessage: { text: '', type: '' },
+        hexMessage: emptyMessage(),
         // Channel Status Modal state
         showChannelStatusModal: false,
         channelStatusSetting: 'background',
         channelStatusText: '',
         channelStatusDuration: null,
         channelStatusSaving: false,
-        channelStatusMessage: { text: '', type: '' },
+        channelStatusMessage: emptyMessage(),
 
         async advanceDJState() {
             await this.runAction({
@@ -55,7 +55,7 @@ export function dj() {
                         body: { state_type: this.djStateType || null },
                     }),
                 success: 'DJ state advanced successfully!',
-                failure: 'Failed to advance DJ state. Please try again.',
+                failure: 'Failed to advance DJ state',
                 afterFn: () => this.closeModal('advanceDJ'),
                 afterMs: 1500,
             });
@@ -76,7 +76,7 @@ export function dj() {
                         },
                     }),
                 success: 'Hex message queued successfully!',
-                failure: 'Failed to play hex message. Please try again.',
+                failure: 'Failed to play hex message',
                 afterFn: () => this.closeModal('playHex'),
                 afterMs: 1500,
             });
@@ -103,7 +103,7 @@ export function dj() {
                         body,
                     }),
                 success: 'Channel status changed successfully!',
-                failure: 'Failed to change channel status. Please try again.',
+                failure: 'Failed to change channel status',
                 afterFn: () => this.closeModal('channelStatus'),
                 afterMs: 1500,
             });

@@ -111,7 +111,7 @@ export function djConfigs() {
         djConfigEditorIsNew: false,
         djConfigEditorLoading: false,
         djConfigEditorSaving: false,
-        djConfigEditorMessage: { text: '', type: '' },
+        djConfigEditorMessage: emptyMessage(),
         djConfigForm: blankForm(),
         djConfigGeneralFields: generalFields,
         djConfigRotationFields: rotationFields,
@@ -183,23 +183,23 @@ export function djConfigs() {
                 return;
             }
 
-            this.djConfigEditorSaving = true;
-            this.djConfigEditorMessage = emptyMessage();
-            try {
-                await apiRequest(`/api/dj-configs/${encodeURIComponent(name)}`, {
-                    method: 'PUT',
-                    body: toBody(this.djConfigForm),
-                    errorMessage: bodyOrStatus,
-                });
-                this.djConfigEditorIsNew = false;
-                this.djConfigEditorMessage = { text: 'DJ config saved', type: 'success' };
-                await this.loadDjConfigs();
-            } catch (error) {
-                console.error('Failed to save DJ config:', error);
-                this.djConfigEditorMessage = { text: `Failed to save DJ config: ${error.message}`, type: 'error' };
-            } finally {
-                this.djConfigEditorSaving = false;
-            }
+            await this.runAction({
+                saving: 'djConfigEditorSaving',
+                message: 'djConfigEditorMessage',
+                label: 'saving DJ config',
+                request: () =>
+                    apiRequest(`/api/dj-configs/${encodeURIComponent(name)}`, {
+                        method: 'PUT',
+                        body: toBody(this.djConfigForm),
+                        errorMessage: bodyOrStatus,
+                    }),
+                onSuccess: async () => {
+                    this.djConfigEditorIsNew = false;
+                    await this.loadDjConfigs();
+                },
+                success: 'DJ config saved',
+                failure: 'Failed to save DJ config',
+            });
         },
     };
 }
