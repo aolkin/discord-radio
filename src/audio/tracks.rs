@@ -5,6 +5,7 @@ use crate::audio::processing::mixer::{
 use crate::audio::processing::processor::ProcessorRef;
 use crate::state::Data;
 use anyhow::{Context, bail};
+use serde::Deserialize;
 use serenity::model::id::GuildId;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -41,6 +42,37 @@ pub struct StartTrackArgs {
     pub fade_time: f32,
     pub loops: bool,
     pub start_position: Option<Duration>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, poise::ChoiceParameter)]
+#[serde(rename_all = "lowercase")]
+pub enum TrackState {
+    #[name = "start"]
+    Start,
+    #[name = "stop"]
+    Stop,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ChangeTrackStateRequest {
+    pub name: String,
+    pub state: Option<TrackState>,
+    pub filename: Option<String>,
+    pub volume: Option<f32>,
+    pub loops: Option<bool>,
+    pub fade_time: Option<f32>,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ChangeTrackStateError {
+    #[error("Starting a track needs a filename")]
+    MissingFilename,
+    #[error("Track '{0}' not found. Use state=start to create a new track.")]
+    TrackNotFound(String),
+    #[error("Failed to resolve audio file: {0:#}")]
+    Resolve(anyhow::Error),
+    #[error(transparent)]
+    Failed(#[from] anyhow::Error),
 }
 
 pub struct TrackManager {
@@ -143,6 +175,78 @@ impl TrackManager {
         self.persist_locked(&tracks).await;
 
         Ok(())
+    }
+
+    pub async fn change_state(
+        self: &Arc<Self>,
+        request: ChangeTrackStateRequest,
+    ) -> Result<String, ChangeTrackStateError> {
+        let name = request.name;
+        let fade_time = request.fade_time.unwrap_or(1.0);
+
+        match request.state {
+            Some(TrackState::Start) => {
+                let filename = request
+                    .filename
+                    .ok_or(ChangeTrackStateError::MissingFilename)?;
+                self.bot_state
+                    .file_resolver
+                    .resolve(&filename)
+                    .await
+                    .map_err(ChangeTrackStateError::Resolve)?;
+                let volume = request.volume.unwrap_or(1.0);
+                let loops = request.loops.unwrap_or(true);
+
+                self.start_track(StartTrackArgs {
+                    name: name.clone(),
+                    filename,
+                    volume,
+                    fade_time,
+                    loops,
+                    start_position: None,
+                })
+                .await
+                .context("Failed to start track")?;
+                Ok(format!(
+                    "Started track '{name}' with volume {volume}, {fade_time} second fade, looping: {loops}"
+                ))
+            }
+            Some(TrackState::Stop) => {
+                self.stop_track(&name, fade_time)
+                    .await
+                    .context("Failed to stop track")?;
+                Ok(format!(
+                    "Stopped track '{name}' with {fade_time} second fade"
+                ))
+            }
+            None => {
+                if !self.has_track(&name).await {
+                    return Err(ChangeTrackStateError::TrackNotFound(name));
+                }
+
+                let mut updated = Vec::new();
+
+                if let Some(volume) = request.volume {
+                    self.update_track_volume(&name, volume, fade_time)
+                        .await
+                        .context("Failed to update volume")?;
+                    updated.push(format!("volume to {volume}"));
+                }
+
+                if let Some(loops) = request.loops {
+                    self.update_track_loops(&name, loops)
+                        .await
+                        .context("Failed to update loops")?;
+                    updated.push(format!("loops to {loops}"));
+                }
+
+                if updated.is_empty() {
+                    Ok("No updates specified. Provide volume and/or loops to update.".to_string())
+                } else {
+                    Ok(format!("Updated track '{name}': {}", updated.join(", ")))
+                }
+            }
+        }
     }
 
     pub async fn has_track(&self, name: &str) -> bool {

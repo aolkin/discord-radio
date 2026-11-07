@@ -4,6 +4,7 @@ use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::{ChannelStatus, default_profile_fade};
 use crate::audio::dj::tiered::{ConfigurableTier, TimedValue};
 use crate::audio::processing::processor::ProcessorRef;
+use crate::audio::tracks::{ChangeTrackStateRequest, TrackState};
 use crate::commands::utils;
 use crate::commands::utils::{Context, require_guild};
 use anyhow::{Context as _, anyhow, bail};
@@ -320,7 +321,9 @@ async fn autocomplete_audio_file(ctx: Context<'_>, partial: &'_ str) -> CreateAu
 pub async fn change_track_state(
     ctx: Context<'_>,
     #[description = "Track name identifier"] name: String,
-    #[description = "Track state: start or stop (omit to update existing)"] state: Option<String>,
+    #[description = "Track state: start or stop (omit to update existing)"] state: Option<
+        TrackState,
+    >,
     #[description = "Audio filename (required for start)"]
     #[autocomplete = "autocomplete_audio_file"]
     filename: Option<String>,
@@ -332,100 +335,20 @@ pub async fn change_track_state(
 
     ctx.defer_ephemeral().await?;
 
-    let manager = ctx.data().track_manager(guild_id).await;
-    let fade_time = fade_time.unwrap_or(1.0);
-
-    let state_str = state.as_deref().map(|s| s.to_lowercase());
-    match state_str.as_deref() {
-        Some("start") => {
-            let Some(filename) = filename else {
-                ctx.say("filename is required for start").await?;
-                return Ok(());
-            };
-
-            if let Err(e) = ctx.data().file_resolver.resolve(&filename).await {
-                ctx.say(format!("Failed to resolve audio file: {e:#}"))
-                    .await?;
-                return Ok(());
-            }
-
-            let volume = volume.unwrap_or(1.0);
-            let loops = loops.unwrap_or(true);
-
-            if let Err(e) = manager
-                .start_track(crate::audio::tracks::StartTrackArgs {
-                    name: name.clone(),
-                    filename,
-                    volume,
-                    fade_time,
-                    loops,
-                    start_position: None,
-                })
-                .await
-            {
-                ctx.say(format!("Failed to start track: {}", e)).await?;
-            } else {
-                ctx.say(format!(
-                    "Started track '{}' with volume {}, {} second fade, looping: {}",
-                    name, volume, fade_time, loops
-                ))
-                .await?;
-            }
-        }
-        Some("stop") => {
-            if let Err(e) = manager.stop_track(&name, fade_time).await {
-                ctx.say(format!("Failed to stop track: {}", e)).await?;
-            } else {
-                ctx.say(format!(
-                    "Stopped track '{}' with {} second fade",
-                    name, fade_time
-                ))
-                .await?;
-            }
-        }
-        None => {
-            if !manager.has_track(&name).await {
-                ctx.say(format!(
-                    "Track '{}' not found. Use state=start to create a new track.",
-                    name
-                ))
-                .await?;
-                return Ok(());
-            }
-
-            let mut updated = Vec::new();
-
-            if let Some(new_volume) = volume {
-                if let Err(e) = manager
-                    .update_track_volume(&name, new_volume, fade_time)
-                    .await
-                {
-                    ctx.say(format!("Failed to update volume: {}", e)).await?;
-                    return Ok(());
-                }
-                updated.push(format!("volume to {}", new_volume));
-            }
-
-            if let Some(new_loops) = loops {
-                if let Err(e) = manager.update_track_loops(&name, new_loops).await {
-                    ctx.say(format!("Failed to update loops: {}", e)).await?;
-                    return Ok(());
-                }
-                updated.push(format!("loops to {}", new_loops));
-            }
-
-            if updated.is_empty() {
-                ctx.say("No updates specified. Provide volume and/or loops to update.")
-                    .await?;
-            } else {
-                ctx.say(format!("Updated track '{}': {}", name, updated.join(", ")))
-                    .await?;
-            }
-        }
-        _ => {
-            ctx.say("Invalid state. Use 'start' or 'stop'").await?;
-        }
-    }
+    let message = ctx
+        .data()
+        .track_manager(guild_id)
+        .await
+        .change_state(ChangeTrackStateRequest {
+            name,
+            state,
+            filename,
+            volume,
+            loops,
+            fade_time,
+        })
+        .await?;
+    ctx.say(message).await?;
 
     Ok(())
 }
