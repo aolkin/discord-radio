@@ -6,6 +6,7 @@ image:
 imagePullSecrets: []
 secret:
   name: ""
+  # Only the Discord token is required.
   keys:
     discordToken: DISCORD_TOKEN
     bucketEndpoint: BUCKET_ENDPOINT
@@ -16,14 +17,14 @@ secret:
     grafanaApiKey: GRAFANA_API_KEY
 web:
   port: 3000
-  corsAllowedOrigins: ""
+  corsAllowedOrigins: []
 cache:
   ttlSecs: 2592000
   sizeLimit: ""
 metrics:
   intervalSeconds: 60
 logging:
-  level: ""
+  rustLog: ""
 persistence:
   size: 256Mi
   storageClass: ""
@@ -42,7 +43,7 @@ httpRoute:
   parentRef:
     name: ""
     namespace: ""
-    sectionName: ""
+    listener: ""
   hostnames: []
 resources:
   requests:

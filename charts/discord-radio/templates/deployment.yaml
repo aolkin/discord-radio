@@ -45,9 +45,9 @@ spec:
               value: {{ .Values.metrics.intervalSeconds | int64 | quote }}
             {{- with .Values.web.corsAllowedOrigins }}
             - name: WEB_CORS_ALLOWED_ORIGINS
-              value: {{ . | quote }}
+              value: {{ join "," . | quote }}
             {{- end }}
-            {{- with .Values.logging.level }}
+            {{- with .Values.logging.rustLog }}
             - name: RUST_LOG
               value: {{ . | quote }}
             {{- end }}
