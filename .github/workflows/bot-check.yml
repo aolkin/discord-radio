@@ -32,6 +32,13 @@ jobs:
       - name: Run tests
         run: cargo test --workspace
 
+      - name: Check field-trait README is up to date
+        working-directory: crates/field-trait
+        run: |
+          cargo install cargo-readme --locked --version 3.4.1
+          cargo readme -o README.md
+          git diff --exit-code -- README.md
+
   frontend:
     name: Check Frontend Code
     runs-on: ubuntu-24.04-arm
