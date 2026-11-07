@@ -108,7 +108,12 @@ fn write_cached_file(path: &Path, contents: &[u8]) {
 }
 
 async fn bucket(cache_dir: PathBuf, backend: Arc<dyn ObjectBackend>) -> Bucket {
-    Bucket::build(cache_dir, backend, None).await.unwrap()
+    let policy = EvictionPolicy {
+        entry_ttl: None,
+        max_bytes: None,
+        sweep_interval: Duration::from_secs(300),
+    };
+    Bucket::build(cache_dir, backend, policy).await.unwrap()
 }
 
 #[tokio::test]
@@ -172,7 +177,10 @@ async fn new_deletes_a_file_unread_for_longer_than_the_ttl() {
     let fresh = dir.path().join("tracks/fresh.ogg");
     write_cached_file(&stale, b"stale");
     write_cached_file(&fresh, b"fresh");
-    let times = FileTimes::new().set_accessed(SystemTime::now() - Duration::from_secs(3_600));
+    let long_ago = SystemTime::now() - Duration::from_secs(3_600);
+    let times = FileTimes::new()
+        .set_accessed(long_ago)
+        .set_modified(long_ago);
     std::fs::File::options()
         .write(true)
         .open(&stale)
@@ -183,7 +191,11 @@ async fn new_deletes_a_file_unread_for_longer_than_the_ttl() {
     let cache = Bucket::build(
         dir.path().to_path_buf(),
         Arc::new(NotFoundBackend),
-        Some(Duration::from_secs(60)),
+        EvictionPolicy {
+            entry_ttl: Some(Duration::from_secs(600)),
+            max_bytes: None,
+            sweep_interval: Duration::from_secs(300),
+        },
     )
     .await
     .unwrap();

@@ -159,9 +159,6 @@ async fn main() -> anyhow::Result<()> {
         PathBuf::from(std::env::var("FILE_CACHE_DIR").unwrap_or_else(|_| "./cache".to_string()));
     tracing::info!("Using file cache dir: {:?}", file_cache_dir);
 
-    // Startup is the only thing that deletes cached files, so this defaults
-    // to evicting rather than to a cache dir that only ever grows. 0 turns
-    // eviction off.
     let file_cache_ttl_secs = std::env::var("FILE_CACHE_TTL_SECS")
         .ok()
         .and_then(|s| s.parse::<u64>().ok())
@@ -170,9 +167,31 @@ async fn main() -> anyhow::Result<()> {
         (file_cache_ttl_secs > 0).then(|| Duration::from_secs(file_cache_ttl_secs));
     tracing::info!("Using file cache ttl: {:?}", file_cache_ttl);
 
+    let file_cache_max_bytes = std::env::var("FILE_CACHE_MAX_BYTES")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .filter(|bytes| *bytes > 0);
+    tracing::info!("Using file cache max bytes: {:?}", file_cache_max_bytes);
+
+    let file_cache_sweep_interval_secs = std::env::var("FILE_CACHE_SWEEP_INTERVAL_SECS")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .filter(|secs| *secs > 0)
+        .unwrap_or(5 * 60);
+    tracing::info!(
+        "Using file cache sweep interval: {}s",
+        file_cache_sweep_interval_secs
+    );
+
+    let file_cache_policy = bucket::EvictionPolicy {
+        entry_ttl: file_cache_ttl,
+        max_bytes: file_cache_max_bytes,
+        sweep_interval: Duration::from_secs(file_cache_sweep_interval_secs),
+    };
+
     let bucket = match bucket {
         Some(bucket) => Some(
-            bucket::Bucket::new(file_cache_dir.clone(), bucket, file_cache_ttl)
+            bucket::Bucket::new(file_cache_dir.clone(), bucket, file_cache_policy)
                 .await
                 .with_context(|| format!("Failed to create file cache at {file_cache_dir:?}"))?,
         ),
