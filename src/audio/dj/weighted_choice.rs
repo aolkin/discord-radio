@@ -80,6 +80,12 @@ impl<T: Weighted, P: WeightedPool<T>> From<&P> for WeightedSelector<T> {
     }
 }
 
+impl<T: Weighted> Default for WeightedSelector<T> {
+    fn default() -> Self {
+        Self::new(Arc::default(), None)
+    }
+}
+
 impl<T: Weighted> WeightedSelector<T> {
     /// Remembers the last half of the item count in picks, at least 2.
     /// The penalty multiplier defaults to 1.
@@ -92,18 +98,14 @@ impl<T: Weighted> WeightedSelector<T> {
         }
     }
 
-    pub fn reconfigure(&mut self, items: Arc<[T]>, history_penalty_multiplier: Option<f32>) {
-        self.identities = items.iter().map(Weighted::identity).collect();
-        self.items = items;
-        self.penalty_multiplier = history_penalty_multiplier.unwrap_or(1.0);
-    }
-
     pub fn items(&self) -> &Arc<[T]> {
         &self.items
     }
 
     pub fn set_pool<P: WeightedPool<T>>(&mut self, pool: &P) {
-        self.reconfigure(pool.entries().clone(), pool.history_penalty_multiplier());
+        self.items = pool.entries().clone();
+        self.identities = self.items.iter().map(Weighted::identity).collect();
+        self.penalty_multiplier = pool.history_penalty_multiplier().unwrap_or(1.0);
     }
 
     pub fn choose(&mut self) -> Option<&T> {

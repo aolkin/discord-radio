@@ -15,7 +15,6 @@ use crate::audio::dj::tiered::{
 use crate::audio::dj::weighted_choice::WeightedSelector;
 use crate::state::Data;
 use anyhow::Context;
-use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use serenity::model::id::{ChannelId, GuildId};
 use std::collections::HashMap;
@@ -171,7 +170,7 @@ impl DJStateMachine {
             announcement_channel,
             bot_state,
             config,
-            pool_selector: WeightedSelector::new(Arc::default(), None),
+            pool_selector: WeightedSelector::default(),
             entry_selectors: HashMap::new(),
             applied_channel_status: None,
         };
@@ -385,7 +384,7 @@ impl DJStateMachine {
         })
     }
 
-    async fn set_config(&mut self, LoadedConfig { config, pools }: &LoadedConfig) {
+    async fn set_config(&mut self, loaded @ LoadedConfig { config, pools }: &LoadedConfig) {
         self.entry_selectors
             .retain(|name, _| pools.iter().any(|pool| pool.file.name == *name));
         for pool in pools.iter() {
@@ -396,8 +395,7 @@ impl DJStateMachine {
                 }
             }
         }
-        self.pool_selector
-            .reconfigure(pools.clone(), config.pool_history_penalty_multiplier);
+        self.pool_selector.set_pool(loaded);
         let mut state = self.state.write().await;
         state.signal_profile.set_pool(&config.signal_profiles);
         state.channel_status.set_pool(&config.channel_statuses);
@@ -422,8 +420,7 @@ impl DJStateMachine {
         let defaults = segment_defaults.hex_config();
         let loops = request
             .loops
-            .unwrap_or_else(|| rand::rng().random_range(defaults.loop_min..=defaults.loop_max))
-            as usize;
+            .unwrap_or_else(|| defaults.pick_loops(None, None)) as usize;
         let next_state = HexSegment::new(
             request.message,
             request.volume.unwrap_or(1.0),

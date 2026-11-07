@@ -3,7 +3,6 @@ use crate::audio::dj::serde::{ShiftBack, deser_instant, ser_instant};
 use crate::audio::dj::weighted_choice::{Weighted, WeightedPool, WeightedSelector};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::{self, Debug, Formatter};
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -195,7 +194,7 @@ impl<E: Weighted, V> From<TieredValueState<V>> for TieredStateMachine<E, V> {
     fn from(state: TieredValueState<V>) -> Self {
         Self {
             state,
-            background_rotation: WeightedSelector::new(Arc::default(), None),
+            background_rotation: WeightedSelector::default(),
             last_applied: None,
         }
     }
