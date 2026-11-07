@@ -87,10 +87,7 @@ spec:
             claimName: {{ default (include "discord-radio.fullname" .) .Values.persistence.existingClaim }}
         - name: cache
           emptyDir:
-            {{- if not .Values.cache.sizeLimit }} {}{{- end }}
-            {{- with .Values.cache.sizeLimit }}
-            sizeLimit: {{ . | quote }}
-            {{- end }}
+            sizeLimit: {{ .Values.cache.sizeLimit | quote }}
         {{- if .Values.content.existingClaim }}
         - name: content
           persistentVolumeClaim:
