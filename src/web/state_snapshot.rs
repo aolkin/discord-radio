@@ -1,17 +1,7 @@
 use crate::audio::dj::state_machine::ChannelStatus;
+use crate::audio::tracks::TrackSnapshot;
 use crate::state::Data;
 use serde::{Deserialize, Serialize};
-use std::time::SystemTime;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TrackInfo {
-    pub name: String,
-    pub filename: String,
-    pub volume: f32,
-    pub loops: bool,
-    pub start_time: SystemTime,
-    pub duration_secs: Option<f64>,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DJStateInfo {
@@ -31,7 +21,7 @@ pub struct AudioProfileInfo {
 pub struct GuildState {
     pub guild_id: String,
     pub in_voice: bool,
-    pub tracks: Vec<TrackInfo>,
+    pub tracks: Vec<TrackSnapshot>,
     pub dj_state: DJStateInfo,
     pub audio_profile: AudioProfileInfo,
     pub channel_status: ChannelStatusInfo,
@@ -65,18 +55,7 @@ impl BotSnapshot {
             // Check if guild is actually in voice
             let in_voice = bot_state.get_voice_channel_id(guild_id).await.is_some();
 
-            let track_snapshots = guild.track_manager.get_all_tracks().await;
-            let tracks = track_snapshots
-                .iter()
-                .map(|t| TrackInfo {
-                    name: t.name.clone(),
-                    filename: t.filename.clone(),
-                    volume: t.volume,
-                    loops: t.loops,
-                    start_time: t.start_time,
-                    duration_secs: t.duration.map(|d| d.as_secs_f64()),
-                })
-                .collect();
+            let tracks = guild.track_manager.get_all_tracks().await;
 
             let (dj_state, profile, channel_status) = {
                 let dj_state_lock = guild.dj_manager.state();

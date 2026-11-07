@@ -5,7 +5,7 @@ use crate::audio::processing::mixer::{
 use crate::audio::processing::processor::ProcessorRef;
 use crate::state::Data;
 use anyhow::{Context, bail};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serenity::model::id::GuildId;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -13,7 +13,7 @@ use std::time::{Duration, SystemTime};
 use tokio::sync::Mutex;
 use tracing::Instrument;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TrackSnapshot {
     pub name: String,
     pub filename: String,

@@ -49,27 +49,33 @@ export function tracks() {
         trackMessage: emptyMessage(),
         audioFiles: [],
 
+        getTrackDurationSecs(track) {
+            return track.duration ? track.duration.secs + track.duration.nanos / 1e9 : null;
+        },
+
         getTrackProgress(track) {
-            if (!track.duration_secs || track.loops) {
+            const durationSecs = this.getTrackDurationSecs(track);
+            if (!durationSecs || track.loops) {
                 return 0;
             }
             const elapsedMs =
                 this.currentTime -
                 (track.start_time.secs_since_epoch * 1000 + track.start_time.nanos_since_epoch / 1000000);
             const elapsedSecs = elapsedMs / 1000;
-            const progress = Math.min((elapsedSecs / track.duration_secs) * 100, 100);
+            const progress = Math.min((elapsedSecs / durationSecs) * 100, 100);
             return Math.max(0, progress);
         },
 
         getTrackTimeDisplay(track) {
-            if (!track.duration_secs) {
+            const durationSecs = this.getTrackDurationSecs(track);
+            if (!durationSecs) {
                 return '';
             }
             const elapsedMs =
                 this.currentTime -
                 (track.start_time.secs_since_epoch * 1000 + track.start_time.nanos_since_epoch / 1000000);
-            const elapsedSecs = Math.max(0, Math.min(elapsedMs / 1000, track.duration_secs));
-            return `${this.formatTime(elapsedSecs)} / ${this.formatTime(track.duration_secs)}`;
+            const elapsedSecs = Math.max(0, Math.min(elapsedMs / 1000, durationSecs));
+            return `${this.formatTime(elapsedSecs)} / ${this.formatTime(durationSecs)}`;
         },
 
         formatTime(seconds) {
