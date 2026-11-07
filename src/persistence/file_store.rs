@@ -1,6 +1,6 @@
-use super::{DJState, MultiTrackPlaybackState, RegisteredChannel, StateStore};
-use crate::persistence::types::DJStateSnapshot;
-use anyhow::{Context, Result};
+use super::utils::{read_json, write_json};
+use super::{DJState, DJStateSnapshot, MultiTrackPlaybackState, RegisteredChannel, StateStore};
+use anyhow::Result;
 use async_trait::async_trait;
 use serde::Serialize;
 use serenity::model::id::{ChannelId, GuildId};
@@ -8,8 +8,6 @@ use std::collections::HashMap;
 use std::hash::Hash;
 use std::marker::PhantomData;
 use std::path::PathBuf;
-use tokio::fs;
-use tokio::io::AsyncWriteExt;
 
 struct PersistedMap<K, V> {
     base_path: PathBuf,
@@ -30,43 +28,16 @@ where
         }
     }
 
-    async fn ensure_directory_exists(&self) -> Result<()> {
-        fs::create_dir_all(&self.base_path).await?;
-        Ok(())
+    fn path(&self) -> PathBuf {
+        self.base_path.join(&self.filename)
     }
 
     async fn write(&self, data: &HashMap<K, serde_json::Value>) -> Result<()> {
-        self.ensure_directory_exists().await?;
-
-        let file_path = self.base_path.join(&self.filename);
-        let temp_path = self.base_path.join(format!("{}.tmp", self.filename));
-
-        let json = serde_json::to_string_pretty(data)?;
-
-        let mut file = fs::File::create(&temp_path).await?;
-        file.write_all(json.as_bytes()).await?;
-        file.sync_all().await?;
-        drop(file);
-
-        fs::rename(&temp_path, &file_path).await?;
-
-        Ok(())
+        write_json(data, &self.path()).await
     }
 
     async fn read(&self) -> Result<HashMap<K, serde_json::Value>> {
-        let file_path = self.base_path.join(&self.filename);
-
-        if !file_path.exists() {
-            return Ok(HashMap::new());
-        }
-
-        let content = fs::read_to_string(&file_path)
-            .await
-            .with_context(|| format!("reading {file_path:?}"))?;
-        let data =
-            serde_json::from_str(&content).with_context(|| format!("parsing {file_path:?}"))?;
-
-        Ok(data)
+        read_json(&self.path()).await
     }
 
     async fn insert<T: Serialize>(&self, key: K, value: T) -> Result<()> {
@@ -162,54 +133,20 @@ impl StateStore for FileStore {
 
     async fn save_registered_channel(&self, channel: &RegisteredChannel) -> Result<()> {
         let mut channels = self.load_registered_channels().await?;
-
-        // Remove existing entry with same channel_id if exists
         channels.retain(|c| c.channel_id != channel.channel_id);
-
-        // Add new entry
         channels.push(channel.clone());
-
-        // Save to file using the utility function
-        let file_path = self.registered_channels_path();
-        super::utils::save_json_to_file(&channels, &file_path).await?;
-
-        Ok(())
+        write_json(&channels, &self.registered_channels_path()).await
     }
 
     async fn load_registered_channels(&self) -> Result<Vec<RegisteredChannel>> {
-        let file_path = self.registered_channels_path();
-
-        if !file_path.exists() {
-            return Ok(Vec::new());
-        }
-
-        let content = fs::read_to_string(&file_path)
-            .await
-            .with_context(|| format!("reading {file_path:?}"))?;
-        let channels =
-            serde_json::from_str(&content).with_context(|| format!("parsing {file_path:?}"))?;
-
-        Ok(channels)
+        read_json(&self.registered_channels_path()).await
     }
 
     async fn save_activity_state(&self, state: Option<&super::ActivityState>) -> Result<()> {
-        let file_path = self.activity_state_path();
-        super::utils::save_json_to_file(&state, &file_path).await
+        write_json(&state, &self.activity_state_path()).await
     }
 
     async fn load_activity_state(&self) -> Result<Option<super::ActivityState>> {
-        let file_path = self.activity_state_path();
-
-        if !file_path.exists() {
-            return Ok(None);
-        }
-
-        let content = fs::read_to_string(&file_path)
-            .await
-            .with_context(|| format!("reading {file_path:?}"))?;
-        let state: Option<super::ActivityState> =
-            serde_json::from_str(&content).with_context(|| format!("parsing {file_path:?}"))?;
-
-        Ok(state)
+        read_json(&self.activity_state_path()).await
     }
 }
