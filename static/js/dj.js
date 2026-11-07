@@ -9,7 +9,7 @@ export const modals = {
     playHex: {
         flag: 'showPlayHexModal',
         perGuild: true,
-        reset: () => ({ hexMessageText: '', hexMessage: emptyMessage() }),
+        reset: () => ({ hexMessageText: '', hexMessagePool: '', hexMessage: emptyMessage() }),
     },
     channelStatus: {
         flag: 'showChannelStatusModal',
@@ -32,6 +32,7 @@ export function dj() {
         // Hex Message Modal state
         showPlayHexModal: false,
         hexMessageText: '',
+        hexMessagePool: '',
         hexSaving: false,
         hexMessage: { text: '', type: '' },
         // Channel Status Modal state
@@ -67,7 +68,10 @@ export function dj() {
                 request: () =>
                     apiRequest(`/api/guilds/${this.currentGuildId}/hex/play`, {
                         method: 'POST',
-                        body: { message: this.hexMessageText },
+                        body: {
+                            message: this.hexMessageText,
+                            ...(this.hexMessagePool && { pool: this.hexMessagePool }),
+                        },
                     }),
                 success: 'Hex message queued successfully!',
                 failure: 'Failed to play hex message. Please try again.',

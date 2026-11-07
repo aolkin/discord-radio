@@ -357,6 +357,16 @@
                 >
                 <small class="hint"> Message will be played using the DJ with default settings. </small>
             </div>
+            <div class="form-group">
+                <label class="form-label" for="hex-pool">Pool (Optional)</label>
+                <select id="hex-pool" class="form-input" x-model="hexMessagePool">
+                    <option value="">No pool</option>
+                    <template x-for="pool in pools" :key="pool">
+                        <option :value="pool" x-text="pool"></option>
+                    </template>
+                </select>
+                <small class="hint"> The pool's segment defaults set the loop count and announcements. </small>
+            </div>
         </template>
 
         <!-- Play Track Modal -->
