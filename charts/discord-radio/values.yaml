@@ -1,15 +1,14 @@
 image:
   repository: ghcr.io/aolkin/discord-radio
   tag: ""
-  # When set, the image is pinned to this digest, which takes precedence over the tag.
+  # Takes precedence over the tag.
   digest: ""
   pullPolicy: IfNotPresent
 imagePullSecrets: []
 secret:
-  # Name of an existing Secret. The chart never creates it.
-  name: ""
-  # Key names inside that Secret, one per setting. Only the Discord token is required.
-  keys:
+  existingName: ""
+  # Only the Discord token is required.
+  keyNames:
     discordToken: DISCORD_TOKEN
     bucketEndpoint: BUCKET_ENDPOINT
     bucketAccessKeyId: BUCKET_ACCESS_KEY_ID
@@ -19,9 +18,8 @@ secret:
     grafanaApiKey: GRAFANA_API_KEY
 web:
   port: 3000
-  # Comma-separated origins allowed to call the web API.
+  # Comma-separated.
   corsAllowedOrigins: ""
-# Scratch space for downloaded files, kept in an emptyDir that is lost on restart.
 cache:
   # Cached files older than this are removed at startup. 0 keeps them forever.
   ttlSecs: 2592000
@@ -29,34 +27,29 @@ cache:
 metrics:
   intervalSeconds: 60
 logging:
-  # Sets RUST_LOG.
-  level: ""
-# Volume for the bot's saved state.
-persistence:
+  rustLog: ""
+statePersistence:
   size: 256Mi
   storageClass: ""
   accessModes:
     - ReadWriteOnce
-  # Use this claim instead of creating one.
   existingClaim: ""
-# Optional pre-existing volume mounted at /data/content.
+# Mounted at /data/content.
 content:
   existingClaim: ""
   readOnly: true
-  # Mount only this folder of the volume.
   subPath: ""
 service:
   type: ClusterIP
   port: 80
-# Gateway API route. The chart does not handle authentication.
+# The chart does not handle authentication.
 httpRoute:
   enabled: false
-  # Becomes the route's spec.parentRefs: the Gateway that serves this route. The cluster owner picks these values.
+  # Becomes the route's spec.parentRefs: the Gateway that serves this route.
   parentRef:
     name: ""
     namespace: ""
-    # Attach to one listener of the Gateway.
-    sectionName: ""
+    listener: ""
   hostnames: []
 resources:
   requests:

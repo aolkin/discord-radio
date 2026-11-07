@@ -11,7 +11,7 @@ spec:
       {{- with .Values.httpRoute.parentRef.namespace }}
       namespace: {{ . }}
       {{- end }}
-      {{- with .Values.httpRoute.parentRef.sectionName }}
+      {{- with .Values.httpRoute.parentRef.listener }}
       sectionName: {{ . }}
       {{- end }}
   {{- with .Values.httpRoute.hostnames }}
