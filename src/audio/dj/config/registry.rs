@@ -1,4 +1,5 @@
 use crate::audio::dj::config::{ConfiguredPool, DJConfig, LoadedConfig, Pool};
+use crate::audio::dj::manager::DEFAULT_DJ_CONFIG;
 use crate::bucket::FileResolver;
 use crate::bucket::registry::JsonRegistry;
 use anyhow::Context;
@@ -98,10 +99,14 @@ impl DJConfigRegistry {
     }
 
     fn load(&self, name: &str) -> anyhow::Result<LoadedConfig> {
-        let config = self
-            .configs
-            .get(name)
-            .with_context(|| format!("no DJ config {name:?}"))?;
+        let config = match self.configs.get(name) {
+            Some(config) => config,
+            None if name == DEFAULT_DJ_CONFIG => Arc::new(DJConfig {
+                name: name.to_string(),
+                ..DJConfig::default()
+            }),
+            None => anyhow::bail!("no DJ config {name:?}"),
+        };
         let pools = config
             .pools
             .iter()
