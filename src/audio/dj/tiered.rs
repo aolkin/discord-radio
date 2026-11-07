@@ -1,7 +1,7 @@
 use crate::audio::dj::segments::Completed;
 use crate::audio::dj::serde::{ShiftBack, deser_instant, ser_instant};
 use crate::audio::dj::weighted_choice::{Weighted, WeightedPool, WeightedSelector};
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::{self, Debug, Formatter};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -101,34 +101,21 @@ impl<T> TieredValueState<T> {
     }
 }
 
-pub struct TieredStateMachine<E: 'static, V> {
+pub struct TieredStateMachine<E, V> {
     state: TieredValueState<V>,
     background_rotation: WeightedSelector<E>,
-    fallback: &'static E,
     last_applied: Option<TieredValue<V>>,
 }
 
-impl<E: Weighted, V: Clone + PartialEq> TieredStateMachine<E, V>
+impl<E: Weighted + Default, V: Clone + PartialEq> TieredStateMachine<E, V>
 where
     for<'a> &'a E: Into<TimedValue<V>>,
 {
-    pub fn new(initial: V, fallback: &'static E) -> Self {
-        Self::restore(
-            TieredValueState {
-                tiered_values: [None, None, None],
-                background_value: TimedValue::temporary(initial, Duration::ZERO),
-            },
-            fallback,
-        )
-    }
-
-    pub fn restore(state: TieredValueState<V>, fallback: &'static E) -> Self {
-        Self {
-            state,
-            background_rotation: WeightedSelector::new(Arc::default(), None),
-            fallback,
-            last_applied: None,
-        }
+    pub fn new(initial: V) -> Self {
+        Self::from(TieredValueState {
+            tiered_values: [None, None, None],
+            background_value: TimedValue::temporary(initial, Duration::ZERO),
+        })
     }
 
     pub fn value(&self) -> TieredValue<V> {
@@ -166,8 +153,10 @@ where
     pub fn advance(&mut self) {
         match self.state.controlling().0 {
             Tier::Background => {
-                let entry = self.background_rotation.choose().unwrap_or(self.fallback);
-                self.state.background_value = entry.into();
+                self.state.background_value = match self.background_rotation.choose() {
+                    Some(entry) => entry.into(),
+                    None => (&E::default()).into(),
+                };
             }
             tier => self.state.update(tier, None),
         }
@@ -189,8 +178,26 @@ impl<E, V: Debug> Debug for TieredStateMachine<E, V> {
     }
 }
 
+impl<E: Weighted, V> From<TieredValueState<V>> for TieredStateMachine<E, V> {
+    fn from(state: TieredValueState<V>) -> Self {
+        Self {
+            state,
+            background_rotation: WeightedSelector::new(Arc::default(), None),
+            last_applied: None,
+        }
+    }
+}
+
 impl<E, V: Serialize> Serialize for TieredStateMachine<E, V> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         self.state.serialize(serializer)
+    }
+}
+
+impl<'de, E: Weighted + Default, V: Deserialize<'de>> Deserialize<'de>
+    for TieredStateMachine<E, V>
+{
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        TieredValueState::deserialize(deserializer).map(Self::from)
     }
 }

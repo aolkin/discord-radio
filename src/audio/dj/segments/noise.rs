@@ -12,7 +12,6 @@ use field_trait::field_trait_impl;
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
-use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -36,13 +35,17 @@ impl Weighted for NoiseEntry {
     }
 }
 
-pub static DEFAULT_SIGNAL_PROFILE: LazyLock<NoiseEntry> = LazyLock::new(|| NoiseEntry {
-    noise_profile: "clear".to_string(),
-    weight: 1,
-    fade_duration_seconds: Some(3.0),
-    min_duration_seconds: 60.0,
-    max_duration_seconds: 120.0,
-});
+impl Default for NoiseEntry {
+    fn default() -> Self {
+        Self {
+            noise_profile: "clear".to_string(),
+            weight: 1,
+            fade_duration_seconds: Some(3.0),
+            min_duration_seconds: 60.0,
+            max_duration_seconds: 120.0,
+        }
+    }
+}
 
 impl From<&NoiseEntry> for TimedValue<SignalProfilePlayback> {
     fn from(entry: &NoiseEntry) -> Self {

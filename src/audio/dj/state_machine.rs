@@ -5,16 +5,14 @@ use crate::audio::dj::manager::{
 use crate::audio::dj::segments::{
     Completed, HexSegment, Segment, SignalProfilePlayback, TrackSegment,
 };
-use crate::audio::dj::segments::{DEFAULT_SIGNAL_PROFILE, NoiseEntry, NoiseSegment, SegmentCtx};
+use crate::audio::dj::segments::{NoiseEntry, NoiseSegment, SegmentCtx};
 use crate::audio::dj::serde::{ShiftBack, deser_instant, ser_instant};
-use crate::audio::dj::tiered::{
-    TieredChange, TieredStateMachine, TieredValue, TieredValueState, TimedValue,
-};
+use crate::audio::dj::tiered::{TieredChange, TieredStateMachine, TieredValue, TimedValue};
 use crate::audio::dj::weighted_choice::WeightedSelector;
 use crate::state::Data;
 use anyhow::Context;
 use rand::RngExt;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use serenity::model::id::{ChannelId, GuildId};
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
@@ -71,26 +69,15 @@ impl From<Box<dyn Segment>> for SegmentContainer {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DJState {
     pub segment: SegmentContainer,
-    #[serde(deserialize_with = "deser_signal_profile")]
     pub signal_profile: TieredStateMachine<NoiseEntry, SignalProfilePlayback>,
     pub override_channel_status: Option<String>,
-}
-
-fn deser_signal_profile<'de, D: Deserializer<'de>>(
-    deserializer: D,
-) -> Result<TieredStateMachine<NoiseEntry, SignalProfilePlayback>, D::Error> {
-    TieredValueState::deserialize(deserializer)
-        .map(|state| TieredStateMachine::restore(state, &*DEFAULT_SIGNAL_PROFILE))
 }
 
 impl Default for DJState {
     fn default() -> Self {
         Self {
             segment: NoiseSegment::quiet(Duration::from_secs(1)).into(),
-            signal_profile: TieredStateMachine::new(
-                "clear".to_string().into(),
-                &*DEFAULT_SIGNAL_PROFILE,
-            ),
+            signal_profile: TieredStateMachine::new("clear".to_string().into()),
             override_channel_status: None,
         }
     }
