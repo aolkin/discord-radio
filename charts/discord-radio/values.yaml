@@ -40,10 +40,7 @@ httpRoute:
     namespace: ""
     sectionName: ""
   hostnames: []
-resources:
-  requests:
-    cpu: 100m
-    memory: 128Mi
+resources: {}
 podAnnotations: {}
 nodeSelector: {}
 tolerations: []
