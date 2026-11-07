@@ -21,7 +21,7 @@ RUN touch src/main.rs crates/field-trait/src/lib.rs \
 # The binary links glibc dynamically, so the runtime image needs a glibc base. TLS uses bundled root certificates, so no CA store is installed.
 FROM debian:bookworm-slim
 RUN useradd --system --uid 10001 --home-dir /app radio \
-    && mkdir -p /app/content /data/state /data/cache \
+    && mkdir -p /data/content /data/state /data/cache \
     && chown -R radio:radio /data
 COPY --from=build /src/target/release/radio-bot /usr/local/bin/radio-bot
 ENV STATE_STORE_PATH=/data/state \
@@ -29,4 +29,4 @@ ENV STATE_STORE_PATH=/data/state \
 USER radio
 WORKDIR /app
 EXPOSE 3000
-ENTRYPOINT ["radio-bot", "/app/content"]
+ENTRYPOINT ["radio-bot", "/data/content"]
