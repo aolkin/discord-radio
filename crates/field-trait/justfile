@@ -1,0 +1,2 @@
+readme:
+    cargo readme -o README.md
