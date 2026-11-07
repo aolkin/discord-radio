@@ -15,7 +15,7 @@ pub struct TimedValue<T> {
 }
 
 impl<T> TimedValue<T> {
-    fn new(value: T, duration: Option<Duration>) -> Self {
+    pub fn new(value: T, duration: Option<Duration>) -> Self {
         Self {
             value,
             started_at: Instant::now(),

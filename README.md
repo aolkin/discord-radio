@@ -112,10 +112,10 @@ See [WEB_PORTAL.md](WEB_PORTAL.md) for more details.
 - `/dj status` - Get the current status of the DJ
 - `/dj configure` - Restart the DJ with a chosen configuration (the DJ runs whenever the bot is in a voice channel)
 - `/dj announcements` - Choose the DJ announcement channel, or turn announcements off by omitting it
-- `/dj profile` - Set the DJ's background signal profile with an optional fade used to fade in and out of it, or clear it to return to rotation
-- `/dj override` - Set the DJ's signal profile override with an optional fade used to fade in and out of it (0 switches instantly), or clear it
-- `/dj channel_status` - Set the DJ's background voice channel status, or clear it to return to rotation
-- `/dj channel_status_override` - Override the voice channel status with a fixed status, leave it unmanaged (the DJ does not touch it), or clear the override
+- `/dj profile` - Set the DJ's background signal profile with an optional fade used to fade in and out of it and an optional duration in seconds, or clear it to return to rotation
+- `/dj override` - Set the DJ's signal profile override with an optional fade used to fade in and out of it (0 switches instantly) and an optional duration in seconds, or clear it
+- `/dj channel_status` - Set the DJ's background voice channel status with an optional duration in seconds, or clear it to return to rotation
+- `/dj channel_status_override` - Override the voice channel status with a fixed status or leave it unmanaged (the DJ does not touch it), with an optional duration in seconds, or clear the override
 
 ### Messaging Commands
 - `/register_channel` - Register a channel for sending messages from the web portal

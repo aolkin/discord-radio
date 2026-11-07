@@ -559,7 +559,7 @@ impl DJStateMachine {
                     .write()
                     .await
                     .signal_profile
-                    .update_manual(profile.map(TimedValue::permanent));
+                    .update_manual(profile);
                 Ok(())
             }
             DJCommand::SetOverrideProfile(profile_override) => {
@@ -567,13 +567,15 @@ impl DJStateMachine {
                     .write()
                     .await
                     .signal_profile
-                    .update_override(profile_override.map(TimedValue::permanent));
+                    .update_override(profile_override);
                 Ok(())
             }
             DJCommand::SetBackgroundChannelStatus(status) => {
-                self.state.write().await.channel_status.update_manual(
-                    status.map(|status| TimedValue::permanent(ChannelStatus::Fixed(status))),
-                );
+                self.state
+                    .write()
+                    .await
+                    .channel_status
+                    .update_manual(status);
                 Ok(())
             }
             DJCommand::SetOverrideChannelStatus(status_override) => {
@@ -581,7 +583,7 @@ impl DJStateMachine {
                     .write()
                     .await
                     .channel_status
-                    .update_override(status_override.map(TimedValue::permanent));
+                    .update_override(status_override);
                 Ok(())
             }
         };

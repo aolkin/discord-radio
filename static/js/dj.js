@@ -17,6 +17,7 @@ export const modals = {
         reset: () => ({
             channelStatusSetting: 'background',
             channelStatusText: '',
+            channelStatusDuration: null,
             channelStatusMessage: emptyMessage(),
         }),
     },
@@ -39,6 +40,7 @@ export function dj() {
         showChannelStatusModal: false,
         channelStatusSetting: 'background',
         channelStatusText: '',
+        channelStatusDuration: null,
         channelStatusSaving: false,
         channelStatusMessage: { text: '', type: '' },
 
@@ -87,6 +89,9 @@ export function dj() {
                 override: ['channel-status-override', { status: status && { fixed: status } }],
                 unmanaged: ['channel-status-override', { status: 'unmanaged' }],
             }[this.channelStatusSetting];
+            if (body.status && this.channelStatusDuration !== null && this.channelStatusDuration !== '') {
+                body.duration = Number.parseFloat(this.channelStatusDuration);
+            }
 
             await this.runAction({
                 saving: 'channelStatusSaving',

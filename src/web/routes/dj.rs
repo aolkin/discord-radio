@@ -1,6 +1,7 @@
 use crate::audio::dj::manager::{DJCommand, DjBusy, IdleRequest, TrackRequest};
 use crate::audio::dj::segments::SignalProfilePlayback;
 use crate::audio::dj::state_machine::{ChannelStatus, DEFAULT_PROFILE_FADE};
+use crate::audio::dj::tiered::TimedValue;
 use crate::state::Data;
 use crate::web::error::{ApiError, WithStatus};
 use anyhow::Context;
@@ -121,12 +122,23 @@ pub async fn force_dj_idle(
     send_dj_command(&bot_state, guild_id, DJCommand::ForceIdle(request))
 }
 
-/// `profile: null` clears the setting; `fade_duration` (seconds) applies only
-/// when setting one.
+/// `profile: null` clears the setting; `fade_duration` and `duration`
+/// (seconds) apply only when setting one.
 #[derive(Debug, Deserialize)]
 pub struct DjProfileRequest {
     pub profile: Option<String>,
     pub fade_duration: Option<f32>,
+    pub duration: Option<f32>,
+}
+
+fn optional_seconds(seconds: Option<f32>, name: &str) -> Result<Option<Duration>, ApiError> {
+    seconds
+        .map(|seconds| {
+            Duration::try_from_secs_f32(seconds)
+                .with_context(|| format!("Invalid {name}"))
+                .status(StatusCode::BAD_REQUEST)
+        })
+        .transpose()
 }
 
 pub async fn set_dj_background_profile(
@@ -164,59 +176,74 @@ async fn set_dj_profile(
     guild_id: GuildId,
     request: DjProfileRequest,
     default_fade: Option<Duration>,
-    command: fn(Option<SignalProfilePlayback>) -> DJCommand,
+    command: fn(Option<TimedValue<SignalProfilePlayback>>) -> DJCommand,
 ) -> Result<StatusCode, ApiError> {
-    if request.profile.is_none() && request.fade_duration.is_some() {
-        return Err(ApiError::bad_request("fade_duration needs a profile"));
+    if request.profile.is_none() && (request.fade_duration.is_some() || request.duration.is_some())
+    {
+        return Err(ApiError::bad_request(
+            "fade_duration and duration need a profile",
+        ));
     }
-    let fade = match request.fade_duration {
-        Some(seconds) => Some(
-            Duration::try_from_secs_f32(seconds)
-                .context("Invalid fade_duration")
-                .status(StatusCode::BAD_REQUEST)?,
-        ),
-        None => default_fade,
-    };
+    let fade = optional_seconds(request.fade_duration, "fade_duration")?.or(default_fade);
+    let duration = optional_seconds(request.duration, "duration")?;
     ensure_profile_exists(bot_state, request.profile.as_deref())?;
 
-    let playback = request.profile.map(|profile| SignalProfilePlayback {
-        name: profile,
-        fade_in_duration: fade,
-        fade_out_duration: fade,
+    let playback = request.profile.map(|profile| {
+        TimedValue::new(
+            SignalProfilePlayback {
+                name: profile,
+                fade_in_duration: fade,
+                fade_out_duration: fade,
+            },
+            duration,
+        )
     });
     send_dj_command(bot_state, guild_id, command(playback))
 }
 
 #[derive(Debug, Deserialize)]
-pub struct DjChannelStatusRequest {
-    pub status: Option<String>,
+pub struct DjChannelStatusRequest<T> {
+    pub status: Option<T>,
+    pub duration: Option<f32>,
+}
+
+impl<T> DjChannelStatusRequest<T> {
+    fn timed(
+        self,
+        into_status: impl FnOnce(T) -> ChannelStatus,
+    ) -> Result<Option<TimedValue<ChannelStatus>>, ApiError> {
+        if self.status.is_none() && self.duration.is_some() {
+            return Err(ApiError::bad_request("duration needs a status"));
+        }
+        let duration = optional_seconds(self.duration, "duration")?;
+        Ok(self
+            .status
+            .map(|status| TimedValue::new(into_status(status), duration)))
+    }
 }
 
 pub async fn set_dj_background_channel_status(
     State(bot_state): State<Data>,
     Path(guild_id): Path<GuildId>,
-    AxumJson(request): AxumJson<DjChannelStatusRequest>,
+    AxumJson(request): AxumJson<DjChannelStatusRequest<String>>,
 ) -> Result<StatusCode, ApiError> {
+    let status = request.timed(ChannelStatus::Fixed)?;
     send_dj_command(
         &bot_state,
         guild_id,
-        DJCommand::SetBackgroundChannelStatus(request.status),
+        DJCommand::SetBackgroundChannelStatus(status),
     )
-}
-
-#[derive(Debug, Deserialize)]
-pub struct DjChannelStatusOverrideRequest {
-    pub status: Option<ChannelStatus>,
 }
 
 pub async fn set_dj_override_channel_status(
     State(bot_state): State<Data>,
     Path(guild_id): Path<GuildId>,
-    AxumJson(request): AxumJson<DjChannelStatusOverrideRequest>,
+    AxumJson(request): AxumJson<DjChannelStatusRequest<ChannelStatus>>,
 ) -> Result<StatusCode, ApiError> {
+    let status = request.timed(|status| status)?;
     send_dj_command(
         &bot_state,
         guild_id,
-        DJCommand::SetOverrideChannelStatus(request.status),
+        DJCommand::SetOverrideChannelStatus(status),
     )
 }

@@ -8,6 +8,7 @@ export const modals = {
             selectedProfile: '',
             profileSetting: 'profile',
             profileFadeDuration: null,
+            profileDuration: null,
             profileMessage: emptyMessage(),
         }),
     },
@@ -25,6 +26,7 @@ export function signalProfiles() {
         selectedProfile: '',
         profileSetting: 'profile',
         profileFadeDuration: null,
+        profileDuration: null,
         profileSaving: false,
         profileMessage: { text: '', type: '' },
         profiles: [],
@@ -147,6 +149,9 @@ export function signalProfiles() {
 
             if (body.profile && this.profileFadeDuration !== null && this.profileFadeDuration !== '') {
                 body.fade_duration = Number.parseFloat(this.profileFadeDuration);
+            }
+            if (body.profile && this.profileDuration !== null && this.profileDuration !== '') {
+                body.duration = Number.parseFloat(this.profileDuration);
             }
 
             await this.runAction({
