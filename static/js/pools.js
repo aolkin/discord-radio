@@ -56,6 +56,17 @@ const kinds = {
         identifier: 'noise_profile',
         entryFields: noiseEntryFields,
     },
+    playlist: {
+        label: 'Playlist',
+        identifier: 'tracks',
+        entryFields: [
+            { key: 'tracks', label: 'Tracks', type: 'strings' },
+            weight,
+            profileText('signal_profile', 'Signal Profile', true),
+            { key: 'volume', label: 'Volume (0-2)', type: 'number', step: 'any', min: 0, max: 2, optional: true },
+            optionalText('channel_status', 'Channel Status'),
+        ],
+    },
 };
 
 const poolFields = [historyPenaltyMultiplier];
