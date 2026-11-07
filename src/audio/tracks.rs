@@ -20,24 +20,11 @@ pub struct TrackSnapshot {
     pub volume: f32,
     pub loops: bool,
     pub start_time: SystemTime,
-    #[serde(rename = "duration_secs", with = "duration_secs")]
+    #[serde(
+        rename = "duration_secs",
+        with = "crate::audio::dj::serde::optional_duration_secs"
+    )]
     pub duration: Option<Duration>,
-}
-
-mod duration_secs {
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
-    use std::time::Duration;
-
-    pub fn serialize<S: Serializer>(value: &Option<Duration>, s: S) -> Result<S::Ok, S::Error> {
-        value.map(|d| d.as_secs_f64()).serialize(s)
-    }
-
-    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Duration>, D::Error> {
-        Option::<f64>::deserialize(d)?
-            .map(Duration::try_from_secs_f64)
-            .transpose()
-            .map_err(serde::de::Error::custom)
-    }
 }
 
 pub struct TrackInfo {
