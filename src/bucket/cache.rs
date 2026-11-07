@@ -278,6 +278,8 @@ impl Bucket {
                 }
             })?;
 
+        mark_accessed(&dest).await;
+
         Ok(dest)
     }
 
@@ -384,7 +386,7 @@ struct KeyLocks(Arc<std::sync::Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>
 struct KeyGuard {
     locks: KeyLocks,
     key: String,
-    mutex: Arc<tokio::sync::Mutex<()>>,
+    mutex: Option<Arc<tokio::sync::Mutex<()>>>,
     guard: Option<tokio::sync::OwnedMutexGuard<()>>,
 }
 
@@ -400,7 +402,7 @@ impl KeyLocks {
         KeyGuard {
             locks: self.clone(),
             key: key.to_string(),
-            mutex,
+            mutex: Some(mutex),
             guard: Some(guard),
         }
     }
@@ -411,19 +413,23 @@ impl KeyLocks {
             Ok(guard) => Some(KeyGuard {
                 locks: self.clone(),
                 key: key.to_string(),
-                mutex,
+                mutex: Some(mutex),
                 guard: Some(guard),
             }),
             Err(_) => {
-                self.release(key, &mutex);
+                self.release(key, mutex);
                 None
             }
         }
     }
 
-    fn release(&self, key: &str, mutex: &Arc<tokio::sync::Mutex<()>>) {
+    fn release(&self, key: &str, mutex: Arc<tokio::sync::Mutex<()>>) {
         let mut map = self.0.lock().unwrap_or_else(|e| e.into_inner());
-        if Arc::strong_count(mutex) == 2 {
+        drop(mutex);
+        if map
+            .get(key)
+            .is_some_and(|entry| Arc::strong_count(entry) == 1)
+        {
             map.remove(key);
         }
     }
@@ -432,7 +438,9 @@ impl KeyLocks {
 impl Drop for KeyGuard {
     fn drop(&mut self) {
         self.guard.take();
-        self.locks.release(&self.key, &self.mutex);
+        if let Some(mutex) = self.mutex.take() {
+            self.locks.release(&self.key, mutex);
+        }
     }
 }
 
@@ -481,9 +489,17 @@ impl Sweeper {
         let Some(_guard) = self.locks.try_lock(&file.key) else {
             return false;
         };
-        let still_idle =
-            std::fs::metadata(&file.path).is_ok_and(|metadata| !is_in_use(&file.path, &metadata));
-        if !still_idle || !remove_best_effort(&file.path) {
+        match std::fs::metadata(&file.path) {
+            Ok(metadata) if !is_in_use(&file.path, &metadata) => {}
+            Ok(_) => return false,
+            Err(e) => {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    self.present.invalidate(&file.key).await;
+                }
+                return false;
+            }
+        }
+        if !remove_best_effort(&file.path) {
             return false;
         }
         self.present.invalidate(&file.key).await;
@@ -506,6 +522,18 @@ impl Sweeper {
                 Err(e) => tracing::warn!("File cache sweep failed: {e:#}"),
             }
         }
+    }
+}
+
+async fn mark_accessed(path: &Path) {
+    let path = path.to_path_buf();
+    let result = tokio::task::spawn_blocking(move || {
+        std::fs::File::open(&path)?
+            .set_times(std::fs::FileTimes::new().set_accessed(SystemTime::now()))
+    })
+    .await;
+    if let Ok(Err(e)) = result {
+        tracing::warn!("Failed to record an access to a cached file: {e}");
     }
 }
 
@@ -578,6 +606,7 @@ fn list_cached_files(
 
     Ok(())
 }
+
 /// The object storage key a cached file came from: its path relative to
 /// `cache_dir`, always `/`-separated. `None` for a path that isn't valid
 /// UTF-8, which no key can be.
