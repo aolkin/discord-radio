@@ -67,6 +67,14 @@ spec:
               mountPath: /data/state
             - name: cache
               mountPath: /data/cache
+            {{- if .Values.content.existingClaim }}
+            - name: content
+              mountPath: /data/content
+              readOnly: {{ .Values.content.readOnly }}
+              {{- with .Values.content.subPath }}
+              subPath: {{ . | quote }}
+              {{- end }}
+            {{- end }}
           {{- with .Values.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
@@ -81,6 +89,12 @@ spec:
             {{- with .Values.cache.sizeLimit }}
             sizeLimit: {{ . | quote }}
             {{- end }}
+        {{- if .Values.content.existingClaim }}
+        - name: content
+          persistentVolumeClaim:
+            claimName: {{ .Values.content.existingClaim }}
+            readOnly: {{ .Values.content.readOnly }}
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

@@ -30,6 +30,10 @@ persistence:
   accessModes:
     - ReadWriteOnce
   existingClaim: ""
+content:
+  existingClaim: ""
+  readOnly: true
+  subPath: ""
 service:
   type: ClusterIP
   port: 80
