@@ -384,8 +384,7 @@ impl DJStateMachine {
         })
     }
 
-    async fn set_config(&mut self, loaded: &LoadedConfig) {
-        let LoadedConfig { config, pools } = loaded;
+    async fn set_config(&mut self, loaded @ LoadedConfig { config, pools }: &LoadedConfig) {
         self.entry_selectors
             .retain(|name, _| pools.iter().any(|pool| pool.file.name == *name));
         for pool in pools.iter() {

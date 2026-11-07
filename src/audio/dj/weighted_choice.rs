@@ -80,14 +80,9 @@ impl<T: Weighted, P: WeightedPool<T>> From<&P> for WeightedSelector<T> {
     }
 }
 
-impl<T> Default for WeightedSelector<T> {
+impl<T: Weighted> Default for WeightedSelector<T> {
     fn default() -> Self {
-        Self {
-            items: Arc::default(),
-            identities: Box::default(),
-            recent_history: VecDeque::new(),
-            penalty_multiplier: 1.0,
-        }
+        Self::new(Arc::default(), None)
     }
 }
 
