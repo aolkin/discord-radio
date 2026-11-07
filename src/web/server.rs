@@ -95,7 +95,11 @@ pub async fn run_web_server(bot_state: Data, port: u16) -> anyhow::Result<()> {
         )
         .route(
             "/api/guilds/{guild_id}/dj/channel-status",
-            post(routes::dj::set_dj_channel_status),
+            post(routes::dj::set_dj_background_channel_status),
+        )
+        .route(
+            "/api/guilds/{guild_id}/dj/channel-status-override",
+            post(routes::dj::set_dj_override_channel_status),
         )
         .route(
             "/api/guilds/{guild_id}/bot-profile",

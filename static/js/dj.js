@@ -11,6 +11,15 @@ export const modals = {
         perGuild: true,
         reset: () => ({ hexMessageText: '', hexMessage: emptyMessage() }),
     },
+    channelStatus: {
+        flag: 'showChannelStatusModal',
+        perGuild: true,
+        reset: () => ({
+            channelStatusSetting: 'background',
+            channelStatusText: '',
+            channelStatusMessage: emptyMessage(),
+        }),
+    },
 };
 
 export function dj() {
@@ -25,6 +34,12 @@ export function dj() {
         hexMessageText: '',
         hexSaving: false,
         hexMessage: { text: '', type: '' },
+        // Channel Status Modal state
+        showChannelStatusModal: false,
+        channelStatusSetting: 'background',
+        channelStatusText: '',
+        channelStatusSaving: false,
+        channelStatusMessage: { text: '', type: '' },
 
         async advanceDJState() {
             await this.runAction({
@@ -61,16 +76,28 @@ export function dj() {
             });
         },
 
-        async setChannelStatusEnabled(guildId, enabled) {
-            try {
-                await apiRequest(`/api/guilds/${guildId}/dj/channel-status`, {
-                    method: 'POST',
-                    body: { enabled },
-                });
-            } catch (error) {
-                console.error('Error changing channel status setting:', error);
-                alert('Failed to change the voice channel status setting. Please try again.');
-            }
+        async changeChannelStatus() {
+            const status = this.channelStatusText || null;
+            const [path, body] = {
+                background: ['channel-status', { status }],
+                override: ['channel-status-override', { status: status && { fixed: status } }],
+                unmanaged: ['channel-status-override', { status: 'unmanaged' }],
+            }[this.channelStatusSetting];
+
+            await this.runAction({
+                saving: 'channelStatusSaving',
+                message: 'channelStatusMessage',
+                label: 'changing channel status',
+                request: () =>
+                    apiRequest(`/api/guilds/${this.currentGuildId}/dj/${path}`, {
+                        method: 'POST',
+                        body,
+                    }),
+                success: 'Channel status changed successfully!',
+                failure: 'Failed to change channel status. Please try again.',
+                afterFn: () => this.closeModal('channelStatus'),
+                afterMs: 1500,
+            });
         },
     };
 }

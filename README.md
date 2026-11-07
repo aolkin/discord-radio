@@ -114,7 +114,8 @@ See [WEB_PORTAL.md](WEB_PORTAL.md) for more details.
 - `/dj announcements` - Choose the DJ announcement channel, or turn announcements off by omitting it
 - `/dj profile` - Set the DJ's background signal profile with an optional fade used to fade in and out of it, or clear it to return to rotation
 - `/dj override` - Set the DJ's signal profile override with an optional fade used to fade in and out of it (0 switches instantly), or clear it
-- `/dj channel_status` - Turn the DJ's management of the voice channel status on or off; turning it off leaves the current status as it is
+- `/dj channel_status` - Set the DJ's background voice channel status, or clear it to return to rotation
+- `/dj channel_status_override` - Override the voice channel status with a fixed status, leave it unmanaged (the DJ does not touch it), or clear the override
 
 ### Messaging Commands
 - `/register_channel` - Register a channel for sending messages from the web portal

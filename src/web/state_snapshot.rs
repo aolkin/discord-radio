@@ -1,3 +1,4 @@
+use crate::audio::dj::state_machine::ChannelStatus;
 use crate::state::Data;
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
@@ -33,7 +34,13 @@ pub struct GuildState {
     pub tracks: Vec<TrackInfo>,
     pub dj_state: DJStateInfo,
     pub audio_profile: AudioProfileInfo,
-    pub channel_status_enabled: bool,
+    pub channel_status: ChannelStatusInfo,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChannelStatusInfo {
+    pub status: Option<String>,
+    pub source: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,10 +78,14 @@ impl BotSnapshot {
                 })
                 .collect();
 
-            let (dj_state, profile) = {
+            let (dj_state, profile, channel_status) = {
                 let dj_state_lock = guild.dj_manager.state();
                 let state = dj_state_lock.read().await;
-                (dj_state_to_info(&state), state.signal_profile())
+                (
+                    dj_state_to_info(&state),
+                    state.signal_profile(),
+                    state.channel_status(),
+                )
             };
 
             // Get audio profile info
@@ -94,11 +105,13 @@ impl BotSnapshot {
                 tracks,
                 dj_state,
                 audio_profile,
-                channel_status_enabled: !bot_state
-                    .dj_settings
-                    .get(guild_id)
-                    .await
-                    .channel_status_disabled,
+                channel_status: ChannelStatusInfo {
+                    status: match channel_status.value {
+                        ChannelStatus::Unmanaged => None,
+                        ChannelStatus::Fixed(status) => Some(status),
+                    },
+                    source: channel_status.tier.to_string(),
+                },
             });
         }
 

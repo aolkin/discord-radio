@@ -2,6 +2,8 @@ use crate::audio::dj::segments::{
     HexMessageDefaults, HexMessageEntry, HexSegment, NoiseEntry, NoiseSegment, Segment, TrackEntry,
     TrackSegment, ensure_loops,
 };
+use crate::audio::dj::state_machine::ChannelStatus;
+use crate::audio::dj::tiered::TimedValue;
 use crate::audio::dj::weighted_choice::{
     Identity, Weighted, WeightedPool, ambassador_impl_Weighted,
 };
@@ -10,10 +12,12 @@ use crate::state::Data;
 use ambassador::Delegate;
 use anyhow::{Context, bail};
 use field_trait::field_trait_impl;
+use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::sync::{Arc, LazyLock};
+use std::time::Duration;
 
 pub mod registry;
 
@@ -22,6 +26,7 @@ pub struct DJConfig {
     pub name: String,
     pub pools: BTreeMap<String, PoolConfig>,
     pub signal_profiles: SignalProfiles,
+    pub channel_statuses: ChannelStatuses,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pool_history_penalty_multiplier: Option<f32>,
 }
@@ -51,6 +56,14 @@ pub struct SignalProfiles {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub history_penalty_multiplier: Option<f32>,
     pub entries: Arc<[NoiseEntry]>,
+}
+
+#[field_trait_impl(WeightedPool<ChannelStatusEntry>)]
+#[derive(Deserialize, Serialize, Debug, Default)]
+pub struct ChannelStatuses {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub history_penalty_multiplier: Option<f32>,
+    pub entries: Arc<[ChannelStatusEntry]>,
 }
 
 #[field_trait_impl(WeightedPool<PoolEntry>)]
@@ -189,6 +202,47 @@ impl PoolEntry {
     }
 }
 
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct ChannelStatusEntry {
+    pub status: String,
+    pub weight: u32,
+    pub min_duration_seconds: f32,
+    pub max_duration_seconds: f32,
+}
+
+#[field_trait_impl]
+impl Weighted for ChannelStatusEntry {
+    fn identity(&self) -> Identity {
+        Identity::of((
+            &self.status,
+            self.min_duration_seconds.to_bits(),
+            self.max_duration_seconds.to_bits(),
+        ))
+    }
+}
+
+impl Default for ChannelStatusEntry {
+    fn default() -> Self {
+        Self {
+            status: String::new(),
+            weight: 1,
+            min_duration_seconds: 60.0,
+            max_duration_seconds: 120.0,
+        }
+    }
+}
+
+impl From<&ChannelStatusEntry> for TimedValue<ChannelStatus> {
+    fn from(entry: &ChannelStatusEntry) -> Self {
+        let seconds =
+            rand::rng().random_range(entry.min_duration_seconds..entry.max_duration_seconds);
+        TimedValue::temporary(
+            ChannelStatus::Fixed(entry.status.clone()),
+            Duration::from_secs_f32(seconds),
+        )
+    }
+}
+
 impl RegistryEntry for DJConfig {
     const KIND: &'static str = "DJ config";
 
@@ -206,16 +260,34 @@ impl RegistryEntry for DJConfig {
             if let Some(seconds) = profile.fade_duration_seconds {
                 ensure_seconds(seconds, context)?;
             }
-            ensure_seconds(profile.min_duration_seconds, context)?;
-            if profile.min_duration_seconds >= profile.max_duration_seconds {
-                bail!(
-                    "{}: min_duration_seconds must be less than max_duration_seconds",
-                    context()
-                );
-            }
+            ensure_duration_range(
+                profile.min_duration_seconds,
+                profile.max_duration_seconds,
+                context,
+            )?;
+        }
+        ensure_penalty_multiplier(self.channel_statuses.history_penalty_multiplier)
+            .context("channel_statuses")?;
+        for status in self.channel_statuses.entries.iter() {
+            ensure_duration_range(
+                status.min_duration_seconds,
+                status.max_duration_seconds,
+                || format!("channel status {:?}", status.status),
+            )?;
         }
         Ok(())
     }
+}
+
+fn ensure_duration_range(min: f32, max: f32, context: impl Fn() -> String) -> anyhow::Result<()> {
+    ensure_seconds(min, &context)?;
+    if min >= max {
+        bail!(
+            "{}: min_duration_seconds must be less than max_duration_seconds",
+            context()
+        );
+    }
+    Ok(())
 }
 
 fn ensure_penalty_multiplier(multiplier: Option<f32>) -> anyhow::Result<()> {

@@ -1,13 +1,9 @@
-mod dj;
 mod file_store;
 mod types;
 mod utils;
 
-pub use dj::DjSettingsStore;
 pub use file_store::FileStore;
-pub use types::{
-    ActivityState, DJState, DjSettings, MultiTrackPlaybackState, RegisteredChannel, TrackState,
-};
+pub use types::{ActivityState, DJState, MultiTrackPlaybackState, RegisteredChannel, TrackState};
 
 pub(crate) use crate::persistence::types::DJStateSnapshot;
 use anyhow::Result;

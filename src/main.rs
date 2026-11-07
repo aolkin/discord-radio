@@ -123,9 +123,6 @@ async fn main() -> anyhow::Result<()> {
     );
     tracing::info!("Using state store path: {:?}", state_store_path);
 
-    let dj_settings_store =
-        persistence::DjSettingsStore::new(state_store_path.join("dj_settings.json"));
-    tracing::info!("Loaded DJ settings");
     let state_store = Arc::new(persistence::FileStore::new(state_store_path));
 
     // Initialize metrics if configured
@@ -207,7 +204,6 @@ async fn main() -> anyhow::Result<()> {
     let data: Data = Box::leak(Box::new(BotState::new(
         file_resolver,
         state_store,
-        dj_settings_store,
         profile_manager,
         dj_config_manager,
         bot_user_id,
