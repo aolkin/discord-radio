@@ -1,4 +1,4 @@
-import { apiRequest, bodyOrStatus, emptyMessage } from './api.js';
+import { emptyMessage } from './api.js';
 import {
     blankRow,
     blankSegmentDefaults,
@@ -16,6 +16,7 @@ import {
     toggleHexConfig,
     weight,
 } from './form-fields.js';
+import { registryEditor } from './registry-editor.js';
 
 export const modals = {
     poolEditor: {
@@ -89,27 +90,23 @@ function blankForm() {
     };
 }
 
+const poolEditor = registryEditor({
+    path: '/api/pools',
+    prefix: 'pool',
+    list: 'pools',
+    listKey: 'pools',
+    label: 'pool',
+    toForm,
+    toBody,
+    blankForm,
+});
+
 export function pools() {
     return {
-        pools: [],
-        showPoolEditor: false,
-        poolEditorIsNew: false,
-        poolEditorLoading: false,
-        poolEditorSaving: false,
-        poolEditorMessage: emptyMessage(),
-        poolForm: blankForm(),
+        ...poolEditor.state(),
+        ...poolEditor.methods,
         poolNewEntryKind: 'track',
         poolKinds: kinds,
-
-        async loadPools() {
-            try {
-                const response = await apiRequest('/api/pools');
-                const data = await response.json();
-                this.pools = data.pools.sort();
-            } catch (error) {
-                console.error('Failed to load pools:', error);
-            }
-        },
 
         poolBlocks() {
             const pool = this.poolForm;
@@ -132,55 +129,6 @@ export function pools() {
         addPoolEntry() {
             const kind = this.poolNewEntryKind;
             this.poolForm.entries.push({ kind, ...blankRow(kinds[kind].entryFields) });
-        },
-
-        async openPoolEditor(name) {
-            this.poolEditorIsNew = name === null;
-            this.openModal('poolEditor');
-
-            if (this.poolEditorIsNew) {
-                this.poolForm = blankForm();
-                return;
-            }
-
-            this.poolEditorLoading = true;
-            try {
-                const response = await apiRequest(`/api/pools/${encodeURIComponent(name)}`, {
-                    errorMessage: bodyOrStatus,
-                });
-                this.poolForm = toForm(name, await response.json());
-            } catch (error) {
-                console.error('Failed to load pool:', error);
-                this.poolEditorMessage = { text: `Failed to load pool: ${error.message}`, type: 'error' };
-            } finally {
-                this.poolEditorLoading = false;
-            }
-        },
-
-        async savePool() {
-            const name = this.poolForm.name;
-            if (this.poolEditorIsNew && this.pools.includes(name)) {
-                this.poolEditorMessage = { text: `A pool named "${name}" already exists`, type: 'error' };
-                return;
-            }
-
-            await this.runAction({
-                saving: 'poolEditorSaving',
-                message: 'poolEditorMessage',
-                label: 'saving pool',
-                request: () =>
-                    apiRequest(`/api/pools/${encodeURIComponent(name)}`, {
-                        method: 'PUT',
-                        body: toBody(this.poolForm),
-                        errorMessage: bodyOrStatus,
-                    }),
-                onSuccess: async () => {
-                    this.poolEditorIsNew = false;
-                    await this.loadPools();
-                },
-                success: 'Pool saved',
-                failure: 'Failed to save pool',
-            });
         },
     };
 }
