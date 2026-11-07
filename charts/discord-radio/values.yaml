@@ -1,0 +1,46 @@
+image:
+  repository: ""
+  tag: ""
+  digest: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+existingSecret: ""
+secretKeys:
+  discordToken: DISCORD_TOKEN
+  bucketEndpoint: BUCKET_ENDPOINT
+  bucketAccessKeyId: BUCKET_ACCESS_KEY_ID
+  bucketSecretAccessKey: BUCKET_SECRET_ACCESS_KEY
+  bucketName: BUCKET_NAME
+  grafanaMetricsUrl: GRAFANA_METRICS_URL
+  grafanaApiKey: GRAFANA_API_KEY
+env:
+  webPort: 3000
+  webCorsAllowedOrigins: ""
+  fileCacheTtlSecs: 2592000
+  metricsIntervalSeconds: 60
+  logLevel: ""
+persistence:
+  size: 256Mi
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  existingClaim: ""
+cache:
+  sizeLimit: ""
+service:
+  type: ClusterIP
+  port: 80
+httpRoute:
+  enabled: false
+  parentRef:
+    name: ""
+    namespace: ""
+    sectionName: ""
+  hostnames: []
+resources: {}
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

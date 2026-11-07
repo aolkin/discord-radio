@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "discord-radio.fullname" . }}
+  labels:
+    {{- include "discord-radio.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "discord-radio.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "discord-radio.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: bot
+          image: {{ include "discord-radio.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.env.webPort }}
+              protocol: TCP
+          env:
+            - name: STATE_STORE_PATH
+              value: /data/state
+            - name: FILE_CACHE_DIR
+              value: /data/cache
+            - name: WEB_PORT
+              value: {{ .Values.env.webPort | quote }}
+            - name: FILE_CACHE_TTL_SECS
+              value: {{ .Values.env.fileCacheTtlSecs | int64 | quote }}
+            - name: METRICS_INTERVAL_SECONDS
+              value: {{ .Values.env.metricsIntervalSeconds | int64 | quote }}
+            {{- with .Values.env.webCorsAllowedOrigins }}
+            - name: WEB_CORS_ALLOWED_ORIGINS
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.env.logLevel }}
+            - name: RUST_LOG
+              value: {{ . | quote }}
+            {{- end }}
+            {{- include "discord-radio.secretEnv" (dict "root" . "env" "DISCORD_TOKEN" "key" .Values.secretKeys.discordToken "optional" false) | nindent 12 }}
+            {{- include "discord-radio.secretEnv" (dict "root" . "env" "BUCKET_ENDPOINT" "key" .Values.secretKeys.bucketEndpoint "optional" true) | nindent 12 }}
+            {{- include "discord-radio.secretEnv" (dict "root" . "env" "BUCKET_ACCESS_KEY_ID" "key" .Values.secretKeys.bucketAccessKeyId "optional" true) | nindent 12 }}
+            {{- include "discord-radio.secretEnv" (dict "root" . "env" "BUCKET_SECRET_ACCESS_KEY" "key" .Values.secretKeys.bucketSecretAccessKey "optional" true) | nindent 12 }}
+            {{- include "discord-radio.secretEnv" (dict "root" . "env" "BUCKET_NAME" "key" .Values.secretKeys.bucketName "optional" true) | nindent 12 }}
+            {{- include "discord-radio.secretEnv" (dict "root" . "env" "GRAFANA_METRICS_URL" "key" .Values.secretKeys.grafanaMetricsUrl "optional" true) | nindent 12 }}
+            {{- include "discord-radio.secretEnv" (dict "root" . "env" "GRAFANA_API_KEY" "key" .Values.secretKeys.grafanaApiKey "optional" true) | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+          volumeMounts:
+            - name: state
+              mountPath: /data/state
+            - name: cache
+              mountPath: /data/cache
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: state
+          persistentVolumeClaim:
+            claimName: {{ default (include "discord-radio.fullname" .) .Values.persistence.existingClaim }}
+        - name: cache
+          emptyDir:
+            {{- if not .Values.cache.sizeLimit }} {}{{- end }}
+            {{- with .Values.cache.sizeLimit }}
+            sizeLimit: {{ . | quote }}
+            {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
