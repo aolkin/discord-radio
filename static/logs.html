@@ -167,6 +167,7 @@
                 playing_track: '🎵',
                 playing_hex_message: '📡',
                 playing_noise: '🔊',
+                playing_playlist: '💿',
                 stopped: '⏹️',
             };
 
@@ -184,6 +185,11 @@
                 }
             } else if (details.message) {
                 detail.textContent = `Message: "${details.message}" (${details.target_loops} loops)`;
+                if (details.forced_profile) {
+                    detail.textContent += ` | Profile: ${details.forced_profile}`;
+                }
+            } else if (details.tracks) {
+                detail.textContent = `Playlist: ${details.tracks.join(', ')} (${details.duration_secs}s)`;
                 if (details.forced_profile) {
                     detail.textContent += ` | Profile: ${details.forced_profile}`;
                 }

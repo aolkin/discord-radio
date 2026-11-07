@@ -1,6 +1,6 @@
 use crate::audio::dj::segments::{
-    HexMessageDefaults, HexMessageEntry, HexSegment, NoiseEntry, NoiseSegment, Segment, TrackEntry,
-    TrackSegment, ensure_loops,
+    HexMessageDefaults, HexMessageEntry, HexSegment, NoiseEntry, NoiseSegment, PlaylistEntry,
+    PlaylistSegment, Segment, TrackEntry, TrackSegment, ensure_loops,
 };
 use crate::audio::dj::state_machine::ChannelStatus;
 use crate::audio::dj::tiered::TimedValue;
@@ -153,6 +153,7 @@ pub enum PoolEntry {
     Track(TrackEntry),
     Hex(HexMessageEntry),
     Noise(NoiseEntry),
+    Playlist(PlaylistEntry),
 }
 
 impl PoolEntry {
@@ -174,6 +175,11 @@ impl PoolEntry {
                 ensure_seconds(noise.max_duration_seconds, context)?;
                 if let Some(seconds) = noise.fade_duration_seconds {
                     ensure_seconds(seconds, context)?;
+                }
+            }
+            PoolEntry::Playlist(playlist) => {
+                if playlist.tracks.is_empty() {
+                    bail!("playlist has no tracks");
                 }
             }
         }
@@ -198,6 +204,14 @@ impl PoolEntry {
                 Box::new(HexSegment::from_entry(message.clone(), segment_defaults))
             }
             PoolEntry::Noise(noise) => Box::new(NoiseSegment::from_entry(noise, segment_defaults)),
+            PoolEntry::Playlist(playlist) => Box::new(
+                PlaylistSegment::from_entry(
+                    playlist.clone(),
+                    segment_defaults,
+                    &bot_state.duration_cache,
+                )
+                .await,
+            ),
         }
     }
 }

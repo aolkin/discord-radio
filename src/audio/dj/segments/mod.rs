@@ -1,10 +1,12 @@
 mod hex;
 mod noise;
+mod playlist;
 mod signals;
 mod track;
 
 pub use hex::{HexMessageDefaults, HexMessageEntry, HexSegment, ensure_loops};
 pub use noise::{NoiseEntry, NoiseSegment};
+pub use playlist::{PlaylistEntry, PlaylistSegment};
 pub use track::{TrackEntry, TrackSegment};
 
 use crate::audio::processing::mixer::{TrackCommand, TrackHandle};
@@ -39,6 +41,10 @@ impl<'a> SegmentCtx<'a> {
 
     pub fn file_resolver(&self) -> &FileResolver {
         &self.bot_state.file_resolver
+    }
+
+    pub fn bot_state(&self) -> Data {
+        self.bot_state
     }
 }
 

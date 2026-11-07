@@ -95,6 +95,14 @@ impl TrackSegment {
         }
     }
 
+    pub fn filename(&self) -> &str {
+        &self.filename
+    }
+
+    pub fn duration(&self) -> Duration {
+        self.duration
+    }
+
     async fn start_at(
         &self,
         ctx: &SegmentCtx<'_>,
@@ -251,7 +259,7 @@ impl Segment for TrackSegment {
     }
 }
 
-fn with_status_emoji(status: &str) -> String {
+pub fn with_status_emoji(status: &str) -> String {
     let starts_with_emoji = status.chars().next().is_some_and(|c| {
         matches!(c as u32,
             0x1F300..=0x1F9FF | // Misc Symbols and Pictographs, Emoticons, Transport and Map, Supplemental Symbols
