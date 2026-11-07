@@ -308,3 +308,12 @@ pub fn ensure_seconds(seconds: f32, context: impl Fn() -> String) -> anyhow::Res
     }
     Ok(())
 }
+
+pub fn optional_seconds(seconds: Option<f32>, name: &str) -> anyhow::Result<Option<Duration>> {
+    seconds
+        .map(|seconds| {
+            ensure_seconds(seconds, || name.to_string())?;
+            Ok(Duration::from_secs_f32(seconds))
+        })
+        .transpose()
+}
