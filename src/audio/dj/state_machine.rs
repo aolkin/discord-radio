@@ -77,7 +77,7 @@ impl Default for DJState {
     fn default() -> Self {
         Self {
             segment: NoiseSegment::quiet(Duration::from_secs(1)).into(),
-            signal_profile: TieredStateMachine::new("clear".to_string().into()),
+            signal_profile: TieredStateMachine::new(&NoiseEntry::default()),
             override_channel_status: None,
         }
     }

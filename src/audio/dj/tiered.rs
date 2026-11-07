@@ -111,10 +111,11 @@ impl<E: Weighted + Default, V: Clone + PartialEq> TieredStateMachine<E, V>
 where
     for<'a> &'a E: Into<TimedValue<V>>,
 {
-    pub fn new(initial: V) -> Self {
+    pub fn new(initial: &E) -> Self {
+        let TimedValue { value, .. } = initial.into();
         Self::from(TieredValueState {
             tiered_values: [None, None, None],
-            background_value: TimedValue::temporary(initial, Duration::ZERO),
+            background_value: TimedValue::temporary(value, Duration::ZERO),
         })
     }
 
