@@ -18,12 +18,9 @@ COPY static static
 RUN touch src/main.rs crates/field-trait/src/lib.rs \
     && cargo build --release --locked
 
-# Not static: the binary links glibc, and the serenity gateway reads CA certificates from the system store.
+# The binary links glibc dynamically, so the runtime image needs a glibc base. TLS uses bundled root certificates, so no CA store is installed.
 FROM debian:bookworm-slim
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
-    && rm -rf /var/lib/apt/lists/* \
-    && useradd --system --uid 10001 --home-dir /app radio \
+RUN useradd --system --uid 10001 --home-dir /app radio \
     && mkdir -p /app/content /data/state /data/cache \
     && chown -R radio:radio /data
 COPY --from=build /src/target/release/radio-bot /usr/local/bin/radio-bot
