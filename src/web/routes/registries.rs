@@ -4,19 +4,30 @@ use crate::bucket::registry::{JsonRegistry, RegistryEntry, RegistryError};
 use crate::state::Data;
 use crate::web::error::{ApiError, WithStatus};
 use axum::Json as AxumJson;
+use axum::Router;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
+use axum::routing::get;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-pub trait RoutedEntry: RegistryEntry + 'static {
+pub trait RoutedEntry: RegistryEntry + Send + Sync + 'static {
+    const PATH: &'static str;
     const LIST_KEY: &'static str;
 
     fn registry(bot_state: Data) -> &'static JsonRegistry<Self>;
+
+    fn validate_body(
+        _bot_state: &Data,
+        _body: &serde_json::Map<String, serde_json::Value>,
+    ) -> Result<(), ApiError> {
+        Ok(())
+    }
 }
 
 impl RoutedEntry for SignalProfile {
+    const PATH: &'static str = "/api/profiles";
     const LIST_KEY: &'static str = "profiles";
 
     fn registry(bot_state: Data) -> &'static JsonRegistry<Self> {
@@ -25,14 +36,32 @@ impl RoutedEntry for SignalProfile {
 }
 
 impl RoutedEntry for DJConfig {
+    const PATH: &'static str = "/api/dj-configs";
     const LIST_KEY: &'static str = "configs";
 
     fn registry(bot_state: Data) -> &'static JsonRegistry<Self> {
         &bot_state.dj_config_manager.configs
     }
+
+    fn validate_body(
+        bot_state: &Data,
+        body: &serde_json::Map<String, serde_json::Value>,
+    ) -> Result<(), ApiError> {
+        if let Some(pools) = body.get("pools").and_then(|pools| pools.as_object()) {
+            for pool in pools.keys() {
+                bot_state
+                    .dj_config_manager
+                    .pools
+                    .require(pool)
+                    .status(StatusCode::UNPROCESSABLE_ENTITY)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 impl RoutedEntry for Pool {
+    const PATH: &'static str = "/api/pools";
     const LIST_KEY: &'static str = "pools";
 
     fn registry(bot_state: Data) -> &'static JsonRegistry<Self> {
@@ -55,7 +84,7 @@ pub async fn list<T: RoutedEntry>(
     )]))
 }
 
-pub async fn get<T: RoutedEntry>(
+pub async fn get_entry<T: RoutedEntry>(
     State(bot_state): State<Data>,
     Path(name): Path<String>,
     Query(params): Query<RefreshParams>,
@@ -79,6 +108,7 @@ pub async fn put<T: RoutedEntry>(
     Path(name): Path<String>,
     AxumJson(body): AxumJson<serde_json::Map<String, serde_json::Value>>,
 ) -> Result<StatusCode, ApiError> {
+    T::validate_body(&bot_state, &body)?;
     T::registry(bot_state)
         .save(&name, body)
         .await
@@ -86,21 +116,11 @@ pub async fn put<T: RoutedEntry>(
     Ok(StatusCode::OK)
 }
 
-pub async fn put_dj_config(
-    State(bot_state): State<Data>,
-    name: Path<String>,
-    body: AxumJson<serde_json::Map<String, serde_json::Value>>,
-) -> Result<StatusCode, ApiError> {
-    if let Some(pools) = body.get("pools").and_then(|pools| pools.as_object()) {
-        for pool in pools.keys() {
-            bot_state
-                .dj_config_manager
-                .pools
-                .require(pool)
-                .status(StatusCode::UNPROCESSABLE_ENTITY)?;
-        }
-    }
-    put::<DJConfig>(State(bot_state), name, body).await
+pub fn routes<T: RoutedEntry>() -> Router<Data> {
+    Router::new().route(T::PATH, get(list::<T>)).route(
+        &format!("{}/{{name}}", T::PATH),
+        get(get_entry::<T>).put(put::<T>),
+    )
 }
 
 fn registry_error(e: RegistryError) -> ApiError {
