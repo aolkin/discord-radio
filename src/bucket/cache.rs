@@ -187,7 +187,7 @@ pub struct Bucket {
     _sweeper: Option<Arc<SweepTask>>,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct EvictionPolicy {
     pub entry_ttl: Option<Duration>,
     pub max_bytes: Option<u64>,
