@@ -51,8 +51,9 @@ spec:
             - name: RUST_LOG
               value: {{ . | quote }}
             {{- end }}
-            {{- range $env, $key := .Values.secret.keys }}
-            {{- include "discord-radio.secretEnv" (dict "root" $ "env" $env "key" $key "optional" (ne $env "DISCORD_TOKEN")) | nindent 12 }}
+            {{- include "discord-radio.secretEnv" (dict "root" . "env" "DISCORD_TOKEN" "optional" false) | nindent 12 }}
+            {{- range .Values.secret.optionalKeys }}
+            {{- include "discord-radio.secretEnv" (dict "root" $ "env" . "optional" true) | nindent 12 }}
             {{- end }}
           livenessProbe:
             httpGet:

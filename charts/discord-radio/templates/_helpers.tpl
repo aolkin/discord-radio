@@ -36,6 +36,6 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
   valueFrom:
     secretKeyRef:
       name: {{ required "secret.name is required" .root.Values.secret.name }}
-      key: {{ .key }}
+      key: {{ .env }}
       optional: {{ .optional }}
 {{- end -}}
