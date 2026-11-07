@@ -229,10 +229,6 @@ impl AudioSource for SymphoniaSource {
         Ok(())
     }
 
-    fn duration(&self) -> Option<Duration> {
-        None // Duration not tracked without total_frames
-    }
-
     fn reset(&mut self) {
         // Try to seek to beginning first
         if self

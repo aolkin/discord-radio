@@ -26,16 +26,12 @@ pub trait StateStore: Send + Sync {
         state: &MultiTrackPlaybackState,
     ) -> Result<()>;
     async fn load_multitrack_playbacks(&self) -> Result<HashMap<GuildId, MultiTrackPlaybackState>>;
-    #[allow(dead_code)]
-    async fn remove_multitrack_playback(&self, guild_id: GuildId) -> Result<()>;
 
     async fn save_dj_state(&self, guild_id: GuildId, state: &DJStateSnapshot) -> Result<()>;
     async fn load_dj_states(&self) -> Result<HashMap<GuildId, DJState>>;
 
     async fn save_registered_channel(&self, channel: &RegisteredChannel) -> Result<()>;
     async fn load_registered_channels(&self) -> Result<Vec<RegisteredChannel>>;
-    #[allow(dead_code)]
-    async fn remove_registered_channel(&self, channel_id: ChannelId) -> Result<()>;
 
     async fn save_activity_state(&self, state: Option<&ActivityState>) -> Result<()>;
     async fn load_activity_state(&self) -> Result<Option<ActivityState>>;

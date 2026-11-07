@@ -10,9 +10,6 @@ impl AudioSource for Constant {
     fn seek(&mut self, _: Duration) -> anyhow::Result<()> {
         Ok(())
     }
-    fn duration(&self) -> Option<Duration> {
-        None
-    }
     fn reset(&mut self) {}
 }
 

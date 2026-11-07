@@ -128,27 +128,6 @@ pub struct CommonSegmentPlaybackConfig {
     pub channel_status: Option<String>,
 }
 
-#[allow(dead_code)]
-#[derive(Debug, Serialize, Deserialize, Default)]
-pub struct BasicSegmentPlaybackConfig {
-    playback_config: CommonSegmentPlaybackConfig,
-}
-
-impl Deref for BasicSegmentPlaybackConfig {
-    type Target = CommonSegmentPlaybackConfig;
-    fn deref(&self) -> &Self::Target {
-        &self.playback_config
-    }
-}
-
-impl From<CommonSegmentPlaybackConfig> for BasicSegmentPlaybackConfig {
-    fn from(playback: CommonSegmentPlaybackConfig) -> Self {
-        Self {
-            playback_config: playback,
-        }
-    }
-}
-
 impl<T: Deref<Target = CommonSegmentPlaybackConfig>> SegmentPlaybackConfig for T {
     fn signal_profile(&self) -> Option<SignalProfilePlayback> {
         self.deref().signal_profile.to_owned()

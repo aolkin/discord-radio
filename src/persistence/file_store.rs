@@ -152,10 +152,6 @@ impl StateStore for FileStore {
         self.multitrack_playbacks().load_all().await
     }
 
-    async fn remove_multitrack_playback(&self, guild_id: GuildId) -> Result<()> {
-        self.multitrack_playbacks().remove(&guild_id).await
-    }
-
     async fn save_dj_state(&self, guild_id: GuildId, state: &DJStateSnapshot) -> Result<()> {
         self.dj_states().insert(guild_id, state).await
     }
@@ -194,17 +190,6 @@ impl StateStore for FileStore {
             serde_json::from_str(&content).with_context(|| format!("parsing {file_path:?}"))?;
 
         Ok(channels)
-    }
-
-    async fn remove_registered_channel(&self, channel_id: ChannelId) -> Result<()> {
-        let mut channels = self.load_registered_channels().await?;
-        channels.retain(|c| c.channel_id != channel_id);
-
-        // Save to file using the utility function
-        let file_path = self.registered_channels_path();
-        super::utils::save_json_to_file(&channels, &file_path).await?;
-
-        Ok(())
     }
 
     async fn save_activity_state(&self, state: Option<&super::ActivityState>) -> Result<()> {
