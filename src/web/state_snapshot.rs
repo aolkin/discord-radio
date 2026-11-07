@@ -1,4 +1,4 @@
-use crate::activity::ActivityType;
+use crate::activity::ActivityEntry;
 use crate::audio::dj::state_machine::ChannelStatus;
 use crate::audio::tracks::TrackSnapshot;
 use crate::state::Data;
@@ -39,13 +39,7 @@ pub struct BotSnapshot {
     pub guilds: Vec<GuildState>,
     pub version: String,
     pub commit_hash: String,
-    pub current_activity: Option<CurrentActivity>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CurrentActivity {
-    pub activity_type: ActivityType,
-    pub status: String,
+    pub current_activity: Option<ActivityEntry>,
 }
 
 impl BotSnapshot {
@@ -96,15 +90,7 @@ impl BotSnapshot {
         }
 
         // Get current bot activity
-        let current_activity =
-            bot_state
-                .activity_manager
-                .current()
-                .await
-                .map(|entry| CurrentActivity {
-                    activity_type: entry.activity_type,
-                    status: entry.status,
-                });
+        let current_activity = bot_state.activity_manager.current().await;
 
         BotSnapshot {
             guilds,

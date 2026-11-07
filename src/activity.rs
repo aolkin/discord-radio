@@ -20,7 +20,7 @@ pub enum ActivityType {
 }
 
 /// Activity type and status text
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ActivityEntry {
     pub activity_type: ActivityType,
     pub status: String,
