@@ -7,8 +7,46 @@ on:
   pull_request:
 
 jobs:
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      bot: ${{ steps.filter.outputs.bot }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+
+    steps:
+      - name: Detect changed paths
+        id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v3.0.4
+        with:
+          filters: |
+            bot:
+              - Dockerfile
+              - Cargo.toml
+              - Cargo.lock
+              - build.rs
+              - src/**
+              - crates/**
+              - .github/actions/setup-rust-and-cache/**
+              - .github/workflows/bot-check.yml
+            frontend:
+              - static/**
+              - biome.json
+              - package.json
+              - package-lock.json
+              - pnpm-lock.yaml
+              - yarn.lock
+              - .github/workflows/bot-check.yml
+
   check:
     name: Check Bot Code
+    needs: changes
+    if: github.event_name != 'pull_request' || needs.changes.outputs.bot == 'true'
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 15
 
@@ -41,6 +79,8 @@ jobs:
 
   frontend:
     name: Check Frontend Code
+    needs: changes
+    if: github.event_name != 'pull_request' || needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 5
 

@@ -7,8 +7,40 @@ on:
   pull_request:
 
 jobs:
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      image: ${{ steps.filter.outputs.image }}
+      chart: ${{ steps.filter.outputs.chart }}
+
+    steps:
+      - name: Detect changed paths
+        id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v3.0.4
+        with:
+          filters: |
+            image:
+              - Dockerfile
+              - Cargo.toml
+              - Cargo.lock
+              - build.rs
+              - src/**
+              - crates/**
+              - .github/workflows/bot-image.yml
+            chart:
+              - charts/**
+              - .github/workflows/bot-image.yml
+
   image:
     name: Build Container Image
+    needs: changes
+    if: github.event_name != 'pull_request' || needs.changes.outputs.image == 'true'
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 30
     permissions:
@@ -45,6 +77,8 @@ jobs:
 
   chart:
     name: Helm Chart
+    needs: changes
+    if: github.event_name != 'pull_request' || needs.changes.outputs.chart == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
