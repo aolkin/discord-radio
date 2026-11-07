@@ -1,11 +1,15 @@
 image:
   repository: ghcr.io/aolkin/discord-radio
+  # Empty uses the chart's appVersion.
   tag: ""
+  # When set, the image is pinned to this digest, which takes precedence over the tag.
   digest: ""
   pullPolicy: IfNotPresent
 imagePullSecrets: []
 secret:
+  # Name of an existing Secret. The chart never creates it.
   name: ""
+  # Key names inside that Secret, one per setting. Only the Discord token is required.
   keys:
     discordToken: DISCORD_TOKEN
     bucketEndpoint: BUCKET_ENDPOINT
@@ -16,34 +20,48 @@ secret:
     grafanaApiKey: GRAFANA_API_KEY
 web:
   port: 3000
+  # Comma-separated list. Empty allows localhost only.
   corsAllowedOrigins: ""
+# Scratch space for downloaded files, kept in an emptyDir that is lost on restart.
 cache:
+  # Cached files older than this are removed at startup. 0 keeps them forever.
   ttlSecs: 2592000
+  # Empty means no limit.
   sizeLimit: ""
 metrics:
   intervalSeconds: 60
 logging:
+  # Sets RUST_LOG. Empty uses the bot's built-in filters.
   level: ""
+# Volume for the bot's saved state.
 persistence:
   size: 256Mi
+  # Empty uses the cluster default.
   storageClass: ""
   accessModes:
     - ReadWriteOnce
+  # Use this claim instead of creating one.
   existingClaim: ""
+# Optional pre-existing volume mounted at /data/content. Nothing is mounted when existingClaim is empty.
 content:
   existingClaim: ""
   readOnly: true
+  # Mount only this folder of the volume.
   subPath: ""
 service:
   type: ClusterIP
   port: 80
+# Gateway API route. The chart does not handle authentication.
 httpRoute:
   enabled: false
+  # Becomes the route's spec.parentRefs: the Gateway that serves this route. The cluster owner picks these values.
   parentRef:
     name: ""
     namespace: ""
+    # Attach to one listener of the Gateway. Empty attaches to all of them.
     sectionName: ""
   hostnames: []
+# Starting values, not measured.
 resources:
   requests:
     cpu: 100m
