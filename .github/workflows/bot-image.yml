@@ -28,10 +28,9 @@ jobs:
             image:
               - Dockerfile
               - Cargo.toml
+              - '**/Cargo.toml'
               - Cargo.lock
               - build.rs
-              - src/**
-              - crates/**
               - .github/workflows/bot-image.yml
             chart:
               - charts/**
