@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "discord-radio.fullname" . }}
+  name: {{ .Release.Name }}
   labels:
     {{- include "discord-radio.labels" . | nindent 4 }}
 spec:

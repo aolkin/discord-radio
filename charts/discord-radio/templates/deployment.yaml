@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "discord-radio.fullname" . }}
+  name: {{ .Release.Name }}
   labels:
     {{- include "discord-radio.labels" . | nindent 4 }}
 spec:
@@ -79,7 +79,7 @@ spec:
       volumes:
         - name: state
           persistentVolumeClaim:
-            claimName: {{ default (include "discord-radio.fullname" .) .Values.persistence.existingClaim }}
+            claimName: {{ default .Release.Name .Values.persistence.existingClaim }}
         - name: cache
           emptyDir:
             sizeLimit: {{ .Values.cache.sizeLimit | quote }}
