@@ -1,9 +1,9 @@
 use crate::audio::dj::config::{DurationRange, EntryPlaybackConfig, SegmentDefaults};
 use crate::audio::dj::segments::signals::Completed;
 use crate::audio::dj::segments::{
-    CommonSegmentPlaybackConfig, Segment, SegmentPlaybackConfig, SignalProfilePlayback,
-    StateDisplay,
+    CommonSegmentPlaybackConfig, Segment, SegmentPlaybackConfig, StateDisplay,
 };
+use crate::audio::dj::signal_profile::SignalProfilePlayback;
 use crate::audio::dj::weighted_choice::{Identity, Weighted};
 use async_trait::async_trait;
 use field_trait::field_trait_impl;

@@ -7,6 +7,7 @@ pub use hex::{HexMessageDefaults, HexMessageEntry, HexSegment, ensure_loops};
 pub use noise::{NoiseEntry, NoiseSegment};
 pub use track::{TrackEntry, TrackSegment};
 
+use crate::audio::dj::signal_profile::SignalProfilePlayback;
 use crate::audio::processing::mixer::{TrackCommand, TrackHandle};
 use crate::audio::processing::processor::ProcessorRef;
 use crate::bucket::FileResolver;
@@ -39,45 +40,6 @@ impl<'a> SegmentCtx<'a> {
 
     pub fn file_resolver(&self) -> &FileResolver {
         &self.bot_state.file_resolver
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SignalProfilePlayback {
-    pub name: String,
-    pub fade_in_duration: Option<Duration>,
-    pub fade_out_duration: Option<Duration>,
-}
-
-impl SignalProfilePlayback {
-    pub fn fade_in(&self) -> Duration {
-        self.fade_in_duration
-            .unwrap_or_else(|| Duration::from_secs(1))
-    }
-
-    pub fn fade_out(&self) -> Duration {
-        self.fade_out_duration
-            .unwrap_or_else(|| Duration::from_secs_f32(1.5))
-    }
-}
-
-impl From<String> for SignalProfilePlayback {
-    fn from(name: String) -> Self {
-        Self {
-            name,
-            fade_in_duration: None,
-            fade_out_duration: None,
-        }
-    }
-}
-
-impl<T> From<&T> for SignalProfilePlayback
-where
-    T: Clone + Into<String>,
-{
-    fn from(value: &T) -> Self {
-        let name: String = value.clone().into();
-        name.into()
     }
 }
 

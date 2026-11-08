@@ -1,6 +1,6 @@
 use crate::audio::dj::config::{
     ChannelStatusEntry, ConfiguredPool, DurationRange, EntryPlaybackConfig, LoadedConfig,
-    PoolEntry, SegmentDefaults, SignalProfileEntry,
+    PoolEntry, SegmentDefaults,
 };
 use crate::audio::dj::manager::{
     ADVANCE_RETRY_DELAY, DJCommand, HexMessageRequest, IdleRequest, TrackRequest,
@@ -8,13 +8,10 @@ use crate::audio::dj::manager::{
 use crate::audio::dj::segments::{
     CommonSegmentPlaybackConfig, NoiseEntry, NoiseSegment, SegmentCtx,
 };
-use crate::audio::dj::segments::{
-    Completed, HexSegment, Segment, SignalProfilePlayback, TrackSegment,
-};
+use crate::audio::dj::segments::{Completed, HexSegment, Segment, TrackSegment};
 use crate::audio::dj::serde::{ShiftBack, deser_instant, ser_instant};
-use crate::audio::dj::tiered::{
-    ConfigurableTier, TieredChange, TieredStateMachine, TieredValue, TimedValue,
-};
+use crate::audio::dj::signal_profile::{SignalProfileEntry, SignalProfilePlayback};
+use crate::audio::dj::tiered::{TieredChange, TieredStateMachine, TieredValue, TimedValue};
 use crate::audio::dj::weighted_choice::WeightedSelector;
 use crate::state::Data;
 use anyhow::Context;
@@ -26,15 +23,6 @@ use std::ops::Deref;
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::{RwLock, RwLockReadGuard, mpsc, watch};
-
-pub const DEFAULT_PROFILE_FADE: Duration = Duration::from_secs(2);
-
-pub fn default_profile_fade(tier: ConfigurableTier) -> Option<Duration> {
-    match tier {
-        ConfigurableTier::Manual => None,
-        ConfigurableTier::Override => Some(DEFAULT_PROFILE_FADE),
-    }
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SegmentContainer {

@@ -1,8 +1,6 @@
 use crate::audio::dj::config::{LoadedConfig, optional_seconds};
-use crate::audio::dj::segments::SignalProfilePlayback;
-use crate::audio::dj::state_machine::{
-    ChannelStatus, DJState, DJStateMachine, default_profile_fade,
-};
+use crate::audio::dj::signal_profile::{SignalProfilePlayback, default_profile_fade};
+use crate::audio::dj::state_machine::{ChannelStatus, DJState, DJStateMachine};
 use crate::audio::dj::tiered::{ConfigurableTier, TimedValue};
 use crate::state::Data;
 use anyhow::{Context, bail};
