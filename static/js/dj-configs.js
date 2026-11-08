@@ -6,11 +6,11 @@ import {
     fieldFromServer,
     fieldToServer,
     historyPenaltyMultiplier,
-    noiseEntryFields,
     seconds,
     segmentDefaultsBlocks,
     segmentDefaultsFromServer,
     segmentDefaultsToServer,
+    signalProfileEntryFields,
     toggleHexConfig,
     weight,
 } from './form-fields.js';
@@ -44,7 +44,7 @@ const rotations = [
         key: 'signal_profiles',
         label: 'Signal Profile Rotation',
         addLabel: '+ Add Signal Profile',
-        entryFields: noiseEntryFields,
+        entryFields: signalProfileEntryFields,
     },
     {
         key: 'channel_statuses',

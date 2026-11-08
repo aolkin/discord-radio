@@ -4,12 +4,19 @@ export const optionalSeconds = (key, label) => ({ ...seconds(key, label), option
 export const profileText = (key, label, optional = false) => ({ key, label, type: 'text', optional, profile: true });
 export const optionalText = (key, label) => ({ key, label, type: 'text', optional: true });
 
-export const noiseEntryFields = [
-    profileText('noise_profile', 'Noise Profile'),
+export const noisePeriodFields = [
     seconds('min_duration_seconds', 'Min Duration (s)'),
     seconds('max_duration_seconds', 'Max Duration (s)'),
     weight,
     optionalSeconds('fade_duration_seconds', 'Fade Duration (s)'),
+];
+
+export const signalProfileEntryFields = [profileText('signal_profile', 'Signal Profile'), ...noisePeriodFields];
+
+export const entryPlaybackFields = [
+    profileText('signal_profile', 'Signal Profile', true),
+    optionalText('channel_status', 'Channel Status'),
+    optionalText('announcement', 'Announcement'),
 ];
 
 export const historyPenaltyMultiplier = {

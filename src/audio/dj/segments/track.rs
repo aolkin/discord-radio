@@ -2,7 +2,7 @@ use super::{
     CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
     TrackSlot,
 };
-use crate::audio::dj::config::{SegmentDefaults, SharedEntryFields};
+use crate::audio::dj::config::{EntryPlaybackConfig, SegmentDefaults};
 use crate::audio::dj::segments::signals::{Completed, CompletedSignal};
 use crate::audio::dj::weighted_choice::{Identity, Weighted};
 use crate::audio::duration::DurationCache;
@@ -23,7 +23,6 @@ pub struct TrackEntry {
     pub weight: u32,
     pub max_duration_seconds: Option<f32>,
     pub allow_subsection: Option<bool>,
-    pub signal_profile: Option<String>,
     /// Volume level (0.0-2.0).
     ///
     /// Uses perceptual (logarithmic) scaling:
@@ -34,9 +33,8 @@ pub struct TrackEntry {
     /// This scaling provides more perceptually uniform volume changes
     /// compared to linear scaling.
     pub volume: Option<f32>,
-    pub channel_status: Option<String>,
     #[serde(flatten)]
-    pub shared: SharedEntryFields,
+    pub playback: EntryPlaybackConfig,
 }
 
 #[field_trait_impl]
@@ -46,10 +44,8 @@ impl Weighted for TrackEntry {
             &self.filename,
             self.max_duration_seconds.map(f32::to_bits),
             self.allow_subsection,
-            &self.signal_profile,
             self.volume.map(f32::to_bits),
-            &self.channel_status,
-            &self.shared.announcement,
+            &self.playback,
         ))
     }
 }
@@ -165,11 +161,14 @@ impl TrackSegment {
             volume,
             start_position,
             play_duration,
-            segment_defaults.playback_config(
-                track_entry.signal_profile,
-                track_entry.channel_status.as_deref().map(with_status_emoji),
-                track_entry.shared,
-            ),
+            segment_defaults.playback_config(EntryPlaybackConfig {
+                channel_status: track_entry
+                    .playback
+                    .channel_status
+                    .as_deref()
+                    .map(with_status_emoji),
+                ..track_entry.playback
+            }),
         )
     }
 }

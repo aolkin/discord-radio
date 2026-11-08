@@ -2,7 +2,7 @@ use super::{
     CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
     TrackSlot,
 };
-use crate::audio::dj::config::{SegmentDefaults, SharedEntryFields};
+use crate::audio::dj::config::{EntryPlaybackConfig, SegmentDefaults};
 use crate::audio::dj::segments::signals::{Completed, CompletedSignal};
 use crate::audio::dj::weighted_choice::{Identity, Weighted};
 use crate::audio::processing::mixer::{TrackCallback, TrackCommand};
@@ -55,22 +55,16 @@ impl HexMessageDefaults {
 pub struct HexMessageEntry {
     pub text: String,
     pub weight: u32,
-    pub signal_profile: Option<String>,
     pub loop_min: Option<u32>,
     pub loop_max: Option<u32>,
     #[serde(flatten)]
-    pub shared: SharedEntryFields,
+    pub playback: EntryPlaybackConfig,
 }
 
 #[field_trait_impl]
 impl Weighted for HexMessageEntry {
     fn identity(&self) -> Identity {
-        Identity::of((
-            &self.text,
-            &self.signal_profile,
-            self.loop_min,
-            self.loop_max,
-        ))
+        Identity::of((&self.text, self.loop_min, self.loop_max, &self.playback))
     }
 }
 
@@ -116,12 +110,15 @@ impl HexSegment {
         message: String,
         volume: f32,
         target_loops: usize,
-        playback_config: CommonSegmentPlaybackConfig,
+        playback: EntryPlaybackConfig,
+        segment_defaults: &SegmentDefaults,
     ) -> Self {
-        let playback_config = CommonSegmentPlaybackConfig {
-            channel_status: Some(obfuscate_message(&message)),
-            ..playback_config
-        };
+        let playback_config = segment_defaults.playback_config(EntryPlaybackConfig {
+            channel_status: playback
+                .channel_status
+                .or_else(|| Some(obfuscate_message(&message))),
+            ..playback
+        });
         Self {
             playback_config,
             message,
@@ -153,11 +150,13 @@ impl HexSegment {
     pub fn from_entry(hex_entry: HexMessageEntry, segment_defaults: &SegmentDefaults) -> Self {
         let defaults = segment_defaults.hex_config();
         let loops = defaults.pick_loops(hex_entry.loop_min, hex_entry.loop_max) as usize;
-
-        let playback_config =
-            segment_defaults.playback_config(hex_entry.signal_profile, None, hex_entry.shared);
-
-        Self::new(hex_entry.text, 1.0, loops, playback_config)
+        Self::new(
+            hex_entry.text,
+            1.0,
+            loops,
+            hex_entry.playback,
+            segment_defaults,
+        )
     }
 }
 

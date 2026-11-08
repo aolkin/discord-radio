@@ -3,13 +3,12 @@ import {
     blankRow,
     blankSegmentDefaults,
     convertObject,
+    entryPlaybackFields,
     fieldFromServer,
     fieldToServer,
     historyPenaltyMultiplier,
-    noiseEntryFields,
+    noisePeriodFields,
     optionalSeconds,
-    optionalText,
-    profileText,
     segmentDefaultsBlocks,
     segmentDefaultsFromServer,
     segmentDefaultsToServer,
@@ -26,8 +25,6 @@ export const modals = {
     },
 };
 
-const announcementField = optionalText('announcement', 'Announcement');
-
 const kinds = {
     track: {
         label: 'Track',
@@ -37,10 +34,8 @@ const kinds = {
             weight,
             optionalSeconds('max_duration_seconds', 'Max Duration (s)'),
             { key: 'allow_subsection', label: 'Allow Subsection', type: 'bool', optional: true },
-            profileText('signal_profile', 'Signal Profile', true),
             { key: 'volume', label: 'Volume (0-2)', type: 'number', step: 'any', min: 0, max: 2, optional: true },
-            optionalText('channel_status', 'Channel Status'),
-            announcementField,
+            ...entryPlaybackFields,
         ],
     },
     hex: {
@@ -49,16 +44,15 @@ const kinds = {
         entryFields: [
             { key: 'text', label: 'Text', type: 'text' },
             weight,
-            profileText('signal_profile', 'Signal Profile', true),
             { key: 'loop_min', label: 'Loop Min', type: 'number', step: 1, min: 0, optional: true },
             { key: 'loop_max', label: 'Loop Max', type: 'number', step: 1, min: 0, optional: true },
-            announcementField,
+            ...entryPlaybackFields,
         ],
     },
     noise: {
         label: 'Noise',
-        identifier: 'noise_profile',
-        entryFields: [...noiseEntryFields, announcementField],
+        identifier: 'min_duration_seconds',
+        entryFields: [...noisePeriodFields, ...entryPlaybackFields],
     },
 };
 

@@ -1,8 +1,8 @@
 use crate::audio::dj::segments::{
     CommonSegmentPlaybackConfig, HexMessageDefaults, HexMessageEntry, HexSegment, NoiseEntry,
-    NoiseSegment, Segment, TrackEntry, TrackSegment, ensure_loops,
+    NoiseSegment, Segment, SignalProfilePlayback, TrackEntry, TrackSegment, ensure_loops,
 };
-use crate::audio::dj::state_machine::ChannelStatus;
+use crate::audio::dj::state_machine::{ChannelStatus, DEFAULT_PROFILE_FADE};
 use crate::audio::dj::tiered::TimedValue;
 use crate::audio::dj::weighted_choice::{
     Identity, Weighted, WeightedPool, ambassador_impl_Weighted,
@@ -51,12 +51,12 @@ pub struct LoadedConfig {
     pub pools: Arc<[ConfiguredPool]>,
 }
 
-#[field_trait_impl(WeightedPool<NoiseEntry>)]
+#[field_trait_impl(WeightedPool<SignalProfileEntry>)]
 #[derive(Deserialize, Serialize, Debug, Default)]
 pub struct SignalProfiles {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub history_penalty_multiplier: Option<f32>,
-    pub entries: Arc<[NoiseEntry]>,
+    pub entries: Arc<[SignalProfileEntry]>,
 }
 
 #[field_trait_impl(WeightedPool<ChannelStatusEntry>)]
@@ -101,18 +101,14 @@ impl SegmentDefaults {
         own.or_else(|| self.announcements.choose(&mut rand::rng()).cloned())
     }
 
-    pub fn playback_config(
-        &self,
-        signal_profile: Option<String>,
-        channel_status: Option<String>,
-        shared: SharedEntryFields,
-    ) -> CommonSegmentPlaybackConfig {
+    pub fn playback_config(&self, entry: EntryPlaybackConfig) -> CommonSegmentPlaybackConfig {
         CommonSegmentPlaybackConfig {
-            signal_profile: signal_profile
+            signal_profile: entry
+                .signal_profile
                 .or_else(|| self.signal_profile.clone())
                 .map(Into::into),
-            channel_status: channel_status.or_else(|| self.channel_status.clone()),
-            announcement: self.pick_announcement(shared.announcement),
+            channel_status: entry.channel_status.or_else(|| self.channel_status.clone()),
+            announcement: self.pick_announcement(entry.announcement),
         }
     }
 
@@ -196,7 +192,7 @@ impl PoolEntry {
             )
             .with_context(|| format!("hex message {:?}", message.text))?,
             PoolEntry::Noise(noise) => {
-                let context = || format!("noise period {:?}", noise.noise_profile);
+                let context = || format!("noise period {:?}", noise.playback.signal_profile);
                 noise.duration.validate(context)?;
                 if let Some(seconds) = noise.fade_duration_seconds {
                     ensure_seconds(seconds, context)?;
@@ -279,7 +275,7 @@ impl RegistryEntry for DJConfig {
         ensure_penalty_multiplier(self.signal_profiles.history_penalty_multiplier)
             .context("signal_profiles")?;
         for profile in self.signal_profiles.entries.iter() {
-            let context = || format!("signal profile {:?}", profile.noise_profile);
+            let context = || format!("signal profile {:?}", profile.signal_profile);
             if let Some(seconds) = profile.fade_duration_seconds {
                 ensure_seconds(seconds, context)?;
             }
@@ -297,8 +293,55 @@ impl RegistryEntry for DJConfig {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub struct SharedEntryFields {
+pub struct EntryPlaybackConfig {
+    pub signal_profile: Option<String>,
+    pub channel_status: Option<String>,
     pub announcement: Option<String>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct SignalProfileEntry {
+    pub signal_profile: String,
+    #[serde(flatten)]
+    pub duration: DurationRange,
+    pub weight: u32,
+    pub fade_duration_seconds: Option<f32>,
+}
+
+#[field_trait_impl]
+impl Weighted for SignalProfileEntry {
+    fn identity(&self) -> Identity {
+        Identity::of((
+            &self.signal_profile,
+            self.duration.min_duration_seconds.to_bits(),
+            self.duration.max_duration_seconds.to_bits(),
+            self.fade_duration_seconds.map(f32::to_bits),
+        ))
+    }
+}
+
+impl Default for SignalProfileEntry {
+    fn default() -> Self {
+        Self {
+            signal_profile: "clear".to_string(),
+            weight: 1,
+            fade_duration_seconds: Some(3.0),
+            duration: DurationRange::default(),
+        }
+    }
+}
+
+impl From<&SignalProfileEntry> for TimedValue<SignalProfilePlayback> {
+    fn from(entry: &SignalProfileEntry) -> Self {
+        let fade = entry
+            .fade_duration_seconds
+            .map_or(DEFAULT_PROFILE_FADE, Duration::from_secs_f32);
+        let profile = SignalProfilePlayback {
+            fade_in_duration: Some(fade),
+            ..entry.signal_profile.clone().into()
+        };
+        TimedValue::temporary(profile, fade + entry.duration.sample())
+    }
 }
 
 #[derive(Deserialize, Serialize, Clone, Copy, Debug)]
