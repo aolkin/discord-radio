@@ -1,3 +1,4 @@
+use crate::audio::dj::config::signal_profiles::SignalProfileEntry;
 use crate::audio::dj::config::{
     ChannelStatusEntry, ConfiguredPool, DurationRange, EntryPlaybackConfig, LoadedConfig,
     PoolEntry, SegmentDefaults,
@@ -10,7 +11,7 @@ use crate::audio::dj::segments::{
 };
 use crate::audio::dj::segments::{Completed, HexSegment, Segment, TrackSegment};
 use crate::audio::dj::serde::{ShiftBack, deser_instant, ser_instant};
-use crate::audio::dj::signal_profile::{SignalProfileEntry, SignalProfilePlayback};
+use crate::audio::dj::signal_profile::SignalProfilePlayback;
 use crate::audio::dj::tiered::{TieredChange, TieredStateMachine, TieredValue, TimedValue};
 use crate::audio::dj::weighted_choice::WeightedSelector;
 use crate::state::Data;

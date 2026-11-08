@@ -2,7 +2,6 @@ use crate::audio::dj::segments::{
     CommonSegmentPlaybackConfig, HexMessageDefaults, HexMessageEntry, HexSegment, NoiseEntry,
     NoiseSegment, Segment, TrackEntry, TrackSegment, ensure_loops,
 };
-use crate::audio::dj::signal_profile::SignalProfiles;
 use crate::audio::dj::state_machine::ChannelStatus;
 use crate::audio::dj::tiered::TimedValue;
 use crate::audio::dj::weighted_choice::{
@@ -16,12 +15,14 @@ use field_trait::field_trait_impl;
 use rand::RngExt;
 use rand::seq::IndexedRandom;
 use serde::{Deserialize, Serialize};
+use signal_profiles::SignalProfiles;
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
 pub mod registry;
+pub mod signal_profiles;
 
 #[derive(Deserialize, Serialize, Debug, Default)]
 pub struct DJConfig {
