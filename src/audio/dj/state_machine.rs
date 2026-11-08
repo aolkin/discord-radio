@@ -1,17 +1,18 @@
+use crate::audio::dj::config::signal_profiles::SignalProfileEntry;
 use crate::audio::dj::config::{
-    ChannelStatusEntry, ConfiguredPool, DurationRange, LoadedConfig, PoolEntry, SegmentDefaults,
+    ChannelStatusEntry, ConfiguredPool, DurationRange, EntryPlaybackConfig, LoadedConfig,
+    PoolEntry, SegmentDefaults,
 };
 use crate::audio::dj::manager::{
     ADVANCE_RETRY_DELAY, DJCommand, HexMessageRequest, IdleRequest, TrackRequest,
 };
 use crate::audio::dj::segments::{
-    Completed, HexSegment, Segment, SignalProfilePlayback, TrackSegment,
+    CommonSegmentPlaybackConfig, NoiseEntry, NoiseSegment, SegmentCtx,
 };
-use crate::audio::dj::segments::{NoiseEntry, NoiseSegment, SegmentCtx};
+use crate::audio::dj::segments::{Completed, HexSegment, Segment, TrackSegment};
 use crate::audio::dj::serde::{ShiftBack, deser_instant, ser_instant};
-use crate::audio::dj::tiered::{
-    ConfigurableTier, TieredChange, TieredStateMachine, TieredValue, TimedValue,
-};
+use crate::audio::dj::signal_profile::SignalProfilePlayback;
+use crate::audio::dj::tiered::{TieredChange, TieredStateMachine, TieredValue, TimedValue};
 use crate::audio::dj::weighted_choice::WeightedSelector;
 use crate::state::Data;
 use anyhow::Context;
@@ -23,15 +24,6 @@ use std::ops::Deref;
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::{RwLock, RwLockReadGuard, mpsc, watch};
-
-pub const DEFAULT_PROFILE_FADE: Duration = Duration::from_secs(2);
-
-pub fn default_profile_fade(tier: ConfigurableTier) -> Option<Duration> {
-    match tier {
-        ConfigurableTier::Manual => None,
-        ConfigurableTier::Override => Some(DEFAULT_PROFILE_FADE),
-    }
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SegmentContainer {
@@ -86,7 +78,7 @@ pub enum ChannelStatus {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DJState {
     pub segment: SegmentContainer,
-    pub signal_profile: TieredStateMachine<NoiseEntry, SignalProfilePlayback>,
+    pub signal_profile: TieredStateMachine<SignalProfileEntry, SignalProfilePlayback>,
     pub channel_status: TieredStateMachine<ChannelStatusEntry, ChannelStatus>,
 }
 
@@ -94,7 +86,7 @@ impl Default for DJState {
     fn default() -> Self {
         Self {
             segment: NoiseSegment::quiet(Duration::from_secs(1)).into(),
-            signal_profile: TieredStateMachine::new(&NoiseEntry::default()),
+            signal_profile: TieredStateMachine::new(&SignalProfileEntry::default()),
             channel_status: TieredStateMachine::new(&ChannelStatusEntry::default()),
         }
     }
@@ -425,8 +417,8 @@ impl DJStateMachine {
             request.message,
             request.volume.unwrap_or(1.0),
             loops,
-            defaults.pick_random_announcement(),
-            segment_defaults.signal_profile.clone(),
+            EntryPlaybackConfig::default(),
+            &segment_defaults,
         )
         .into();
         self.enter_state(next_state, bot_state).await
@@ -451,8 +443,7 @@ impl DJStateMachine {
             request.volume.unwrap_or(1.0),
             start_position,
             duration,
-            None,
-            None,
+            CommonSegmentPlaybackConfig::default(),
         )
         .into();
         self.enter_state(next_state, bot_state).await
@@ -469,9 +460,14 @@ impl DJStateMachine {
             .map(Duration::try_from_secs_f32)
             .transpose()?;
         let next_state = match (request.noise_profile, duration) {
-            (Some(noise_profile), duration) => {
-                NoiseSegment::new(noise_profile, duration, None, None)
-            }
+            (Some(noise_profile), duration) => NoiseSegment::new(
+                duration,
+                None,
+                CommonSegmentPlaybackConfig {
+                    signal_profile: Some(noise_profile.into()),
+                    ..Default::default()
+                },
+            ),
             (None, Some(duration)) => NoiseSegment::quiet(duration),
             (None, None) => NoiseSegment::idle(),
         };
@@ -594,11 +590,14 @@ impl DJStateMachine {
 }
 
 static DEFAULT_NOISE_PERIOD: LazyLock<NoiseEntry> = LazyLock::new(|| NoiseEntry {
-    noise_profile: "default".to_string(),
     duration: DurationRange {
         min_duration_seconds: 2.0,
         max_duration_seconds: 2.0,
     },
     weight: 1,
     fade_duration_seconds: None,
+    playback: EntryPlaybackConfig {
+        signal_profile: Some("default".to_string()),
+        ..Default::default()
+    },
 });

@@ -1,11 +1,9 @@
-use crate::audio::dj::config::{DurationRange, SegmentDefaults};
+use crate::audio::dj::config::{DurationRange, EntryPlaybackConfig, SegmentDefaults};
 use crate::audio::dj::segments::signals::Completed;
 use crate::audio::dj::segments::{
-    CommonSegmentPlaybackConfig, Segment, SegmentPlaybackConfig, SignalProfilePlayback,
-    StateDisplay,
+    CommonSegmentPlaybackConfig, Segment, SegmentPlaybackConfig, StateDisplay,
 };
-use crate::audio::dj::state_machine::DEFAULT_PROFILE_FADE;
-use crate::audio::dj::tiered::TimedValue;
+use crate::audio::dj::signal_profile::SignalProfilePlayback;
 use crate::audio::dj::weighted_choice::{Identity, Weighted};
 use async_trait::async_trait;
 use field_trait::field_trait_impl;
@@ -15,46 +13,23 @@ use std::time::{Duration, Instant};
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct NoiseEntry {
-    pub noise_profile: String,
     #[serde(flatten)]
     pub duration: DurationRange,
     pub weight: u32,
     pub fade_duration_seconds: Option<f32>,
+    #[serde(flatten)]
+    pub playback: EntryPlaybackConfig,
 }
 
 #[field_trait_impl]
 impl Weighted for NoiseEntry {
     fn identity(&self) -> Identity {
         Identity::of((
-            &self.noise_profile,
             self.duration.min_duration_seconds.to_bits(),
             self.duration.max_duration_seconds.to_bits(),
             self.fade_duration_seconds.map(f32::to_bits),
+            &self.playback,
         ))
-    }
-}
-
-impl Default for NoiseEntry {
-    fn default() -> Self {
-        Self {
-            noise_profile: "clear".to_string(),
-            weight: 1,
-            fade_duration_seconds: Some(3.0),
-            duration: DurationRange::default(),
-        }
-    }
-}
-
-impl From<&NoiseEntry> for TimedValue<SignalProfilePlayback> {
-    fn from(entry: &NoiseEntry) -> Self {
-        let fade = entry
-            .fade_duration_seconds
-            .map_or(DEFAULT_PROFILE_FADE, Duration::from_secs_f32);
-        let profile = SignalProfilePlayback {
-            fade_in_duration: Some(fade),
-            ..entry.noise_profile.clone().into()
-        };
-        TimedValue::temporary(profile, fade + entry.duration.sample())
     }
 }
 
@@ -71,18 +46,17 @@ pub enum NoiseSegment {
 
 impl NoiseSegment {
     pub fn new(
-        noise_profile: String,
         duration: Option<Duration>,
         fade: Option<Duration>,
-        channel_status: Option<String>,
+        config: CommonSegmentPlaybackConfig,
     ) -> Self {
+        let fade_in_duration = fade.or_else(|| duration.map(|duration| duration.div_f32(2.0)));
         let config = CommonSegmentPlaybackConfig {
-            signal_profile: Some(SignalProfilePlayback {
-                name: noise_profile,
-                fade_in_duration: fade.or_else(|| duration.map(|duration| duration.div_f32(2.0))),
-                fade_out_duration: None,
+            signal_profile: config.signal_profile.map(|profile| SignalProfilePlayback {
+                fade_in_duration,
+                ..profile
             }),
-            channel_status,
+            ..config
         };
         match duration {
             Some(duration) => Self::Timed { config, duration },
@@ -160,12 +134,11 @@ impl Segment for NoiseSegment {
 impl NoiseSegment {
     pub fn from_entry(noise_entry: &NoiseEntry, segment_defaults: &SegmentDefaults) -> Self {
         Self::new(
-            noise_entry.noise_profile.clone(),
             Some(noise_entry.duration.sample()),
             noise_entry
                 .fade_duration_seconds
                 .map(Duration::from_secs_f32),
-            segment_defaults.channel_status.clone(),
+            segment_defaults.playback_config(noise_entry.playback.clone()),
         )
     }
 }

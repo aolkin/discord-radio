@@ -2,7 +2,7 @@ use super::{
     CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
     TrackSlot,
 };
-use crate::audio::dj::config::SegmentDefaults;
+use crate::audio::dj::config::{EntryPlaybackConfig, SegmentDefaults};
 use crate::audio::dj::segments::signals::{Completed, CompletedSignal};
 use crate::audio::dj::weighted_choice::{Identity, Weighted};
 use crate::audio::processing::mixer::{TrackCallback, TrackCommand};
@@ -13,7 +13,6 @@ use anyhow::bail;
 use async_trait::async_trait;
 use field_trait::field_trait_impl;
 use rand::RngExt;
-use rand::seq::IndexedRandom;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use std::path::Path;
@@ -30,8 +29,6 @@ pub struct HexMessageDefaults {
     pub loop_min: u32,
     #[serde(default = "default_loops")]
     pub loop_max: u32,
-    #[serde(default)]
-    pub announcements: Vec<String>,
 }
 
 impl Default for HexMessageDefaults {
@@ -39,7 +36,6 @@ impl Default for HexMessageDefaults {
         Self {
             loop_min: default_loops(),
             loop_max: default_loops(),
-            announcements: Vec::new(),
         }
     }
 }
@@ -53,32 +49,22 @@ impl HexMessageDefaults {
         rand::rng()
             .random_range(loop_min.unwrap_or(self.loop_min)..=loop_max.unwrap_or(self.loop_max))
     }
-
-    pub fn pick_random_announcement(&self) -> Option<String> {
-        self.announcements.choose(&mut rand::rng()).cloned()
-    }
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct HexMessageEntry {
     pub text: String,
     pub weight: u32,
-    pub signal_profile: Option<String>,
     pub loop_min: Option<u32>,
     pub loop_max: Option<u32>,
-    pub announcement: Option<String>,
+    #[serde(flatten)]
+    pub playback: EntryPlaybackConfig,
 }
 
 #[field_trait_impl]
 impl Weighted for HexMessageEntry {
     fn identity(&self) -> Identity {
-        Identity::of((
-            &self.text,
-            &self.signal_profile,
-            self.loop_min,
-            self.loop_max,
-            &self.announcement,
-        ))
+        Identity::of((&self.text, self.loop_min, self.loop_max, &self.playback))
     }
 }
 
@@ -104,7 +90,6 @@ pub struct HexSegment {
     volume: f32,
     target_loops: usize,
     progress: Arc<HexProgress>,
-    announcement: Option<String>,
     #[serde(skip)]
     run: Mutex<Option<JoinHandle<()>>>,
     #[serde(skip)]
@@ -125,19 +110,20 @@ impl HexSegment {
         message: String,
         volume: f32,
         target_loops: usize,
-        announcement: Option<String>,
-        signal_profile: Option<String>,
+        playback: EntryPlaybackConfig,
+        segment_defaults: &SegmentDefaults,
     ) -> Self {
-        let playback_config = CommonSegmentPlaybackConfig {
-            signal_profile: signal_profile.map(Into::into),
-            channel_status: Some(obfuscate_message(&message)),
-        };
+        let playback_config = segment_defaults.playback_config(EntryPlaybackConfig {
+            channel_status: playback
+                .channel_status
+                .or_else(|| Some(obfuscate_message(&message))),
+            ..playback
+        });
         Self {
             playback_config,
             message,
             volume,
             target_loops,
-            announcement,
             progress: Default::default(),
             run: Default::default(),
             done: Default::default(),
@@ -163,15 +149,14 @@ impl HexSegment {
 
     pub fn from_entry(hex_entry: HexMessageEntry, segment_defaults: &SegmentDefaults) -> Self {
         let defaults = segment_defaults.hex_config();
-        let signal_profile = hex_entry
-            .signal_profile
-            .or_else(|| segment_defaults.signal_profile.clone());
-        let announcement = hex_entry
-            .announcement
-            .or_else(|| defaults.pick_random_announcement());
         let loops = defaults.pick_loops(hex_entry.loop_min, hex_entry.loop_max) as usize;
-
-        Self::new(hex_entry.text, 1.0, loops, announcement, signal_profile)
+        Self::new(
+            hex_entry.text,
+            1.0,
+            loops,
+            hex_entry.playback,
+            segment_defaults,
+        )
     }
 }
 
@@ -214,10 +199,6 @@ impl Segment for HexSegment {
             let loops_played = self.progress.loops.load(Ordering::Relaxed) as u64;
             metrics.record_hex_message_loops(ctx.guild_id.get(), loops_played);
         }
-    }
-
-    fn announcement(&self) -> &Option<String> {
-        &self.announcement
     }
 
     fn loggable_properties(&self) -> serde_json::Value {

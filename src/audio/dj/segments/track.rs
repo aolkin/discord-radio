@@ -2,7 +2,7 @@ use super::{
     CommonSegmentPlaybackConfig, Segment, SegmentCtx, SegmentPlaybackConfig, StateDisplay,
     TrackSlot,
 };
-use crate::audio::dj::config::SegmentDefaults;
+use crate::audio::dj::config::{EntryPlaybackConfig, SegmentDefaults};
 use crate::audio::dj::segments::signals::{Completed, CompletedSignal};
 use crate::audio::dj::weighted_choice::{Identity, Weighted};
 use crate::audio::duration::DurationCache;
@@ -23,7 +23,6 @@ pub struct TrackEntry {
     pub weight: u32,
     pub max_duration_seconds: Option<f32>,
     pub allow_subsection: Option<bool>,
-    pub signal_profile: Option<String>,
     /// Volume level (0.0-2.0).
     ///
     /// Uses perceptual (logarithmic) scaling:
@@ -34,7 +33,8 @@ pub struct TrackEntry {
     /// This scaling provides more perceptually uniform volume changes
     /// compared to linear scaling.
     pub volume: Option<f32>,
-    pub channel_status: Option<String>,
+    #[serde(flatten)]
+    pub playback: EntryPlaybackConfig,
 }
 
 #[field_trait_impl]
@@ -44,9 +44,8 @@ impl Weighted for TrackEntry {
             &self.filename,
             self.max_duration_seconds.map(f32::to_bits),
             self.allow_subsection,
-            &self.signal_profile,
             self.volume.map(f32::to_bits),
-            &self.channel_status,
+            &self.playback,
         ))
     }
 }
@@ -77,13 +76,8 @@ impl TrackSegment {
         volume: f32,
         start_position: Option<Duration>,
         duration: Duration,
-        signal_profile: Option<String>,
-        channel_status: Option<String>,
+        config: CommonSegmentPlaybackConfig,
     ) -> Self {
-        let config = CommonSegmentPlaybackConfig {
-            signal_profile: signal_profile.map(Into::into),
-            channel_status,
-        };
         Self {
             config,
             duration,
@@ -167,14 +161,14 @@ impl TrackSegment {
             volume,
             start_position,
             play_duration,
-            track_entry
-                .signal_profile
-                .or_else(|| segment_defaults.signal_profile.clone()),
-            track_entry
-                .channel_status
-                .as_deref()
-                .map(with_status_emoji)
-                .or_else(|| segment_defaults.channel_status.clone()),
+            segment_defaults.playback_config(EntryPlaybackConfig {
+                channel_status: track_entry
+                    .playback
+                    .channel_status
+                    .as_deref()
+                    .map(with_status_emoji),
+                ..track_entry.playback
+            }),
         )
     }
 }
