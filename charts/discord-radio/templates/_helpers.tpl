@@ -2,14 +2,6 @@
 {{- .Chart.Name -}}
 {{- end -}}
 
-{{- define "discord-radio.fullname" -}}
-{{- if contains .Chart.Name .Release.Name -}}
-{{- .Release.Name | trunc 63 | trimSuffix "-" -}}
-{{- else -}}
-{{- printf "%s-%s" .Release.Name .Chart.Name | trunc 63 | trimSuffix "-" -}}
-{{- end -}}
-{{- end -}}
-
 {{- define "discord-radio.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "discord-radio.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
