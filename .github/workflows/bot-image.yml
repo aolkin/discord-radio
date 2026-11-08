@@ -31,7 +31,6 @@ jobs:
               - '**/Cargo.toml'
               - Cargo.lock
               - build.rs
-              - .github/actions/setup-rust-and-cache/**
               - .github/workflows/bot-image.yml
             chart:
               - charts/**
