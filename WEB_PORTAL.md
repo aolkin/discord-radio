@@ -117,13 +117,13 @@ Each guild card's Bot Profile button opens the bot's current nickname, avatar an
 - `POST /api/guilds/:guild_id/dj/channel-status` - Set the DJ background channel status (`{"tier": "manual"}`) or channel status override (`{"tier": "override"}`) to a fixed status (`{"status": {"fixed": "..."}}`) or leave it unmanaged (`{"status": "unmanaged"}`), with an optional `duration` in seconds, or clear it (`{"status": null}`)
 - `GET /api/guilds/:guild_id/bot-profile` - Get the bot's current per-guild profile from Discord (`{"nick", "avatar_url", "banner_url"}`)
 - `PUT /api/guilds/:guild_id/bot-profile` - Set the bot's per-guild profile on Discord. Body fields `nick`, `avatar`, `banner` are each optional; omitted fields are left unchanged, and at least one is required. `avatar` and `banner` are file references resolved like track filenames. Returns 429 when Discord rate limits the request
-- `GET /api/profiles` - List available signal profiles
+- `GET /api/profiles` - List available signal profiles as a JSON array of names
 - `GET /api/profiles/:name` - Get a signal profile's parameters. With `?refresh=true`, re-fetch the profile from object storage first and keep the fetched copy; returns 404 when object storage has no such profile
 - `PUT /api/profiles/:name` - Create or replace a signal profile in object storage. The body holds the profile's parameters; the name comes from `:name`, which may contain only letters, digits, `-` and `_`. Returns 422 when the body holds a different `name`, and 503 when object storage is not configured
-- `GET /api/dj-configs` - List available DJ configs (`{"configs": [...]}`)
+- `GET /api/dj-configs` - List available DJ configs as a JSON array of names
 - `GET /api/dj-configs/:name` - Get a DJ config. With `?refresh=true`, re-fetch the config from object storage first and keep the fetched copy; returns 404 when object storage has no such config
 - `PUT /api/dj-configs/:name` - Create or replace a DJ config in object storage. The body holds the config in the same JSON form as the files under `DJ_CONFIGS_PATH`; the name comes from `:name`, which may contain only letters, digits, `-` and `_`. Returns 422 with the reason when the body is not a valid DJ config, holds a different `name`, or references a pool that is missing, and 503 when object storage is not configured
-- `GET /api/pools` - List available pool files (`{"pools": [...]}`)
+- `GET /api/pools` - List available pool files as a JSON array of names
 - `GET /api/pools/:name` - Get a pool file. With `?refresh=true`, re-fetch the pool file from object storage first and keep the fetched copy; returns 404 when object storage has no such pool file
 - `PUT /api/pools/:name` - Create or replace a pool file in object storage. The body holds the pool in the same JSON form as the files under `POOLS_PATH`; the name comes from `:name`, which may contain only letters, digits, `-` and `_`. Returns 422 with the reason when the body is not a valid pool or holds a different `name`, and 503 when object storage is not configured
 - `GET /api/files` - Browse object storage one folder level at a time. `?prefix=` selects the folder; returns `{"prefix", "folders", "files"}`, where `folders` are the sub-folder prefixes and each file has `key`, `size` and `last_modified`. Returns 503 when object storage is not configured

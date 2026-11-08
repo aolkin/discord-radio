@@ -60,7 +60,6 @@ const profileEditor = registryEditor({
     path: '/api/profiles',
     prefix: 'profile',
     list: 'profiles',
-    listKey: 'profiles',
     label: 'signal profile',
     toForm,
     toBody,

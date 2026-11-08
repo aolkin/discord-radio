@@ -2,7 +2,7 @@ import { apiRequest, bodyOrStatus, emptyMessage } from './api.js';
 
 const capitalize = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 
-export function registryEditor({ path, prefix, list, listKey, label, toForm, toBody, blankForm }) {
+export function registryEditor({ path, prefix, list, label, toForm, toBody, blankForm }) {
     const editor = `${prefix}Editor`;
     const form = `${prefix}Form`;
     const isNew = `${editor}IsNew`;
@@ -27,7 +27,7 @@ export function registryEditor({ path, prefix, list, listKey, label, toForm, toB
                 try {
                     const response = await apiRequest(path);
                     const data = await response.json();
-                    this[list] = data[listKey].sort();
+                    this[list] = data.sort();
                 } catch (error) {
                     console.error(`Failed to load ${label}s:`, error);
                 }
