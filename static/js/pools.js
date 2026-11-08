@@ -91,7 +91,6 @@ const poolEditor = registryEditor({
     path: '/api/pools',
     prefix: 'pool',
     list: 'pools',
-    listKey: 'pools',
     label: 'pool',
     toForm,
     toBody,

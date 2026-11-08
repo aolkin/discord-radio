@@ -109,7 +109,6 @@ const djConfigEditor = registryEditor({
     path: '/api/dj-configs',
     prefix: 'djConfig',
     list: 'djConfigs',
-    listKey: 'configs',
     label: 'DJ config',
     toForm,
     toBody,

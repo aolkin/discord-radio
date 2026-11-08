@@ -9,12 +9,10 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::routing::get;
 use serde::Deserialize;
-use std::collections::HashMap;
 use std::sync::Arc;
 
 pub trait RoutedEntry: RegistryEntry + Send + Sync + 'static {
     const PATH: &'static str;
-    const LIST_KEY: &'static str;
 
     fn registry(bot_state: Data) -> &'static JsonRegistry<Self>;
 
@@ -28,7 +26,6 @@ pub trait RoutedEntry: RegistryEntry + Send + Sync + 'static {
 
 impl RoutedEntry for SignalProfile {
     const PATH: &'static str = "/api/profiles";
-    const LIST_KEY: &'static str = "profiles";
 
     fn registry(bot_state: Data) -> &'static JsonRegistry<Self> {
         &bot_state.profile_manager
@@ -37,7 +34,6 @@ impl RoutedEntry for SignalProfile {
 
 impl RoutedEntry for DJConfig {
     const PATH: &'static str = "/api/dj-configs";
-    const LIST_KEY: &'static str = "configs";
 
     fn registry(bot_state: Data) -> &'static JsonRegistry<Self> {
         &bot_state.dj_config_manager.configs
@@ -62,7 +58,6 @@ impl RoutedEntry for DJConfig {
 
 impl RoutedEntry for Pool {
     const PATH: &'static str = "/api/pools";
-    const LIST_KEY: &'static str = "pools";
 
     fn registry(bot_state: Data) -> &'static JsonRegistry<Self> {
         &bot_state.dj_config_manager.pools
@@ -75,13 +70,8 @@ pub struct RefreshParams {
     pub refresh: bool,
 }
 
-pub async fn list<T: RoutedEntry>(
-    State(bot_state): State<Data>,
-) -> AxumJson<HashMap<&'static str, Vec<String>>> {
-    AxumJson(HashMap::from([(
-        T::LIST_KEY,
-        T::registry(bot_state).list(),
-    )]))
+pub async fn list<T: RoutedEntry>(State(bot_state): State<Data>) -> AxumJson<Vec<String>> {
+    AxumJson(T::registry(bot_state).list())
 }
 
 pub async fn get_entry<T: RoutedEntry>(
