@@ -49,7 +49,7 @@ sudo apt update && sudo apt install -y cmake libopus-dev pkg-config
 ./target/release/radio-bot <content_path>
 ```
 
-Where `<content_path>` is the path to the directory containing bot content (e.g. hex message audio files).
+Where `<content_path>` is the path to the directory containing bot content (e.g. hex message audio files). Hex audio files are named `hex_<char>.wav` for `0`-`9` and uppercase `A`-`F`, and are resolved from the folder named by the `HEX_AUDIO_FOLDER` environment variable (default `audio/hex/`, must end with `/`; a value such as `s3://hex/` loads them from object storage). A hex config in a pool can set `hex_audio_folder` to use another folder. A missing file is skipped with a warning.
 
 To check the build version:
 

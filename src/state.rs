@@ -37,12 +37,14 @@ pub struct BotState {
     pub dj_config_manager: &'static DJConfigRegistry,
     pub activity_manager: ActivityManager,
     pub file_resolver: FileResolver,
+    pub hex_audio_folder: String,
     pub bot_user_id: UserId,
 }
 
 impl BotState {
     pub fn new(
         file_resolver: FileResolver,
+        hex_audio_folder: String,
         state_store: Arc<dyn StateStore>,
         profile_manager: JsonRegistry<SignalProfile>,
         dj_config_manager: &'static DJConfigRegistry,
@@ -58,6 +60,7 @@ impl BotState {
             dj_config_manager,
             activity_manager: ActivityManager::new(state_store),
             file_resolver,
+            hex_audio_folder,
             bot_user_id,
         }
     }
