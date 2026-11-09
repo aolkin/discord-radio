@@ -73,7 +73,7 @@ pub async fn send_channel_message(
         ));
     }
 
-    let create_message = crate::commands::messaging::build_message(
+    let create_message = crate::commands::message::build_message(
         request.message,
         request.title,
         request.description,

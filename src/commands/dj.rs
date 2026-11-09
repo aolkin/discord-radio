@@ -6,7 +6,6 @@ use crate::audio::dj::manager::{
 use crate::audio::dj::state_machine::ChannelStatus;
 use crate::audio::dj::tiered::ConfigurableTier;
 use crate::audio::processing::processor::ProcessorRef;
-use crate::audio::tracks::{ChangeTrackStateRequest, TrackState};
 use crate::commands::utils;
 use crate::commands::utils::{Context, require_guild};
 use anyhow::{Context as _, bail};
@@ -25,24 +24,16 @@ fn send_to_dj(
 }
 
 /// Join a voice channel to broadcast audio
-#[poise::command(
-    slash_command,
-    guild_only,
-    default_member_permissions = "ADMINISTRATOR"
-)]
+#[poise::command(slash_command, guild_only)]
 #[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
-pub async fn join_voice_channel(
+pub async fn join(
     ctx: Context<'_>,
     #[description = "Voice channel to join and broadcast audio"] channel: ChannelId,
 ) -> anyhow::Result<()> {
     let guild_id = require_guild(ctx)?;
     let user_id = ctx.author().id;
 
-    tracing::info!(
-        "User {} executed join_voice_channel for channel {}",
-        user_id,
-        channel,
-    );
+    tracing::info!("User {} executed dj join for channel {}", user_id, channel,);
 
     ctx.defer_ephemeral().await?;
 
@@ -75,17 +66,13 @@ pub async fn join_voice_channel(
 }
 
 /// Leave the current voice channel
-#[poise::command(
-    slash_command,
-    guild_only,
-    default_member_permissions = "ADMINISTRATOR"
-)]
+#[poise::command(slash_command, guild_only)]
 #[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
-pub async fn leave_voice_channel(ctx: Context<'_>) -> anyhow::Result<()> {
+pub async fn leave(ctx: Context<'_>) -> anyhow::Result<()> {
     let guild_id = require_guild(ctx)?;
     let user_id = ctx.author().id;
 
-    tracing::info!("User {} executed leave_voice_channel", user_id,);
+    tracing::info!("User {} executed dj leave", user_id,);
 
     ctx.defer_ephemeral().await?;
 
@@ -302,92 +289,6 @@ async fn autocomplete_audio_file(ctx: Context<'_>, partial: &'_ str) -> CreateAu
     autocomplete_response(results)
 }
 
-/// Start or stop an audio track with fade transition
-#[poise::command(
-    slash_command,
-    guild_only,
-    default_member_permissions = "ADMINISTRATOR"
-)]
-#[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
-pub async fn change_track_state(
-    ctx: Context<'_>,
-    #[description = "Track name identifier"] name: String,
-    #[description = "Track state: start or stop (omit to update existing)"] state: Option<
-        TrackState,
-    >,
-    #[description = "Audio filename (required for start)"]
-    #[autocomplete = "autocomplete_audio_file"]
-    filename: Option<String>,
-    #[description = "Volume 0.0-2.0 (0=silence, 1.0=unity, 2.0=+18dB boost)"] volume: Option<f32>,
-    #[description = "Loop track"] loops: Option<bool>,
-    #[description = "Fade time in seconds (default 1.0)"] fade_time: Option<f32>,
-) -> anyhow::Result<()> {
-    let guild_id = require_guild(ctx)?;
-
-    ctx.defer_ephemeral().await?;
-
-    let message = ctx
-        .data()
-        .track_manager(guild_id)
-        .await
-        .change_state(ChangeTrackStateRequest {
-            name,
-            state,
-            filename,
-            volume,
-            loops,
-            fade_time,
-        })
-        .await?;
-    ctx.say(message).await?;
-
-    Ok(())
-}
-
-/// Display all currently playing audio tracks
-#[poise::command(
-    slash_command,
-    guild_only,
-    default_member_permissions = "ADMINISTRATOR"
-)]
-pub async fn get_current_tracks(ctx: Context<'_>) -> anyhow::Result<()> {
-    let guild_id = require_guild(ctx)?;
-
-    let tracks = ctx
-        .data()
-        .track_manager(guild_id)
-        .await
-        .get_all_tracks()
-        .await;
-
-    ctx.defer_ephemeral().await?;
-
-    if tracks.is_empty() {
-        ctx.say("No tracks currently playing").await?;
-        return Ok(());
-    }
-
-    let embed = serenity::all::CreateEmbed::default()
-        .title("Currently Playing Tracks")
-        .description(format!("{} track(s) active", tracks.len()))
-        .fields(tracks.iter().map(|track| {
-            (
-                &track.name,
-                format!(
-                    "File: {}\nVolume: {:.2}\nLoops: {}",
-                    track.filename, track.volume, track.loops
-                ),
-                false,
-            )
-        }))
-        .color(0x00ff00);
-
-    ctx.send(poise::CreateReply::default().embed(embed).ephemeral(true))
-        .await?;
-
-    Ok(())
-}
-
 async fn join_voice_channel_helper(
     ctx: Context<'_>,
     guild_id: GuildId,
@@ -555,8 +456,8 @@ pub enum ChannelStatusOverrideMode {
 }
 
 /// Set or clear the DJ's channel status override, which beats every other channel status
-#[poise::command(slash_command, guild_only, rename = "channel_status_override")]
-pub async fn override_channel_status(
+#[poise::command(slash_command, guild_only)]
+pub async fn channel_status_override(
     ctx: Context<'_>,
     #[description = "What the override does"] mode: ChannelStatusOverrideMode,
     #[description = "Channel status for the fixed mode"] status: Option<String>,
@@ -604,6 +505,8 @@ pub async fn override_channel_status(
     guild_only,
     default_member_permissions = "ADMINISTRATOR",
     subcommands(
+        "join",
+        "leave",
         "skip",
         "idle",
         "track",
@@ -614,7 +517,7 @@ pub async fn override_channel_status(
         "profile",
         "override_profile",
         "channel_status",
-        "override_channel_status"
+        "channel_status_override"
     )
 )]
 pub async fn dj(_ctx: Context<'_>) -> anyhow::Result<()> {
