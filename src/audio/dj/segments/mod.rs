@@ -1,10 +1,12 @@
 mod hex;
 mod noise;
+mod sequence;
 mod signals;
 mod track;
 
 pub use hex::{HexMessageDefaults, HexMessageEntry, HexSegment, ensure_audio_folder, ensure_loops};
 pub use noise::{NoiseEntry, NoiseSegment};
+pub use sequence::{SequenceEntry, SequenceSegment};
 pub use track::{TrackEntry, TrackSegment};
 
 use crate::audio::dj::announcement::Announcement;

@@ -21,7 +21,7 @@ pub trait WeightedPool<T: Weighted> {
     fn history_penalty_multiplier(&self) -> Option<f32>;
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct Identity(u64);
 
 impl Identity {

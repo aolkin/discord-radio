@@ -1,0 +1,25 @@
+{
+  "name": "sequence",
+  "entries": [
+    {
+      "weight": 1,
+      "channel_status": "📻 Incoming transmission",
+      "segments": [
+        {
+          "signal_profile": "noise_pink",
+          "min_duration_seconds": 2.0,
+          "max_duration_seconds": 4.0,
+          "weight": 1
+        },
+        {
+          "text": "hello world",
+          "weight": 1
+        },
+        {
+          "filename": "audio/example.mp3",
+          "weight": 1
+        }
+      ]
+    }
+  ]
+}

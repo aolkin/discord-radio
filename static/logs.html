@@ -167,6 +167,7 @@
                 playing_track: '🎵',
                 playing_hex_message: '📡',
                 playing_noise: '🔊',
+                playing_sequence: '🔁',
                 stopped: '⏹️',
             };
 
@@ -189,6 +190,8 @@
                 }
             } else if (details.noise_profile) {
                 detail.textContent = `Profile: ${details.noise_profile} (${details.duration_secs}s)`;
+            } else if (details.segments) {
+                detail.textContent = `Sequence of ${details.segments.length} segments`;
             } else if (details.duration_secs) {
                 detail.textContent = `Duration: ${details.duration_secs}s`;
             }

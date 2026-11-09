@@ -1,7 +1,7 @@
 use crate::audio::dj::announcement::Announcement;
 use crate::audio::dj::segments::{
     CommonSegmentPlaybackConfig, HexMessageDefaults, HexMessageEntry, HexSegment, NoiseEntry,
-    NoiseSegment, Segment, TrackEntry, TrackSegment, ensure_loops,
+    NoiseSegment, Segment, SequenceEntry, SequenceSegment, TrackEntry, TrackSegment, ensure_loops,
 };
 use crate::audio::dj::state_machine::ChannelStatus;
 use crate::audio::dj::tiered::TimedValue;
@@ -173,6 +173,7 @@ pub enum PoolEntry {
     Track(TrackEntry),
     Hex(HexMessageEntry),
     Noise(NoiseEntry),
+    Sequence(SequenceEntry),
 }
 
 impl PoolEntry {
@@ -193,6 +194,18 @@ impl PoolEntry {
                 noise.duration.validate(context)?;
                 if let Some(seconds) = noise.fade_duration_seconds {
                     ensure_seconds(seconds, context)?;
+                }
+            }
+            PoolEntry::Sequence(sequence) => {
+                if sequence.segments.is_empty() {
+                    bail!("sequence has no segments");
+                }
+                for (index, child) in sequence.segments.iter().enumerate() {
+                    let context = || format!("sequence segment {}", index + 1);
+                    if let PoolEntry::Sequence(_) = child {
+                        bail!("{}: a sequence cannot hold another sequence", context());
+                    }
+                    child.validate(hex_defaults).with_context(context)?;
                 }
             }
         }
@@ -217,6 +230,14 @@ impl PoolEntry {
                 Box::new(HexSegment::from_entry(message.clone(), segment_defaults))
             }
             PoolEntry::Noise(noise) => Box::new(NoiseSegment::from_entry(noise, segment_defaults)),
+            PoolEntry::Sequence(sequence) => {
+                let child_defaults = sequence.segment_defaults(segment_defaults);
+                let mut segments = Vec::with_capacity(sequence.segments.len());
+                for child in &sequence.segments {
+                    segments.push(Box::pin(child.segment(&child_defaults, bot_state)).await);
+                }
+                Box::new(SequenceSegment::new(segments))
+            }
         }
     }
 }
