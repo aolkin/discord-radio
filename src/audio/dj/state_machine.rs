@@ -1,8 +1,8 @@
-use crate::audio::dj::announcement::{Announcement, NoAnnouncement};
+use crate::audio::dj::announcement::Announcement;
 use crate::audio::dj::config::signal_profiles::SignalProfileEntry;
 use crate::audio::dj::config::{
-    ChannelStatusEntry, ConfiguredPool, DurationRange, EntryPlaybackConfig, LoadedConfig,
-    PoolEntry, SegmentDefaults,
+    AnnouncementEntry, ChannelStatusEntry, ConfiguredPool, DurationRange, EntryPlaybackConfig,
+    LoadedConfig, PoolEntry, SegmentDefaults,
 };
 use crate::audio::dj::manager::{
     ADVANCE_RETRY_DELAY, DJCommand, HexMessageRequest, IdleRequest, TrackRequest,
@@ -81,7 +81,7 @@ pub struct DJState {
     pub segment: SegmentContainer,
     pub signal_profile: TieredStateMachine<SignalProfileEntry, SignalProfilePlayback>,
     pub channel_status: TieredStateMachine<ChannelStatusEntry, ChannelStatus>,
-    pub announcement: TieredStateMachine<NoAnnouncement, Option<Announcement>>,
+    pub announcement: TieredStateMachine<AnnouncementEntry, Option<Announcement>>,
 }
 
 impl Default for DJState {
@@ -90,7 +90,7 @@ impl Default for DJState {
             segment: NoiseSegment::quiet(Duration::from_secs(1)).into(),
             signal_profile: TieredStateMachine::new(&SignalProfileEntry::default()),
             channel_status: TieredStateMachine::new(&ChannelStatusEntry::default()),
-            announcement: TieredStateMachine::new(&NoAnnouncement),
+            announcement: TieredStateMachine::new(&AnnouncementEntry::default()),
         }
     }
 }
