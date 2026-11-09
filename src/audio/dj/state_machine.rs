@@ -1,4 +1,4 @@
-use crate::audio::dj::announcement::AnnouncementStateMachine;
+use crate::audio::dj::announcement::{Announcement, NoAnnouncement};
 use crate::audio::dj::config::signal_profiles::SignalProfileEntry;
 use crate::audio::dj::config::{
     ChannelStatusEntry, ConfiguredPool, DurationRange, EntryPlaybackConfig, LoadedConfig,
@@ -81,7 +81,7 @@ pub struct DJState {
     pub segment: SegmentContainer,
     pub signal_profile: TieredStateMachine<SignalProfileEntry, SignalProfilePlayback>,
     pub channel_status: TieredStateMachine<ChannelStatusEntry, ChannelStatus>,
-    pub announcement: AnnouncementStateMachine,
+    pub announcement: TieredStateMachine<NoAnnouncement, Option<Announcement>>,
 }
 
 impl Default for DJState {
@@ -90,7 +90,7 @@ impl Default for DJState {
             segment: NoiseSegment::quiet(Duration::from_secs(1)).into(),
             signal_profile: TieredStateMachine::new(&SignalProfileEntry::default()),
             channel_status: TieredStateMachine::new(&ChannelStatusEntry::default()),
-            announcement: AnnouncementStateMachine::default(),
+            announcement: TieredStateMachine::new(&NoAnnouncement),
         }
     }
 }
@@ -147,7 +147,8 @@ impl DJStateMachine {
             None => (None, None),
         };
 
-        let initial_state = restored_state.unwrap_or_default();
+        let mut initial_state = restored_state.unwrap_or_default();
+        initial_state.announcement.changed();
 
         let _ = initial_state
             .segment
@@ -274,7 +275,15 @@ impl DJStateMachine {
     }
 
     async fn update_announcement(&mut self) {
-        let Some(announcement) = self.state.write().await.announcement.changed() else {
+        let Some(TieredChange {
+            current:
+                TieredValue {
+                    value: Some(announcement),
+                    ..
+                },
+            ..
+        }) = self.state.write().await.announcement.changed()
+        else {
             return;
         };
         let Some(channel) = self.announcement_channel else {
@@ -508,7 +517,11 @@ impl DJStateMachine {
                 .channel_status()
                 .map(|status| TimedValue::permanent(ChannelStatus::Fixed(status))),
         );
-        state.announcement.start_segment(segment.announcement());
+        state.announcement.update_forced(
+            segment
+                .announcement()
+                .map(|message| TimedValue::permanent(Some(Announcement::new(message)))),
+        );
         state.segment = segment;
         drop(state);
         if let Some(metrics) = crate::metrics::get() {
