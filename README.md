@@ -100,7 +100,6 @@ See [WEB_PORTAL.md](WEB_PORTAL.md) for more details.
 
 ### DJ Commands
 - `/dj join` - Join a voice channel to broadcast audio
-- `/dj leave` - Leave the current voice channel
 - `/dj skip` - Skip the DJ to its next state now, optionally to a segment from a named pool in the DJ config
 - `/dj idle` - Have the DJ go idle now, optionally playing a noise profile, for a number of seconds or until the DJ is advanced
 - `/dj track` - Have the DJ play an audio track now

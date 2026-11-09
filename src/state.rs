@@ -133,6 +133,30 @@ impl BotState {
         call.current_channel().map(|id| ChannelId::new(id.0.get()))
     }
 
+    pub async fn leave_voice_channel(&self, guild_id: GuildId) {
+        if self.songbird.get(guild_id).is_some()
+            && let Err(e) = self.songbird.remove(guild_id).await
+        {
+            tracing::error!("Failed to remove voice connection: {e:#}");
+        }
+        if let Err(e) = self.state_store.remove_voice_channel(guild_id).await {
+            tracing::error!("Failed to remove saved voice channel: {e:#}");
+        }
+        if let Some(dj_manager) = self.existing_dj_manager(guild_id) {
+            dj_manager.stop().await;
+        }
+    }
+
+    pub async fn saved_voice_channel(&self, guild_id: GuildId) -> Option<ChannelId> {
+        match self.state_store.load_voice_channels().await {
+            Ok(channels) => channels.get(&guild_id).copied(),
+            Err(e) => {
+                tracing::error!("Failed to load saved voice channels: {e:#}");
+                None
+            }
+        }
+    }
+
     /// Count the guilds with a Call that is in a voice channel
     pub async fn voice_connection_count(&self) -> usize {
         let mut count = 0;

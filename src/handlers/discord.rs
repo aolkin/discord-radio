@@ -36,12 +36,32 @@ impl serenity::EventHandler for Handler {
             None => return,
         };
 
-        if self.data.get_voice_channel_id(guild_id).await.is_none() {
+        let user_id = new.user_id;
+        if user_id == ctx.cache.current_user().id {
+            if let Some(saved_channel) = self.data.saved_voice_channel(guild_id).await {
+                match new.channel_id {
+                    None => {
+                        tracing::info!("Bot was disconnected from voice, cleaning up");
+                        self.data.leave_voice_channel(guild_id).await;
+                    }
+                    Some(channel_id) if channel_id != saved_channel => {
+                        tracing::info!("Bot was moved to voice channel {}", channel_id);
+                        if let Err(e) = self
+                            .data
+                            .state_store
+                            .save_voice_channel(guild_id, channel_id)
+                            .await
+                        {
+                            tracing::error!("Failed to save voice channel: {e:#}");
+                        }
+                    }
+                    Some(_) => {}
+                }
+            }
             return;
         }
 
-        let user_id = new.user_id;
-        if user_id == ctx.cache.current_user().id {
+        if self.data.get_voice_channel_id(guild_id).await.is_none() {
             return;
         }
 
