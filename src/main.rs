@@ -253,7 +253,6 @@ async fn main() -> anyhow::Result<()> {
                 commands::voice::voice(),
                 commands::messaging::channel(),
                 commands::messaging::activity(),
-                commands::voice::track_group(),
                 commands::voice::dj(),
             ],
             on_error: |error| Box::pin(on_error(error)),

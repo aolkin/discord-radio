@@ -234,8 +234,4 @@ All volume parameters in the system (config files, Discord commands, API calls) 
 }
 ```
 
-```
-/track change name:bgm volume:1.5
-```
-
 The conversion to amplitude happens internally in the mixer, so all user-facing interfaces remain simple and consistent.

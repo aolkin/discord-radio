@@ -6,7 +6,6 @@ use crate::audio::dj::manager::{
 use crate::audio::dj::state_machine::ChannelStatus;
 use crate::audio::dj::tiered::ConfigurableTier;
 use crate::audio::processing::processor::ProcessorRef;
-use crate::audio::tracks::{ChangeTrackStateRequest, TrackState};
 use crate::commands::utils;
 use crate::commands::utils::{Context, require_guild};
 use anyhow::{Context as _, bail};
@@ -292,84 +291,6 @@ async fn autocomplete_audio_file(ctx: Context<'_>, partial: &'_ str) -> CreateAu
     results.sort();
     results.truncate(25);
     autocomplete_response(results)
-}
-
-/// Start or stop an audio track with fade transition
-#[poise::command(slash_command, guild_only, rename = "change")]
-#[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
-pub async fn track_change(
-    ctx: Context<'_>,
-    #[description = "Track name identifier"] name: String,
-    #[description = "Track state: start or stop (omit to update existing)"] state: Option<
-        TrackState,
-    >,
-    #[description = "Audio filename (required for start)"]
-    #[autocomplete = "autocomplete_audio_file"]
-    filename: Option<String>,
-    #[description = "Volume 0.0-2.0 (0=silence, 1.0=unity, 2.0=+18dB boost)"] volume: Option<f32>,
-    #[description = "Loop track"] loops: Option<bool>,
-    #[description = "Fade time in seconds (default 1.0)"] fade_time: Option<f32>,
-) -> anyhow::Result<()> {
-    let guild_id = require_guild(ctx)?;
-
-    ctx.defer_ephemeral().await?;
-
-    let message = ctx
-        .data()
-        .track_manager(guild_id)
-        .await
-        .change_state(ChangeTrackStateRequest {
-            name,
-            state,
-            filename,
-            volume,
-            loops,
-            fade_time,
-        })
-        .await?;
-    ctx.say(message).await?;
-
-    Ok(())
-}
-
-/// Display all currently playing audio tracks
-#[poise::command(slash_command, guild_only, rename = "status")]
-pub async fn track_status(ctx: Context<'_>) -> anyhow::Result<()> {
-    let guild_id = require_guild(ctx)?;
-
-    let tracks = ctx
-        .data()
-        .track_manager(guild_id)
-        .await
-        .get_all_tracks()
-        .await;
-
-    ctx.defer_ephemeral().await?;
-
-    if tracks.is_empty() {
-        ctx.say("No tracks currently playing").await?;
-        return Ok(());
-    }
-
-    let embed = serenity::all::CreateEmbed::default()
-        .title("Currently Playing Tracks")
-        .description(format!("{} track(s) active", tracks.len()))
-        .fields(tracks.iter().map(|track| {
-            (
-                &track.name,
-                format!(
-                    "File: {}\nVolume: {:.2}\nLoops: {}",
-                    track.filename, track.volume, track.loops
-                ),
-                false,
-            )
-        }))
-        .color(0x00ff00);
-
-    ctx.send(poise::CreateReply::default().embed(embed).ephemeral(true))
-        .await?;
-
-    Ok(())
 }
 
 async fn join_voice_channel_helper(
@@ -743,17 +664,5 @@ pub async fn status(ctx: Context<'_>) -> anyhow::Result<()> {
     subcommands("voice_join", "voice_leave")
 )]
 pub async fn voice(_ctx: Context<'_>) -> anyhow::Result<()> {
-    Ok(())
-}
-
-/// Control audio tracks
-#[poise::command(
-    slash_command,
-    guild_only,
-    default_member_permissions = "ADMINISTRATOR",
-    subcommands("track_change", "track_status"),
-    rename = "track"
-)]
-pub async fn track_group(_ctx: Context<'_>) -> anyhow::Result<()> {
     Ok(())
 }

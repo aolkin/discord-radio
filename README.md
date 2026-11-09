@@ -101,8 +101,6 @@ See [WEB_PORTAL.md](WEB_PORTAL.md) for more details.
 ### Voice Commands
 - `/voice join` - Join a voice channel to broadcast audio
 - `/voice leave` - Leave the current voice channel
-- `/track change` - Start or stop an audio track with fade transition
-- `/track status` - Display all currently playing audio tracks
 
 ### DJ Commands
 - `/dj skip` - Skip the DJ to its next state now, optionally to a segment from a named pool in the DJ config
