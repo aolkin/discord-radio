@@ -8,9 +8,7 @@ pub use file_store::FileStore;
 use serenity::model::id::{ChannelId, GuildId};
 use std::collections::HashMap;
 use std::path::PathBuf;
-pub use types::{
-    ActivityState, DJState, DJStateSnapshot, MultiTrackPlaybackState, RegisteredChannel, TrackState,
-};
+pub use types::{ActivityState, DJState, DJStateSnapshot, MultiTrackPlaybackState, TrackState};
 
 #[async_trait]
 pub trait StateStore: Send + Sync {
@@ -29,9 +27,6 @@ pub trait StateStore: Send + Sync {
 
     async fn save_dj_state(&self, guild_id: GuildId, state: &DJStateSnapshot) -> Result<()>;
     async fn load_dj_states(&self) -> Result<HashMap<GuildId, DJState>>;
-
-    async fn save_registered_channel(&self, channel: &RegisteredChannel) -> Result<()>;
-    async fn load_registered_channels(&self) -> Result<Vec<RegisteredChannel>>;
 
     async fn save_activity_state(&self, state: Option<&ActivityState>) -> Result<()>;
     async fn load_activity_state(&self) -> Result<Option<ActivityState>>;

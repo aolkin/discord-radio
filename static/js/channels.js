@@ -3,9 +3,9 @@ import { apiRequest, bodyOrStatus, emptyMessage } from './api.js';
 export const modals = {
     channelMessage: {
         flag: 'showChannelMessageModal',
-        perGuild: false,
+        perGuild: true,
         reset: () => ({
-            registeredChannels: [],
+            sendableChannels: [],
             selectedChannelId: '',
             channelMessageText: '',
             channelMessageTitle: '',
@@ -19,7 +19,7 @@ export function channels() {
     return {
         // Channel Message state
         showChannelMessageModal: false,
-        registeredChannels: [],
+        sendableChannels: [],
         channelsLoading: false,
         selectedChannelId: '',
         channelMessageText: '',
@@ -29,23 +29,22 @@ export function channels() {
         channelMessage: emptyMessage(),
 
         // Channel Message Functions
-        async openChannelMessageModal() {
-            this.openModal('channelMessage');
+        async openChannelMessageModal(guildId) {
+            this.openModal('channelMessage', guildId);
             this.channelsLoading = true;
 
             try {
-                const response = await apiRequest('/api/registered-channels', {
-                    errorMessage: 'Failed to load registered channels',
-                    includeStatus: true,
+                const response = await apiRequest(`/api/guilds/${this.currentGuildId}/channels`, {
+                    errorMessage: bodyOrStatus,
                 });
 
                 const data = await response.json();
-                this.registeredChannels = data.channels;
+                this.sendableChannels = data.channels;
             } catch (error) {
-                console.error('Error loading registered channels:', error);
+                console.error('Error loading channels:', error);
                 this.channelMessage = {
                     type: 'error',
-                    text: error.message || 'Failed to load registered channels. Please try again.',
+                    text: error.message || 'Failed to load channels. Please try again.',
                 };
             } finally {
                 this.channelsLoading = false;
@@ -77,7 +76,7 @@ export function channels() {
                 message: 'channelMessage',
                 label: 'sending message',
                 request: () =>
-                    apiRequest(`/api/registered-channels/${this.selectedChannelId}/send`, {
+                    apiRequest(`/api/guilds/${this.currentGuildId}/channels/${this.selectedChannelId}/send`, {
                         method: 'POST',
                         body,
                         errorMessage: bodyOrStatus,

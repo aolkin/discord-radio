@@ -1,50 +1,73 @@
 use crate::bot_profile::ProfileEdit;
 use crate::state::Data;
 use crate::web::error::{ApiError, WithStatus};
-use anyhow::Context;
 use axum::Json as AxumJson;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
+use serenity::model::channel::ChannelType;
 use serenity::model::id::{ChannelId, GuildId};
-
-// Registered Channels endpoints
+use serenity::model::permissions::Permissions;
 
 #[derive(Debug, Serialize)]
-pub struct RegisteredChannelResponse {
+pub struct SendableChannelResponse {
     pub channel_id: String,
-    pub guild_id: String,
     pub name: String,
-    pub channel_type: String,
 }
 
 #[derive(Debug, Serialize)]
-pub struct RegisteredChannelsResponse {
-    pub channels: Vec<RegisteredChannelResponse>,
+pub struct SendableChannelsResponse {
+    pub channels: Vec<SendableChannelResponse>,
 }
 
-pub async fn get_registered_channels(
+fn sendable_channels(
+    bot_state: Data,
+    guild_id: GuildId,
+) -> Result<Vec<(ChannelId, String)>, ApiError> {
+    let cache = bot_state.cache.get().ok_or_else(|| {
+        ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            anyhow::anyhow!("The Discord cache is not ready yet"),
+        )
+    })?;
+    let guild = cache
+        .guild(guild_id)
+        .ok_or_else(|| ApiError::not_found(format!("Guild {guild_id} is not known to the bot")))?;
+    let member = guild.members.get(&bot_state.bot_user_id).ok_or_else(|| {
+        ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            anyhow::anyhow!("The bot member of guild {guild_id} is not cached"),
+        )
+    })?;
+
+    let required = Permissions::VIEW_CHANNEL | Permissions::SEND_MESSAGES;
+    let mut channels: Vec<_> = guild
+        .channels
+        .values()
+        .filter(|c| c.kind == ChannelType::Text)
+        .filter(|c| guild.user_permissions_in(c, member).contains(required))
+        .collect();
+    channels.sort_by_key(|c| (c.position, c.id));
+
+    Ok(channels
+        .into_iter()
+        .map(|c| (c.id, c.name.clone()))
+        .collect())
+}
+
+pub async fn get_sendable_channels(
     State(bot_state): State<Data>,
-) -> Result<AxumJson<RegisteredChannelsResponse>, ApiError> {
-    let channels = bot_state
-        .state_store
-        .load_registered_channels()
-        .await
-        .context("Failed to load registered channels")?;
+    Path(guild_id): Path<GuildId>,
+) -> Result<AxumJson<SendableChannelsResponse>, ApiError> {
+    let channels = sendable_channels(bot_state, guild_id)?
+        .into_iter()
+        .map(|(id, name)| SendableChannelResponse {
+            channel_id: id.to_string(),
+            name,
+        })
+        .collect();
 
-    let response = RegisteredChannelsResponse {
-        channels: channels
-            .into_iter()
-            .map(|c| RegisteredChannelResponse {
-                channel_id: c.channel_id.to_string(),
-                guild_id: c.guild_id.to_string(),
-                name: c.name,
-                channel_type: c.channel_type,
-            })
-            .collect(),
-    };
-
-    Ok(AxumJson(response))
+    Ok(AxumJson(SendableChannelsResponse { channels }))
 }
 
 #[derive(Debug, Deserialize)]
@@ -56,20 +79,18 @@ pub struct SendChannelMessageRequest {
 
 pub async fn send_channel_message(
     State(bot_state): State<Data>,
-    Path(channel_id): Path<ChannelId>,
+    Path((guild_id, channel_id)): Path<(GuildId, ChannelId)>,
     AxumJson(request): AxumJson<SendChannelMessageRequest>,
 ) -> Result<StatusCode, ApiError> {
-    let registered = bot_state
-        .state_store
-        .load_registered_channels()
-        .await
-        .context("Failed to load registered channels")?
+    let sendable = sendable_channels(bot_state, guild_id)?
         .iter()
-        .any(|c| c.channel_id == channel_id);
-    if !registered {
+        .any(|(id, _)| *id == channel_id);
+    if !sendable {
         return Err(ApiError::new(
             StatusCode::FORBIDDEN,
-            anyhow::anyhow!("Channel {channel_id} is not registered"),
+            anyhow::anyhow!(
+                "The bot cannot send messages to channel {channel_id} in guild {guild_id}"
+            ),
         ));
     }
 

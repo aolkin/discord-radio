@@ -38,14 +38,6 @@
                 </div>
             </header>
 
-            <!-- Registered Channels Section -->
-            <div class="card">
-                <h2 class="card-title">Registered Channels</h2>
-                <button type="button" class="send-message-button" @click="openChannelMessageModal()">
-                    📤 Send Message to Registered Channel
-                </button>
-            </div>
-
             <div class="card">
                 <h2 class="card-title">Signal Profiles</h2>
                 <div class="chip-list">
@@ -241,6 +233,17 @@
                                     </template>
                                 </div>
                             </template>
+
+                            <div class="section">
+                                <div class="section-title">Send Message</div>
+                                <button
+                                    type="button"
+                                    class="btn btn-secondary w-full"
+                                    @click="openChannelMessageModal(guild.guild_id)"
+                                >
+                                    📤 Send Message to a Channel
+                                </button>
+                            </div>
 
                             <div class="section">
                                 <div class="section-title">Bot Profile</div>
@@ -707,7 +710,7 @@
         <template
             x-modal
             data-modal="channelMessage"
-            data-title="Send Message to Registered Channel"
+            data-title="Send Message to a Channel"
             data-message="channelMessage"
             data-loading="channelsLoading"
             data-submit="sendChannelMessage()"
@@ -720,11 +723,8 @@
                 <label class="form-label" for="channel-message-channel">Channel *</label>
                 <select id="channel-message-channel" class="form-input" x-model="selectedChannelId" required>
                     <option value="">Select a channel...</option>
-                    <template x-for="channel in registeredChannels" :key="channel.channel_id">
-                        <option
-                            :value="channel.channel_id"
-                            x-text="`${channel.name} (${channel.channel_type}) - Guild: ${channel.guild_id}`"
-                        ></option>
+                    <template x-for="channel in sendableChannels" :key="channel.channel_id">
+                        <option :value="channel.channel_id" x-text="`#${channel.name}`"></option>
                     </template>
                 </select>
             </div>

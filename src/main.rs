@@ -285,6 +285,10 @@ async fn main() -> anyhow::Result<()> {
         .register_songbird_with(songbird)
         .await?;
 
+    data.cache
+        .set(client.cache.clone())
+        .map_err(|_| anyhow::anyhow!("Discord cache was already set"))?;
+
     // Set up graceful shutdown handling
     shutdown::setup_shutdown_handler(data).await;
 
