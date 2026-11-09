@@ -32,20 +32,16 @@ pub fn build_message(
 }
 
 /// Register a channel for sending messages from the web portal
-#[poise::command(
-    slash_command,
-    guild_only,
-    default_member_permissions = "ADMINISTRATOR"
-)]
+#[poise::command(slash_command, guild_only, rename = "register")]
 #[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
-pub async fn register_channel(
+pub async fn channel_register(
     ctx: Context<'_>,
     #[description = "Channel to register"] channel: serenity::Channel,
 ) -> anyhow::Result<()> {
     let user_id = ctx.author().id;
     let guild_id = require_guild(ctx)?;
 
-    tracing::info!("User {} executed register_channel", user_id,);
+    tracing::info!("User {} executed channel register", user_id,);
 
     ctx.defer_ephemeral().await?;
 
@@ -93,7 +89,7 @@ pub async fn register_channel(
     default_member_permissions = "ADMINISTRATOR"
 )]
 #[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
-pub async fn set_status(
+pub async fn activity(
     ctx: Context<'_>,
     #[description = "Custom status text"] status: String,
     #[description = "Activity type (defaults to custom)"]
@@ -103,7 +99,7 @@ pub async fn set_status(
     let user_id = ctx.author().id;
 
     tracing::info!(
-        "User {} executed set_status with type {:?}",
+        "User {} executed activity with type {:?}",
         user_id,
         activity_type
     );
@@ -124,13 +120,9 @@ pub async fn set_status(
 }
 
 /// Send a message with optional embed to the current channel
-#[poise::command(
-    slash_command,
-    guild_only,
-    default_member_permissions = "ADMINISTRATOR"
-)]
+#[poise::command(slash_command, guild_only, rename = "speak")]
 #[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
-pub async fn speak(
+pub async fn channel_speak(
     ctx: Context<'_>,
     #[description = "Message to send"] message: Option<String>,
     #[description = "Title for embed"] title: Option<String>,
@@ -138,7 +130,7 @@ pub async fn speak(
 ) -> anyhow::Result<()> {
     let user_id = ctx.author().id;
 
-    tracing::info!("User {} executed speak", user_id);
+    tracing::info!("User {} executed channel speak", user_id);
 
     ctx.defer_ephemeral().await?;
 
@@ -153,5 +145,16 @@ pub async fn speak(
 
     ctx.say("Message sent").await?;
 
+    Ok(())
+}
+
+/// Register channels and send messages
+#[poise::command(
+    slash_command,
+    guild_only,
+    default_member_permissions = "ADMINISTRATOR",
+    subcommands("channel_register", "channel_speak")
+)]
+pub async fn channel(_ctx: Context<'_>) -> anyhow::Result<()> {
     Ok(())
 }

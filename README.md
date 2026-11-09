@@ -99,10 +99,10 @@ See [WEB_PORTAL.md](WEB_PORTAL.md) for more details.
 ## Commands
 
 ### Voice Commands
-- `/join_voice_channel` - Join a voice channel to broadcast audio
-- `/leave_voice_channel` - Leave the current voice channel
-- `/change_track_state` - Start or stop an audio track with fade transition
-- `/get_current_tracks` - Display all currently playing audio tracks
+- `/voice join` - Join a voice channel to broadcast audio
+- `/voice leave` - Leave the current voice channel
+- `/track change` - Start or stop an audio track with fade transition
+- `/track status` - Display all currently playing audio tracks
 
 ### DJ Commands
 - `/dj skip` - Skip the DJ to its next state now, optionally to a segment from a named pool in the DJ config
@@ -118,9 +118,9 @@ See [WEB_PORTAL.md](WEB_PORTAL.md) for more details.
 - `/dj channel_status_override` - Override the voice channel status with a fixed status or leave it unmanaged (the DJ does not touch it), with an optional duration in seconds, or clear the override
 
 ### Messaging Commands
-- `/register_channel` - Register a channel for sending messages from the web portal
-- `/speak` - Send a message with optional embed to the current channel
-- `/set_status` - Set the bot's custom status
+- `/channel register` - Register a channel for sending messages from the web portal
+- `/channel speak` - Send a message with optional embed to the current channel
+- `/activity` - Set the bot's custom status
 
 ## License
 

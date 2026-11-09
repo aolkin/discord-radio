@@ -25,13 +25,9 @@ fn send_to_dj(
 }
 
 /// Join a voice channel to broadcast audio
-#[poise::command(
-    slash_command,
-    guild_only,
-    default_member_permissions = "ADMINISTRATOR"
-)]
+#[poise::command(slash_command, guild_only, rename = "join")]
 #[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
-pub async fn join_voice_channel(
+pub async fn voice_join(
     ctx: Context<'_>,
     #[description = "Voice channel to join and broadcast audio"] channel: ChannelId,
 ) -> anyhow::Result<()> {
@@ -39,7 +35,7 @@ pub async fn join_voice_channel(
     let user_id = ctx.author().id;
 
     tracing::info!(
-        "User {} executed join_voice_channel for channel {}",
+        "User {} executed voice join for channel {}",
         user_id,
         channel,
     );
@@ -75,17 +71,13 @@ pub async fn join_voice_channel(
 }
 
 /// Leave the current voice channel
-#[poise::command(
-    slash_command,
-    guild_only,
-    default_member_permissions = "ADMINISTRATOR"
-)]
+#[poise::command(slash_command, guild_only, rename = "leave")]
 #[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
-pub async fn leave_voice_channel(ctx: Context<'_>) -> anyhow::Result<()> {
+pub async fn voice_leave(ctx: Context<'_>) -> anyhow::Result<()> {
     let guild_id = require_guild(ctx)?;
     let user_id = ctx.author().id;
 
-    tracing::info!("User {} executed leave_voice_channel", user_id,);
+    tracing::info!("User {} executed voice leave", user_id,);
 
     ctx.defer_ephemeral().await?;
 
@@ -303,13 +295,9 @@ async fn autocomplete_audio_file(ctx: Context<'_>, partial: &'_ str) -> CreateAu
 }
 
 /// Start or stop an audio track with fade transition
-#[poise::command(
-    slash_command,
-    guild_only,
-    default_member_permissions = "ADMINISTRATOR"
-)]
+#[poise::command(slash_command, guild_only, rename = "change")]
 #[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
-pub async fn change_track_state(
+pub async fn track_change(
     ctx: Context<'_>,
     #[description = "Track name identifier"] name: String,
     #[description = "Track state: start or stop (omit to update existing)"] state: Option<
@@ -345,12 +333,8 @@ pub async fn change_track_state(
 }
 
 /// Display all currently playing audio tracks
-#[poise::command(
-    slash_command,
-    guild_only,
-    default_member_permissions = "ADMINISTRATOR"
-)]
-pub async fn get_current_tracks(ctx: Context<'_>) -> anyhow::Result<()> {
+#[poise::command(slash_command, guild_only, rename = "status")]
+pub async fn track_status(ctx: Context<'_>) -> anyhow::Result<()> {
     let guild_id = require_guild(ctx)?;
 
     let tracks = ctx
@@ -748,5 +732,28 @@ pub async fn status(ctx: Context<'_>) -> anyhow::Result<()> {
     ctx.say(format!("DJ State: {}{}", state_description, profile_info))
         .await?;
 
+    Ok(())
+}
+
+/// Join or leave a voice channel
+#[poise::command(
+    slash_command,
+    guild_only,
+    default_member_permissions = "ADMINISTRATOR",
+    subcommands("voice_join", "voice_leave")
+)]
+pub async fn voice(_ctx: Context<'_>) -> anyhow::Result<()> {
+    Ok(())
+}
+
+/// Control audio tracks
+#[poise::command(
+    slash_command,
+    guild_only,
+    default_member_permissions = "ADMINISTRATOR",
+    subcommands("track_change", "track_status"),
+    rename = "track"
+)]
+pub async fn track_group(_ctx: Context<'_>) -> anyhow::Result<()> {
     Ok(())
 }

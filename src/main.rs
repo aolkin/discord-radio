@@ -250,14 +250,11 @@ async fn main() -> anyhow::Result<()> {
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
             commands: vec![
-                commands::voice::join_voice_channel(),
-                commands::voice::leave_voice_channel(),
-                commands::voice::change_track_state(),
-                commands::voice::get_current_tracks(),
+                commands::voice::voice(),
+                commands::messaging::channel(),
+                commands::messaging::activity(),
+                commands::voice::track_group(),
                 commands::voice::dj(),
-                commands::messaging::register_channel(),
-                commands::messaging::speak(),
-                commands::messaging::set_status(),
             ],
             on_error: |error| Box::pin(on_error(error)),
             ..Default::default()

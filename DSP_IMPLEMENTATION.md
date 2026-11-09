@@ -130,7 +130,7 @@ Sample effect presets are in `examples/audio_profiles/`. The bot loads profiles 
 ### Discord Command
 
 ```
-/signal_profile profile:clear fade_duration:2.0
+/dj profile profile:clear fade_duration:2.0
 ```
 
 **Parameters:**
@@ -184,7 +184,7 @@ This provides natural-feeling volume control matching human loudness perception.
 
 - All DSP components implemented and compiling
 - Profile system with JSON loading
-- Command interface (`/signal_profile`)
+- Command interface (`/dj profile`)
 - State management in BotState
 - Profile switching with smooth transitions
 
@@ -235,7 +235,7 @@ All volume parameters in the system (config files, Discord commands, API calls) 
 ```
 
 ```
-/change_track_state name:bgm volume:1.5
+/track change name:bgm volume:1.5
 ```
 
 The conversion to amplitude happens internally in the mixer, so all user-facing interfaces remain simple and consistent.
