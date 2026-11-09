@@ -119,6 +119,7 @@ pub async fn run_web_server(bot_state: Data, port: u16) -> anyhow::Result<()> {
             "/api/guilds/{guild_id}/logs/{log_type}",
             get(routes::logs::get_logs),
         )
+        .route("/api/guilds", get(routes::discord::get_guilds))
         .route(
             "/api/guilds/{guild_id}/channels",
             get(routes::discord::get_sendable_channels),

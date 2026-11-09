@@ -25,8 +25,8 @@ The Discord bot includes a built-in web portal for monitoring bot status and con
   - List, create, and edit pool files (entries, segment defaults, history penalty multiplier) in a form
 - **Audio file browser**
   - Browse the folders and files under `tracks/` in object storage, create folders, and upload audio files by choosing or dropping them
-- **Per-guild messages**
-  - Send a message or embed to any text channel the bot can view and send to in that guild, chosen from a list that follows the bot's live Discord permissions
+- **Messages**
+  - Send a message or embed to any text channel the bot can view and send to, in any guild the bot is in (with or without a radio), chosen from lists that follow the bot's live Discord cache and permissions
 - **Per-guild bot profile**
   - Set the bot's nickname, avatar and banner in each guild, picking or uploading images under `images/` in object storage
 
@@ -119,6 +119,7 @@ Each guild card's Bot Profile button opens the bot's current nickname, avatar an
 - `POST /api/guilds/:guild_id/dj/channel-status` - Set the DJ background channel status (`{"tier": "manual"}`) or channel status override (`{"tier": "override"}`) to a fixed status (`{"status": {"fixed": "..."}}`) or leave it unmanaged (`{"status": "unmanaged"}`), with an optional `duration` in seconds, or clear it (`{"status": null}`)
 - `GET /api/guilds/:guild_id/bot-profile` - Get the bot's current per-guild profile from Discord (`{"nick", "avatar_url", "banner_url"}`)
 - `PUT /api/guilds/:guild_id/bot-profile` - Set the bot's per-guild profile on Discord. Body fields `nick`, `avatar`, `banner` are each optional; omitted fields are left unchanged, and at least one is required. `avatar` and `banner` are file references resolved like track filenames. Returns 429 when Discord rate limits the request
+- `GET /api/guilds` - List every guild the bot is in, from the bot's live Discord cache (`{"guilds": [{"guild_id", "name"}]}`), sorted by name. Returns 503 until the cache is ready
 - `GET /api/guilds/:guild_id/channels` - List the guild's text channels the bot can view and send messages to, from the bot's live Discord cache (`{"channels": [{"channel_id", "name"}]}`)
 - `POST /api/guilds/:guild_id/channels/:channel_id/send` - Send a message and/or embed (`message`, `title`, `description`) to a channel from that list. Other channels get a 403
 - `GET /api/profiles` - List available signal profiles as a JSON array of names
