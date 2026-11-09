@@ -57,7 +57,10 @@ function blankValue(field) {
     if (field.type === 'strings') {
         return [];
     }
-    return field.type === 'number' && !field.optional ? (field.default ?? 0) : '';
+    if (field.optional) {
+        return '';
+    }
+    return field.default ?? (field.type === 'number' ? 0 : '');
 }
 
 export function blankRow(fields) {
@@ -72,7 +75,11 @@ const segmentDefaultsFields = [
     { key: 'announcements', label: 'Announcements', type: 'strings' },
 ];
 
-const hexConfigFields = [loops('loop_min', 'Loop Min'), loops('loop_max', 'Loop Max')];
+const hexConfigFields = [
+    loops('loop_min', 'Loop Min'),
+    loops('loop_max', 'Loop Max'),
+    { key: 'hex_audio_prefix', label: 'Hex Audio Prefix', type: 'text', default: 'audio/hex/' },
+];
 
 export function segmentDefaultsFromServer(segmentDefaults) {
     const source = segmentDefaults ?? {};

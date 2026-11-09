@@ -151,7 +151,7 @@ impl RegistryEntry for Pool {
 
     fn validate(&self) -> anyhow::Result<()> {
         let defaults = self.segment_defaults.hex_config();
-        ensure_loops(defaults.loop_min, defaults.loop_max).context("hex_config")?;
+        defaults.validate().context("hex_config")?;
         ensure_penalty_multiplier(self.history_penalty_multiplier)?;
         if !self.has_weighted_entry() {
             bail!("pool has no entry with weight above 0");
