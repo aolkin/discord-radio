@@ -1,3 +1,4 @@
+use crate::audio::dj::announcement::Announcement;
 use crate::audio::dj::segments::{
     CommonSegmentPlaybackConfig, HexMessageDefaults, HexMessageEntry, HexSegment, NoiseEntry,
     NoiseSegment, Segment, TrackEntry, TrackSegment, ensure_loops,
@@ -252,6 +253,36 @@ impl From<&ChannelStatusEntry> for TimedValue<ChannelStatus> {
         TimedValue::temporary(
             ChannelStatus::Fixed(entry.status.clone()),
             entry.duration.sample(),
+        )
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct AnnouncementEntry {
+    pub message: String,
+    pub weight: u32,
+}
+
+#[field_trait_impl]
+impl Weighted for AnnouncementEntry {
+    fn identity(&self) -> Identity {
+        Identity::of(&self.message)
+    }
+}
+
+impl Default for AnnouncementEntry {
+    fn default() -> Self {
+        Self {
+            message: String::new(),
+            weight: 1,
+        }
+    }
+}
+
+impl From<&AnnouncementEntry> for TimedValue<Option<Announcement>> {
+    fn from(entry: &AnnouncementEntry) -> Self {
+        TimedValue::permanent(
+            (!entry.message.is_empty()).then(|| Announcement::new(entry.message.clone())),
         )
     }
 }

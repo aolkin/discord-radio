@@ -1,3 +1,4 @@
+pub mod announcement;
 pub mod config;
 pub mod manager;
 pub mod segments;

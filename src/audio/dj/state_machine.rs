@@ -1,7 +1,8 @@
+use crate::audio::dj::announcement::Announcement;
 use crate::audio::dj::config::signal_profiles::SignalProfileEntry;
 use crate::audio::dj::config::{
-    ChannelStatusEntry, ConfiguredPool, DurationRange, EntryPlaybackConfig, LoadedConfig,
-    PoolEntry, SegmentDefaults,
+    AnnouncementEntry, ChannelStatusEntry, ConfiguredPool, DurationRange, EntryPlaybackConfig,
+    LoadedConfig, PoolEntry, SegmentDefaults,
 };
 use crate::audio::dj::manager::{
     ADVANCE_RETRY_DELAY, DJCommand, HexMessageRequest, IdleRequest, TrackRequest,
@@ -80,6 +81,7 @@ pub struct DJState {
     pub segment: SegmentContainer,
     pub signal_profile: TieredStateMachine<SignalProfileEntry, SignalProfilePlayback>,
     pub channel_status: TieredStateMachine<ChannelStatusEntry, ChannelStatus>,
+    pub announcement: TieredStateMachine<AnnouncementEntry, Option<Announcement>>,
 }
 
 impl Default for DJState {
@@ -88,6 +90,7 @@ impl Default for DJState {
             segment: NoiseSegment::quiet(Duration::from_secs(1)).into(),
             signal_profile: TieredStateMachine::new(&SignalProfileEntry::default()),
             channel_status: TieredStateMachine::new(&ChannelStatusEntry::default()),
+            announcement: TieredStateMachine::new(&AnnouncementEntry::default()),
         }
     }
 }
@@ -144,7 +147,8 @@ impl DJStateMachine {
             None => (None, None),
         };
 
-        let initial_state = restored_state.unwrap_or_default();
+        let mut initial_state = restored_state.unwrap_or_default();
+        initial_state.announcement.changed();
 
         let _ = initial_state
             .segment
@@ -176,6 +180,7 @@ impl DJStateMachine {
         'dj: loop {
             self.update_profile().await;
             self.update_channel_status().await;
+            self.update_announcement().await;
             let (profile_due, channel_status_due) = {
                 let state = self.current_state().await;
                 (
@@ -266,6 +271,26 @@ impl DJStateMachine {
                 self.applied_channel_status = Some(target)
             }
             Err(e) => tracing::warn!("Failed to set voice channel status: {e:#}"),
+        }
+    }
+
+    async fn update_announcement(&mut self) {
+        let Some(TieredChange {
+            current:
+                TieredValue {
+                    value: Some(announcement),
+                    ..
+                },
+            ..
+        }) = self.state.write().await.announcement.changed()
+        else {
+            return;
+        };
+        let Some(channel) = self.announcement_channel else {
+            return;
+        };
+        if let Err(e) = channel.say(crate::http(), announcement.message).await {
+            tracing::warn!("Failed to send DJ announcement: {e:#}");
         }
     }
 
@@ -482,13 +507,6 @@ impl DJStateMachine {
 
         segment.enter(&self.segment_ctx()).await?;
 
-        if let Some(channel) = self.announcement_channel
-            && let Some(announcement) = segment.announcement()
-            && let Err(e) = channel.say(crate::http(), announcement).await
-        {
-            tracing::warn!("Failed to send DJ announcement: {}", e);
-        }
-
         let to_state = segment.state_name().to_string();
         let mut state = self.state.write().await;
         state
@@ -498,6 +516,11 @@ impl DJStateMachine {
             segment
                 .channel_status()
                 .map(|status| TimedValue::permanent(ChannelStatus::Fixed(status))),
+        );
+        state.announcement.update_forced(
+            segment
+                .announcement()
+                .map(|message| TimedValue::permanent(Some(Announcement::new(message)))),
         );
         state.segment = segment;
         drop(state);
