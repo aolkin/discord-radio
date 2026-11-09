@@ -10,6 +10,43 @@ use serenity::model::id::{ChannelId, GuildId};
 use serenity::model::permissions::Permissions;
 
 #[derive(Debug, Serialize)]
+pub struct GuildResponse {
+    pub guild_id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct GuildsResponse {
+    pub guilds: Vec<GuildResponse>,
+}
+
+pub async fn get_guilds(
+    State(bot_state): State<Data>,
+) -> Result<AxumJson<GuildsResponse>, ApiError> {
+    let cache = ready_cache(&bot_state)?;
+    let mut guilds: Vec<_> = cache
+        .guilds()
+        .into_iter()
+        .filter_map(|id| cache.guild(id).map(|g| (id, g.name.clone())))
+        .collect();
+    guilds.sort_by(|a, b| {
+        a.1.to_lowercase()
+            .cmp(&b.1.to_lowercase())
+            .then(a.0.cmp(&b.0))
+    });
+
+    Ok(AxumJson(GuildsResponse {
+        guilds: guilds
+            .into_iter()
+            .map(|(id, name)| GuildResponse {
+                guild_id: id.to_string(),
+                name,
+            })
+            .collect(),
+    }))
+}
+
+#[derive(Debug, Serialize)]
 pub struct SendableChannelResponse {
     pub channel_id: String,
     pub name: String,
@@ -20,16 +57,20 @@ pub struct SendableChannelsResponse {
     pub channels: Vec<SendableChannelResponse>,
 }
 
-fn sendable_channels(
-    bot_state: Data,
-    guild_id: GuildId,
-) -> Result<Vec<(ChannelId, String)>, ApiError> {
-    let cache = bot_state.cache.get().ok_or_else(|| {
+fn ready_cache(bot_state: &Data) -> Result<&std::sync::Arc<serenity::cache::Cache>, ApiError> {
+    bot_state.cache.get().ok_or_else(|| {
         ApiError::new(
             StatusCode::SERVICE_UNAVAILABLE,
             anyhow::anyhow!("The Discord cache is not ready yet"),
         )
-    })?;
+    })
+}
+
+fn sendable_channels(
+    bot_state: Data,
+    guild_id: GuildId,
+) -> Result<Vec<(ChannelId, String)>, ApiError> {
+    let cache = ready_cache(&bot_state)?;
     let guild = cache
         .guild(guild_id)
         .ok_or_else(|| ApiError::not_found(format!("Guild {guild_id} is not known to the bot")))?;

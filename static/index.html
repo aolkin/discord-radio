@@ -31,6 +31,9 @@
                     <button type="button" class="btn btn-primary btn-md" @click="openModal('activity')">
                         Manage Activity
                     </button>
+                    <button type="button" class="btn btn-primary btn-md" @click="openChannelMessageModal()">
+                        Send Message
+                    </button>
                     <div class="status-indicator">
                         <span class="status-dot" :class="{ 'disconnected': !connected }"></span>
                         <span x-text="statusText"></span>
@@ -233,17 +236,6 @@
                                     </template>
                                 </div>
                             </template>
-
-                            <div class="section">
-                                <div class="section-title">Send Message</div>
-                                <button
-                                    type="button"
-                                    class="btn btn-secondary w-full"
-                                    @click="openChannelMessageModal(guild.guild_id)"
-                                >
-                                    📤 Send Message to a Channel
-                                </button>
-                            </div>
 
                             <div class="section">
                                 <div class="section-title">Bot Profile</div>
@@ -715,13 +707,35 @@
             data-loading="channelsLoading"
             data-submit="sendChannelMessage()"
             data-saving="channelMessageSaving"
-            data-disabled-when="!selectedChannelId"
+            data-disabled-when="!selectedGuildId || !selectedChannelId"
             data-submit-label="Send Message"
             data-busy-label="Sending..."
         >
             <div class="form-group">
+                <label class="form-label" for="channel-message-guild">Server *</label>
+                <select
+                    id="channel-message-guild"
+                    class="form-input"
+                    x-model="selectedGuildId"
+                    @change="loadSendableChannels()"
+                    required
+                >
+                    <option value="">Select a server...</option>
+                    <template x-for="messageGuild in messageGuilds" :key="messageGuild.guild_id">
+                        <option :value="messageGuild.guild_id" x-text="messageGuild.name"></option>
+                    </template>
+                </select>
+            </div>
+
+            <div class="form-group">
                 <label class="form-label" for="channel-message-channel">Channel *</label>
-                <select id="channel-message-channel" class="form-input" x-model="selectedChannelId" required>
+                <select
+                    id="channel-message-channel"
+                    class="form-input"
+                    x-model="selectedChannelId"
+                    :disabled="!selectedGuildId || channelListLoading"
+                    required
+                >
                     <option value="">Select a channel...</option>
                     <template x-for="channel in sendableChannels" :key="channel.channel_id">
                         <option :value="channel.channel_id" x-text="`#${channel.name}`"></option>
