@@ -1,4 +1,4 @@
-import { apiRequest, emptyMessage } from './api.js';
+import { apiRequest, bodyOrStatus, emptyMessage } from './api.js';
 
 export const modals = {
     advanceDJ: {
@@ -10,6 +10,15 @@ export const modals = {
         flag: 'showPlayHexModal',
         perGuild: true,
         reset: () => ({ hexMessageText: '', hexMessagePool: '', hexMessage: emptyMessage() }),
+    },
+    announcementChannels: {
+        flag: 'showAnnouncementChannelsModal',
+        perGuild: true,
+        reset: () => ({
+            announcementOptions: [],
+            announcementSelection: '',
+            announcementMessage: emptyMessage(),
+        }),
     },
     channelStatus: {
         flag: 'showChannelStatusModal',
@@ -43,6 +52,78 @@ export function dj() {
         channelStatusDuration: null,
         channelStatusSaving: false,
         channelStatusMessage: emptyMessage(),
+        // Announcement Channels Modal state
+        showAnnouncementChannelsModal: false,
+        announcementOptions: [],
+        announcementSelection: '',
+        announcementLoading: false,
+        announcementSaving: false,
+        announcementMessage: emptyMessage(),
+
+        announcementChannelsOf(guildId) {
+            return this.guilds.find((guild) => guild.guild_id === guildId)?.announcement_channels ?? [];
+        },
+
+        availableAnnouncementOptions() {
+            const listed = this.announcementChannelsOf(this.currentGuildId).map((channel) => channel.channel_id);
+            return this.announcementOptions.filter((channel) => !listed.includes(channel.channel_id));
+        },
+
+        async openAnnouncementChannelsModal(guildId) {
+            this.openModal('announcementChannels', guildId);
+            this.announcementLoading = true;
+            try {
+                const response = await apiRequest(`/api/guilds/${guildId}/channels`, {
+                    errorMessage: bodyOrStatus,
+                });
+                const data = await response.json();
+                if (guildId === this.currentGuildId) {
+                    this.announcementOptions = data.channels;
+                }
+            } catch (error) {
+                console.error('Error loading channels:', error);
+                this.announcementMessage = {
+                    text: `Failed to load channels: ${error.message}`,
+                    type: 'error',
+                };
+            } finally {
+                this.announcementLoading = false;
+            }
+        },
+
+        async addAnnouncementChannel() {
+            await this.runAction({
+                saving: 'announcementSaving',
+                message: 'announcementMessage',
+                label: 'adding announcement channel',
+                request: () =>
+                    apiRequest(`/api/guilds/${this.currentGuildId}/dj/announcement-channels`, {
+                        method: 'POST',
+                        body: { channel_id: this.announcementSelection },
+                        errorMessage: bodyOrStatus,
+                    }),
+                success: 'Announcement channel added.',
+                failure: 'Failed to add announcement channel',
+                onSuccess: () => {
+                    this.announcementSelection = '';
+                },
+            });
+        },
+
+        async removeAnnouncementChannel(channelId) {
+            await this.runAction({
+                saving: 'announcementSaving',
+                message: 'announcementMessage',
+                label: 'removing announcement channel',
+                request: () =>
+                    apiRequest(`/api/guilds/${this.currentGuildId}/dj/announcement-channels/${channelId}`, {
+                        method: 'DELETE',
+                        errorMessage: bodyOrStatus,
+                    }),
+                success: 'Announcement channel removed.',
+                failure: 'Failed to remove announcement channel',
+            });
+        },
 
         async advanceDJState() {
             await this.runAction({

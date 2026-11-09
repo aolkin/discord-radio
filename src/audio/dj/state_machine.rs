@@ -185,7 +185,6 @@ impl DJStateMachine {
         let mut state_machine = Self {
             state,
             guild_id,
-            announcement_channel,
             bot_state,
             config,
             pool_selector: WeightedSelector::default(),

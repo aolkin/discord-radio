@@ -8,7 +8,7 @@ use axum::{
     extract::{DefaultBodyLimit, RawPathParams, Request},
     middleware::{self, Next},
     response::Response,
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use http::header::{AUTHORIZATION, CONTENT_TYPE};
 use std::net::SocketAddr;
@@ -92,6 +92,14 @@ pub async fn run_web_server(bot_state: Data, port: u16) -> anyhow::Result<()> {
         .route(
             "/api/guilds/{guild_id}/dj/channel-status",
             post(routes::dj::set_dj_channel_status),
+        )
+        .route(
+            "/api/guilds/{guild_id}/dj/announcement-channels",
+            post(routes::dj::add_announcement_channel),
+        )
+        .route(
+            "/api/guilds/{guild_id}/dj/announcement-channels/{channel_id}",
+            delete(routes::dj::remove_announcement_channel),
         )
         .route(
             "/api/guilds/{guild_id}/bot-profile",
