@@ -1,5 +1,4 @@
 pub mod activity;
-pub mod channel;
 pub mod dj;
+pub mod message;
 mod utils;
-pub mod voice;

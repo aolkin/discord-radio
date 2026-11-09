@@ -40,7 +40,7 @@ pub async fn register(
     let user_id = ctx.author().id;
     let guild_id = require_guild(ctx)?;
 
-    tracing::info!("User {} executed channel register", user_id,);
+    tracing::info!("User {} executed message register", user_id,);
 
     ctx.defer_ephemeral().await?;
 
@@ -92,7 +92,7 @@ pub async fn speak(
 ) -> anyhow::Result<()> {
     let user_id = ctx.author().id;
 
-    tracing::info!("User {} executed channel speak", user_id);
+    tracing::info!("User {} executed message speak", user_id);
 
     ctx.defer_ephemeral().await?;
 
@@ -117,6 +117,6 @@ pub async fn speak(
     default_member_permissions = "ADMINISTRATOR",
     subcommands("register", "speak")
 )]
-pub async fn channel(_ctx: Context<'_>) -> anyhow::Result<()> {
+pub async fn message(_ctx: Context<'_>) -> anyhow::Result<()> {
     Ok(())
 }
