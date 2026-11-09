@@ -5,8 +5,7 @@
     "announcements": [],
     "hex_config": {
       "loop_min": 2,
-      "loop_max": 3,
-      "hex_audio_prefix": "audio/hex/"
+      "loop_max": 3
     }
   },
   "entries": [

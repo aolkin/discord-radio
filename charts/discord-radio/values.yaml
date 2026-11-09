@@ -19,6 +19,7 @@ metrics:
   intervalSeconds: 60
 logging:
   rustLog: ""
+hexAudioFolder: ""
 persistence:
   size: 64Mi
   storageClass: ""

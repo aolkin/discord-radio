@@ -31,6 +31,7 @@ Object storage is used only when all four `BUCKET_*` keys are present. Metrics a
 
 - `web.port` is the port the bot listens on. `web.corsAllowedOrigins` lists the origins allowed by CORS.
 - `cache.ttlSecs`, `cache.maxBytes` and `cache.sweepIntervalSecs` set how long cached files live, how large the cache may grow, and how often expired files are removed.
+- `hexAudioFolder` sets the folder hex audio files load from (`HEX_AUDIO_FOLDER`), such as `s3://hex/`. It must end with `/`; when empty, the bot uses `audio/hex/`.
 - `persistence.size`, `persistence.storageClass` and `persistence.accessModes` configure the state claim.
 - `httpRoute.parentRef` (`name`, `namespace`, `listener`) selects the gateway, and `httpRoute.hostnames` sets the hostnames.
 - `resources`, `nodeSelector`, `tolerations`, `affinity` and `podAnnotations` apply to the pod.

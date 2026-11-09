@@ -29,8 +29,8 @@ pub struct HexMessageDefaults {
     pub loop_min: u32,
     #[serde(default = "default_loops")]
     pub loop_max: u32,
-    #[serde(default = "default_hex_audio_prefix")]
-    pub hex_audio_prefix: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hex_audio_folder: Option<String>,
 }
 
 impl Default for HexMessageDefaults {
@@ -38,7 +38,7 @@ impl Default for HexMessageDefaults {
         Self {
             loop_min: default_loops(),
             loop_max: default_loops(),
-            hex_audio_prefix: default_hex_audio_prefix(),
+            hex_audio_folder: None,
         }
     }
 }
@@ -47,17 +47,12 @@ fn default_loops() -> u32 {
     1
 }
 
-fn default_hex_audio_prefix() -> String {
-    "audio/hex/".to_string()
-}
-
 impl HexMessageDefaults {
     pub fn validate(&self) -> anyhow::Result<()> {
         ensure_loops(self.loop_min, self.loop_max)?;
-        if !self.hex_audio_prefix.ends_with('/') {
-            bail!("hex_audio_prefix must end with '/'");
-        }
-        Ok(())
+        self.hex_audio_folder
+            .as_deref()
+            .map_or(Ok(()), ensure_audio_folder)
     }
 
     pub fn pick_loops(&self, loop_min: Option<u32>, loop_max: Option<u32>) -> u32 {
@@ -83,6 +78,13 @@ impl Weighted for HexMessageEntry {
     }
 }
 
+pub fn ensure_audio_folder(folder: &str) -> anyhow::Result<()> {
+    if !folder.ends_with('/') {
+        bail!("hex audio folder must end with '/'");
+    }
+    Ok(())
+}
+
 pub fn ensure_loops(min: u32, max: u32) -> anyhow::Result<()> {
     if min > max {
         bail!("loop_min must not exceed loop_max");
@@ -103,7 +105,7 @@ pub struct HexSegment {
     playback_config: CommonSegmentPlaybackConfig,
     message: String,
     volume: f32,
-    audio_prefix: String,
+    audio_folder: Option<String>,
     target_loops: usize,
     progress: Arc<HexProgress>,
     #[serde(skip)]
@@ -139,7 +141,7 @@ impl HexSegment {
             playback_config,
             message,
             volume,
-            audio_prefix: segment_defaults.hex_config().hex_audio_prefix.clone(),
+            audio_folder: segment_defaults.hex_config().hex_audio_folder.clone(),
             target_loops,
             progress: Default::default(),
             run: Default::default(),
@@ -155,7 +157,10 @@ impl HexSegment {
                     message: self.message.clone(),
                     volume: self.volume,
                     target_loops: self.target_loops,
-                    audio_prefix: self.audio_prefix.clone(),
+                    audio_folder: self
+                        .audio_folder
+                        .clone()
+                        .unwrap_or_else(|| ctx.default_hex_audio_folder().to_string()),
                 },
                 self.progress.clone(),
                 processor,
@@ -252,7 +257,7 @@ struct HexRunSettings {
     message: String,
     volume: f32,
     target_loops: usize,
-    audio_prefix: String,
+    audio_folder: String,
 }
 
 async fn run_hex_message(
@@ -266,12 +271,12 @@ async fn run_hex_message(
         message,
         volume,
         target_loops,
-        audio_prefix,
+        audio_folder,
     } = settings;
     let hex_chars = message_to_hex_sequence(&message);
     while !hex_chars.is_empty() && progress.loops.load(Ordering::Relaxed) < target_loops {
         let position = progress.position.load(Ordering::Relaxed);
-        let filename = format!("{audio_prefix}hex_{}.wav", hex_chars[position]);
+        let filename = format!("{audio_folder}hex_{}.wav", hex_chars[position]);
         match file_resolver.resolve(&filename).await {
             Ok(path) if Path::new(&path).exists() => {
                 let source = match open_track_source(&path, None) {

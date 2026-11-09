@@ -78,7 +78,7 @@ const segmentDefaultsFields = [
 const hexConfigFields = [
     loops('loop_min', 'Loop Min'),
     loops('loop_max', 'Loop Max'),
-    { key: 'hex_audio_prefix', label: 'Hex Audio Prefix', type: 'text', default: 'audio/hex/' },
+    optionalText('hex_audio_folder', 'Hex Audio Folder'),
 ];
 
 export function segmentDefaultsFromServer(segmentDefaults) {
