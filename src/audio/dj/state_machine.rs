@@ -1,3 +1,4 @@
+use crate::audio::dj::announcement::AnnouncementStateMachine;
 use crate::audio::dj::config::signal_profiles::SignalProfileEntry;
 use crate::audio::dj::config::{
     ChannelStatusEntry, ConfiguredPool, DurationRange, EntryPlaybackConfig, LoadedConfig,
@@ -80,6 +81,7 @@ pub struct DJState {
     pub segment: SegmentContainer,
     pub signal_profile: TieredStateMachine<SignalProfileEntry, SignalProfilePlayback>,
     pub channel_status: TieredStateMachine<ChannelStatusEntry, ChannelStatus>,
+    pub announcement: AnnouncementStateMachine,
 }
 
 impl Default for DJState {
@@ -88,6 +90,7 @@ impl Default for DJState {
             segment: NoiseSegment::quiet(Duration::from_secs(1)).into(),
             signal_profile: TieredStateMachine::new(&SignalProfileEntry::default()),
             channel_status: TieredStateMachine::new(&ChannelStatusEntry::default()),
+            announcement: AnnouncementStateMachine::default(),
         }
     }
 }
@@ -176,6 +179,7 @@ impl DJStateMachine {
         'dj: loop {
             self.update_profile().await;
             self.update_channel_status().await;
+            self.update_announcement().await;
             let (profile_due, channel_status_due) = {
                 let state = self.current_state().await;
                 (
@@ -266,6 +270,18 @@ impl DJStateMachine {
                 self.applied_channel_status = Some(target)
             }
             Err(e) => tracing::warn!("Failed to set voice channel status: {e:#}"),
+        }
+    }
+
+    async fn update_announcement(&mut self) {
+        let Some(announcement) = self.state.write().await.announcement.changed() else {
+            return;
+        };
+        let Some(channel) = self.announcement_channel else {
+            return;
+        };
+        if let Err(e) = channel.say(crate::http(), announcement.message).await {
+            tracing::warn!("Failed to send DJ announcement: {e:#}");
         }
     }
 
@@ -482,13 +498,6 @@ impl DJStateMachine {
 
         segment.enter(&self.segment_ctx()).await?;
 
-        if let Some(channel) = self.announcement_channel
-            && let Some(announcement) = segment.announcement()
-            && let Err(e) = channel.say(crate::http(), announcement).await
-        {
-            tracing::warn!("Failed to send DJ announcement: {}", e);
-        }
-
         let to_state = segment.state_name().to_string();
         let mut state = self.state.write().await;
         state
@@ -499,6 +508,7 @@ impl DJStateMachine {
                 .channel_status()
                 .map(|status| TimedValue::permanent(ChannelStatus::Fixed(status))),
         );
+        state.announcement.start_segment(segment.announcement());
         state.segment = segment;
         drop(state);
         if let Some(metrics) = crate::metrics::get() {
