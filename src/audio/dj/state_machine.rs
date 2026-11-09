@@ -19,8 +19,8 @@ use crate::state::Data;
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use serenity::model::id::{ChannelId, GuildId};
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::{BTreeSet, HashMap};
 use std::ops::Deref;
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant, SystemTime};
@@ -82,6 +82,8 @@ pub struct DJState {
     pub signal_profile: TieredStateMachine<SignalProfileEntry, SignalProfilePlayback>,
     pub channel_status: TieredStateMachine<ChannelStatusEntry, ChannelStatus>,
     pub announcement: TieredStateMachine<AnnouncementEntry, Option<Announcement>>,
+    #[serde(default)]
+    pub announcement_channels: BTreeSet<ChannelId>,
 }
 
 impl Default for DJState {
@@ -91,6 +93,7 @@ impl Default for DJState {
             signal_profile: TieredStateMachine::new(&SignalProfileEntry::default()),
             channel_status: TieredStateMachine::new(&ChannelStatusEntry::default()),
             announcement: TieredStateMachine::new(&AnnouncementEntry::default()),
+            announcement_channels: BTreeSet::new(),
         }
     }
 }
@@ -129,7 +132,6 @@ impl DJState {
 pub struct DJStateMachine {
     state: Arc<RwLock<DJState>>,
     guild_id: GuildId,
-    announcement_channel: Option<ChannelId>,
     bot_state: Data,
     config: watch::Receiver<Arc<LoadedConfig>>,
     pool_selector: WeightedSelector<ConfiguredPool>,
@@ -146,7 +148,7 @@ impl DJStateMachine {
         mut config: watch::Receiver<Arc<LoadedConfig>>,
         bot_state: Data,
     ) -> Self {
-        let (announcement_channel, restored_state) = match saved {
+        let restored_state = match saved {
             Some(saved) => {
                 let mut state_machine = saved.state_machine;
                 if !saved.stopped
@@ -154,12 +156,9 @@ impl DJStateMachine {
                 {
                     state.shift_back(saved.saved_at.elapsed().unwrap_or_default());
                 }
-                (
-                    saved.announcement_channel_id.map(ChannelId::new),
-                    state_machine,
-                )
+                state_machine
             }
-            None => (None, None),
+            None => None,
         };
 
         let mut initial_state = restored_state.unwrap_or_default();
@@ -178,7 +177,6 @@ impl DJStateMachine {
         let mut state_machine = Self {
             state,
             guild_id,
-            announcement_channel,
             bot_state,
             config,
             pool_selector: WeightedSelector::default(),
@@ -292,22 +290,28 @@ impl DJStateMachine {
     }
 
     async fn update_announcement(&mut self) {
-        let Some(TieredChange {
-            current:
-                TieredValue {
-                    value: Some(announcement),
-                    ..
-                },
-            ..
-        }) = self.state.write().await.announcement.changed()
-        else {
-            return;
+        let (announcement, channels) = {
+            let mut state = self.state.write().await;
+            let Some(TieredChange {
+                current:
+                    TieredValue {
+                        value: Some(announcement),
+                        ..
+                    },
+                ..
+            }) = state.announcement.changed()
+            else {
+                return;
+            };
+            (announcement, state.announcement_channels.clone())
         };
-        let Some(channel) = self.announcement_channel else {
-            return;
-        };
-        if let Err(e) = channel.say(crate::http(), announcement.message).await {
-            tracing::warn!("Failed to send DJ announcement: {e:#}");
+        for channel in channels {
+            if let Err(e) = channel
+                .say(crate::http(), announcement.message.clone())
+                .await
+            {
+                tracing::warn!("Failed to send DJ announcement to channel {channel}: {e:#}");
+            }
         }
     }
 
@@ -316,7 +320,6 @@ impl DJStateMachine {
         let config = self.config.borrow().clone();
         let persist_state = crate::persistence::DJStateSnapshot {
             config_name: &config.config.name,
-            announcement_channel_id: self.announcement_channel.map(|id| id.get()),
             state_machine: &current_state,
             saved_at: SystemTime::now(),
             stopped,
@@ -341,10 +344,6 @@ impl DJStateMachine {
 
     pub async fn state_completed(&self) {
         self.current_state().await.segment.completed().await
-    }
-
-    pub fn set_announcement_channel(&mut self, channel: Option<ChannelId>) {
-        self.announcement_channel = channel;
     }
 
     pub async fn stop(&mut self, bot_state: &Data) {
@@ -579,9 +578,22 @@ impl DJStateMachine {
                 self.set_config(&loaded).await;
                 Ok(())
             }
-            DJCommand::SetAnnouncementChannel(new_channel) => {
-                tracing::info!("Setting DJ announcement channel to {:?}", new_channel);
-                self.set_announcement_channel(new_channel);
+            DJCommand::AddAnnouncementChannel(channel) => {
+                tracing::info!("Adding DJ announcement channel {channel}");
+                self.state
+                    .write()
+                    .await
+                    .announcement_channels
+                    .insert(channel);
+                Ok(())
+            }
+            DJCommand::RemoveAnnouncementChannel(channel) => {
+                tracing::info!("Removing DJ announcement channel {channel}");
+                self.state
+                    .write()
+                    .await
+                    .announcement_channels
+                    .remove(&channel);
                 Ok(())
             }
             DJCommand::SetSignalProfile(tier, profile) => {

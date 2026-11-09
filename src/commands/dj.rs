@@ -477,20 +477,31 @@ pub async fn configure(
     Ok(())
 }
 
-/// Choose the announcement channel or turn announcements off
-#[poise::command(slash_command, guild_only)]
+/// Manage the channels the DJ announces in
+#[poise::command(
+    slash_command,
+    guild_only,
+    subcommands("announcements_add", "announcements_remove")
+)]
+pub async fn announcements(_ctx: Context<'_>) -> anyhow::Result<()> {
+    Ok(())
+}
+
+/// Announce in a text channel too
+#[poise::command(slash_command, guild_only, rename = "add")]
 #[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
-pub async fn announcements(
+pub async fn announcements_add(
     ctx: Context<'_>,
-    #[description = "Text channel for announcements (omit to turn announcements off)"]
-    announcement_channel: Option<ChannelId>,
+    #[description = "Text channel for announcements"]
+    #[channel_types("Text")]
+    channel: ChannelId,
 ) -> anyhow::Result<()> {
     let guild_id = require_guild(ctx)?;
 
     tracing::info!(
-        "User {} executed dj announcements with channel {:?}",
+        "User {} executed dj announcements add with channel {}",
         ctx.author().id,
-        announcement_channel,
+        channel,
     );
 
     ctx.defer_ephemeral().await?;
@@ -498,15 +509,56 @@ pub async fn announcements(
     send_to_dj(
         ctx.data(),
         guild_id,
-        DJCommand::SetAnnouncementChannel(announcement_channel),
+        DJCommand::AddAnnouncementChannel(channel),
     )
-    .context("Failed to configure DJ")?;
+    .context("Failed to add DJ announcement channel")?;
 
-    let message = match announcement_channel {
-        Some(channel) => format!("DJ announcements in <#{channel}>"),
-        None => "DJ announcements off".to_string(),
-    };
-    ctx.say(message).await?;
+    ctx.say(format!("DJ announcements will also go to <#{channel}>"))
+        .await?;
+
+    Ok(())
+}
+
+/// Stop announcing in a channel
+#[poise::command(slash_command, guild_only, rename = "remove")]
+#[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
+pub async fn announcements_remove(
+    ctx: Context<'_>,
+    #[description = "Channel to stop announcing in"] channel: ChannelId,
+) -> anyhow::Result<()> {
+    let guild_id = require_guild(ctx)?;
+
+    tracing::info!(
+        "User {} executed dj announcements remove with channel {}",
+        ctx.author().id,
+        channel,
+    );
+
+    ctx.defer_ephemeral().await?;
+
+    let listed = ctx
+        .data()
+        .dj_manager(guild_id)
+        .state()
+        .read()
+        .await
+        .announcement_channels
+        .contains(&channel);
+    if !listed {
+        ctx.say(format!("<#{channel}> is not an announcement channel"))
+            .await?;
+        return Ok(());
+    }
+
+    send_to_dj(
+        ctx.data(),
+        guild_id,
+        DJCommand::RemoveAnnouncementChannel(channel),
+    )
+    .context("Failed to remove DJ announcement channel")?;
+
+    ctx.say(format!("DJ announcements no longer go to <#{channel}>"))
+        .await?;
 
     Ok(())
 }
@@ -561,6 +613,17 @@ pub async fn status(ctx: Context<'_>) -> anyhow::Result<()> {
         profile.value.name, profile.tier
     );
 
+    let announcement_info = if state.announcement_channels.is_empty() {
+        "\nAnnouncement Channels: none".to_string()
+    } else {
+        let mentions: Vec<_> = state
+            .announcement_channels
+            .iter()
+            .map(|channel| format!("<#{channel}>"))
+            .collect();
+        format!("\nAnnouncement Channels: {}", mentions.join(", "))
+    };
+
     let display = state.segment.state_display();
     let elapsed = state.segment.elapsed().as_secs();
     let time = match display.total {
@@ -572,8 +635,10 @@ pub async fn status(ctx: Context<'_>) -> anyhow::Result<()> {
         None => format!("{} ({time})", display.name),
     };
 
-    ctx.say(format!("DJ State: {}{}", state_description, profile_info))
-        .await?;
+    ctx.say(format!(
+        "DJ State: {state_description}{profile_info}{announcement_info}"
+    ))
+    .await?;
 
     Ok(())
 }

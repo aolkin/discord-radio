@@ -106,7 +106,8 @@ See [WEB_PORTAL.md](WEB_PORTAL.md) for more details.
 - `/dj hex` - Have the DJ play a text message as hex audio, optionally with the segment defaults of a named pool in the DJ config
 - `/dj status` - Get the current status of the DJ
 - `/dj configure` - Restart the DJ with a chosen configuration (the DJ runs whenever the bot is in a voice channel)
-- `/dj announcements` - Choose the DJ announcement channel, or turn announcements off by omitting it
+- `/dj announcements add` - Add a text channel to the DJ announcement channels (the DJ posts each announcement to every channel in the list; adding a listed channel changes nothing)
+- `/dj announcements remove` - Remove a channel from the DJ announcement channels (an empty list turns announcements off)
 - `/dj signal_profile` - Set the DJ's signal profile with an optional fade used to fade in and out of it (0 switches instantly) and an optional duration in seconds, or clear it; by default this sets the background profile (clearing returns to rotation), and `override: true` sets the override that beats every other profile (default fade 2 seconds)
 - `/dj channel_status` - Set the DJ's channel status with an optional duration in seconds, or clear it; by default this sets the background status (clearing returns to rotation), and `override: true` sets the override that beats every other status, which can also be `unmanaged: true` to leave the status untouched (the DJ does not touch it)
 

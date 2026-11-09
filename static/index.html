@@ -271,6 +271,25 @@
                                 </button>
                             </div>
 
+                            <div class="section">
+                                <div class="section-title">Announcement Channels</div>
+                                <div class="info-item">
+                                    <div class="grow">
+                                        <div
+                                            class="track-name"
+                                            x-text="guild.announcement_channels.length ? guild.announcement_channels.map((c) => '#' + (c.name || c.channel_id)).join(', ') : 'None (announcements are off)'"
+                                        ></div>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    class="btn btn-secondary mt-12 w-full"
+                                    @click="openAnnouncementChannelsModal(guild.guild_id)"
+                                >
+                                    Edit Announcement Channels
+                                </button>
+                            </div>
+
                             <!-- Activity Logs-->
                             <div class="section">
                                 <div class="section-title">Activity Logs</div>
@@ -595,6 +614,49 @@
                     step="1"
                     placeholder="Until cleared"
                 >
+            </div>
+        </template>
+
+        <template
+            x-modal
+            data-modal="announcementChannels"
+            data-title="Announcement Channels"
+            data-message="announcementMessage"
+            data-loading="announcementLoading"
+        >
+            <div x-show="!announcementLoading">
+                <template x-for="channel in announcementChannelsOf(currentGuildId)" :key="channel.channel_id">
+                    <div class="info-item">
+                        <div class="grow track-name" x-text="'#' + (channel.name || channel.channel_id)"></div>
+                        <button
+                            type="button"
+                            class="btn btn-secondary"
+                            :disabled="announcementSaving"
+                            @click="removeAnnouncementChannel(channel.channel_id)"
+                        >
+                            Remove
+                        </button>
+                    </div>
+                </template>
+                <div class="hint" x-show="!announcementChannelsOf(currentGuildId).length">
+                    No announcement channels. Announcements are off.
+                </div>
+                <form class="form-group mt-12" @submit.prevent="addAnnouncementChannel()">
+                    <label class="form-label" for="announcement-channel-select">Add a channel</label>
+                    <select id="announcement-channel-select" class="form-input" x-model="announcementSelection">
+                        <option value="">Choose a channel</option>
+                        <template x-for="channel in availableAnnouncementOptions()" :key="channel.channel_id">
+                            <option :value="channel.channel_id" x-text="'#' + channel.name"></option>
+                        </template>
+                    </select>
+                    <button
+                        type="submit"
+                        class="btn btn-primary mt-12 w-full"
+                        :disabled="announcementSaving || !announcementSelection"
+                    >
+                        Add Channel
+                    </button>
+                </form>
             </div>
         </template>
 

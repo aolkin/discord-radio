@@ -24,7 +24,8 @@ pub enum DJCommand {
     ForceIdle(IdleRequest),
     Stop,
     SetConfig(watch::Receiver<Arc<LoadedConfig>>),
-    SetAnnouncementChannel(Option<ChannelId>),
+    AddAnnouncementChannel(ChannelId),
+    RemoveAnnouncementChannel(ChannelId),
     SetSignalProfile(ConfigurableTier, Option<TimedValue<SignalProfilePlayback>>),
     SetChannelStatus(ConfigurableTier, Option<TimedValue<ChannelStatus>>),
 }

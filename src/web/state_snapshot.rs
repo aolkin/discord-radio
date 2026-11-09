@@ -26,6 +26,13 @@ pub struct GuildState {
     pub dj_state: DJStateInfo,
     pub audio_profile: AudioProfileInfo,
     pub channel_status: ChannelStatusInfo,
+    pub announcement_channels: Vec<AnnouncementChannelInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnnouncementChannelInfo {
+    pub channel_id: String,
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,13 +59,25 @@ impl BotSnapshot {
 
             let tracks = guild.track_manager.get_all_tracks().await;
 
-            let (dj_state, profile, channel_status) = {
+            let (dj_state, profile, channel_status, announcement_channels) = {
                 let dj_state_lock = guild.dj_manager.state();
                 let state = dj_state_lock.read().await;
                 (
                     dj_state_to_info(&state),
                     state.signal_profile(),
                     state.channel_status(),
+                    state
+                        .announcement_channels
+                        .iter()
+                        .map(|channel| AnnouncementChannelInfo {
+                            channel_id: channel.to_string(),
+                            name: bot_state.cache.get().and_then(|cache| {
+                                cache
+                                    .guild(guild_id)
+                                    .and_then(|g| g.channels.get(channel).map(|c| c.name.clone()))
+                            }),
+                        })
+                        .collect(),
                 )
             };
 
@@ -86,6 +105,7 @@ impl BotSnapshot {
                     },
                     source: channel_status.tier.to_string(),
                 },
+                announcement_channels,
             });
         }
 

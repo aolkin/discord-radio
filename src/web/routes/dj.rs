@@ -4,11 +4,12 @@ use crate::audio::dj::manager::{
 };
 use crate::state::Data;
 use crate::web::error::ApiError;
+use crate::web::routes::discord::sendable_channels;
 use axum::Json as AxumJson;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use serde::Deserialize;
-use serenity::model::id::GuildId;
+use serenity::model::id::{ChannelId, GuildId};
 
 #[derive(Debug, Deserialize)]
 pub struct AdvanceDjStateRequest {
@@ -99,6 +100,58 @@ pub async fn set_dj_profile(
 ) -> Result<StatusCode, ApiError> {
     let command = request.into_command(bot_state).map_err(invalid_request)?;
     send_dj_command(&bot_state, guild_id, command)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AnnouncementChannelRequest {
+    pub channel_id: ChannelId,
+}
+
+pub async fn add_announcement_channel(
+    State(bot_state): State<Data>,
+    Path(guild_id): Path<GuildId>,
+    AxumJson(request): AxumJson<AnnouncementChannelRequest>,
+) -> Result<StatusCode, ApiError> {
+    let channel_id = request.channel_id;
+    let sendable = sendable_channels(bot_state, guild_id)?
+        .iter()
+        .any(|(id, _)| *id == channel_id);
+    if !sendable {
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            anyhow::anyhow!(
+                "The bot cannot send messages to channel {channel_id} in guild {guild_id}"
+            ),
+        ));
+    }
+    send_dj_command(
+        &bot_state,
+        guild_id,
+        DJCommand::AddAnnouncementChannel(channel_id),
+    )
+}
+
+pub async fn remove_announcement_channel(
+    State(bot_state): State<Data>,
+    Path((guild_id, channel_id)): Path<(GuildId, ChannelId)>,
+) -> Result<StatusCode, ApiError> {
+    let listed = bot_state
+        .dj_manager(guild_id)
+        .state()
+        .read()
+        .await
+        .announcement_channels
+        .contains(&channel_id);
+    if !listed {
+        return Err(ApiError::not_found(format!(
+            "Channel {channel_id} is not an announcement channel in guild {guild_id}"
+        )));
+    }
+    send_dj_command(
+        &bot_state,
+        guild_id,
+        DJCommand::RemoveAnnouncementChannel(channel_id),
+    )
 }
 
 pub async fn set_dj_channel_status(

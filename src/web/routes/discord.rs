@@ -66,7 +66,7 @@ fn ready_cache(bot_state: &Data) -> Result<&std::sync::Arc<serenity::cache::Cach
     })
 }
 
-fn sendable_channels(
+pub fn sendable_channels(
     bot_state: Data,
     guild_id: GuildId,
 ) -> Result<Vec<(ChannelId, String)>, ApiError> {
