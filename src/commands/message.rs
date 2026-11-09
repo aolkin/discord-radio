@@ -33,14 +33,14 @@ pub fn build_message(
 /// Register a channel for sending messages from the web portal
 #[poise::command(slash_command, guild_only)]
 #[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
-pub async fn register(
+pub async fn register_channel(
     ctx: Context<'_>,
     #[description = "Channel to register"] channel: serenity::Channel,
 ) -> anyhow::Result<()> {
     let user_id = ctx.author().id;
     let guild_id = require_guild(ctx)?;
 
-    tracing::info!("User {} executed message register", user_id,);
+    tracing::info!("User {} executed message register_channel", user_id,);
 
     ctx.defer_ephemeral().await?;
 
@@ -115,7 +115,7 @@ pub async fn speak(
     slash_command,
     guild_only,
     default_member_permissions = "ADMINISTRATOR",
-    subcommands("register", "speak")
+    subcommands("register_channel", "speak")
 )]
 pub async fn message(_ctx: Context<'_>) -> anyhow::Result<()> {
     Ok(())
