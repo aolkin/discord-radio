@@ -103,7 +103,9 @@ impl SegmentDefaults {
                 .or_else(|| self.signal_profile.clone())
                 .map(Into::into),
             channel_status: entry.channel_status.or_else(|| self.channel_status.clone()),
-            announcement: self.pick_announcement(entry.announcement),
+            announcement: self
+                .pick_announcement(entry.announcement)
+                .map(Announcement::new),
         }
     }
 

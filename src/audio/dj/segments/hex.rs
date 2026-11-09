@@ -3,7 +3,7 @@ use super::{
     TrackSlot,
 };
 use crate::audio::dj::config::{EntryPlaybackConfig, SegmentDefaults};
-use crate::audio::dj::segments::signals::{Completed, CompletedSignal};
+use crate::audio::dj::segments::signals::{ChangedSignal, Completed, CompletedSignal};
 use crate::audio::dj::weighted_choice::{Identity, Weighted};
 use crate::audio::processing::mixer::{TrackCallback, TrackCommand};
 use crate::audio::processing::processor::AudioProcessor;
@@ -112,6 +112,8 @@ pub struct HexSegment {
     run: Mutex<Option<JoinHandle<()>>>,
     #[serde(skip)]
     done: CompletedSignal,
+    #[serde(skip)]
+    progressed: ChangedSignal,
 }
 
 impl Deref for HexSegment {
@@ -146,6 +148,7 @@ impl HexSegment {
             progress: Default::default(),
             run: Default::default(),
             done: Default::default(),
+            progressed: Default::default(),
         }
     }
 
@@ -166,6 +169,7 @@ impl HexSegment {
                 processor,
                 ctx.file_resolver().clone(),
                 self.done.clone(),
+                self.progressed.clone(),
             )
             .instrument(tracing::Span::current()),
         );
@@ -190,6 +194,10 @@ impl HexSegment {
 impl Segment for HexSegment {
     fn completed(&self, _elapsed: Duration) -> Completed {
         self.done.completed()
+    }
+
+    fn changed(&self) -> Completed {
+        self.progressed.changed()
     }
 
     async fn restore(&self, ctx: &SegmentCtx, _elapsed: Duration) -> anyhow::Result<()> {
@@ -266,6 +274,7 @@ async fn run_hex_message(
     processor: Arc<RwLock<AudioProcessor>>,
     file_resolver: FileResolver,
     done: CompletedSignal,
+    progressed: ChangedSignal,
 ) {
     let HexRunSettings {
         message,
@@ -310,6 +319,7 @@ async fn run_hex_message(
                 break;
             }
         }
+        progressed.notify();
 
         let delay = if next_position.is_multiple_of(2) {
             Duration::from_millis(800)
