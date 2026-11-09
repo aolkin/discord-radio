@@ -1,5 +1,5 @@
 use super::utils::{read_json, write_json};
-use super::{DJState, DJStateSnapshot, MultiTrackPlaybackState, RegisteredChannel, StateStore};
+use super::{DJState, DJStateSnapshot, MultiTrackPlaybackState, StateStore};
 use anyhow::Result;
 use async_trait::async_trait;
 use serde::Serialize;
@@ -84,10 +84,6 @@ impl FileStore {
         PersistedMap::new(self.base_path.clone(), "dj_states.json")
     }
 
-    fn registered_channels_path(&self) -> PathBuf {
-        self.base_path.join("registered_channels.json")
-    }
-
     fn activity_state_path(&self) -> PathBuf {
         self.base_path.join("activity_state.json")
     }
@@ -129,17 +125,6 @@ impl StateStore for FileStore {
 
     async fn load_dj_states(&self) -> Result<HashMap<GuildId, DJState>> {
         self.dj_states().load_all().await
-    }
-
-    async fn save_registered_channel(&self, channel: &RegisteredChannel) -> Result<()> {
-        let mut channels = self.load_registered_channels().await?;
-        channels.retain(|c| c.channel_id != channel.channel_id);
-        channels.push(channel.clone());
-        write_json(&channels, &self.registered_channels_path()).await
-    }
-
-    async fn load_registered_channels(&self) -> Result<Vec<RegisteredChannel>> {
-        read_json(&self.registered_channels_path()).await
     }
 
     async fn save_activity_state(&self, state: Option<&super::ActivityState>) -> Result<()> {

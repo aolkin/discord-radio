@@ -114,8 +114,7 @@ See [WEB_PORTAL.md](WEB_PORTAL.md) for more details.
 - `/dj channel_status_override` - Override the voice channel status with a fixed status or leave it unmanaged (the DJ does not touch it), with an optional duration in seconds, or clear the override
 
 ### Messaging Commands
-- `/message register_channel` - Register a channel for sending messages from the web portal
-- `/message speak` - Send a message with optional embed to the current channel
+- `/speak` - Send a message with optional embed to the current channel
 - `/activity` - Set the bot's custom status
 
 ## License

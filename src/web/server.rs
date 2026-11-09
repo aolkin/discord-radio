@@ -120,11 +120,11 @@ pub async fn run_web_server(bot_state: Data, port: u16) -> anyhow::Result<()> {
             get(routes::logs::get_logs),
         )
         .route(
-            "/api/registered-channels",
-            get(routes::discord::get_registered_channels),
+            "/api/guilds/{guild_id}/channels",
+            get(routes::discord::get_sendable_channels),
         )
         .route(
-            "/api/registered-channels/{channel_id}/send",
+            "/api/guilds/{guild_id}/channels/{channel_id}/send",
             post(routes::discord::send_channel_message),
         )
         .route("/ws", get(websocket::websocket_handler))

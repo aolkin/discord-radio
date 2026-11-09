@@ -1,4 +1,4 @@
-use crate::commands::utils::{Context, require_guild};
+use crate::commands::utils::Context;
 use anyhow::Context as _;
 use poise::serenity_prelude as serenity;
 
@@ -30,59 +30,12 @@ pub fn build_message(
     create_message
 }
 
-/// Register a channel for sending messages from the web portal
-#[poise::command(slash_command, guild_only)]
-#[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
-pub async fn register_channel(
-    ctx: Context<'_>,
-    #[description = "Channel to register"] channel: serenity::Channel,
-) -> anyhow::Result<()> {
-    let user_id = ctx.author().id;
-    let guild_id = require_guild(ctx)?;
-
-    tracing::info!("User {} executed message register_channel", user_id,);
-
-    ctx.defer_ephemeral().await?;
-
-    // Get channel info
-    let channel_id = channel.id();
-    let channel_name = match &channel {
-        serenity::Channel::Guild(gc) => gc.name.clone(),
-        _ => channel_id.to_string(),
-    };
-
-    let channel_type = match &channel {
-        serenity::Channel::Guild(gc) => format!("{:?}", gc.kind),
-        serenity::Channel::Private(_) => "Private".to_string(),
-        _ => "Unknown".to_string(),
-    };
-
-    // Create registered channel entry
-    let registered_channel = crate::persistence::RegisteredChannel {
-        channel_id,
-        guild_id,
-        name: channel_name.clone(),
-        channel_type: channel_type.clone(),
-    };
-
-    // Save to persistent storage
-    ctx.data()
-        .state_store
-        .save_registered_channel(&registered_channel)
-        .await
-        .context("Failed to register channel")?;
-
-    ctx.say(format!(
-        "Channel '{}' (type: {}) has been registered for web portal messaging",
-        channel_name, channel_type
-    ))
-    .await?;
-
-    Ok(())
-}
-
 /// Send a message with optional embed to the current channel
-#[poise::command(slash_command, guild_only)]
+#[poise::command(
+    slash_command,
+    guild_only,
+    default_member_permissions = "ADMINISTRATOR"
+)]
 #[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
 pub async fn speak(
     ctx: Context<'_>,
@@ -92,7 +45,7 @@ pub async fn speak(
 ) -> anyhow::Result<()> {
     let user_id = ctx.author().id;
 
-    tracing::info!("User {} executed message speak", user_id);
+    tracing::info!("User {} executed speak", user_id);
 
     ctx.defer_ephemeral().await?;
 
@@ -107,16 +60,5 @@ pub async fn speak(
 
     ctx.say("Message sent").await?;
 
-    Ok(())
-}
-
-/// Register channels and send messages
-#[poise::command(
-    slash_command,
-    guild_only,
-    default_member_permissions = "ADMINISTRATOR",
-    subcommands("register_channel", "speak")
-)]
-pub async fn message(_ctx: Context<'_>) -> anyhow::Result<()> {
     Ok(())
 }

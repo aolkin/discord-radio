@@ -15,7 +15,7 @@ use serenity::model::id::GuildId;
 use songbird::Songbird;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
-use std::sync::{Arc, Mutex as StdMutex};
+use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 use tokio::sync::RwLock;
 use tokio::sync::broadcast::Receiver;
 
@@ -39,6 +39,7 @@ pub struct BotState {
     pub file_resolver: FileResolver,
     pub hex_audio_folder: String,
     pub bot_user_id: UserId,
+    pub cache: OnceLock<Arc<serenity::cache::Cache>>,
 }
 
 impl BotState {
@@ -62,6 +63,7 @@ impl BotState {
             file_resolver,
             hex_audio_folder,
             bot_user_id,
+            cache: OnceLock::new(),
         }
     }
 

@@ -250,7 +250,7 @@ async fn main() -> anyhow::Result<()> {
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
             commands: vec![
-                commands::message::message(),
+                commands::message::speak(),
                 commands::activity::activity(),
                 commands::dj::dj(),
             ],
@@ -284,6 +284,10 @@ async fn main() -> anyhow::Result<()> {
         .event_handler(handlers::discord::Handler { data })
         .register_songbird_with(songbird)
         .await?;
+
+    data.cache
+        .set(client.cache.clone())
+        .map_err(|_| anyhow::anyhow!("Discord cache was already set"))?;
 
     // Set up graceful shutdown handling
     shutdown::setup_shutdown_handler(data).await;

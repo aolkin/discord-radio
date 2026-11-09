@@ -1,6 +1,5 @@
 use crate::activity::ActivityType;
 use serde::{Deserialize, Serialize};
-use serenity::model::id::{ChannelId, GuildId};
 use std::time::SystemTime;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -41,14 +40,6 @@ pub struct DJStateSnapshot<'a> {
     pub state_machine: &'a crate::audio::dj::state_machine::DJState,
     pub saved_at: SystemTime,
     pub stopped: bool,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct RegisteredChannel {
-    pub channel_id: ChannelId,
-    pub guild_id: GuildId,
-    pub name: String,
-    pub channel_type: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
