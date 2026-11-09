@@ -65,40 +65,6 @@ pub async fn join(
     Ok(())
 }
 
-/// Leave the current voice channel
-#[poise::command(slash_command, guild_only)]
-#[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
-pub async fn leave(ctx: Context<'_>) -> anyhow::Result<()> {
-    let guild_id = require_guild(ctx)?;
-    let user_id = ctx.author().id;
-
-    tracing::info!("User {} executed dj leave", user_id,);
-
-    ctx.defer_ephemeral().await?;
-
-    let manager = songbird::get(ctx.serenity_context())
-        .await
-        .expect("Songbird Voice client placed in at initialisation.")
-        .clone();
-
-    if manager.get(guild_id).is_some() {
-        if let Err(e) = manager.remove(guild_id).await {
-            ctx.say(format!("Failed to leave voice channel: {}", e))
-                .await?;
-        } else {
-            let _ = ctx.data().state_store.remove_voice_channel(guild_id).await;
-            if let Some(dj_manager) = ctx.data().existing_dj_manager(guild_id) {
-                dj_manager.stop().await;
-            }
-            ctx.say("Left voice channel").await?;
-        }
-    } else {
-        ctx.say("Not in a voice channel").await?;
-    }
-
-    Ok(())
-}
-
 /// Have the DJ play a text message as hex audio
 #[poise::command(slash_command, guild_only)]
 #[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
@@ -506,7 +472,6 @@ pub async fn channel_status_override(
     default_member_permissions = "ADMINISTRATOR",
     subcommands(
         "join",
-        "leave",
         "skip",
         "idle",
         "track",
