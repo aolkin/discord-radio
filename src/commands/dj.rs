@@ -337,129 +337,90 @@ async fn set_dj_profile(
     Ok(())
 }
 
-/// Set or clear the DJ's background signal profile, which replaces rotation
+fn tier_for(override_tier: Option<bool>) -> ConfigurableTier {
+    if override_tier.unwrap_or(false) {
+        ConfigurableTier::Override
+    } else {
+        ConfigurableTier::Manual
+    }
+}
+
+/// Set or clear the DJ's signal profile (background by default, or the override that beats all others)
 #[poise::command(slash_command, guild_only)]
-pub async fn profile(
+pub async fn signal_profile(
     ctx: Context<'_>,
-    #[description = "Profile name (omit to return to rotation)"]
+    #[description = "Profile name (omit to clear: background returns to rotation)"]
     #[autocomplete = "autocomplete_profile"]
     profile: Option<String>,
-    #[description = "Fade duration in seconds when setting"] fade_duration: Option<f32>,
+    #[description = "Fade duration in seconds when setting (default: 2.0 for the override)"]
+    fade_duration: Option<f32>,
     #[description = "Seconds the profile lasts (default: until cleared)"] duration: Option<f32>,
+    #[description = "Set the override instead of the background profile (default: false)"]
+    r#override: Option<bool>,
 ) -> anyhow::Result<()> {
-    set_dj_profile(
-        ctx,
-        profile,
-        fade_duration,
-        duration,
-        "background profile",
-        ConfigurableTier::Manual,
-    )
-    .await
+    let tier = tier_for(r#override);
+    let label = match tier {
+        ConfigurableTier::Override => "profile override",
+        _ => "background profile",
+    };
+    set_dj_profile(ctx, profile, fade_duration, duration, label, tier).await
 }
 
-/// Set or clear the DJ's signal profile override, which beats every other profile
-#[poise::command(slash_command, guild_only, rename = "override")]
-pub async fn override_profile(
-    ctx: Context<'_>,
-    #[description = "Profile name (omit to clear)"]
-    #[autocomplete = "autocomplete_profile"]
-    profile: Option<String>,
-    #[description = "Fade duration in seconds when setting (default: 2.0)"] fade_duration: Option<
-        f32,
-    >,
-    #[description = "Seconds the override lasts (default: until cleared)"] duration: Option<f32>,
-) -> anyhow::Result<()> {
-    set_dj_profile(
-        ctx,
-        profile,
-        fade_duration,
-        duration,
-        "profile override",
-        ConfigurableTier::Override,
-    )
-    .await
-}
-
-/// Set or clear the DJ's background channel status, which replaces rotation
+/// Set or clear the DJ's channel status (background by default, or the override that beats all others)
 #[poise::command(slash_command, guild_only)]
 pub async fn channel_status(
     ctx: Context<'_>,
-    #[description = "Channel status (omit to return to rotation)"] status: Option<String>,
+    #[description = "Channel status (omit to clear: background returns to rotation)"]
+    status: Option<String>,
     #[description = "Seconds the status lasts (default: until cleared)"] duration: Option<f32>,
+    #[description = "Set the override instead of the background status (default: false)"]
+    r#override: Option<bool>,
+    #[description = "Override only: leave the channel status unmanaged (default: false)"]
+    unmanaged: Option<bool>,
 ) -> anyhow::Result<()> {
     ctx.defer_ephemeral().await?;
 
     let guild_id = require_guild(ctx)?;
 
-    let message = match &status {
-        Some(status) => format!(
-            "DJ background channel status set to {status:?}{}",
-            for_duration(duration)
-        ),
-        None => "DJ background channel status cleared".to_string(),
+    let tier = tier_for(r#override);
+    let unmanaged = unmanaged.unwrap_or(false);
+    let label = match tier {
+        ConfigurableTier::Override => "override",
+        _ => "background",
     };
-    let request = ChannelStatusRequest {
-        tier: ConfigurableTier::Manual,
-        status: status.map(ChannelStatus::Fixed),
-        duration,
-    };
-    send_to_dj(ctx.data(), guild_id, request.into_command()?)
-        .context("Failed to update DJ background channel status")?;
-    ctx.say(message).await?;
+    if unmanaged && !matches!(tier, ConfigurableTier::Override) {
+        bail!("The unmanaged option needs override set to true");
+    }
+    if unmanaged && status.is_some() {
+        bail!("Give either a status or unmanaged, not both");
+    }
 
-    Ok(())
-}
-
-#[derive(poise::ChoiceParameter)]
-pub enum ChannelStatusOverrideMode {
-    #[name = "Clear (use the background channel status)"]
-    Clear,
-    #[name = "Unmanaged (leave the channel status as it is)"]
-    Unmanaged,
-    #[name = "Fixed (set the status given)"]
-    Fixed,
-}
-
-/// Set or clear the DJ's channel status override, which beats every other channel status
-#[poise::command(slash_command, guild_only)]
-pub async fn channel_status_override(
-    ctx: Context<'_>,
-    #[description = "What the override does"] mode: ChannelStatusOverrideMode,
-    #[description = "Channel status for the fixed mode"] status: Option<String>,
-    #[description = "Seconds the override lasts (default: until cleared)"] duration: Option<f32>,
-) -> anyhow::Result<()> {
-    ctx.defer_ephemeral().await?;
-
-    let guild_id = require_guild(ctx)?;
-
-    let (status_override, message) = match (mode, status) {
-        (ChannelStatusOverrideMode::Fixed, Some(status)) => (
-            Some(ChannelStatus::Fixed(status.clone())),
-            format!(
-                "DJ channel status override set to {status:?}{}",
-                for_duration(duration)
-            ),
-        ),
-        (ChannelStatusOverrideMode::Fixed, None) => bail!("The fixed mode needs a status"),
-        (ChannelStatusOverrideMode::Unmanaged, _) => (
+    let (new_status, message) = if unmanaged {
+        (
             Some(ChannelStatus::Unmanaged),
             format!(
-                "DJ channel status override set to unmanaged{}; the current status stays as it is",
+                "DJ channel status {label} set to unmanaged{}; the current status stays as it is",
                 for_duration(duration)
             ),
-        ),
-        (ChannelStatusOverrideMode::Clear, _) => {
-            (None, "DJ channel status override cleared".to_string())
-        }
+        )
+    } else if let Some(status) = status {
+        (
+            Some(ChannelStatus::Fixed(status.clone())),
+            format!(
+                "DJ channel status {label} set to {status:?}{}",
+                for_duration(duration)
+            ),
+        )
+    } else {
+        (None, format!("DJ channel status {label} cleared"))
     };
     let request = ChannelStatusRequest {
-        tier: ConfigurableTier::Override,
-        status: status_override,
+        tier,
+        status: new_status,
         duration,
     };
     send_to_dj(ctx.data(), guild_id, request.into_command()?)
-        .context("Failed to update DJ channel status override")?;
+        .with_context(|| format!("Failed to update DJ channel status {label}"))?;
     ctx.say(message).await?;
 
     Ok(())
@@ -479,10 +440,8 @@ pub async fn channel_status_override(
         "status",
         "configure",
         "announcements",
-        "profile",
-        "override_profile",
-        "channel_status",
-        "channel_status_override"
+        "signal_profile",
+        "channel_status"
     )
 )]
 pub async fn dj(_ctx: Context<'_>) -> anyhow::Result<()> {
