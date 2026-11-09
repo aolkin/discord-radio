@@ -7,6 +7,7 @@ pub use hex::{HexMessageDefaults, HexMessageEntry, HexSegment, ensure_audio_fold
 pub use noise::{NoiseEntry, NoiseSegment};
 pub use track::{TrackEntry, TrackSegment};
 
+use crate::audio::dj::announcement::Announcement;
 use crate::audio::dj::signal_profile::SignalProfilePlayback;
 use crate::audio::processing::mixer::{TrackCommand, TrackHandle};
 use crate::audio::processing::processor::ProcessorRef;
@@ -56,7 +57,7 @@ pub trait SegmentPlaybackConfig {
         None
     }
 
-    fn announcement(&self) -> Option<String> {
+    fn announcement(&self) -> Option<Announcement> {
         None
     }
 }
@@ -71,6 +72,10 @@ pub struct StateDisplay {
 #[typetag::serde(tag = "type")]
 pub trait Segment: Send + Sync + Debug + SegmentPlaybackConfig {
     fn completed(&self, elapsed: Duration) -> Completed;
+
+    fn changed(&self) -> Completed {
+        Completed::never()
+    }
 
     async fn restore(&self, _ctx: &SegmentCtx, _elapsed: Duration) -> anyhow::Result<()> {
         Ok(())
@@ -92,7 +97,7 @@ pub trait Segment: Send + Sync + Debug + SegmentPlaybackConfig {
 pub struct CommonSegmentPlaybackConfig {
     pub signal_profile: Option<SignalProfilePlayback>,
     pub channel_status: Option<String>,
-    pub announcement: Option<String>,
+    pub announcement: Option<Announcement>,
 }
 
 impl<T: Deref<Target = CommonSegmentPlaybackConfig>> SegmentPlaybackConfig for T {
@@ -104,7 +109,7 @@ impl<T: Deref<Target = CommonSegmentPlaybackConfig>> SegmentPlaybackConfig for T
         self.deref().channel_status.to_owned()
     }
 
-    fn announcement(&self) -> Option<String> {
+    fn announcement(&self) -> Option<Announcement> {
         self.deref().announcement.to_owned()
     }
 }

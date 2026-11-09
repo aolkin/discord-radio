@@ -102,6 +102,21 @@ impl DJState {
         self.channel_status.shift_back(by);
     }
 
+    fn apply_segment_playback(&mut self) {
+        self.signal_profile
+            .update_forced(self.segment.signal_profile().map(TimedValue::permanent));
+        self.channel_status.update_forced(
+            self.segment
+                .channel_status()
+                .map(|status| TimedValue::permanent(ChannelStatus::Fixed(status))),
+        );
+        self.announcement.update_forced(
+            self.segment
+                .announcement()
+                .map(|announcement| TimedValue::permanent(Some(announcement))),
+        );
+    }
+
     pub fn signal_profile(&self) -> TieredValue<SignalProfilePlayback> {
         self.signal_profile.value()
     }
@@ -181,9 +196,10 @@ impl DJStateMachine {
             self.update_profile().await;
             self.update_channel_status().await;
             self.update_announcement().await;
-            let (profile_due, channel_status_due) = {
+            let (segment_changed, profile_due, channel_status_due) = {
                 let state = self.current_state().await;
                 (
+                    state.segment.changed(),
                     state.signal_profile.completed(),
                     state.channel_status.completed(),
                 )
@@ -205,7 +221,8 @@ impl DJStateMachine {
                         tokio::time::sleep(ADVANCE_RETRY_DELAY).await;
                     }
                 }
-                _ = profile_due => self.state.write().await.signal_profile.advance(),
+                _ = segment_changed => self.state.write().await.apply_segment_playback(),
+                _ = profile_due =>self.state.write().await.signal_profile.advance(),
                 _ = channel_status_due => self.state.write().await.channel_status.advance(),
                 Ok(()) = config.changed() => {
                     let loaded = self.config.borrow_and_update().clone();
@@ -509,20 +526,8 @@ impl DJStateMachine {
 
         let to_state = segment.state_name().to_string();
         let mut state = self.state.write().await;
-        state
-            .signal_profile
-            .update_forced(segment.signal_profile().map(TimedValue::permanent));
-        state.channel_status.update_forced(
-            segment
-                .channel_status()
-                .map(|status| TimedValue::permanent(ChannelStatus::Fixed(status))),
-        );
-        state.announcement.update_forced(
-            segment
-                .announcement()
-                .map(|message| TimedValue::permanent(Some(Announcement::new(message)))),
-        );
         state.segment = segment;
+        state.apply_segment_playback();
         drop(state);
         if let Some(metrics) = crate::metrics::get() {
             metrics.record_dj_state_transition(self.guild_id.get(), &from_state, &to_state);

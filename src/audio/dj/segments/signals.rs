@@ -1,8 +1,9 @@
 use crate::audio::processing::mixer::TrackCallback;
 use futures_util::future::BoxFuture;
 use std::ops::Deref;
+use std::sync::Arc;
 use std::time::Instant;
-use tokio::sync::watch;
+use tokio::sync::{Notify, watch};
 
 pub struct Completed(BoxFuture<'static, ()>);
 
@@ -74,6 +75,20 @@ impl CompletedSignal {
 impl Drop for CompletedSignal {
     fn drop(&mut self) {
         self.complete();
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ChangedSignal(Arc<Notify>);
+
+impl ChangedSignal {
+    pub fn changed(&self) -> Completed {
+        let notify = self.0.clone();
+        Completed::when(async move { notify.notified().await })
+    }
+
+    pub fn notify(&self) {
+        self.0.notify_one();
     }
 }
 
