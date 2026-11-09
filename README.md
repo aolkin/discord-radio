@@ -104,7 +104,7 @@ See [WEB_PORTAL.md](WEB_PORTAL.md) for more details.
 - `/dj idle` - Have the DJ go idle now, optionally playing a noise profile, for a number of seconds or until the DJ is advanced
 - `/dj track` - Have the DJ play an audio track now
 - `/dj hex` - Have the DJ play a text message as hex audio, optionally with the segment defaults of a named pool in the DJ config
-- `/dj status` - Get the current status of the DJ, including its announcement channels
+- `/dj status` - Get the current status of the DJ
 - `/dj configure` - Restart the DJ with a chosen configuration (the DJ runs whenever the bot is in a voice channel)
 - `/dj announcements add` - Add a text channel to the DJ announcement channels (the DJ posts each announcement to every channel in the list; adding a listed channel changes nothing)
 - `/dj announcements remove` - Remove a channel from the DJ announcement channels (an empty list turns announcements off)

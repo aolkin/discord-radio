@@ -19,8 +19,8 @@ use crate::state::Data;
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use serenity::model::id::{ChannelId, GuildId};
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::{BTreeSet, HashMap};
 use std::ops::Deref;
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant, SystemTime};
@@ -82,8 +82,8 @@ pub struct DJState {
     pub signal_profile: TieredStateMachine<SignalProfileEntry, SignalProfilePlayback>,
     pub channel_status: TieredStateMachine<ChannelStatusEntry, ChannelStatus>,
     pub announcement: TieredStateMachine<AnnouncementEntry, Option<Announcement>>,
-    #[serde(skip)]
-    pub announcement_channels: Vec<ChannelId>,
+    #[serde(default)]
+    pub announcement_channels: BTreeSet<ChannelId>,
 }
 
 impl Default for DJState {
@@ -93,7 +93,7 @@ impl Default for DJState {
             signal_profile: TieredStateMachine::new(&SignalProfileEntry::default()),
             channel_status: TieredStateMachine::new(&ChannelStatusEntry::default()),
             announcement: TieredStateMachine::new(&AnnouncementEntry::default()),
-            announcement_channels: Vec::new(),
+            announcement_channels: BTreeSet::new(),
         }
     }
 }
@@ -148,7 +148,7 @@ impl DJStateMachine {
         mut config: watch::Receiver<Arc<LoadedConfig>>,
         bot_state: Data,
     ) -> Self {
-        let (announcement_channels, restored_state) = match saved {
+        let restored_state = match saved {
             Some(saved) => {
                 let mut state_machine = saved.state_machine;
                 if !saved.stopped
@@ -156,20 +156,12 @@ impl DJStateMachine {
                 {
                     state.shift_back(saved.saved_at.elapsed().unwrap_or_default());
                 }
-                (
-                    saved
-                        .announcement_channel_ids
-                        .into_iter()
-                        .map(ChannelId::new)
-                        .collect(),
-                    state_machine,
-                )
+                state_machine
             }
-            None => (Vec::new(), None),
+            None => None,
         };
 
         let mut initial_state = restored_state.unwrap_or_default();
-        initial_state.announcement_channels = announcement_channels;
         initial_state.announcement.changed();
 
         let _ = initial_state
@@ -328,11 +320,6 @@ impl DJStateMachine {
         let config = self.config.borrow().clone();
         let persist_state = crate::persistence::DJStateSnapshot {
             config_name: &config.config.name,
-            announcement_channel_ids: current_state
-                .announcement_channels
-                .iter()
-                .map(|id| id.get())
-                .collect(),
             state_machine: &current_state,
             saved_at: SystemTime::now(),
             stopped,
@@ -593,10 +580,11 @@ impl DJStateMachine {
             }
             DJCommand::AddAnnouncementChannel(channel) => {
                 tracing::info!("Adding DJ announcement channel {channel}");
-                let mut state = self.state.write().await;
-                if !state.announcement_channels.contains(&channel) {
-                    state.announcement_channels.push(channel);
-                }
+                self.state
+                    .write()
+                    .await
+                    .announcement_channels
+                    .insert(channel);
                 Ok(())
             }
             DJCommand::RemoveAnnouncementChannel(channel) => {
@@ -605,7 +593,7 @@ impl DJStateMachine {
                     .write()
                     .await
                     .announcement_channels
-                    .retain(|id| *id != channel);
+                    .remove(&channel);
                 Ok(())
             }
             DJCommand::SetSignalProfile(tier, profile) => {
