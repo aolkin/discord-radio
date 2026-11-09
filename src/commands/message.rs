@@ -31,7 +31,11 @@ pub fn build_message(
 }
 
 /// Send a message with optional embed to the current channel
-#[poise::command(slash_command, guild_only)]
+#[poise::command(
+    slash_command,
+    guild_only,
+    default_member_permissions = "ADMINISTRATOR"
+)]
 #[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
 pub async fn speak(
     ctx: Context<'_>,
@@ -41,7 +45,7 @@ pub async fn speak(
 ) -> anyhow::Result<()> {
     let user_id = ctx.author().id;
 
-    tracing::info!("User {} executed message speak", user_id);
+    tracing::info!("User {} executed speak", user_id);
 
     ctx.defer_ephemeral().await?;
 
@@ -56,16 +60,5 @@ pub async fn speak(
 
     ctx.say("Message sent").await?;
 
-    Ok(())
-}
-
-/// Send messages
-#[poise::command(
-    slash_command,
-    guild_only,
-    default_member_permissions = "ADMINISTRATOR",
-    subcommands("speak")
-)]
-pub async fn message(_ctx: Context<'_>) -> anyhow::Result<()> {
     Ok(())
 }

@@ -250,7 +250,7 @@ async fn main() -> anyhow::Result<()> {
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
             commands: vec![
-                commands::message::message(),
+                commands::message::speak(),
                 commands::activity::activity(),
                 commands::dj::dj(),
             ],
