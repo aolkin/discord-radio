@@ -261,18 +261,12 @@ impl From<&ChannelStatusEntry> for TimedValue<ChannelStatus> {
 pub struct AnnouncementEntry {
     pub message: String,
     pub weight: u32,
-    #[serde(flatten)]
-    pub duration: DurationRange,
 }
 
 #[field_trait_impl]
 impl Weighted for AnnouncementEntry {
     fn identity(&self) -> Identity {
-        Identity::of((
-            &self.message,
-            self.duration.min_duration_seconds.to_bits(),
-            self.duration.max_duration_seconds.to_bits(),
-        ))
+        Identity::of(&self.message)
     }
 }
 
@@ -281,16 +275,14 @@ impl Default for AnnouncementEntry {
         Self {
             message: String::new(),
             weight: 1,
-            duration: DurationRange::default(),
         }
     }
 }
 
 impl From<&AnnouncementEntry> for TimedValue<Option<Announcement>> {
     fn from(entry: &AnnouncementEntry) -> Self {
-        TimedValue::temporary(
+        TimedValue::permanent(
             (!entry.message.is_empty()).then(|| Announcement::new(entry.message.clone())),
-            entry.duration.sample(),
         )
     }
 }
