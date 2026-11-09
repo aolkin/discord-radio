@@ -1,4 +1,3 @@
-use crate::activity::ActivityType;
 use crate::commands::utils::{Context, require_guild};
 use anyhow::Context as _;
 use poise::serenity_prelude as serenity;
@@ -32,9 +31,9 @@ pub fn build_message(
 }
 
 /// Register a channel for sending messages from the web portal
-#[poise::command(slash_command, guild_only, rename = "register")]
+#[poise::command(slash_command, guild_only)]
 #[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
-pub async fn channel_register(
+pub async fn register(
     ctx: Context<'_>,
     #[description = "Channel to register"] channel: serenity::Channel,
 ) -> anyhow::Result<()> {
@@ -82,47 +81,10 @@ pub async fn channel_register(
     Ok(())
 }
 
-/// Set the bot's custom status
-#[poise::command(
-    slash_command,
-    guild_only,
-    default_member_permissions = "ADMINISTRATOR"
-)]
-#[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
-pub async fn activity(
-    ctx: Context<'_>,
-    #[description = "Custom status text"] status: String,
-    #[description = "Activity type (defaults to custom)"]
-    #[rename = "type"]
-    activity_type: Option<ActivityType>,
-) -> anyhow::Result<()> {
-    let user_id = ctx.author().id;
-
-    tracing::info!(
-        "User {} executed activity with type {:?}",
-        user_id,
-        activity_type
-    );
-
-    ctx.defer_ephemeral().await?;
-
-    let activity_type = activity_type.unwrap_or(ActivityType::Custom);
-
-    ctx.data()
-        .activity_manager
-        .set_activity(activity_type, status.clone())
-        .await;
-
-    ctx.say(format!("Status set to: {} ({})", status, activity_type))
-        .await?;
-
-    Ok(())
-}
-
 /// Send a message with optional embed to the current channel
-#[poise::command(slash_command, guild_only, rename = "speak")]
+#[poise::command(slash_command, guild_only)]
 #[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
-pub async fn channel_speak(
+pub async fn speak(
     ctx: Context<'_>,
     #[description = "Message to send"] message: Option<String>,
     #[description = "Title for embed"] title: Option<String>,
@@ -153,7 +115,7 @@ pub async fn channel_speak(
     slash_command,
     guild_only,
     default_member_permissions = "ADMINISTRATOR",
-    subcommands("channel_register", "channel_speak")
+    subcommands("register", "speak")
 )]
 pub async fn channel(_ctx: Context<'_>) -> anyhow::Result<()> {
     Ok(())

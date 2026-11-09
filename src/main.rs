@@ -251,9 +251,9 @@ async fn main() -> anyhow::Result<()> {
         .options(poise::FrameworkOptions {
             commands: vec![
                 commands::voice::voice(),
-                commands::messaging::channel(),
-                commands::messaging::activity(),
-                commands::voice::dj(),
+                commands::channel::channel(),
+                commands::activity::activity(),
+                commands::dj::dj(),
             ],
             on_error: |error| Box::pin(on_error(error)),
             ..Default::default()
