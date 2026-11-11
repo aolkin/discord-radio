@@ -388,17 +388,19 @@ impl DJStateMachine {
                 &SegmentDefaults::default(),
             )));
         };
-        let selector = state
+        let mut selector = state
             .entry_selectors
-            .entry(pool.file.name.clone())
-            .or_insert_with(|| EntrySelector::new(pool.order));
-        if selector.order() != pool.order {
-            *selector = EntrySelector::new(pool.order);
-        }
-        let entry = selector.choose(&pool.file.entries).with_context(|| {
+            .remove(&pool.file.name)
+            .filter(|selector| selector.order() == pool.order)
+            .unwrap_or_else(|| EntrySelector::new(pool.order));
+        let entry = selector.choose(&pool.file.entries);
+        state
+            .entry_selectors
+            .insert(pool.file.name.clone(), selector);
+        drop(state);
+        let entry = entry.with_context(|| {
             format!("pool {:?} has no entry with weight above 0", pool.file.name)
         })?;
-        drop(state);
         Ok(entry.segment(&pool.segment_defaults, &bot_state).await)
     }
 
