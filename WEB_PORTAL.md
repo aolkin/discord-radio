@@ -48,6 +48,8 @@ http://localhost:3000
 
 The portal uses WebSockets for live status updates, automatically reconnecting if the connection is lost.
 
+The page has two views, picked by the switch under the header. Live (`#/live`) shows the guild cards. Edit (`#/edit`) shows a tree of DJ configs (each with the pools it uses under it), pools, signal profiles and audio files, and opens the selected item's editor beside it, or above it on a narrow screen. Each item has its own address: `#/edit/dj-configs/<name>`, `#/edit/pools/<name>` or `#/edit/signal-profiles/<name>`, and `+new` in place of the name opens a blank editor. The portal opens the same view and item on reload, from a shared link, and on Back and Forward; it opens `#/live` for an empty or unknown address.
+
 ### DJ Management
 
 When the bot is in a guild's voice channel, you can control that guild's DJ directly from the web portal:
@@ -79,7 +81,7 @@ The DJ plays the profile override if set, else the current segment's profile, el
 
 The DJ picks the voice channel status the same way: the override if set, else the current segment's channel status, else its background channel status, which is either one set by hand or a rotating pick from the DJ config's `channel_statuses`. The override either sets a fixed status or leaves the channel status unmanaged, so the DJ does not touch it. The hand-set background channel status and the override can each have a duration, as with signal profiles. The DJ saves the override and the background channel status with its state.
 
-The Signal Profiles panel lists every profile by name. Saving a new or edited profile writes it to object storage; a DJ picks up the new parameters the next time it transitions to that profile.
+The Edit view's tree lists every signal profile by name. Saving a new or edited profile writes it to object storage; a DJ picks up the new parameters the next time it transitions to that profile.
 
 ### DJ Configs
 
@@ -87,7 +89,7 @@ The bot loads DJ configs from the `DJ_CONFIGS_PATH` directory (default `dj_confi
 
 A config's `pools` maps pool names to settings, as `{"<name>": {"weight": <weight>}}`; the weight sets how often that config picks the pool and must be above 0. A pool's settings can also hold `segment_defaults`; each field set there replaces the same field of the pool file's segment defaults for that config. The bot loads pool files from the `POOLS_PATH` directory (default `pools/`; the value must end with a slash) in the same way as configs. A pool file holds `name`, `entries` and `segment_defaults`, and needs at least one entry of weight above 0; `/dj skip` and `/dj hex` match the `name`. Several configs can reference the same pool. A config fails to load when a pool it references is missing or invalid; a running DJ then keeps the last copy of the config that loaded. The `name` stored in a config, pool or signal profile file must match its file name without `.json`; the bot skips a file where they differ. Sample configs and pool files are in `examples/dj_configs/` and `examples/pools/`; the bot does not load them from there.
 
-The DJ Configs panel lists every config by name and opens a form for it, showing the server's reason when it rejects a save. The Pools panel does the same for pool files. Saving a config or a pool file writes it to object storage; a running DJ using that config switches to the saved copy at once and picks its next segment from it.
+The Edit view's tree lists every DJ config and pool file by name and opens a form for the selected one, showing the server's reason when it rejects a save. A pool's form lists the DJ configs that use it. Saving a config or a pool file writes it to object storage; a running DJ using that config switches to the saved copy at once and picks its next segment from it.
 
 Each pool can set segment defaults (a hex config, a signal profile, a channel status and a list of announcements). Every pool entry kind accepts an optional `signal_profile`, `channel_status` and `announcement`. A segment from the pool uses its entry's own setting, then the pool's segment default, then the built-in hex config with no signal profile or channel status. A hex config holds `loop_min`, `loop_max` and an optional `hex_audio_folder`; the folder (must end with `/`) is put before `hex_<char>.wav` to find each hex audio file, and a folder starting with `s3://` (for example `s3://hex/`) loads the files from object storage. Without it, the hex message uses the bot-wide `HEX_AUDIO_FOLDER` (default `audio/hex/`). A hex message without its own channel status shows its scrambled text instead of the pool's channel status. A segment without its own announcement posts a random entry of the pool's `announcements`, when the list is not empty. The segment's signal profile overrides the rotating background profile while it plays.
 
@@ -97,7 +99,7 @@ Each guild card lists the channels the DJ posts announcements to (`announcement_
 
 ### Audio File Browser
 
-The Audio Files panel opens a browser over the `tracks/` folder of object storage. Dropping or choosing files uploads them to the current folder one after another, with a progress bar per file and the server's message when a file is rejected. Breadcrumbs and Up move between folders, and each file shows its full key, size and last modified time. The same browser opens in a mode that picks a file or a folder and hands the choice back to the section that opened it.
+The Audio Files item in the Edit view's tree opens a browser over the `tracks/` folder of object storage. Dropping or choosing files uploads them to the current folder one after another, with a progress bar per file and the server's message when a file is rejected. Breadcrumbs and Up move between folders, and each file shows its full key, size and last modified time. The same browser opens in a mode that picks a file or a folder and hands the choice back to the section that opened it.
 
 ### Bot Profile
 

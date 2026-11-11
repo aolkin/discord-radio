@@ -2,7 +2,7 @@ import { apiRequest, bodyOrStatus, emptyMessage } from './api.js';
 
 const capitalize = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 
-export function registryEditor({ path, prefix, list, label, toForm, toBody, blankForm }) {
+export function registryEditor({ path, prefix, list, kind, label, toForm, toBody, blankForm, afterSave }) {
     const editor = `${prefix}Editor`;
     const form = `${prefix}Form`;
     const isNew = `${editor}IsNew`;
@@ -14,7 +14,6 @@ export function registryEditor({ path, prefix, list, label, toForm, toBody, blan
     return {
         state: () => ({
             [list]: [],
-            [`show${capitalize(editor)}`]: false,
             [isNew]: false,
             [loading]: false,
             [saving]: false,
@@ -35,24 +34,31 @@ export function registryEditor({ path, prefix, list, label, toForm, toBody, blan
 
             async [`open${capitalize(editor)}`](name) {
                 this[isNew] = name === null;
-                this.openModal(editor);
+                this[message] = emptyMessage();
+                this[form] = blankForm();
+                this[loading] = !this[isNew];
 
                 if (this[isNew]) {
-                    this[form] = blankForm();
                     return;
                 }
 
-                this[loading] = true;
                 try {
                     const response = await apiRequest(`${path}/${encodeURIComponent(name)}`, {
                         errorMessage: bodyOrStatus,
                     });
-                    this[form] = toForm(name, await response.json());
+                    const data = await response.json();
+                    if (this.isSelected(kind, name)) {
+                        this[form] = toForm(name, data);
+                    }
                 } catch (error) {
                     console.error(`Failed to load ${label}:`, error);
-                    this[message] = { text: `Failed to load ${label}: ${error.message}`, type: 'error' };
+                    if (this.isSelected(kind, name)) {
+                        this[message] = { text: `Failed to load ${label}: ${error.message}`, type: 'error' };
+                    }
                 } finally {
-                    this[loading] = false;
+                    if (this.isSelected(kind, name)) {
+                        this[loading] = false;
+                    }
                 }
             },
 
@@ -74,8 +80,12 @@ export function registryEditor({ path, prefix, list, label, toForm, toBody, blan
                             errorMessage: bodyOrStatus,
                         }),
                     onSuccess: async () => {
-                        this[isNew] = false;
+                        if (this[isNew]) {
+                            this[isNew] = false;
+                            this.replaceRoute({ view: 'edit', kind, name });
+                        }
                         await this[loadList]();
+                        await afterSave?.call(this);
                     },
                     success: `${capitalize(label)} saved`,
                     failure: `Failed to save ${label}`,

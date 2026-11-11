@@ -3,10 +3,11 @@ import { botProfile, modals as botProfileModals } from './js/bot-profile.js';
 import { channels, modals as channelsModals } from './js/channels.js';
 import { connection } from './js/connection.js';
 import { dj, modals as djModals } from './js/dj.js';
-import { djConfigs, modals as djConfigsModals } from './js/dj-configs.js';
+import { djConfigs } from './js/dj-configs.js';
 import { fileBrowser, modals as fileBrowserModals } from './js/file-browser.js';
 import { modalMethods, modals } from './js/modal.js';
-import { pools, modals as poolsModals } from './js/pools.js';
+import { pools } from './js/pools.js';
+import { router } from './js/router.js';
 import { actionMethods } from './js/run-action.js';
 import { signalProfiles, modals as signalProfilesModals } from './js/signal-profiles.js';
 import { tracks, modals as tracksModals } from './js/tracks.js';
@@ -17,9 +18,7 @@ Object.assign(
     botProfileModals,
     channelsModals,
     djModals,
-    djConfigsModals,
     fileBrowserModals,
-    poolsModals,
     signalProfilesModals,
     tracksModals,
 );
@@ -27,6 +26,7 @@ Object.assign(
 function botPortal() {
     return {
         ...connection(),
+        ...router(),
         ...dj(),
         ...tracks(),
         ...signalProfiles(),

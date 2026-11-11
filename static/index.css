@@ -404,8 +404,38 @@ h1 {
     margin-bottom: 15px;
 }
 
+.view-switch {
+    margin-bottom: 20px;
+}
+
+.view-switch .btn {
+    text-decoration: none;
+}
+
+.edit-view {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 20px;
+    align-items: start;
+}
+
+.tree-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    margin-bottom: 6px;
+}
+
+.tree-children {
+    padding-left: 20px;
+}
+
 @media (max-width: 768px) {
     .guild-content {
+        grid-template-columns: 1fr;
+    }
+
+    .edit-view {
         grid-template-columns: 1fr;
     }
 
