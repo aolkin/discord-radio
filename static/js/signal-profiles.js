@@ -34,7 +34,6 @@ const profileFields = [
     { key: 'clip_threshold', label: 'Clip Threshold', type: 'number', step: 'any', default: 1 },
     { key: 'bitcrush_bits', label: 'Bitcrush Bits', type: 'number', step: 1, min: 1, max: 255, optional: true },
     { key: 'dropout_probability', label: 'Dropout Probability', type: 'number', step: 'any', min: 0 },
-    { key: 'frequency_warble_hz', label: 'Frequency Warble (Hz)', type: 'number', step: 'any', optional: true },
 ];
 
 function toForm(name, profile) {

@@ -27,8 +27,6 @@ pub struct SignalProfile {
 
     pub dropout_probability: f32,
     pub dropout_duration_ms: (f32, f32),
-
-    pub frequency_warble_hz: Option<f32>,
 }
 
 impl SignalProfile {
@@ -61,12 +59,6 @@ impl SignalProfile {
                 self.dropout_duration_ms.0 * inv_t + other.dropout_duration_ms.0 * t,
                 self.dropout_duration_ms.1 * inv_t + other.dropout_duration_ms.1 * t,
             ),
-            frequency_warble_hz: match (self.frequency_warble_hz, other.frequency_warble_hz) {
-                (Some(a), Some(b)) => Some(a * inv_t + b * t),
-                (Some(a), None) => Some(a * inv_t),
-                (None, Some(b)) => Some(b * t),
-                (None, None) => None,
-            },
         }
     }
 }
@@ -102,7 +94,6 @@ impl JsonRegistry<SignalProfile> {
             bitcrush_bits: None,
             dropout_probability: 0.0,
             dropout_duration_ms: (0.0, 0.0),
-            frequency_warble_hz: None,
         }
     }
 }

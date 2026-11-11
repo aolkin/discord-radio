@@ -154,8 +154,7 @@ Sample effect presets are in `examples/audio_profiles/`. The bot loads profiles 
   "clip_threshold": 0.8,
   "bitcrush_bits": null,
   "dropout_probability": 0.1,
-  "dropout_duration_ms": [50.0, 150.0],
-  "frequency_warble_hz": null
+  "dropout_duration_ms": [50.0, 150.0]
 }
 ```
 

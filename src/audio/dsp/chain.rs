@@ -130,6 +130,10 @@ impl RadioEffectChain {
             .store(profile.tremolo_depth, Ordering::Relaxed);
         self.tremolo_lfo
             .set_frequency(self.sample_rate, profile.tremolo_rate);
+        self.tremolo_lfo
+            .set_amplitude_jitter(profile.tremolo_jitter);
+        self.dropout_gen
+            .set_params(profile.dropout_probability, profile.dropout_duration_ms);
         self.clip_pregain
             .store(profile.clip_pregain, Ordering::Relaxed);
         self.clip_threshold

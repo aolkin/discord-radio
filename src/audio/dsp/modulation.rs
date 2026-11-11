@@ -43,6 +43,10 @@ impl LFO {
         self.phase_increment = self.base_phase_increment;
     }
 
+    pub fn set_amplitude_jitter(&mut self, amount: f32) {
+        self.amplitude_jitter_amount = amount as f64;
+    }
+
     pub fn next(&mut self) -> f32 {
         // Apply frequency jitter
         if self.frames_until_jitter == 0 {
@@ -140,6 +144,11 @@ impl DropoutGenerator {
             dropout_frames_remaining: 0,
             rng: StdRng::from_seed(seed),
         }
+    }
+
+    pub fn set_params(&mut self, probability_per_second: f32, duration_range_ms: (f32, f32)) {
+        self.probability_per_second = probability_per_second;
+        self.duration_range_ms = duration_range_ms;
     }
 
     pub fn should_dropout(&mut self) -> bool {
