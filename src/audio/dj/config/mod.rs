@@ -58,7 +58,6 @@ pub struct ChannelStatuses {
     pub entries: Arc<[ChannelStatusEntry]>,
 }
 
-#[field_trait_impl(WeightedPool<PoolEntry>)]
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Pool {
     pub name: String,
@@ -368,10 +367,4 @@ pub fn optional_seconds(seconds: Option<f32>, name: &str) -> anyhow::Result<Opti
             Ok(Duration::from_secs_f32(seconds))
         })
         .transpose()
-}
-
-impl WeightedPool<ConfiguredPool> for LoadedConfig {
-    fn entries(&self) -> &Arc<[ConfiguredPool]> {
-        &self.pools
-    }
 }

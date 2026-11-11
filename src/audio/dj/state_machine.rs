@@ -2,7 +2,7 @@ use crate::audio::dj::announcement::Announcement;
 use crate::audio::dj::config::signal_profiles::SignalProfileEntry;
 use crate::audio::dj::config::{
     AnnouncementEntry, ChannelStatusEntry, ConfiguredPool, DurationRange, EntryPlaybackConfig,
-    LoadedConfig, PoolEntry, SegmentDefaults,
+    LoadedConfig, SegmentDefaults,
 };
 use crate::audio::dj::manager::{
     ADVANCE_RETRY_DELAY, DJCommand, HexMessageRequest, IdleRequest, TrackRequest,
@@ -19,8 +19,7 @@ use crate::state::Data;
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use serenity::model::id::{ChannelId, GuildId};
-use std::collections::hash_map::Entry;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Deref;
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant, SystemTime};
@@ -84,6 +83,8 @@ pub struct DJState {
     pub announcement: TieredStateMachine<AnnouncementEntry, Option<Announcement>>,
     #[serde(default)]
     pub announcement_channels: BTreeSet<ChannelId>,
+    pub pool_selector: WeightedSelector,
+    pub entry_selectors: BTreeMap<String, WeightedSelector>,
 }
 
 impl Default for DJState {
@@ -94,6 +95,8 @@ impl Default for DJState {
             channel_status: TieredStateMachine::new(&ChannelStatusEntry::default()),
             announcement: TieredStateMachine::new(&AnnouncementEntry::default()),
             announcement_channels: BTreeSet::new(),
+            pool_selector: WeightedSelector::default(),
+            entry_selectors: BTreeMap::new(),
         }
     }
 }
@@ -134,8 +137,6 @@ pub struct DJStateMachine {
     guild_id: GuildId,
     bot_state: Data,
     config: watch::Receiver<Arc<LoadedConfig>>,
-    pool_selector: WeightedSelector<ConfiguredPool>,
-    entry_selectors: HashMap<String, WeightedSelector<PoolEntry>>,
     /// An empty status is how Discord clears it.
     applied_channel_status: Option<String>,
 }
@@ -179,8 +180,6 @@ impl DJStateMachine {
             guild_id,
             bot_state,
             config,
-            pool_selector: WeightedSelector::default(),
-            entry_selectors: HashMap::new(),
             applied_channel_status: None,
         };
         state_machine.set_config(&loaded).await;
@@ -379,31 +378,33 @@ impl DJStateMachine {
         pool_name: Option<&str>,
         bot_state: Data,
     ) -> anyhow::Result<Box<dyn Segment>> {
-        let pool = match pool_name {
-            Some(name) => Some(self.pool_named(name)?),
-            None => self.pool_selector.choose().cloned(),
-        };
+        let requested = pool_name.map(|name| self.pool_named(name)).transpose()?;
+        let loaded = self.config.borrow().clone();
+        let mut state = self.state.write().await;
+        let pool = requested.or_else(|| state.pool_selector.choose(&loaded.pools).cloned());
         let Some(pool) = pool else {
             return Ok(Box::new(NoiseSegment::from_entry(
                 &DEFAULT_NOISE_PERIOD,
                 &SegmentDefaults::default(),
             )));
         };
-        let entry = self
+        let entry = state
             .entry_selectors
             .entry(pool.file.name.clone())
-            .or_insert_with(|| pool.file.as_ref().into())
-            .choose()
+            .or_default()
+            .choose(&pool.file.entries)
             .with_context(|| {
                 format!("pool {:?} has no entry with weight above 0", pool.file.name)
             })?;
+        drop(state);
         Ok(entry.segment(&pool.segment_defaults, &bot_state).await)
     }
 
     fn pool_named(&self, name: &str) -> anyhow::Result<ConfiguredPool> {
         if let Some(pool) = self
-            .pool_selector
-            .items()
+            .config
+            .borrow()
+            .pools
             .iter()
             .find(|pool| pool.file.name == name)
         {
@@ -417,19 +418,11 @@ impl DJStateMachine {
         })
     }
 
-    async fn set_config(&mut self, loaded @ LoadedConfig { config, pools }: &LoadedConfig) {
-        self.entry_selectors
-            .retain(|name, _| pools.iter().any(|pool| pool.file.name == *name));
-        for pool in pools.iter() {
-            match self.entry_selectors.entry(pool.file.name.clone()) {
-                Entry::Occupied(mut selector) => selector.get_mut().set_pool(pool.file.as_ref()),
-                Entry::Vacant(slot) => {
-                    slot.insert(pool.file.as_ref().into());
-                }
-            }
-        }
-        self.pool_selector.set_pool(loaded);
+    async fn set_config(&mut self, LoadedConfig { config, pools }: &LoadedConfig) {
         let mut state = self.state.write().await;
+        state
+            .entry_selectors
+            .retain(|name, _| pools.iter().any(|pool| pool.file.name == *name));
         state.signal_profile.set_pool(&config.signal_profiles);
         state.channel_status.set_pool(&config.channel_statuses);
     }
