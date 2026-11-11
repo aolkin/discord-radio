@@ -10,8 +10,6 @@ use std::time::Duration;
 #[field_trait_impl(WeightedPool<SignalProfileEntry>)]
 #[derive(Deserialize, Serialize, Debug, Default)]
 pub struct SignalProfiles {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub history_penalty_multiplier: Option<f32>,
     pub entries: Arc<[SignalProfileEntry]>,
 }
 

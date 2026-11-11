@@ -943,42 +943,6 @@
             </div>
 
             <div class="modal-section">
-                <div class="modal-section-title">General</div>
-                <div class="form-row">
-                    <template x-for="field in djConfigGeneralFields" :key="field.key">
-                        <div class="form-group">
-                            <!-- biome-ignore lint/a11y/noLabelWithoutControl: the input is rendered by a template inside the label -->
-                            <label class="form-label">
-                                <span x-text="field.label"></span>
-                                <template x-if="field.type === 'number'">
-                                    <input
-                                        type="number"
-                                        class="form-input"
-                                        x-model.number="djConfigForm[field.key]"
-                                        :step="field.step"
-                                        :min="field.min"
-                                        :max="field.max"
-                                        :required="!field.optional"
-                                        :placeholder="field.optional ? 'Optional' : ''"
-                                    >
-                                </template>
-                                <template x-if="field.type === 'text'">
-                                    <input
-                                        type="text"
-                                        class="form-input"
-                                        x-model="djConfigForm[field.key]"
-                                        :list="field.profile ? 'dj-config-profile-options' : null"
-                                        :required="!field.optional"
-                                        :placeholder="field.optional ? 'Optional' : ''"
-                                    >
-                                </template>
-                            </label>
-                        </div>
-                    </template>
-                </div>
-            </div>
-
-            <div class="modal-section">
                 <div class="modal-section-title">Pools</div>
                 <template x-for="(reference, referenceIndex) in djConfigForm.pools" :key="referenceIndex">
                     <div class="list-row">
@@ -1105,25 +1069,6 @@
             <template x-for="rotation in djConfigRotations" :key="rotation.key">
                 <div class="modal-section">
                     <div class="modal-section-title" x-text="rotation.label"></div>
-                    <div class="form-row">
-                        <template x-for="field in djConfigRotationFields" :key="field.key">
-                            <div class="form-group">
-                                <!-- biome-ignore lint/a11y/noLabelWithoutControl: the input is rendered inside the label -->
-                                <label class="form-label">
-                                    <span x-text="field.label"></span>
-                                    <input
-                                        type="number"
-                                        class="form-input"
-                                        x-model.number="djConfigForm[rotation.key][field.key]"
-                                        :step="field.step"
-                                        :min="field.min"
-                                        :max="field.max"
-                                        placeholder="Optional"
-                                    >
-                                </label>
-                            </div>
-                        </template>
-                    </div>
                     <template x-for="(row, index) in djConfigForm[rotation.key].entries" :key="index">
                         <div class="list-row">
                             <div class="form-row">

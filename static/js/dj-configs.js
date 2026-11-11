@@ -5,7 +5,6 @@ import {
     convertObject,
     fieldFromServer,
     fieldToServer,
-    historyPenaltyMultiplier,
     seconds,
     segmentDefaultsBlocks,
     segmentDefaultsFromServer,
@@ -24,20 +23,10 @@ export const modals = {
     },
 };
 
-const generalFields = [
-    {
-        ...historyPenaltyMultiplier,
-        key: 'pool_history_penalty_multiplier',
-        label: 'Pool selection history penalty multiplier',
-    },
-];
-
 const poolReferenceFields = [
     { key: 'pool', label: 'Pool', type: 'text' },
     { ...weight, min: 1 },
 ];
-
-const rotationFields = [historyPenaltyMultiplier];
 
 const rotations = [
     {
@@ -64,7 +53,6 @@ function convertRotations(source, convert) {
         rotations.map(({ key, entryFields }) => [
             key,
             {
-                ...convertObject(rotationFields, source[key], convert),
                 entries: source[key].entries.map((row) => convertObject(entryFields, row, convert)),
             },
         ]),
@@ -74,7 +62,6 @@ function convertRotations(source, convert) {
 function toForm(name, config) {
     return {
         name,
-        ...convertObject(generalFields, config, fieldFromServer),
         pools: Object.entries(config.pools).map(([pool, reference]) => ({
             ...convertObject(poolReferenceFields, { pool, ...reference }, fieldFromServer),
             segment_defaults: segmentDefaultsFromServer(reference.segment_defaults),
@@ -85,7 +72,6 @@ function toForm(name, config) {
 
 function toBody(form) {
     return {
-        ...convertObject(generalFields, form, fieldToServer),
         pools: Object.fromEntries(
             form.pools.map((reference) => {
                 const { pool, ...settings } = convertObject(poolReferenceFields, reference, fieldToServer);
@@ -99,9 +85,8 @@ function toBody(form) {
 function blankForm() {
     return {
         name: '',
-        ...blankRow(generalFields),
         pools: [],
-        ...Object.fromEntries(rotations.map(({ key }) => [key, { ...blankRow(rotationFields), entries: [] }])),
+        ...Object.fromEntries(rotations.map(({ key }) => [key, { entries: [] }])),
     };
 }
 
@@ -119,8 +104,6 @@ export function djConfigs() {
     return {
         ...djConfigEditor.state(),
         ...djConfigEditor.methods,
-        djConfigGeneralFields: generalFields,
-        djConfigRotationFields: rotationFields,
         djConfigRotations: rotations,
 
         djConfigPoolOptions(reference) {
