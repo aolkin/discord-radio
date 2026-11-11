@@ -3,6 +3,7 @@ use crate::audio::dj::serde::{ShiftBack, deser_instant, ser_instant};
 use crate::audio::dj::weighted_choice::{Weighted, WeightedPool, WeightedSelector};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::{self, Debug, Formatter};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -86,6 +87,7 @@ pub struct TieredChange<T> {
 pub struct TieredValueState<T> {
     tiered_values: [Option<TimedValue<T>>; 3],
     background_value: TimedValue<T>,
+    background_rotation: WeightedSelector,
 }
 
 impl<T> TieredValueState<T> {
@@ -118,7 +120,7 @@ impl<T> TieredValueState<T> {
 
 pub struct TieredStateMachine<E, V> {
     state: TieredValueState<V>,
-    background_rotation: WeightedSelector<E>,
+    entries: Arc<[E]>,
     last_applied: Option<TieredValue<V>>,
 }
 
@@ -131,6 +133,7 @@ where
         Self::from(TieredValueState {
             tiered_values: [None, None, None],
             background_value: TimedValue::temporary(value, Duration::ZERO),
+            background_rotation: WeightedSelector::default(),
         })
     }
 
@@ -155,7 +158,7 @@ where
     }
 
     pub fn set_pool<P: WeightedPool<E>>(&mut self, pool: &P) {
-        self.background_rotation.set_pool(pool);
+        self.entries = pool.entries().clone();
     }
 
     pub fn shift_back(&mut self, by: Duration) {
@@ -165,10 +168,11 @@ where
     pub fn advance(&mut self) {
         match self.state.controlling().0 {
             Tier::Background => {
-                self.state.background_value = match self.background_rotation.choose() {
-                    Some(entry) => entry.into(),
-                    None => (&E::default()).into(),
-                };
+                self.state.background_value =
+                    match self.state.background_rotation.choose(&self.entries) {
+                        Some(entry) => entry.into(),
+                        None => (&E::default()).into(),
+                    };
             }
             tier => self.state.update(tier, None),
         }
@@ -194,7 +198,7 @@ impl<E: Weighted, V> From<TieredValueState<V>> for TieredStateMachine<E, V> {
     fn from(state: TieredValueState<V>) -> Self {
         Self {
             state,
-            background_rotation: WeightedSelector::default(),
+            entries: Arc::default(),
             last_applied: None,
         }
     }
