@@ -12,6 +12,5 @@
   "clip_threshold": 0.8,
   "bitcrush_bits": null,
   "dropout_probability": 0.15,
-  "dropout_duration_ms": [50.0, 150.0],
-  "frequency_warble_hz": 3.0
+  "dropout_duration_ms": [50.0, 150.0]
 }
