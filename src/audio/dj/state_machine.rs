@@ -2,7 +2,7 @@ use crate::audio::dj::announcement::Announcement;
 use crate::audio::dj::config::signal_profiles::SignalProfileEntry;
 use crate::audio::dj::config::{
     AnnouncementEntry, ChannelStatusEntry, ConfiguredPool, DurationRange, EntryPlaybackConfig,
-    LoadedConfig, SegmentDefaults,
+    LoadedConfig, Order, SegmentDefaults,
 };
 use crate::audio::dj::manager::{
     ADVANCE_RETRY_DELAY, DJCommand, HexMessageRequest, IdleRequest, TrackRequest,
@@ -14,7 +14,7 @@ use crate::audio::dj::segments::{Completed, HexSegment, Segment, TrackSegment};
 use crate::audio::dj::serde::{ShiftBack, deser_instant, ser_instant};
 use crate::audio::dj::signal_profile::SignalProfilePlayback;
 use crate::audio::dj::tiered::{TieredChange, TieredStateMachine, TieredValue, TimedValue};
-use crate::audio::dj::weighted_choice::WeightedSelector;
+use crate::audio::dj::weighted_choice::{EntrySelector, WeightedSelector};
 use crate::state::Data;
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
@@ -84,7 +84,7 @@ pub struct DJState {
     #[serde(default)]
     pub announcement_channels: BTreeSet<ChannelId>,
     pub pool_selector: WeightedSelector,
-    pub entry_selectors: BTreeMap<String, WeightedSelector>,
+    pub entry_selectors: BTreeMap<String, EntrySelector>,
 }
 
 impl Default for DJState {
@@ -388,14 +388,16 @@ impl DJStateMachine {
                 &SegmentDefaults::default(),
             )));
         };
-        let entry = state
+        let selector = state
             .entry_selectors
             .entry(pool.file.name.clone())
-            .or_default()
-            .choose(&pool.file.entries)
-            .with_context(|| {
-                format!("pool {:?} has no entry with weight above 0", pool.file.name)
-            })?;
+            .or_insert_with(|| EntrySelector::new(pool.order));
+        if selector.order() != pool.order {
+            *selector = EntrySelector::new(pool.order);
+        }
+        let entry = selector.choose(&pool.file.entries).with_context(|| {
+            format!("pool {:?} has no entry with weight above 0", pool.file.name)
+        })?;
         drop(state);
         Ok(entry.segment(&pool.segment_defaults, &bot_state).await)
     }
@@ -413,6 +415,7 @@ impl DJStateMachine {
         let file = self.bot_state.dj_config_manager.pools.require(name)?;
         Ok(ConfiguredPool {
             weight: 0,
+            order: Order::default(),
             segment_defaults: file.segment_defaults.clone(),
             file,
         })
