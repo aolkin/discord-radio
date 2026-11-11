@@ -1,4 +1,3 @@
-import { emptyMessage } from './api.js';
 import {
     blankRow,
     blankSegmentDefaults,
@@ -15,14 +14,6 @@ import {
     weight,
 } from './form-fields.js';
 import { registryEditor } from './registry-editor.js';
-
-export const modals = {
-    poolEditor: {
-        flag: 'showPoolEditor',
-        perGuild: false,
-        reset: () => ({ poolEditorMessage: emptyMessage() }),
-    },
-};
 
 const kinds = {
     track: {
@@ -85,6 +76,7 @@ const poolEditor = registryEditor({
     path: '/api/pools',
     prefix: 'pool',
     list: 'pools',
+    kind: 'pools',
     label: 'pool',
     toForm,
     toBody,
@@ -97,6 +89,10 @@ export function pools() {
         ...poolEditor.methods,
         poolNewEntryKind: 'track',
         poolKinds: kinds,
+
+        poolUsers(pool) {
+            return this.djConfigs.filter((config) => this.djConfigPools[config]?.includes(pool));
+        },
 
         poolBlocks() {
             const pool = this.poolForm;

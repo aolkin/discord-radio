@@ -17,6 +17,7 @@ export function connection() {
             this.loadProfiles();
             this.loadPools();
             this.loadDjConfigs();
+            this.initRouter();
             // Update current time every 500ms for smooth progress bars
             setInterval(() => {
                 this.currentTime = Date.now();

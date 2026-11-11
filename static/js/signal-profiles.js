@@ -14,11 +14,6 @@ export const modals = {
             profileMessage: emptyMessage(),
         }),
     },
-    profileEditor: {
-        flag: 'showProfileEditor',
-        perGuild: false,
-        reset: () => ({ profileEditorMessage: emptyMessage() }),
-    },
 };
 
 const profileFields = [
@@ -59,6 +54,7 @@ const profileEditor = registryEditor({
     path: '/api/profiles',
     prefix: 'profile',
     list: 'profiles',
+    kind: 'signal-profiles',
     label: 'signal profile',
     toForm,
     toBody,

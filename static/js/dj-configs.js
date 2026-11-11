@@ -1,4 +1,4 @@
-import { emptyMessage } from './api.js';
+import { apiRequest } from './api.js';
 import {
     blankRow,
     blankSegmentDefaults,
@@ -14,14 +14,6 @@ import {
     weight,
 } from './form-fields.js';
 import { registryEditor } from './registry-editor.js';
-
-export const modals = {
-    djConfigEditor: {
-        flag: 'showDjConfigEditor',
-        perGuild: false,
-        reset: () => ({ djConfigEditorMessage: emptyMessage() }),
-    },
-};
 
 const poolReferenceFields = [
     { key: 'pool', label: 'Pool', type: 'text' },
@@ -94,10 +86,14 @@ const djConfigEditor = registryEditor({
     path: '/api/dj-configs',
     prefix: 'djConfig',
     list: 'djConfigs',
+    kind: 'dj-configs',
     label: 'DJ config',
     toForm,
     toBody,
     blankForm,
+    afterSave() {
+        return this.loadDjConfigPools();
+    },
 });
 
 export function djConfigs() {
@@ -105,6 +101,23 @@ export function djConfigs() {
         ...djConfigEditor.state(),
         ...djConfigEditor.methods,
         djConfigRotations: rotations,
+        djConfigPools: {},
+
+        async loadDjConfigPools() {
+            await this.loadDjConfigs();
+            const entries = await Promise.all(
+                this.djConfigs.map(async (name) => {
+                    try {
+                        const response = await apiRequest(`/api/dj-configs/${encodeURIComponent(name)}`);
+                        return [name, Object.keys((await response.json()).pools)];
+                    } catch (error) {
+                        console.error(`Failed to load DJ config ${name}:`, error);
+                        return [name, []];
+                    }
+                }),
+            );
+            this.djConfigPools = Object.fromEntries(entries);
+        },
 
         djConfigPoolOptions(reference) {
             return this.pools.includes(reference.pool) || reference.pool === ''
