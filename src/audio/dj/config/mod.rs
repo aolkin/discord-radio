@@ -31,8 +31,6 @@ pub struct DJConfig {
     pub pools: BTreeMap<String, PoolConfig>,
     pub signal_profiles: SignalProfiles,
     pub channel_statuses: ChannelStatuses,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pool_history_penalty_multiplier: Option<f32>,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -57,8 +55,6 @@ pub struct LoadedConfig {
 #[field_trait_impl(WeightedPool<ChannelStatusEntry>)]
 #[derive(Deserialize, Serialize, Debug, Default)]
 pub struct ChannelStatuses {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub history_penalty_multiplier: Option<f32>,
     pub entries: Arc<[ChannelStatusEntry]>,
 }
 
@@ -68,8 +64,6 @@ pub struct Pool {
     pub name: String,
     #[serde(default)]
     pub segment_defaults: SegmentDefaults,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub history_penalty_multiplier: Option<f32>,
     pub entries: Arc<[PoolEntry]>,
 }
 
@@ -155,7 +149,6 @@ impl RegistryEntry for Pool {
     fn validate(&self) -> anyhow::Result<()> {
         let defaults = self.segment_defaults.hex_config();
         defaults.validate().context("hex_config")?;
-        ensure_penalty_multiplier(self.history_penalty_multiplier)?;
         if !self.has_weighted_entry() {
             bail!("pool has no entry with weight above 0");
         }
@@ -298,9 +291,6 @@ impl RegistryEntry for DJConfig {
 
     /// Rejects values that would make the DJ panic when it picks them.
     fn validate(&self) -> anyhow::Result<()> {
-        ensure_penalty_multiplier(self.pool_history_penalty_multiplier)?;
-        ensure_penalty_multiplier(self.signal_profiles.history_penalty_multiplier)
-            .context("signal_profiles")?;
         for profile in self.signal_profiles.entries.iter() {
             let context = || format!("signal profile {:?}", profile.signal_profile);
             if let Some(seconds) = profile.fade_duration_seconds {
@@ -308,8 +298,6 @@ impl RegistryEntry for DJConfig {
             }
             profile.duration.validate(context)?;
         }
-        ensure_penalty_multiplier(self.channel_statuses.history_penalty_multiplier)
-            .context("channel_statuses")?;
         for status in self.channel_statuses.entries.iter() {
             status
                 .duration
@@ -363,15 +351,6 @@ impl Default for DurationRange {
     }
 }
 
-fn ensure_penalty_multiplier(multiplier: Option<f32>) -> anyhow::Result<()> {
-    if let Some(multiplier) = multiplier
-        && !(0.0..=1.0).contains(&multiplier)
-    {
-        bail!("history_penalty_multiplier {multiplier} is not between 0 and 1");
-    }
-    Ok(())
-}
-
 pub fn ensure_seconds(seconds: f32, context: impl Fn() -> String) -> anyhow::Result<()> {
     if !(seconds.is_finite() && seconds >= 0.0) {
         bail!(
@@ -394,9 +373,5 @@ pub fn optional_seconds(seconds: Option<f32>, name: &str) -> anyhow::Result<Opti
 impl WeightedPool<ConfiguredPool> for LoadedConfig {
     fn entries(&self) -> &Arc<[ConfiguredPool]> {
         &self.pools
-    }
-
-    fn history_penalty_multiplier(&self) -> Option<f32> {
-        self.config.pool_history_penalty_multiplier
     }
 }

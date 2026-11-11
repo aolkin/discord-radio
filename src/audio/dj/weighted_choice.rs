@@ -18,7 +18,6 @@ pub trait Weighted {
 #[field_trait]
 pub trait WeightedPool<T: Weighted> {
     fn entries(&self) -> &Arc<[T]>;
-    fn history_penalty_multiplier(&self) -> Option<f32>;
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -71,30 +70,27 @@ pub struct WeightedSelector<T> {
     items: Arc<[T]>,
     identities: Box<[Identity]>,
     recent_history: VecDeque<Identity>,
-    penalty_multiplier: f32,
 }
 
 impl<T: Weighted, P: WeightedPool<T>> From<&P> for WeightedSelector<T> {
     fn from(pool: &P) -> Self {
-        Self::new(pool.entries().clone(), pool.history_penalty_multiplier())
+        Self::new(pool.entries().clone())
     }
 }
 
 impl<T: Weighted> Default for WeightedSelector<T> {
     fn default() -> Self {
-        Self::new(Arc::default(), None)
+        Self::new(Arc::default())
     }
 }
 
 impl<T: Weighted> WeightedSelector<T> {
     /// Remembers the last half of the item count in picks, at least 2.
-    /// The penalty multiplier defaults to 1.
-    pub fn new(items: Arc<[T]>, history_penalty_multiplier: Option<f32>) -> Self {
+    pub fn new(items: Arc<[T]>) -> Self {
         Self {
             identities: items.iter().map(Weighted::identity).collect(),
             items,
             recent_history: VecDeque::new(),
-            penalty_multiplier: history_penalty_multiplier.unwrap_or(1.0),
         }
     }
 
@@ -105,7 +101,6 @@ impl<T: Weighted> WeightedSelector<T> {
     pub fn set_pool<P: WeightedPool<T>>(&mut self, pool: &P) {
         self.items = pool.entries().clone();
         self.identities = self.items.iter().map(Weighted::identity).collect();
-        self.penalty_multiplier = pool.history_penalty_multiplier().unwrap_or(1.0);
     }
 
     pub fn choose(&mut self) -> Option<&T> {
@@ -132,10 +127,7 @@ impl<T: Weighted> WeightedSelector<T> {
             .iter()
             .rposition(|&recent| recent == identity)
         {
-            Some(history_idx) => {
-                let recency_factor = 1.0 - (history_idx as f32 / self.recent_history.len() as f32);
-                self.penalty_multiplier * recency_factor + (1.0 - self.penalty_multiplier)
-            }
+            Some(history_idx) => 1.0 - (history_idx as f32 / self.recent_history.len() as f32),
             None => 1.0,
         }
     }

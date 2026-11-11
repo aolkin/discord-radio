@@ -1,6 +1,5 @@
 {
   "name": "noise",
-  "history_penalty_multiplier": 0.5,
   "entries": [
     {
       "signal_profile": "noise_pink",

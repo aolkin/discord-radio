@@ -6,7 +6,6 @@ import {
     entryPlaybackFields,
     fieldFromServer,
     fieldToServer,
-    historyPenaltyMultiplier,
     noisePeriodFields,
     optionalSeconds,
     segmentDefaultsBlocks,
@@ -56,12 +55,9 @@ const kinds = {
     },
 };
 
-const poolFields = [historyPenaltyMultiplier];
-
 function toForm(name, pool) {
     return {
         name,
-        ...convertObject(poolFields, pool, fieldFromServer),
         segment_defaults: segmentDefaultsFromServer(pool.segment_defaults),
         entries: pool.entries.map((entry) => {
             const kind = Object.keys(kinds).find((kindName) => kinds[kindName].identifier in entry);
@@ -72,7 +68,6 @@ function toForm(name, pool) {
 
 function toBody(form) {
     return {
-        ...convertObject(poolFields, form, fieldToServer),
         segment_defaults: segmentDefaultsToServer(form.segment_defaults),
         entries: form.entries.map((entry) => convertObject(kinds[entry.kind].entryFields, entry, fieldToServer)),
     };
@@ -81,7 +76,6 @@ function toBody(form) {
 function blankForm() {
     return {
         name: '',
-        ...blankRow(poolFields),
         segment_defaults: blankSegmentDefaults(),
         entries: [],
     };
@@ -107,7 +101,6 @@ export function pools() {
         poolBlocks() {
             const pool = this.poolForm;
             return [
-                { row: pool, fields: poolFields },
                 ...segmentDefaultsBlocks(pool.segment_defaults),
                 ...pool.entries.map((entry, index) => ({
                     row: entry,

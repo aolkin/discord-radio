@@ -19,16 +19,6 @@ export const entryPlaybackFields = [
     optionalText('announcement', 'Announcement'),
 ];
 
-export const historyPenaltyMultiplier = {
-    key: 'history_penalty_multiplier',
-    label: 'History penalty multiplier',
-    type: 'number',
-    step: 'any',
-    min: 0,
-    max: 1,
-    optional: true,
-};
-
 export function fieldFromServer(field, value) {
     if (field.type === 'strings') {
         return [...(value ?? [])];
