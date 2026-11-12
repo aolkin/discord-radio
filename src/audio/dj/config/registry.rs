@@ -114,6 +114,7 @@ impl DJConfigRegistry {
                 let file = self.pools.require(pool_name)?;
                 Ok(ConfiguredPool {
                     weight: pool_config.weight.get(),
+                    playback: pool_config.playback,
                     order: pool_config.order,
                     segment_defaults: pool_config.segment_defaults.or(&file.segment_defaults),
                     file,
