@@ -24,6 +24,7 @@ pub struct GuildState {
     pub in_voice: bool,
     pub tracks: Vec<TrackSnapshot>,
     pub dj_state: DJStateInfo,
+    pub dj_config: Option<String>,
     pub audio_profile: AudioProfileInfo,
     pub channel_status: ChannelStatusInfo,
     pub announcement_channels: Vec<AnnouncementChannelInfo>,
@@ -97,6 +98,7 @@ impl BotSnapshot {
                 in_voice,
                 tracks,
                 dj_state,
+                dj_config: guild.dj_manager.config_name(),
                 audio_profile,
                 channel_status: ChannelStatusInfo {
                     status: match channel_status.value {

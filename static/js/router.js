@@ -10,7 +10,7 @@ function parseRoute(hash) {
     const [view, kind, ...rest] = hash.replace(/^#\/?/, '').split('/');
     const name = rest.join('/');
     if (view !== 'edit') {
-        return { view: 'live', kind: null, name: null };
+        return { view: 'live', kind: null, name: /^\d+$/.test(kind ?? '') ? kind : null };
     }
     if (Object.hasOwn(editors, kind) && /^([\w-]+|\+new)$/.test(name)) {
         return { view, kind, name };
@@ -22,7 +22,10 @@ function parseRoute(hash) {
 }
 
 function routeHash({ view, kind, name }) {
-    return kind ? `#/${view}/${kind}/${name}` : `#/${view}`;
+    if (kind) {
+        return `#/${view}/${kind}/${name}`;
+    }
+    return name ? `#/${view}/${name}` : `#/${view}`;
 }
 
 export function router() {
@@ -44,6 +47,9 @@ export function router() {
             }
 
             if (this.route.view !== 'edit') {
+                if (this.route.name) {
+                    this.$nextTick(() => document.getElementById(`guild-${this.route.name}`)?.scrollIntoView());
+                }
                 return;
             }
             if (previous.view !== 'edit') {
@@ -67,6 +73,10 @@ export function router() {
 
         openItem(kind, name) {
             this.navigate(routeHash({ view: 'edit', kind, name }));
+        },
+
+        openGuild(guildId) {
+            this.navigate(routeHash({ view: 'live', kind: null, name: guildId }));
         },
 
         isSelected(kind, name) {

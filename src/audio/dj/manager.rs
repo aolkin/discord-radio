@@ -153,6 +153,7 @@ pub struct DJManager {
 }
 
 struct Running {
+    config_name: String,
     task_handle: JoinHandle<()>,
     command_tx: mpsc::Sender<DJCommand>,
 }
@@ -174,6 +175,11 @@ impl DJManager {
 
     pub fn state(&self) -> Arc<RwLock<DJState>> {
         self.state.clone()
+    }
+
+    pub fn config_name(&self) -> Option<String> {
+        let running = self.running.try_read().ok()?;
+        running.as_ref().map(|running| running.config_name.clone())
     }
 
     /// Sends `command` to the running task, returning false when none is running.
@@ -220,6 +226,7 @@ impl DJManager {
             .instrument(span),
         );
         *running = Some(Running {
+            config_name,
             task_handle,
             command_tx,
         });
@@ -232,6 +239,7 @@ impl DJManager {
         let Some(Running {
             mut task_handle,
             command_tx,
+            ..
         }) = running.take()
         else {
             return;

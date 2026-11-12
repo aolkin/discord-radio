@@ -5,6 +5,7 @@
       "in_voice": true,
       "tracks": [],
       "dj_state": { "state_type": "PlayingHexMessage", "details": "once upon a time (3.5s / 12.0s)" },
+      "dj_config": "default",
       "audio_profile": { "name": "tuning", "expected_name": "tuning", "transitioning": false, "source": "background" },
       "channel_status": { "status": "On air", "source": "background" },
       "announcement_channels": [
