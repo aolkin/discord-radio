@@ -14,7 +14,7 @@ use crate::audio::dj::segments::{Completed, HexSegment, Segment, TrackSegment};
 use crate::audio::dj::serde::{ShiftBack, deser_instant, ser_instant};
 use crate::audio::dj::signal_profile::SignalProfilePlayback;
 use crate::audio::dj::tiered::{TieredChange, TieredStateMachine, TieredValue, TimedValue};
-use crate::audio::dj::weighted_choice::{EntrySelector, WeightedSelector};
+use crate::audio::dj::weighted_choice::WeightedSelector;
 use crate::state::Data;
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
@@ -84,7 +84,7 @@ pub struct DJState {
     #[serde(default)]
     pub announcement_channels: BTreeSet<ChannelId>,
     pub pool_selector: WeightedSelector,
-    pub entry_selectors: BTreeMap<String, EntrySelector>,
+    pub entry_selectors: BTreeMap<String, WeightedSelector>,
 }
 
 impl Default for DJState {
@@ -388,15 +388,11 @@ impl DJStateMachine {
                 &SegmentDefaults::default(),
             )));
         };
-        let mut selector = state
+        let entry = state
             .entry_selectors
-            .remove(&pool.file.name)
-            .filter(|selector| selector.order() == pool.order)
-            .unwrap_or_else(|| EntrySelector::new(pool.order));
-        let entry = selector.choose(&pool.file.entries);
-        state
-            .entry_selectors
-            .insert(pool.file.name.clone(), selector);
+            .entry(pool.file.name.clone())
+            .or_default()
+            .choose_ordered(pool.order, &pool.file.entries);
         drop(state);
         let entry = entry.with_context(|| {
             format!("pool {:?} has no entry with weight above 0", pool.file.name)

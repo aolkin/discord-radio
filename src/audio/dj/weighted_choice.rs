@@ -68,18 +68,32 @@ fn choose_index(weights: &[f32]) -> Option<usize> {
     Some(idx)
 }
 
-/// A weighted random selector with history-based penalty to avoid repetition
+/// Both orders share one history, so switching order keeps the place.
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct WeightedSelector {
-    recent_history: VecDeque<Identity>,
+    recent_history: VecDeque<Played>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Played {
+    identity: Identity,
+    index: usize,
 }
 
 impl WeightedSelector {
-    /// Remembers the last half of the item count in picks, at least 2.
+    pub fn choose_ordered<'a, T: Weighted>(
+        &mut self,
+        order: Order,
+        items: &'a [T],
+    ) -> Option<&'a T> {
+        match order {
+            Order::Shuffle => self.choose(items),
+            Order::Sequential => self.choose_sequential(items),
+        }
+    }
+
     pub fn choose<'a, T: Weighted>(&mut self, items: &'a [T]) -> Option<&'a T> {
-        let history_size = (items.len() / 2).max(2);
-        let excess = self.recent_history.len().saturating_sub(history_size);
-        self.recent_history.drain(..excess);
+        self.trim(items.len());
 
         let identities: Vec<Identity> = items.iter().map(Weighted::identity).collect();
         let effective_weights: Vec<f32> = items
@@ -88,41 +102,21 @@ impl WeightedSelector {
             .map(|(item, &identity)| item.weight() as f32 * self.penalty(identity))
             .collect();
 
-        let idx = choose_index(&effective_weights)?;
-        self.recent_history.push_back(identities[idx]);
-        Some(&items[idx])
+        let index = choose_index(&effective_weights)?;
+        self.recent_history.push_back(Played {
+            identity: identities[index],
+            index,
+        });
+        Some(&items[index])
     }
 
-    fn penalty(&self, identity: Identity) -> f32 {
-        match self
-            .recent_history
-            .iter()
-            .rposition(|&recent| recent == identity)
-        {
-            Some(history_idx) => 1.0 - (history_idx as f32 / self.recent_history.len() as f32),
-            None => 1.0,
-        }
-    }
-}
-
-/// Plays items in order, wrapping after the last, and ignores weights.
-#[derive(Debug, Default, Serialize, Deserialize)]
-pub struct Sequential {
-    last: Option<LastPlayed>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct LastPlayed {
-    identity: Identity,
-    index: usize,
-}
-
-impl Sequential {
-    pub fn choose<'a, T: Weighted>(&mut self, items: &'a [T]) -> Option<&'a T> {
+    pub fn choose_sequential<'a, T: Weighted>(&mut self, items: &'a [T]) -> Option<&'a T> {
         if items.is_empty() {
             return None;
         }
-        let last_index = self.last.as_ref().and_then(|last| {
+        self.trim(items.len());
+
+        let last_index = self.recent_history.back().and_then(|last| {
             if items.get(last.index).map(Weighted::identity) == Some(last.identity) {
                 Some(last.index)
             } else {
@@ -132,40 +126,27 @@ impl Sequential {
             }
         });
         let index = last_index.map_or(0, |index| (index + 1) % items.len());
-        self.last = Some(LastPlayed {
+        self.recent_history.push_back(Played {
             identity: items[index].identity(),
             index,
         });
         Some(&items[index])
     }
-}
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
-pub enum EntrySelector {
-    Shuffle(WeightedSelector),
-    Sequential(Sequential),
-}
-
-impl EntrySelector {
-    pub fn new(order: Order) -> Self {
-        match order {
-            Order::Shuffle => Self::Shuffle(WeightedSelector::default()),
-            Order::Sequential => Self::Sequential(Sequential::default()),
-        }
+    fn trim(&mut self, item_count: usize) {
+        let history_size = (item_count / 2).max(2);
+        let excess = self.recent_history.len().saturating_sub(history_size);
+        self.recent_history.drain(..excess);
     }
 
-    pub fn order(&self) -> Order {
-        match self {
-            Self::Shuffle(_) => Order::Shuffle,
-            Self::Sequential(_) => Order::Sequential,
-        }
-    }
-
-    pub fn choose<'a, T: Weighted>(&mut self, items: &'a [T]) -> Option<&'a T> {
-        match self {
-            Self::Shuffle(selector) => selector.choose(items),
-            Self::Sequential(selector) => selector.choose(items),
+    fn penalty(&self, identity: Identity) -> f32 {
+        match self
+            .recent_history
+            .iter()
+            .rposition(|recent| recent.identity == identity)
+        {
+            Some(history_idx) => 1.0 - (history_idx as f32 / self.recent_history.len() as f32),
+            None => 1.0,
         }
     }
 }
