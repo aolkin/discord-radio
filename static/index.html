@@ -156,7 +156,12 @@
 
                     <div class="section">
                         <div class="section-title">Audio Files</div>
-                        <button type="button" class="btn btn-secondary tree-item" @click="openFileBrowser()">
+                        <button
+                            type="button"
+                            class="btn tree-item"
+                            :class="route.kind === 'files' ? 'btn-primary' : 'btn-secondary'"
+                            @click="openItem('files', 'tracks')"
+                        >
                             Browse Audio Files
                         </button>
                     </div>
@@ -698,6 +703,16 @@
                                 </div>
                             </div>
                         </form>
+                    </section>
+                    <section class="card" x-show="route.kind === 'files'">
+                        <!-- biome-ignore lint/a11y/useHeadingContent: the heading text comes from x-text -->
+                        <h2 class="card-title" x-text="fileBrowserKind().noun + 's'"></h2>
+                        <div
+                            x-show="fileBrowser.message.text"
+                            :class="fileBrowser.message.type === 'error' ? 'error-message' : 'success-message'"
+                            x-text="fileBrowser.message.text"
+                        ></div>
+                        <div x-include="#file-browser-list"></div>
                     </section>
                 </div>
             </div>
@@ -1473,19 +1488,13 @@
             </div>
         </template>
 
-        <template
-            x-modal
-            data-modal="fileBrowser"
-            data-message="fileBrowser.message"
-            data-overlay-class="file-browser-overlay"
-            data-title-expression="fileBrowser.mode === 'file' ? 'Select ' + fileBrowserKind().noun : fileBrowser.mode === 'folder' ? 'Select Folder' : fileBrowserKind().noun + 's'"
-        >
+        <template id="file-browser-list">
             <div class="file-browser-crumbs">
                 <button
                     type="button"
                     class="btn btn-secondary"
                     :disabled="fileBrowserCrumbs().length < 2"
-                    @click="loadFileBrowser(fileBrowserCrumbs().at(-2).prefix)"
+                    @click="browseFileBrowser(fileBrowserCrumbs().at(-2).prefix)"
                 >
                     &uarr; Up
                 </button>
@@ -1495,7 +1504,7 @@
                         <button
                             type="button"
                             class="btn btn-secondary"
-                            @click="loadFileBrowser(crumb.prefix)"
+                            @click="browseFileBrowser(crumb.prefix)"
                             x-text="crumb.name"
                         ></button>
                     </span>
@@ -1510,13 +1519,13 @@
                         <button
                             type="button"
                             class="btn btn-secondary"
-                            @click="loadFileBrowser(folder)"
+                            @click="browseFileBrowser(folder)"
                             x-text="'📁 ' + folder.slice(fileBrowser.prefix.length)"
                         ></button>
                         <button
                             type="button"
                             class="btn btn-primary"
-                            x-show="fileBrowser.mode === 'folder'"
+                            x-show="fileBrowser.open && fileBrowser.mode === 'folder'"
                             @click="selectFileBrowserEntry(folder)"
                         >
                             Select
@@ -1535,7 +1544,7 @@
                         <button
                             type="button"
                             class="btn btn-primary"
-                            x-show="fileBrowser.mode === 'file'"
+                            x-show="fileBrowser.open && fileBrowser.mode === 'file'"
                             @click="selectFileBrowserEntry(file.key)"
                         >
                             Select
@@ -1592,6 +1601,16 @@
                     <div class="error-message" x-show="upload.status === 'error'" x-text="upload.detail"></div>
                 </div>
             </template>
+        </template>
+
+        <template
+            x-modal
+            data-modal="fileBrowser"
+            data-message="fileBrowser.message"
+            data-overlay-class="file-browser-overlay"
+            data-title-expression="fileBrowser.mode === 'file' ? 'Select ' + fileBrowserKind().noun : 'Select Folder'"
+        >
+            <div x-include="#file-browser-list"></div>
 
             <div class="button-group" x-show="fileBrowser.mode === 'folder'">
                 <button type="button" class="btn btn-primary" @click="selectFileBrowserEntry(fileBrowser.prefix)">
