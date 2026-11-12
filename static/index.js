@@ -12,6 +12,7 @@ import { router } from './js/router.js';
 import { actionMethods } from './js/run-action.js';
 import { signalProfiles, modals as signalProfilesModals } from './js/signal-profiles.js';
 import { tracks, modals as tracksModals } from './js/tracks.js';
+import { weightSliders } from './js/weights.js';
 
 Object.assign(
     modals,
@@ -32,6 +33,7 @@ function botPortal() {
         ...tracks(),
         ...signalProfiles(),
         ...pools(),
+        ...weightSliders(),
         ...djConfigs(),
         ...drafts(),
         ...fileBrowser(),

@@ -895,23 +895,55 @@
                                                     </td>
                                                     <td class="pool-grid-name" x-text="poolEntryName(entry)"></td>
                                                     <td>
-                                                        <input
-                                                            type="number"
-                                                            class="form-input"
-                                                            aria-label="Weight"
-                                                            x-model.number="entry.weight"
-                                                            step="1"
-                                                            min="0"
-                                                            required
-                                                            :aria-invalid="fieldInvalid(poolWeightField, entry.weight)"
-                                                        >
+                                                        <div class="weight-control">
+                                                            <input
+                                                                type="number"
+                                                                class="form-input"
+                                                                aria-label="Weight"
+                                                                x-model.number="entry.weight"
+                                                                step="1"
+                                                                min="0"
+                                                                required
+                                                                :aria-invalid="fieldInvalid(poolWeightField, entry.weight)"
+                                                            >
+                                                            <input
+                                                                type="range"
+                                                                min="0"
+                                                                max="100"
+                                                                step="0.1"
+                                                                aria-label="Share of picks"
+                                                                :value="weightShare(poolForm.entries, index)"
+                                                                :disabled="weightMode(poolForm.entries, index) === 'pin'"
+                                                                @input="slideWeight(poolForm.entries, index, $event)"
+                                                            >
+                                                            <div class="weight-modes">
+                                                                <button
+                                                                    type="button"
+                                                                    class="btn"
+                                                                    :class="weightMode(poolForm.entries, index) === 'pin' ? 'btn-primary' : 'btn-secondary'"
+                                                                    :aria-pressed="weightMode(poolForm.entries, index) === 'pin'"
+                                                                    @click="toggleWeightMode(poolForm.entries, index, 'pin')"
+                                                                >
+                                                                    Pin
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    class="btn"
+                                                                    :class="weightMode(poolForm.entries, index) === 'alone' ? 'btn-primary' : 'btn-secondary'"
+                                                                    :aria-pressed="weightMode(poolForm.entries, index) === 'alone'"
+                                                                    @click="toggleWeightMode(poolForm.entries, index, 'alone')"
+                                                                >
+                                                                    Alone
+                                                                </button>
+                                                            </div>
+                                                        </div>
                                                         <span
                                                             class="field-was"
                                                             x-show="isChanged('pools', ['entries', index, 'weight'])"
                                                             x-text="'was ' + wasValue('pools', ['entries', index, 'weight'])"
                                                         ></span>
                                                     </td>
-                                                    <td x-text="poolShare(entry)"></td>
+                                                    <td x-text="weightShareText(poolForm.entries, index)"></td>
                                                 </tr>
                                             </tbody>
                                         </template>

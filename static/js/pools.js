@@ -143,20 +143,6 @@ export function pools() {
             return value === '' || this.profiles.includes(value) ? this.profiles : [...this.profiles, value];
         },
 
-        poolTotalWeight() {
-            return this.poolForm.entries.reduce(
-                (total, entry) => total + (typeof entry.weight === 'number' ? entry.weight : 0),
-                0,
-            );
-        },
-
-        poolShare(entry) {
-            const total = this.poolTotalWeight();
-            return total > 0 && typeof entry.weight === 'number'
-                ? `${((entry.weight / total) * 100).toFixed(1)}%`
-                : '0%';
-        },
-
         poolEntryName(entry) {
             if (entry.kind === 'noise') {
                 return `Noise ${entry.min_duration_seconds}-${entry.max_duration_seconds}s`;
