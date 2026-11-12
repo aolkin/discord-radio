@@ -72,6 +72,25 @@ function blankForm() {
     };
 }
 
+function blocks(form) {
+    return [
+        ...segmentDefaultsBlocks(form.segment_defaults, ['segment_defaults']),
+        ...form.entries.map((entry, index) => ({
+            row: entry,
+            fields: kinds[entry.kind].entryFields,
+            label: `${kinds[entry.kind].label} Entry`,
+            path: ['entries', index],
+            index,
+        })),
+    ];
+}
+
+function formErrors(form) {
+    return form.entries.some((entry) => typeof entry.weight === 'number' && entry.weight > 0)
+        ? []
+        : ['A pool needs at least one entry with weight above 0'];
+}
+
 const poolEditor = registryEditor({
     path: '/api/pools',
     prefix: 'pool',
@@ -81,6 +100,8 @@ const poolEditor = registryEditor({
     toForm,
     toBody,
     blankForm,
+    blocks,
+    formErrors,
 });
 
 export function pools() {
@@ -95,16 +116,7 @@ export function pools() {
         },
 
         poolBlocks() {
-            const pool = this.poolForm;
-            return [
-                ...segmentDefaultsBlocks(pool.segment_defaults),
-                ...pool.entries.map((entry, index) => ({
-                    row: entry,
-                    fields: kinds[entry.kind].entryFields,
-                    label: `${kinds[entry.kind].label} Entry`,
-                    index,
-                })),
-            ];
+            return blocks(this.poolForm);
         },
 
         togglePoolHexConfig() {

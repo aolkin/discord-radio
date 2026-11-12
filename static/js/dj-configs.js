@@ -15,10 +15,9 @@ import {
 } from './form-fields.js';
 import { registryEditor } from './registry-editor.js';
 
-const poolReferenceFields = [
-    { key: 'pool', label: 'Pool', type: 'text' },
-    { ...weight, min: 1 },
-];
+const poolWeight = { ...weight, min: 1 };
+
+const poolReferenceFields = [{ key: 'pool', label: 'Pool', type: 'text' }, poolWeight];
 
 const rotations = [
     {
@@ -82,6 +81,22 @@ function blankForm() {
     };
 }
 
+function referenceBlocks(reference, index) {
+    return segmentDefaultsBlocks(reference.segment_defaults, ['pools', index, 'segment_defaults']);
+}
+
+function blocks(form) {
+    return [
+        ...form.pools.flatMap((reference, index) => [
+            { row: reference, fields: poolReferenceFields, path: ['pools', index] },
+            ...referenceBlocks(reference, index),
+        ]),
+        ...rotations.flatMap(({ key, entryFields }) =>
+            form[key].entries.map((row, index) => ({ row, fields: entryFields, path: [key, 'entries', index] })),
+        ),
+    ];
+}
+
 const djConfigEditor = registryEditor({
     path: '/api/dj-configs',
     prefix: 'djConfig',
@@ -91,6 +106,7 @@ const djConfigEditor = registryEditor({
     toForm,
     toBody,
     blankForm,
+    blocks,
     afterSave() {
         return this.loadDjConfigPools();
     },
@@ -101,6 +117,7 @@ export function djConfigs() {
         ...djConfigEditor.state(),
         ...djConfigEditor.methods,
         djConfigRotations: rotations,
+        djConfigWeightField: poolWeight,
         djConfigPools: {},
 
         async loadDjConfigPools() {
@@ -133,8 +150,8 @@ export function djConfigs() {
             });
         },
 
-        djConfigReferenceBlocks(reference) {
-            return segmentDefaultsBlocks(reference.segment_defaults);
+        djConfigReferenceBlocks(reference, index) {
+            return referenceBlocks(reference, index);
         },
 
         toggleDjConfigReferenceHexConfig(reference) {

@@ -7,6 +7,7 @@ import { djConfigs } from './js/dj-configs.js';
 import { fileBrowser, modals as fileBrowserModals } from './js/file-browser.js';
 import { modalMethods, modals } from './js/modal.js';
 import { pools } from './js/pools.js';
+import { drafts } from './js/registry-editor.js';
 import { router } from './js/router.js';
 import { actionMethods } from './js/run-action.js';
 import { signalProfiles, modals as signalProfilesModals } from './js/signal-profiles.js';
@@ -32,6 +33,7 @@ function botPortal() {
         ...signalProfiles(),
         ...pools(),
         ...djConfigs(),
+        ...drafts(),
         ...fileBrowser(),
         ...botProfile(),
         ...activity(),

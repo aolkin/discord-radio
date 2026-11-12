@@ -39,6 +39,25 @@ export function fieldToServer(field, value) {
     return field.type === 'bool' ? value === 'true' : value;
 }
 
+export function fieldInvalid(field, value) {
+    if (field.type === 'strings') {
+        return value.some((item) => item === '');
+    }
+    if (value === '') {
+        return !field.optional;
+    }
+    if (field.type !== 'number') {
+        return false;
+    }
+    return (
+        typeof value !== 'number' ||
+        Number.isNaN(value) ||
+        (field.step === 1 && !Number.isInteger(value)) ||
+        (field.min !== undefined && value < field.min) ||
+        (field.max !== undefined && value > field.max)
+    );
+}
+
 export function convertObject(fields, source, convert) {
     return Object.fromEntries(fields.map((field) => [field.key, convert(field, source[field.key])]));
 }
@@ -90,11 +109,18 @@ export function blankSegmentDefaults() {
     return { ...blankRow(segmentDefaultsFields), hex_config: null };
 }
 
-export function segmentDefaultsBlocks(segmentDefaults) {
+export function segmentDefaultsBlocks(segmentDefaults, path) {
     return [
-        { row: segmentDefaults, fields: segmentDefaultsFields, label: 'Segment Defaults' },
+        { row: segmentDefaults, fields: segmentDefaultsFields, label: 'Segment Defaults', path },
         ...(segmentDefaults.hex_config
-            ? [{ row: segmentDefaults.hex_config, fields: hexConfigFields, label: 'Hex Config' }]
+            ? [
+                  {
+                      row: segmentDefaults.hex_config,
+                      fields: hexConfigFields,
+                      label: 'Hex Config',
+                      path: [...path, 'hex_config'],
+                  },
+              ]
             : []),
     ];
 }

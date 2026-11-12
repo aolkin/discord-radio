@@ -66,8 +66,14 @@
                                     class="btn tree-item"
                                     :class="isSelected('dj-configs', config) ? 'btn-primary' : 'btn-secondary'"
                                     @click="openItem('dj-configs', config)"
-                                    x-text="config"
-                                ></button>
+                                >
+                                    <span x-text="config"></span>
+                                    <span
+                                        class="draft-dot"
+                                        title="Unsaved changes"
+                                        x-show="changeCount('dj-configs', config) > 0"
+                                    ></span>
+                                </button>
                                 <div class="tree-children">
                                     <template x-for="pool in djConfigPools[config] ?? []" :key="pool">
                                         <button
@@ -75,8 +81,14 @@
                                             class="btn tree-item"
                                             :class="isSelected('pools', pool) ? 'btn-primary' : 'btn-secondary'"
                                             @click="openItem('pools', pool)"
-                                            x-text="pool"
-                                        ></button>
+                                        >
+                                            <span x-text="pool"></span>
+                                            <span
+                                                class="draft-dot"
+                                                title="Unsaved changes"
+                                                x-show="changeCount('pools', pool) > 0"
+                                            ></span>
+                                        </button>
                                     </template>
                                 </div>
                             </div>
@@ -101,8 +113,14 @@
                                 class="btn tree-item"
                                 :class="isSelected('pools', pool) ? 'btn-primary' : 'btn-secondary'"
                                 @click="openItem('pools', pool)"
-                                x-text="pool"
-                            ></button>
+                            >
+                                <span x-text="pool"></span>
+                                <span
+                                    class="draft-dot"
+                                    title="Unsaved changes"
+                                    x-show="changeCount('pools', pool) > 0"
+                                ></span>
+                            </button>
                         </template>
                         <div class="empty-state" x-show="pools.length === 0">No pools</div>
                     </div>
@@ -124,8 +142,14 @@
                                 class="btn tree-item"
                                 :class="isSelected('signal-profiles', profile) ? 'btn-primary' : 'btn-secondary'"
                                 @click="openItem('signal-profiles', profile)"
-                                x-text="profile"
-                            ></button>
+                            >
+                                <span x-text="profile"></span>
+                                <span
+                                    class="draft-dot"
+                                    title="Unsaved changes"
+                                    x-show="changeCount('signal-profiles', profile) > 0"
+                                ></span>
+                            </button>
                         </template>
                         <div class="empty-state" x-show="profiles.length === 0">No signal profiles</div>
                     </div>
@@ -140,19 +164,83 @@
 
                 <div>
                     <div class="card empty-state" x-show="!route.kind">Select an item to edit</div>
+                    <template x-if="route.kind">
+                        <section class="card draft-bar" x-show="!editorStatus(route.kind).loading">
+                            <div
+                                x-show="editorStatus(route.kind).message.text"
+                                :class="editorStatus(route.kind).message.type === 'error' ? 'error-message' : 'success-message'"
+                                x-text="editorStatus(route.kind).message.text"
+                            ></div>
+                            <template x-for="error in draftErrors(route.kind)" :key="error">
+                                <div class="error-message" x-text="error"></div>
+                            </template>
+                            <div class="draft-bar-row">
+                                <span
+                                    class="draft-count"
+                                    x-text="changeCount(route.kind, route.name) === 1 ? '1 unsaved change' : changeCount(route.kind, route.name) + ' unsaved changes'"
+                                ></span>
+                                <div class="row-gap-10" x-show="!draftReviewing">
+                                    <button
+                                        type="button"
+                                        class="btn btn-secondary"
+                                        :disabled="changeCount(route.kind, route.name) === 0"
+                                        @click="discardDraft(route.kind)"
+                                    >
+                                        Discard draft
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="btn btn-primary"
+                                        :disabled="changeCount(route.kind, route.name) === 0 || draftErrors(route.kind).length > 0"
+                                        @click="reviewDraft(route.kind)"
+                                    >
+                                        Review changes
+                                    </button>
+                                </div>
+                                <div class="row-gap-10" x-show="draftReviewing">
+                                    <button type="button" class="btn btn-secondary" @click="draftReviewing = false">
+                                        Back
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="btn btn-primary"
+                                        :disabled="editorStatus(route.kind).saving"
+                                        @click="applyDraft(route.kind)"
+                                        x-text="editorStatus(route.kind).saving ? 'Applying...' : 'Apply'"
+                                    ></button>
+                                </div>
+                            </div>
+                            <table class="review-table" x-show="draftReviewing">
+                                <thead>
+                                    <tr>
+                                        <th>Field</th>
+                                        <th>Was</th>
+                                        <th>Now</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template x-for="change in reviewList(route.kind)" :key="change.label">
+                                        <tr>
+                                            <td x-text="change.label"></td>
+                                            <td x-text="change.was"></td>
+                                            <td x-text="change.now"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </section>
+                    </template>
                     <section class="card" x-show="route.kind === 'signal-profiles'">
                         <!-- biome-ignore lint/a11y/useHeadingContent: the heading text comes from x-text -->
                         <h2
                             class="card-title"
                             x-text="profileEditorIsNew ? 'New Signal Profile' : 'Edit Signal Profile'"
                         ></h2>
-                        <div
-                            x-show="profileEditorMessage.text"
-                            :class="profileEditorMessage.type === 'error' ? 'error-message' : 'success-message'"
-                            x-text="profileEditorMessage.text"
-                        ></div>
                         <div class="loading" x-show="profileEditorLoading">Loading...</div>
-                        <form x-show="!profileEditorLoading" @submit.prevent="saveProfile()">
+                        <form
+                            x-show="!profileEditorLoading && !draftReviewing"
+                            @submit.prevent="reviewDraft('signal-profiles')"
+                        >
                             <div class="form-group">
                                 <label class="form-label" for="profile-editor-name">Name</label>
                                 <input
@@ -161,66 +249,40 @@
                                     class="form-input"
                                     x-model="profileForm.name"
                                     :readonly="!profileEditorIsNew"
+                                    :aria-invalid="nameInvalid('signal-profiles')"
                                     required
                                     pattern="[A-Za-z0-9_\-]+"
                                     title="Letters, digits, - and _ only"
                                 >
                             </div>
                             <div class="form-row">
-                                <template x-for="field in profileFields" :key="field.key">
+                                <template x-for="item in profileFieldRows()" :key="item.path.join('-')">
                                     <div class="form-group">
                                         <!-- biome-ignore lint/a11y/noLabelWithoutControl: the label text comes from x-text -->
                                         <label
                                             class="form-label"
-                                            :for="'profile-field-' + field.key"
-                                            x-text="field.label"
+                                            :for="'profile-field-' + item.path.join('-')"
+                                            x-text="item.field.label"
                                         ></label>
                                         <input
-                                            :id="'profile-field-' + field.key"
+                                            :id="'profile-field-' + item.path.join('-')"
                                             type="number"
                                             class="form-input"
-                                            x-model.number="profileForm[field.key]"
-                                            :step="field.step"
-                                            :min="field.min"
-                                            :max="field.max"
-                                            :required="!field.optional"
-                                            :placeholder="field.optional ? 'Off' : ''"
+                                            x-model.number="item.row[item.field.key]"
+                                            :step="item.field.step"
+                                            :min="item.field.min"
+                                            :max="item.field.max"
+                                            :required="!item.field.optional"
+                                            :placeholder="item.field.optional ? 'Off' : ''"
+                                            :aria-invalid="fieldInvalid(item.field, item.row[item.field.key])"
                                         >
+                                        <span
+                                            class="field-was"
+                                            x-show="isChanged('signal-profiles', item.path)"
+                                            x-text="'was ' + wasValue('signal-profiles', item.path)"
+                                        ></span>
                                     </div>
                                 </template>
-                                <div class="form-group">
-                                    <label class="form-label" for="profile-editor-dropout-min"
-                                        >Dropout Min Duration (ms)</label
-                                    >
-                                    <input
-                                        id="profile-editor-dropout-min"
-                                        type="number"
-                                        class="form-input"
-                                        x-model.number="profileForm.dropout_duration_ms[0]"
-                                        step="any"
-                                        min="0"
-                                        required
-                                    >
-                                </div>
-                                <div class="form-group">
-                                    <label class="form-label" for="profile-editor-dropout-max"
-                                        >Dropout Max Duration (ms)</label
-                                    >
-                                    <input
-                                        id="profile-editor-dropout-max"
-                                        type="number"
-                                        class="form-input"
-                                        x-model.number="profileForm.dropout_duration_ms[1]"
-                                        step="any"
-                                        min="0"
-                                        required
-                                    >
-                                </div>
-                            </div>
-                            <div class="button-group">
-                                <button type="submit" class="btn btn-primary" :disabled="profileEditorSaving">
-                                    <span x-text="profileEditorSaving ? 'Saving...' : 'Save Profile'"></span>
-                                </button>
                             </div>
                         </form>
                     </section>
@@ -228,13 +290,11 @@
                     <section class="card" x-show="route.kind === 'dj-configs'">
                         <!-- biome-ignore lint/a11y/useHeadingContent: the heading text comes from x-text -->
                         <h2 class="card-title" x-text="djConfigEditorIsNew ? 'New DJ Config' : 'Edit DJ Config'"></h2>
-                        <div
-                            x-show="djConfigEditorMessage.text"
-                            :class="djConfigEditorMessage.type === 'error' ? 'error-message' : 'success-message'"
-                            x-text="djConfigEditorMessage.text"
-                        ></div>
                         <div class="loading" x-show="djConfigEditorLoading">Loading...</div>
-                        <form x-show="!djConfigEditorLoading" @submit.prevent="saveDjConfig()">
+                        <form
+                            x-show="!djConfigEditorLoading && !draftReviewing"
+                            @submit.prevent="reviewDraft('dj-configs')"
+                        >
                             <datalist id="dj-config-profile-options">
                                 <template x-for="profile in profiles" :key="profile">
                                     <option :value="profile"></option>
@@ -249,6 +309,7 @@
                                         class="form-input"
                                         x-model="djConfigForm.name"
                                         :readonly="!djConfigEditorIsNew"
+                                        :aria-invalid="nameInvalid('dj-configs')"
                                         required
                                         pattern="[A-Za-z0-9_\-]+"
                                         title="Letters, digits, - and _ only"
@@ -267,7 +328,12 @@
                                             <div class="form-group">
                                                 <label class="form-label">
                                                     <span>Pool</span>
-                                                    <select class="form-input" x-model="reference.pool" required>
+                                                    <select
+                                                        class="form-input"
+                                                        x-model="reference.pool"
+                                                        :aria-invalid="reference.pool === ''"
+                                                        required
+                                                    >
                                                         <option value="">Select a pool</option>
                                                         <template
                                                             x-for="name in djConfigPoolOptions(reference)"
@@ -277,6 +343,11 @@
                                                         </template>
                                                     </select>
                                                 </label>
+                                                <span
+                                                    class="field-was"
+                                                    x-show="isChanged('dj-configs', ['pools', referenceIndex, 'pool'])"
+                                                    x-text="'was ' + wasValue('dj-configs', ['pools', referenceIndex, 'pool'])"
+                                                ></span>
                                             </div>
                                             <div class="form-group">
                                                 <label class="form-label">
@@ -286,14 +357,20 @@
                                                         class="form-input"
                                                         x-model.number="reference.weight"
                                                         step="1"
-                                                        min="0"
+                                                        min="1"
+                                                        :aria-invalid="fieldInvalid(djConfigWeightField, reference.weight)"
                                                         required
                                                     >
                                                 </label>
+                                                <span
+                                                    class="field-was"
+                                                    x-show="isChanged('dj-configs', ['pools', referenceIndex, 'weight'])"
+                                                    x-text="'was ' + wasValue('dj-configs', ['pools', referenceIndex, 'weight'])"
+                                                ></span>
                                             </div>
                                         </div>
                                         <template
-                                            x-for="(block, blockIndex) in djConfigReferenceBlocks(reference)"
+                                            x-for="(block, blockIndex) in djConfigReferenceBlocks(reference, referenceIndex)"
                                             :key="blockIndex"
                                         >
                                             <div>
@@ -312,6 +389,7 @@
                                                                         :min="field.min"
                                                                         :max="field.max"
                                                                         :required="!field.optional"
+                                                                        :aria-invalid="fieldInvalid(field, block.row[field.key])"
                                                                         :placeholder="field.optional ? 'Optional' : ''"
                                                                     >
                                                                 </template>
@@ -322,6 +400,7 @@
                                                                         x-model="block.row[field.key]"
                                                                         :list="field.profile ? 'dj-config-profile-options' : null"
                                                                         :required="!field.optional"
+                                                                        :aria-invalid="fieldInvalid(field, block.row[field.key])"
                                                                         :placeholder="field.optional ? 'Optional' : ''"
                                                                     >
                                                                 </template>
@@ -336,6 +415,11 @@
                                                                     </select>
                                                                 </template>
                                                             </label>
+                                                            <span
+                                                                class="field-was"
+                                                                x-show="isChanged('dj-configs', block.path.concat(field.key))"
+                                                                x-text="'was ' + wasValue('dj-configs', block.path.concat(field.key))"
+                                                            ></span>
                                                             <template x-if="field.type === 'strings'">
                                                                 <div>
                                                                     <template
@@ -348,6 +432,7 @@
                                                                                 class="form-input"
                                                                                 :aria-label="field.label"
                                                                                 x-model="block.row[field.key][valueIndex]"
+                                                                                :aria-invalid="block.row[field.key][valueIndex] === ''"
                                                                                 required
                                                                             >
                                                                             <button
@@ -414,6 +499,7 @@
                                                                     :min="field.min"
                                                                     :max="field.max"
                                                                     :required="!field.optional"
+                                                                    :aria-invalid="fieldInvalid(field, row[field.key])"
                                                                     :placeholder="field.optional ? 'Optional' : ''"
                                                                 >
                                                             </template>
@@ -424,10 +510,16 @@
                                                                     x-model="row[field.key]"
                                                                     :list="field.profile ? 'dj-config-profile-options' : null"
                                                                     :required="!field.optional"
+                                                                    :aria-invalid="fieldInvalid(field, row[field.key])"
                                                                     :placeholder="field.optional ? 'Optional' : ''"
                                                                 >
                                                             </template>
                                                         </label>
+                                                        <span
+                                                            class="field-was"
+                                                            x-show="isChanged('dj-configs', [rotation.key, 'entries', index, field.key])"
+                                                            x-text="'was ' + wasValue('dj-configs', [rotation.key, 'entries', index, field.key])"
+                                                        ></span>
                                                     </div>
                                                 </template>
                                             </div>
@@ -451,22 +543,12 @@
                                     ></button>
                                 </div>
                             </template>
-                            <div class="button-group">
-                                <button type="submit" class="btn btn-primary" :disabled="djConfigEditorSaving">
-                                    <span x-text="djConfigEditorSaving ? 'Saving...' : 'Save DJ Config'"></span>
-                                </button>
-                            </div>
                         </form>
                     </section>
 
                     <section class="card" x-show="route.kind === 'pools'">
                         <!-- biome-ignore lint/a11y/useHeadingContent: the heading text comes from x-text -->
                         <h2 class="card-title" x-text="poolEditorIsNew ? 'New Pool' : 'Edit Pool'"></h2>
-                        <div
-                            x-show="poolEditorMessage.text"
-                            :class="poolEditorMessage.type === 'error' ? 'error-message' : 'success-message'"
-                            x-text="poolEditorMessage.text"
-                        ></div>
                         <div class="modal-section" x-show="!poolEditorIsNew">
                             <div class="modal-section-title">Used By</div>
                             <div class="chip-list">
@@ -482,7 +564,7 @@
                             </div>
                         </div>
                         <div class="loading" x-show="poolEditorLoading">Loading...</div>
-                        <form x-show="!poolEditorLoading" @submit.prevent="savePool()">
+                        <form x-show="!poolEditorLoading && !draftReviewing" @submit.prevent="reviewDraft('pools')">
                             <datalist id="pool-editor-profile-options">
                                 <template x-for="profile in profiles" :key="profile">
                                     <option :value="profile"></option>
@@ -497,6 +579,7 @@
                                         class="form-input"
                                         x-model="poolForm.name"
                                         :readonly="!poolEditorIsNew"
+                                        :aria-invalid="nameInvalid('pools')"
                                         required
                                         pattern="[A-Za-z0-9_\-]+"
                                         title="Letters, digits, - and _ only"
@@ -522,6 +605,7 @@
                                                                 :min="field.min"
                                                                 :max="field.max"
                                                                 :required="!field.optional"
+                                                                :aria-invalid="fieldInvalid(field, block.row[field.key])"
                                                                 :placeholder="field.optional ? 'Optional' : ''"
                                                             >
                                                         </template>
@@ -532,6 +616,7 @@
                                                                 x-model="block.row[field.key]"
                                                                 :list="field.profile ? 'pool-editor-profile-options' : null"
                                                                 :required="!field.optional"
+                                                                :aria-invalid="fieldInvalid(field, block.row[field.key])"
                                                                 :placeholder="field.optional ? 'Optional' : ''"
                                                             >
                                                         </template>
@@ -543,6 +628,11 @@
                                                             </select>
                                                         </template>
                                                     </label>
+                                                    <span
+                                                        class="field-was"
+                                                        x-show="isChanged('pools', block.path.concat(field.key))"
+                                                        x-text="'was ' + wasValue('pools', block.path.concat(field.key))"
+                                                    ></span>
                                                     <template x-if="field.type === 'strings'">
                                                         <div>
                                                             <template
@@ -555,6 +645,7 @@
                                                                         class="form-input"
                                                                         :aria-label="field.label"
                                                                         x-model="block.row[field.key][valueIndex]"
+                                                                        :aria-invalid="block.row[field.key][valueIndex] === ''"
                                                                         required
                                                                     >
                                                                     <button
@@ -605,11 +696,6 @@
                                         x-text="poolForm.segment_defaults.hex_config ? 'Remove Hex Config' : '+ Add Hex Config'"
                                     ></button>
                                 </div>
-                            </div>
-                            <div class="button-group">
-                                <button type="submit" class="btn btn-primary" :disabled="poolEditorSaving">
-                                    <span x-text="poolEditorSaving ? 'Saving...' : 'Save Pool'"></span>
-                                </button>
                             </div>
                         </form>
                     </section>
