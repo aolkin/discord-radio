@@ -711,6 +711,28 @@
                                         Weights
                                     </button>
                                 </div>
+                                <div class="pool-bulk">
+                                    <button
+                                        type="button"
+                                        class="btn btn-secondary"
+                                        :disabled="poolSelectedRows().length === 0"
+                                        :aria-expanded="poolBulkOpen"
+                                        @click="poolBulkOpen = !poolBulkOpen"
+                                    >
+                                        Bulk actions ▾
+                                    </button>
+                                    <div class="button-group" x-show="poolBulkOpen && poolSelectedRows().length > 0">
+                                        <button type="button" class="btn btn-secondary" @click="poolBulkDelete()">
+                                            Delete
+                                        </button>
+                                        <button type="button" class="btn btn-secondary" @click="poolBulkDuplicate()">
+                                            Duplicate
+                                        </button>
+                                        <button type="button" class="btn btn-secondary" @click="poolBulkEqualize()">
+                                            Equalize weights
+                                        </button>
+                                    </div>
+                                </div>
                                 <div class="pool-grid-scroll">
                                     <table class="pool-grid">
                                         <thead>
@@ -736,6 +758,8 @@
                                                         <input
                                                             type="checkbox"
                                                             :aria-label="'Select entry ' + (index + 1)"
+                                                            :checked="poolSelected.some((row) => Alpine.raw(row) === Alpine.raw(entry))"
+                                                            @change="togglePoolSelected(entry)"
                                                         >
                                                     </td>
                                                     <td>
@@ -891,6 +915,8 @@
                                                         <input
                                                             type="checkbox"
                                                             :aria-label="'Select entry ' + (index + 1)"
+                                                            :checked="poolSelected.some((row) => Alpine.raw(row) === Alpine.raw(entry))"
+                                                            @change="togglePoolSelected(entry)"
                                                         >
                                                     </td>
                                                     <td class="pool-grid-name" x-text="poolEntryName(entry)"></td>
@@ -954,6 +980,9 @@
                                 <div class="button-group">
                                     <button type="button" class="btn btn-secondary" @click="addPoolEntry('track')">
                                         + Add track
+                                    </button>
+                                    <button type="button" class="btn btn-secondary" @click="pickPoolFiles()">
+                                        Tracks from files…
                                     </button>
                                     <button type="button" class="btn btn-secondary" @click="addPoolEntry('hex')">
                                         + Add hex message
@@ -1810,6 +1839,13 @@
                         >
                             Select
                         </button>
+                        <input
+                            type="checkbox"
+                            x-show="fileBrowser.open && fileBrowser.mode === 'files'"
+                            :aria-label="'Pick ' + file.key"
+                            :checked="fileBrowser.picked.includes(file.key)"
+                            @change="toggleFileBrowserPicked(file.key)"
+                        >
                     </div>
                 </template>
                 <div class="empty-state" x-show="fileBrowser.folders.length === 0 && fileBrowser.files.length === 0">
@@ -1869,9 +1905,19 @@
             data-modal="fileBrowser"
             data-message="fileBrowser.message"
             data-overlay-class="file-browser-overlay"
-            data-title-expression="fileBrowser.mode === 'file' ? 'Select ' + fileBrowserKind().noun : 'Select Folder'"
+            data-title-expression="fileBrowser.mode === 'folder' ? 'Select Folder' : 'Select ' + fileBrowserKind().noun + (fileBrowser.mode === 'files' ? 's' : '')"
         >
             <div x-include="#file-browser-list"></div>
+
+            <div class="button-group" x-show="fileBrowser.mode === 'files'">
+                <button
+                    type="button"
+                    class="btn btn-primary"
+                    :disabled="fileBrowser.picked.length === 0"
+                    @click="selectFileBrowserEntry(fileBrowser.picked)"
+                    x-text="'Add ' + fileBrowser.picked.length + ' files'"
+                ></button>
+            </div>
 
             <div class="button-group" x-show="fileBrowser.mode === 'folder'">
                 <button type="button" class="btn btn-primary" @click="selectFileBrowserEntry(fileBrowser.prefix)">
