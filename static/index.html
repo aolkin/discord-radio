@@ -4,6 +4,7 @@
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Discord Bot Portal</title>
+        <script src="/static/theme.js"></script>
         <script type="module" src="/static/index.js"></script>
         <script defer src="/static/alpine.min.js"></script>
         <link rel="stylesheet" href="/static/base.css">
@@ -34,6 +35,11 @@
                     <button type="button" class="btn btn-primary btn-md" @click="openChannelMessageModal()">
                         Send Message
                     </button>
+                    <select class="theme-switch" id="themeSwitch" aria-label="Theme">
+                        <option value="system">System</option>
+                        <option value="light">Light</option>
+                        <option value="dark">Dark</option>
+                    </select>
                     <div class="status-indicator">
                         <span class="status-dot" :class="{ 'disconnected': !connected }"></span>
                         <span x-text="statusText"></span>

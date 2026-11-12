@@ -99,10 +99,10 @@ h1 {
 }
 
 .guild-card {
-    background: white;
+    background: var(--color-surface);
     border-radius: 12px;
     padding: 20px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-sm);
     transition:
         transform 0.2s,
         box-shadow 0.2s;
@@ -111,7 +111,7 @@ h1 {
 }
 
 .guild-card:hover {
-    box-shadow: 0 8px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: var(--shadow-md);
 }
 
 .guild-content {
@@ -138,7 +138,7 @@ h1 {
 
 .voice-badge {
     background: var(--color-success);
-    color: white;
+    color: var(--color-on-accent);
     padding: 4px 12px;
     border-radius: 20px;
     font-size: 0.85rem;
@@ -227,7 +227,7 @@ h1 {
 
 .dj-state {
     background: var(--gradient-primary);
-    color: white;
+    color: var(--color-on-accent);
     padding: 12px;
     border-radius: 8px;
 }
@@ -246,7 +246,7 @@ h1 {
 .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--color-overlay);
     z-index: 1000;
     display: flex;
     align-items: center;
@@ -255,20 +255,20 @@ h1 {
 }
 
 .modal-content {
-    background: white;
+    background: var(--color-surface);
     border-radius: 12px;
     width: 100%;
     max-width: 700px;
     max-height: 90vh;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    box-shadow: var(--shadow-lg);
 }
 
 .modal-header {
     padding: 20px 30px;
     background: var(--gradient-primary);
-    color: white;
+    color: var(--color-on-accent);
     border-radius: 12px 12px 0 0;
     display: flex;
     justify-content: space-between;
@@ -281,7 +281,7 @@ h1 {
 }
 
 .close {
-    color: white;
+    color: var(--color-on-accent);
     font-size: 2rem;
     font-weight: bold;
     cursor: pointer;
@@ -335,6 +335,8 @@ h1 {
     padding: 10px;
     border: 2px solid var(--color-button-secondary);
     border-radius: 6px;
+    background: var(--color-surface);
+    color: var(--color-text);
     font-size: 0.9rem;
     transition: border-color 0.2s;
 }
@@ -396,11 +398,11 @@ h1 {
 }
 
 .guild-list-row {
-    background: white;
+    background: var(--color-surface);
     border-radius: 12px;
     padding: 12px 20px;
     margin-bottom: 8px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-sm);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -409,7 +411,7 @@ h1 {
 }
 
 .no-guilds {
-    background: white;
+    background: var(--color-surface);
     border-radius: 12px;
     padding: 60px 20px;
     text-align: center;
@@ -644,11 +646,11 @@ h1 {
 }
 
 .card {
-    background: white;
+    background: var(--color-surface);
     border-radius: 12px;
     padding: 20px;
     margin-bottom: 20px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-sm);
 }
 
 .card-title {
@@ -697,7 +699,7 @@ h1 {
 
 .info-item-accent {
     background: var(--gradient-primary);
-    color: white;
+    color: var(--color-on-accent);
 }
 
 .activity-icon-large {

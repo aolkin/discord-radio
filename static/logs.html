@@ -4,6 +4,7 @@
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Activity Logs</title>
+        <script src="/static/theme.js"></script>
         <link rel="stylesheet" href="/static/base.css">
         <link rel="stylesheet" href="/static/logs.css">
     </head>
@@ -14,6 +15,11 @@
                     <h1 id="pageTitle">📜 Activity Logs</h1>
                     <div class="log-info" id="logInfo">Loading...</div>
                 </div>
+                <select class="theme-switch" id="themeSwitch" aria-label="Theme">
+                    <option value="system">System</option>
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                </select>
                 <button type="button" class="btn btn-secondary" onclick="window.close()">Close</button>
             </header>
 
