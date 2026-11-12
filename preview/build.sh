@@ -2,7 +2,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
-out="$root/dist"
+out="$root/preview/dist"
 
 if command -v gsed >/dev/null 2>&1; then
     sed_cmd=gsed
