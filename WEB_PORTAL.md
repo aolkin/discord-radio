@@ -48,7 +48,7 @@ http://localhost:3000
 
 The portal uses WebSockets for live status updates, automatically reconnecting if the connection is lost.
 
-The page has two views, picked by the switch under the header. Live (`#/live`) shows every guild by name: guilds with a radio as cards, and guilds without one as a list below, each row with Send Message (server already chosen) and Bot Profile. Edit (`#/edit`) shows a tree of DJ configs (each with the pools it uses under it), pools, signal profiles and audio files, and opens the selected item's editor beside it, or above it on a narrow screen. Each item has its own address: `#/edit/dj-configs/<name>`, `#/edit/pools/<name>` or `#/edit/signal-profiles/<name>`, and `+new` in place of the name opens a blank editor. The portal opens the same view and item on reload, from a shared link, and on Back and Forward; it opens `#/live` for an empty or unknown address.
+The page has two views, picked by the switch under the header. Live (`#/live`) shows every guild by name: guilds with a radio as cards, and guilds without one as a list below, each row with Send Message (server already chosen) and Bot Profile. Edit (`#/edit`) shows a tree of DJ configs (each with the pools it uses under it), pools, signal profiles and audio files, and opens the selected item's editor beside it, or above it on a narrow screen. Each item has its own address: `#/edit/dj-configs/<name>`, `#/edit/pools/<name>` or `#/edit/signal-profiles/<name>`; `+new` in place of the name opens a blank editor. `#/edit/files/<folder>` opens the audio file browser at that folder (`#/edit/files` opens `tracks/`). The portal opens the same view and item on reload, from a shared link, and on Back and Forward; it opens `#/live` for an empty or unknown address.
 
 ### DJ Management
 
@@ -99,7 +99,7 @@ Each guild card lists the channels the DJ posts announcements to (`announcement_
 
 ### Audio File Browser
 
-The Audio Files item in the Edit view's tree opens a browser over the `tracks/` folder of object storage. Dropping or choosing files uploads them to the current folder one after another, with a progress bar per file and the server's message when a file is rejected. Breadcrumbs and Up move between folders, and each file shows its full key, size and last modified time. The same browser opens in a mode that picks a file or a folder and hands the choice back to the section that opened it.
+The Audio Files item in the Edit view's tree opens the browser as a page beside the tree, over the `tracks/` folder of object storage. The current folder is part of the address. Dropping or choosing files uploads them to the current folder one after another, with a progress bar per file and the server's message when a file is rejected. Breadcrumbs and Up move between folders, and each file shows its full key, size and last modified time. The same list opens as a pop-up that only picks a file or a folder and hands the choice back to the section that opened it.
 
 ### Bot Profile
 

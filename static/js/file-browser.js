@@ -8,11 +8,17 @@ export const modals = {
     },
 };
 
+document.addEventListener('alpine:init', () => {
+    Alpine.directive('include', (element, { expression }) => {
+        element.append(document.querySelector(expression).content.cloneNode(true));
+    });
+});
+
 export function fileBrowser() {
     return {
         fileBrowser: {
             open: false,
-            mode: 'browse',
+            mode: null,
             prefix: 'tracks/',
             folders: [],
             files: [],
@@ -42,15 +48,26 @@ export function fileBrowser() {
             },
         },
 
-        // mode is 'browse' (no selection), 'file' or 'folder'. A picking
-        // mode calls onSelect with the chosen object key or folder prefix.
-        openFileBrowser({ mode = 'browse', prefix = 'tracks/', onSelect = null } = {}) {
+        openFileBrowser({ mode, prefix, onSelect }) {
             this.fileBrowser.mode = mode;
             this.fileBrowser.newFolderName = '';
             this.fileBrowser.uploads = [];
             this.openModal('fileBrowser');
             this.fileBrowserOnSelect = onSelect;
             return this.loadFileBrowser(prefix);
+        },
+
+        openFileBrowserPage(path) {
+            this.fileBrowser.newFolderName = '';
+            this.fileBrowser.uploads = [];
+            return this.loadFileBrowser(`${path}/`);
+        },
+
+        browseFileBrowser(prefix) {
+            if (this.fileBrowser.open) {
+                return this.loadFileBrowser(prefix);
+            }
+            return this.openItem('files', prefix.replace(/\/$/, ''));
         },
 
         selectFileBrowserEntry(value) {

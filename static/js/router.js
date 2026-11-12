@@ -7,12 +7,16 @@ const editors = {
 };
 
 function parseRoute(hash) {
-    const [view, kind, name] = hash.replace(/^#\/?/, '').split('/');
+    const [view, kind, ...rest] = hash.replace(/^#\/?/, '').split('/');
+    const name = rest.join('/');
     if (view !== 'edit') {
         return { view: 'live', kind: null, name: null };
     }
     if (Object.hasOwn(editors, kind) && /^([\w-]+|\+new)$/.test(name)) {
         return { view, kind, name };
+    }
+    if (kind === 'files' && (name === '' || /^[\w-]+(\/[\w-]+)*$/.test(name))) {
+        return { view, kind, name: name || 'tracks' };
     }
     return { view, kind: null, name: null };
 }
@@ -45,7 +49,9 @@ export function router() {
             if (previous.view !== 'edit') {
                 this.loadDjConfigPools();
             }
-            if (this.route.kind) {
+            if (this.route.kind === 'files') {
+                this.openFileBrowserPage(this.route.name);
+            } else if (this.route.kind) {
                 this[editors[this.route.kind]](this.route.name === newItem ? null : this.route.name);
             }
         },
