@@ -55,9 +55,9 @@ jobs:
         env:
           BRANCH: ${{ github.head_ref }}
         run: |
-          output=$(npx --yes wrangler@4 pages deploy dist --project-name=discord-radio-portal-preview --branch="$BRANCH" --commit-hash="$GITHUB_SHA" --commit-dirty=true 2>&1)
-          echo "$output"
-          url=$(echo "$output" | grep -Eo 'https://[^ ]+\.pages\.dev' | tail -n 1)
+          set -o pipefail
+          npx --yes wrangler@4 pages deploy dist --project-name=discord-radio-portal-preview --branch="$BRANCH" --commit-hash="$GITHUB_SHA" --commit-dirty=true 2>&1 | tee "$RUNNER_TEMP/deploy.log"
+          url=$(grep -Eo 'https://[^ ]+\.pages\.dev' "$RUNNER_TEMP/deploy.log" | tail -n 1)
           if [ -z "$url" ]; then
             echo "Could not find a preview URL in the deploy output" >&2
             exit 1
