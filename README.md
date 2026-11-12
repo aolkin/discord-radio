@@ -94,8 +94,6 @@ The portal provides:
 - Hex playback status with loop counters
 - DJ state visualization
 
-See [WEB_PORTAL.md](WEB_PORTAL.md) for more details.
-
 ## Commands
 
 ### DJ Commands
