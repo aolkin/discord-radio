@@ -130,8 +130,7 @@ impl WeightedSelector {
     }
 
     fn trim(&mut self, item_count: usize) {
-        let history_size = (item_count / 2).max(2);
-        let excess = self.recent_history.len().saturating_sub(history_size);
+        let excess = self.recent_history.len().saturating_sub(item_count);
         self.recent_history.drain(..excess);
     }
 
