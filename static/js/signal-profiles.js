@@ -31,6 +31,18 @@ const profileFields = [
     { key: 'dropout_probability', label: 'Dropout Probability', type: 'number', step: 'any', min: 0 },
 ];
 
+const dropoutFields = [
+    { key: 0, label: 'Dropout Min Duration (ms)', type: 'number', step: 'any', min: 0 },
+    { key: 1, label: 'Dropout Max Duration (ms)', type: 'number', step: 'any', min: 0 },
+];
+
+function blocks(form) {
+    return [
+        { row: form, fields: profileFields, path: [] },
+        { row: form.dropout_duration_ms, fields: dropoutFields, path: ['dropout_duration_ms'] },
+    ];
+}
+
 function toForm(name, profile) {
     return {
         name,
@@ -59,6 +71,7 @@ const profileEditor = registryEditor({
     toForm,
     toBody,
     blankForm,
+    blocks,
 });
 
 export function signalProfiles() {
@@ -72,7 +85,11 @@ export function signalProfiles() {
         profileDuration: null,
         profileSaving: false,
         profileMessage: emptyMessage(),
-        profileFields,
+        profileFieldRows() {
+            return blocks(this.profileForm).flatMap(({ row, fields, path }) =>
+                fields.map((field) => ({ row, field, path: [...path, field.key] })),
+            );
+        },
 
         async changeSignalProfile() {
             const body = {

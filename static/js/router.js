@@ -1,4 +1,4 @@
-const newItem = '+new';
+export const newItem = '+new';
 
 const editors = {
     'dj-configs': 'openDjConfigEditor',
