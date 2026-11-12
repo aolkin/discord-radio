@@ -90,12 +90,20 @@ impl WeightedSelector {
 
     fn choose_weighted<'a, T: Weighted>(&mut self, items: &'a [T]) -> Option<&'a T> {
         self.trim(items.len());
+        let index = self.choose_weighted_index(items, Self::penalty)?;
+        Some(&items[index])
+    }
 
+    fn choose_weighted_index<T: Weighted>(
+        &mut self,
+        items: &[T],
+        history_factor: fn(&Self, Identity) -> f32,
+    ) -> Option<usize> {
         let identities: Vec<Identity> = items.iter().map(Weighted::identity).collect();
         let effective_weights: Vec<f32> = items
             .iter()
             .zip(&identities)
-            .map(|(item, &identity)| item.weight() as f32 * self.penalty(identity))
+            .map(|(item, &identity)| item.weight() as f32 * history_factor(self, identity))
             .collect();
 
         let index = choose_index(&effective_weights)?;
@@ -103,26 +111,12 @@ impl WeightedSelector {
             identity: identities[index],
             index,
         });
-        Some(&items[index])
+        Some(index)
     }
 
     pub fn choose_unplayed<T: Weighted>(&mut self, order: Order, items: &[T]) -> Option<usize> {
         let index = match order {
-            Order::Weighted => {
-                let identities: Vec<Identity> = items.iter().map(Weighted::identity).collect();
-                let effective_weights: Vec<f32> = items
-                    .iter()
-                    .zip(&identities)
-                    .map(|(item, identity)| {
-                        let played = self
-                            .recent_history
-                            .iter()
-                            .any(|recent| recent.identity == *identity);
-                        if played { 0.0 } else { item.weight() as f32 }
-                    })
-                    .collect();
-                choose_index(&effective_weights)?
-            }
+            Order::Weighted => return self.choose_weighted_index(items, Self::unplayed_factor),
             Order::Sequential => self.last_index(items).map_or(0, |index| index + 1),
         };
         let item = items.get(index)?;
@@ -164,6 +158,18 @@ impl WeightedSelector {
     fn trim(&mut self, item_count: usize) {
         let excess = self.recent_history.len().saturating_sub(item_count);
         self.recent_history.drain(..excess);
+    }
+
+    fn unplayed_factor(&self, identity: Identity) -> f32 {
+        if self
+            .recent_history
+            .iter()
+            .any(|recent| recent.identity == identity)
+        {
+            0.0
+        } else {
+            1.0
+        }
     }
 
     fn penalty(&self, identity: Identity) -> f32 {

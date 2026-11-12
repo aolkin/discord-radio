@@ -16,6 +16,7 @@ use crate::audio::dj::signal_profile::SignalProfilePlayback;
 use crate::audio::dj::tiered::{TieredChange, TieredStateMachine, TieredValue, TimedValue};
 use crate::audio::dj::weighted_choice::WeightedSelector;
 use crate::state::Data;
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use serenity::model::id::{ChannelId, GuildId};
 use std::collections::{BTreeMap, BTreeSet};
@@ -388,7 +389,6 @@ impl DJStateMachine {
         let requested = pool_name.map(|name| self.pool_named(name)).transpose()?;
         let loaded = self.config.borrow().clone();
         let mut state = self.state.write().await;
-        let mut continued = false;
         let mut next_pool = match requested {
             Some(pool) => {
                 state.playing_pool = None;
@@ -400,16 +400,15 @@ impl DJStateMachine {
                         pool.file.name == playing.pool && pool.playback == Playback::All
                     })
                 });
-                continued = current.is_some();
                 current.cloned()
             }
         };
-        let (pool, index) = loop {
+        let mut picked_entry = None;
+        for _ in 0..2 {
             let pool = match next_pool.take() {
                 Some(pool) => pool,
                 None => {
                     state.playing_pool = None;
-                    continued = false;
                     let picked = state
                         .pool_selector
                         .choose(Order::Weighted, &loaded.pools)
@@ -452,15 +451,13 @@ impl DJStateMachine {
                         .choose_unplayed(pool.order, &pool.file.entries)
                 }
             };
-            match index {
-                Some(index) => break (pool, index),
-                None if continued => {
-                    state.playing_pool = None;
-                    continued = false;
-                }
-                None => anyhow::bail!("pool {:?} has no entry with weight above 0", pool.file.name),
+            if let Some(index) = index {
+                picked_entry = Some((pool, index));
+                break;
             }
-        };
+            state.playing_pool = None;
+        }
+        let (pool, index) = picked_entry.context("no pool has an entry to play")?;
         drop(state);
         Ok(pool.file.entries[index]
             .segment(&pool.segment_defaults, &bot_state)
