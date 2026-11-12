@@ -106,8 +106,6 @@ impl WeightedSelector {
         Some(&items[index])
     }
 
-    /// Returns the index of an entry not yet in the history, or `None` once
-    /// none are left (weight 0 entries never play under `Weighted`).
     pub fn choose_unplayed<T: Weighted>(&mut self, order: Order, items: &[T]) -> Option<usize> {
         let index = match order {
             Order::Weighted => {
