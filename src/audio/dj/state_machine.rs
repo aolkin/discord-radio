@@ -381,7 +381,12 @@ impl DJStateMachine {
         let requested = pool_name.map(|name| self.pool_named(name)).transpose()?;
         let loaded = self.config.borrow().clone();
         let mut state = self.state.write().await;
-        let pool = requested.or_else(|| state.pool_selector.choose(&loaded.pools).cloned());
+        let pool = requested.or_else(|| {
+            state
+                .pool_selector
+                .choose(Order::Weighted, &loaded.pools)
+                .cloned()
+        });
         let Some(pool) = pool else {
             return Ok(Box::new(NoiseSegment::from_entry(
                 &DEFAULT_NOISE_PERIOD,
@@ -392,7 +397,7 @@ impl DJStateMachine {
             .entry_selectors
             .entry(pool.file.name.clone())
             .or_default()
-            .choose_ordered(pool.order, &pool.file.entries);
+            .choose(pool.order, &pool.file.entries);
         drop(state);
         let entry = entry.with_context(|| {
             format!("pool {:?} has no entry with weight above 0", pool.file.name)

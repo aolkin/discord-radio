@@ -81,18 +81,14 @@ struct Played {
 }
 
 impl WeightedSelector {
-    pub fn choose_ordered<'a, T: Weighted>(
-        &mut self,
-        order: Order,
-        items: &'a [T],
-    ) -> Option<&'a T> {
+    pub fn choose<'a, T: Weighted>(&mut self, order: Order, items: &'a [T]) -> Option<&'a T> {
         match order {
-            Order::Shuffle => self.choose(items),
+            Order::Weighted => self.choose_weighted(items),
             Order::Sequential => self.choose_sequential(items),
         }
     }
 
-    pub fn choose<'a, T: Weighted>(&mut self, items: &'a [T]) -> Option<&'a T> {
+    fn choose_weighted<'a, T: Weighted>(&mut self, items: &'a [T]) -> Option<&'a T> {
         self.trim(items.len());
 
         let identities: Vec<Identity> = items.iter().map(Weighted::identity).collect();
@@ -110,7 +106,7 @@ impl WeightedSelector {
         Some(&items[index])
     }
 
-    pub fn choose_sequential<'a, T: Weighted>(&mut self, items: &'a [T]) -> Option<&'a T> {
+    fn choose_sequential<'a, T: Weighted>(&mut self, items: &'a [T]) -> Option<&'a T> {
         if items.is_empty() {
             return None;
         }

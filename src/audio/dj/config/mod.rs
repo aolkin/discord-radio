@@ -37,7 +37,7 @@ pub struct DJConfig {
 #[serde(rename_all = "lowercase")]
 pub enum Order {
     #[default]
-    Shuffle,
+    Weighted,
     Sequential,
 }
 

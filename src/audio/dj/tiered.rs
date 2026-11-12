@@ -1,3 +1,4 @@
+use crate::audio::dj::config::Order;
 use crate::audio::dj::segments::Completed;
 use crate::audio::dj::serde::{ShiftBack, deser_instant, ser_instant};
 use crate::audio::dj::weighted_choice::{Weighted, WeightedPool, WeightedSelector};
@@ -168,11 +169,14 @@ where
     pub fn advance(&mut self) {
         match self.state.controlling().0 {
             Tier::Background => {
-                self.state.background_value =
-                    match self.state.background_rotation.choose(&self.entries) {
-                        Some(entry) => entry.into(),
-                        None => (&E::default()).into(),
-                    };
+                self.state.background_value = match self
+                    .state
+                    .background_rotation
+                    .choose(Order::Weighted, &self.entries)
+                {
+                    Some(entry) => entry.into(),
+                    None => (&E::default()).into(),
+                };
             }
             tier => self.state.update(tier, None),
         }
