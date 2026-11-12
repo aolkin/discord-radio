@@ -114,17 +114,24 @@ impl WeightedSelector {
         Some(index)
     }
 
-    pub fn choose_unplayed<T: Weighted>(&mut self, order: Order, items: &[T]) -> Option<usize> {
+    pub fn choose_unplayed<'a, T: Weighted>(
+        &mut self,
+        order: Order,
+        items: &'a [T],
+    ) -> Option<&'a T> {
         let index = match order {
-            Order::Weighted => return self.choose_weighted_index(items, Self::unplayed_factor),
-            Order::Sequential => self.last_index(items).map_or(0, |index| index + 1),
+            Order::Weighted => self.choose_weighted_index(items, Self::unplayed_factor)?,
+            Order::Sequential => {
+                let index = self.last_index(items).map_or(0, |index| index + 1);
+                let item = items.get(index)?;
+                self.recent_history.push_back(Played {
+                    identity: item.identity(),
+                    index,
+                });
+                index
+            }
         };
-        let item = items.get(index)?;
-        self.recent_history.push_back(Played {
-            identity: item.identity(),
-            index,
-        });
-        Some(index)
+        Some(&items[index])
     }
 
     fn last_index<T: Weighted>(&self, items: &[T]) -> Option<usize> {

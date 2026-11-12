@@ -2,7 +2,7 @@ use crate::audio::dj::announcement::Announcement;
 use crate::audio::dj::config::signal_profiles::SignalProfileEntry;
 use crate::audio::dj::config::{
     AnnouncementEntry, ChannelStatusEntry, ConfiguredPool, DurationRange, EntryPlaybackConfig,
-    LoadedConfig, Order, Playback, SegmentDefaults,
+    LoadedConfig, Order, Playback, PoolEntry, SegmentDefaults,
 };
 use crate::audio::dj::manager::{
     ADVANCE_RETRY_DELAY, DJCommand, HexMessageRequest, IdleRequest, TrackRequest,
@@ -110,28 +110,21 @@ impl Default for DJState {
 }
 
 impl DJState {
-    fn continuing_pool(&self, pools: &[ConfiguredPool]) -> Option<ConfiguredPool> {
+    fn continuing_pool<'a>(&self, pools: &'a [ConfiguredPool]) -> Option<&'a ConfiguredPool> {
         let playing = self.playing_pool.as_ref()?;
         pools
             .iter()
             .find(|pool| pool.file.name == playing.pool && pool.playback == Playback::All)
-            .cloned()
     }
 
-    fn pick_entry(&mut self, pool: ConfiguredPool) -> Option<(ConfiguredPool, usize)> {
-        let index = match pool.playback {
+    fn pick_entry<'a>(&mut self, pool: &'a ConfiguredPool) -> Option<&'a PoolEntry> {
+        match pool.playback {
             Playback::Single => {
                 self.playing_pool = None;
                 self.entry_selectors
                     .entry(pool.file.name.clone())
                     .or_default()
                     .choose(pool.order, &pool.file.entries)
-                    .and_then(|entry| {
-                        pool.file
-                            .entries
-                            .iter()
-                            .position(|candidate| std::ptr::eq(candidate, entry))
-                    })
             }
             Playback::All => {
                 let playing = self
@@ -146,8 +139,7 @@ impl DJState {
                     .selector
                     .choose_unplayed(pool.order, &pool.file.entries)
             }
-        }?;
-        Some((pool, index))
+        }
     }
 
     pub fn shift_back(&mut self, by: Duration) {
@@ -429,37 +421,33 @@ impl DJStateMachine {
         let requested = pool_name.map(|name| self.pool_named(name)).transpose()?;
         let loaded = self.config.borrow().clone();
         let mut state = self.state.write().await;
-        let first = match requested {
+        let first = match &requested {
             Some(pool) => {
                 state.playing_pool = None;
                 Some(pool)
             }
             None => state.continuing_pool(&loaded.pools),
         };
-        let (pool, index) = match first.and_then(|pool| state.pick_entry(pool)) {
+        let first_pick = first.and_then(|pool| Some((pool, state.pick_entry(pool)?)));
+        let (pool, entry) = match first_pick {
             Some(picked) => picked,
             None => {
                 state.playing_pool = None;
-                let Some(pool) = state
-                    .pool_selector
-                    .choose(Order::Weighted, &loaded.pools)
-                    .cloned()
-                else {
+                let Some(pool) = state.pool_selector.choose(Order::Weighted, &loaded.pools) else {
                     return Ok(Box::new(NoiseSegment::from_entry(
                         &DEFAULT_NOISE_PERIOD,
                         &SegmentDefaults::default(),
                     )));
                 };
                 let name = pool.file.name.clone();
-                state
+                let entry = state
                     .pick_entry(pool)
-                    .with_context(|| format!("pool {name:?} has no entry to play"))?
+                    .with_context(|| format!("pool {name:?} has no entry to play"))?;
+                (pool, entry)
             }
         };
         drop(state);
-        Ok(pool.file.entries[index]
-            .segment(&pool.segment_defaults, &bot_state)
-            .await)
+        Ok(entry.segment(&pool.segment_defaults, &bot_state).await)
     }
 
     fn pool_named(&self, name: &str) -> anyhow::Result<ConfiguredPool> {
