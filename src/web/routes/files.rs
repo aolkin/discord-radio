@@ -40,7 +40,7 @@ pub struct BrowseFilesParams {
     pub prefix: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct BrowseFilesResponse {
     pub prefix: String,
     pub folders: Vec<String>,

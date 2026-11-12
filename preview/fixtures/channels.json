@@ -1,0 +1,7 @@
+{
+  "channels": [
+    { "channel_id": "200000000000000001", "name": "general" },
+    { "channel_id": "200000000000000002", "name": "announcements" },
+    { "channel_id": "200000000000000003", "name": "radio-chat" }
+  ]
+}

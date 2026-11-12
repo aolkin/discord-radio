@@ -1,0 +1,11 @@
+{
+  "name": "hex",
+  "segment_defaults": {
+    "hex_config": { "loop_min": 2, "loop_max": 3 },
+    "signal_profile": "tuning"
+  },
+  "entries": [
+    { "text": "once upon a time", "weight": 1, "loop_min": null, "loop_max": null, "signal_profile": null, "channel_status": null, "announcement": null },
+    { "text": "the signal went quiet", "weight": 1, "loop_min": 1, "loop_max": 2, "signal_profile": null, "channel_status": null, "announcement": null }
+  ]
+}

@@ -3,6 +3,8 @@ use std::sync::LazyLock;
 
 pub mod audio_stream;
 pub mod error;
+#[cfg(test)]
+mod preview_fixtures;
 pub mod routes;
 pub mod server;
 pub mod state_snapshot;

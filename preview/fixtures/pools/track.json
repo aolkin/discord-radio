@@ -1,0 +1,8 @@
+{
+  "name": "track",
+  "segment_defaults": {},
+  "entries": [
+    { "filename": "s3://tracks/signal.mp3", "weight": 2, "max_duration_seconds": null, "allow_subsection": null, "volume": null, "signal_profile": null, "channel_status": null, "announcement": null },
+    { "filename": "s3://tracks/static-lullaby.ogg", "weight": 1, "max_duration_seconds": 120.0, "allow_subsection": true, "volume": 0.5, "signal_profile": null, "channel_status": null, "announcement": null }
+  ]
+}

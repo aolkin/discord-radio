@@ -1,0 +1,8 @@
+{
+  "name": "noise",
+  "segment_defaults": {},
+  "entries": [
+    { "min_duration_seconds": 0.5, "max_duration_seconds": 1.5, "weight": 20, "fade_duration_seconds": null, "signal_profile": "weak_signal", "channel_status": null, "announcement": null },
+    { "min_duration_seconds": 2.0, "max_duration_seconds": 4.0, "weight": 5, "fade_duration_seconds": 1.0, "signal_profile": "tuning", "channel_status": null, "announcement": null }
+  ]
+}

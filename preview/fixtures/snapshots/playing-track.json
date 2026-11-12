@@ -1,0 +1,27 @@
+{
+  "guilds": [
+    {
+      "guild_id": "100000000000000001",
+      "in_voice": true,
+      "tracks": [
+        {
+          "name": "dj",
+          "filename": "s3://tracks/signal.mp3",
+          "volume": 1.0,
+          "loops": false,
+          "start_time": { "secs_since_epoch": 1790000000, "nanos_since_epoch": 0 },
+          "duration": { "secs": 187, "nanos": 500000000 }
+        }
+      ],
+      "dj_state": { "state_type": "PlayingTrack", "details": "s3://tracks/signal.mp3 (42.0s / 187.5s)" },
+      "audio_profile": { "name": "clear", "expected_name": "clear", "transitioning": false, "source": "background" },
+      "channel_status": { "status": "On air", "source": "background" },
+      "announcement_channels": [
+        { "channel_id": "200000000000000002", "name": "announcements" }
+      ]
+    }
+  ],
+  "version": "1",
+  "commit_hash": "preview",
+  "current_activity": { "activity_type": "listening", "status": "the static" }
+}

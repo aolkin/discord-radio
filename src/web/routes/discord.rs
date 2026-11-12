@@ -9,13 +9,13 @@ use serenity::model::channel::ChannelType;
 use serenity::model::id::{ChannelId, GuildId};
 use serenity::model::permissions::Permissions;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct GuildResponse {
     pub guild_id: String,
     pub name: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct GuildsResponse {
     pub guilds: Vec<GuildResponse>,
 }
@@ -46,13 +46,13 @@ pub async fn get_guilds(
     }))
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SendableChannelResponse {
     pub channel_id: String,
     pub name: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SendableChannelsResponse {
     pub channels: Vec<SendableChannelResponse>,
 }

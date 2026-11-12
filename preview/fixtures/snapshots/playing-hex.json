@@ -1,0 +1,18 @@
+{
+  "guilds": [
+    {
+      "guild_id": "100000000000000001",
+      "in_voice": true,
+      "tracks": [],
+      "dj_state": { "state_type": "PlayingHexMessage", "details": "once upon a time (3.5s / 12.0s)" },
+      "audio_profile": { "name": "tuning", "expected_name": "tuning", "transitioning": false, "source": "background" },
+      "channel_status": { "status": "On air", "source": "background" },
+      "announcement_channels": [
+        { "channel_id": "200000000000000002", "name": "announcements" }
+      ]
+    }
+  ],
+  "version": "1",
+  "commit_hash": "preview",
+  "current_activity": { "activity_type": "listening", "status": "the static" }
+}
