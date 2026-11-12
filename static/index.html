@@ -915,6 +915,7 @@
                                                                 :value="weightShare(poolForm.entries, index)"
                                                                 :disabled="weightMode(poolForm.entries, index) === 'pin'"
                                                                 @input="slideWeight(poolForm.entries, index, $event)"
+                                                                @change="endWeightDrag()"
                                                             >
                                                             <div class="weight-modes">
                                                                 <button

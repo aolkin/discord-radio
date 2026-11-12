@@ -38,6 +38,7 @@ jobs:
             frontend:
               - static/**
               - biome.json
+              - tests/frontend/**
               - .github/workflows/bot-check.yml
 
   check:
@@ -92,3 +93,11 @@ jobs:
 
       - name: Lint and check formatting
         run: biome ci static
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Run frontend tests
+        run: node --test 'tests/frontend/*.test.mjs'

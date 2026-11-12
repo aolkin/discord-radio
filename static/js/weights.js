@@ -20,6 +20,8 @@ function distribute(amount, parts) {
     return result;
 }
 
+const keepEqual = (weights, result) => result.map((value, i) => (asWeight(weights[i]) === value ? weights[i] : value));
+
 export function rebalance(weights, index, share, pinned) {
     const scaled = scaleTo100(weights);
     const total = sum(scaled);
@@ -38,19 +40,18 @@ export function rebalance(weights, index, share, pinned) {
     free.forEach((i, k) => {
         result[i] = rest[k];
     });
-    return result;
+    return keepEqual(weights, result);
 }
 
 export function setAlone(weights, index, share) {
-    const scaled = scaleTo100(weights);
-    const others = sum(scaled) - scaled[index];
+    const others = sum(weights.map(asWeight)) - asWeight(weights[index]);
     if (others === 0) {
         return weights;
     }
     const fraction = Math.min(Math.max(share, 0), 99) / 100;
-    const result = [...scaled];
+    const result = [...weights];
     result[index] = Math.round((fraction * others) / (1 - fraction));
-    return result;
+    return keepEqual(weights, result);
 }
 
 export function shareOf(weights, index) {
@@ -63,6 +64,7 @@ const sameRow = (a, b) => Alpine.raw(a) === Alpine.raw(b);
 export function weightSliders() {
     return {
         weightModes: [],
+        weightDrag: null,
 
         weightShare(rows, index) {
             return shareOf(
@@ -87,8 +89,19 @@ export function weightSliders() {
             this.weightModes = current === mode ? kept : [...kept, { row: rows[index], mode }];
         },
 
+        endWeightDrag() {
+            this.weightDrag = null;
+        },
+
         slideWeight(rows, index, event) {
-            const weights = rows.map((row) => row.weight);
+            if (
+                !this.weightDrag ||
+                !sameRow(this.weightDrag.row, rows[index]) ||
+                this.weightDrag.start.length !== rows.length
+            ) {
+                this.weightDrag = { row: rows[index], start: rows.map((row) => row.weight) };
+            }
+            const weights = this.weightDrag.start;
             const share = Number(event.target.value);
             const next =
                 this.weightMode(rows, index) === 'alone'
