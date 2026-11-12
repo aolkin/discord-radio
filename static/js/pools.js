@@ -19,10 +19,13 @@ const kinds = {
     track: {
         label: 'Track',
         identifier: 'filename',
+        what: ['filename'],
+        length: ['max_duration_seconds'],
+        expansion: ['allow_subsection', 'volume', 'channel_status', 'announcement'],
         entryFields: [
             { key: 'filename', label: 'Filename', type: 'text' },
             weight,
-            optionalSeconds('max_duration_seconds', 'Max Duration (s)'),
+            { ...optionalSeconds('max_duration_seconds', 'Max Duration (s)'), placeholder: 'Whole file' },
             { key: 'allow_subsection', label: 'Allow Subsection', type: 'bool', optional: true },
             { key: 'volume', label: 'Volume (0-2)', type: 'number', step: 'any', min: 0, max: 2, optional: true },
             ...entryPlaybackFields,
@@ -31,6 +34,9 @@ const kinds = {
     hex: {
         label: 'Hex Message',
         identifier: 'text',
+        what: ['text'],
+        length: ['loop_min', 'loop_max'],
+        expansion: ['channel_status', 'announcement'],
         entryFields: [
             { key: 'text', label: 'Text', type: 'text' },
             weight,
@@ -42,6 +48,9 @@ const kinds = {
     noise: {
         label: 'Noise',
         identifier: 'min_duration_seconds',
+        what: [],
+        length: ['min_duration_seconds', 'max_duration_seconds'],
+        expansion: ['fade_duration_seconds', 'channel_status', 'announcement'],
         entryFields: [...noisePeriodFields, ...entryPlaybackFields],
     },
 };
@@ -108,24 +117,70 @@ export function pools() {
     return {
         ...poolEditor.state(),
         ...poolEditor.methods,
-        poolNewEntryKind: 'track',
+        poolMode: 'properties',
+        poolExpanded: {},
         poolKinds: kinds,
+        poolWeightField: weight,
 
         poolUsers(pool) {
             return this.djConfigs.filter((config) => this.djConfigPools[config]?.includes(pool));
-        },
-
-        poolBlocks() {
-            return blocks(this.poolForm);
         },
 
         togglePoolHexConfig() {
             toggleHexConfig(this.poolForm.segment_defaults);
         },
 
-        addPoolEntry() {
-            const kind = this.poolNewEntryKind;
+        poolDefaultBlocks() {
+            return segmentDefaultsBlocks(this.poolForm.segment_defaults, ['segment_defaults']);
+        },
+
+        poolColumn(entry, column) {
+            const { entryFields } = kinds[entry.kind];
+            return kinds[entry.kind][column].map((key) => entryFields.find((field) => field.key === key));
+        },
+
+        poolProfileOptions(value) {
+            return value === '' || this.profiles.includes(value) ? this.profiles : [...this.profiles, value];
+        },
+
+        poolTotalWeight() {
+            return this.poolForm.entries.reduce(
+                (total, entry) => total + (typeof entry.weight === 'number' ? entry.weight : 0),
+                0,
+            );
+        },
+
+        poolShare(entry) {
+            const total = this.poolTotalWeight();
+            return total > 0 && typeof entry.weight === 'number'
+                ? `${((entry.weight / total) * 100).toFixed(1)}%`
+                : '0%';
+        },
+
+        poolEntryName(entry) {
+            if (entry.kind === 'noise') {
+                return `Noise ${entry.min_duration_seconds}-${entry.max_duration_seconds}s`;
+            }
+            return entry[kinds[entry.kind].identifier];
+        },
+
+        pickPoolFile(entry) {
+            this.openFileBrowser({
+                mode: 'file',
+                prefix: 'tracks/',
+                onSelect: (key) => {
+                    entry.filename = `s3://${key}`;
+                },
+            });
+        },
+
+        addPoolEntry(kind) {
             this.poolForm.entries.push({ kind, ...blankRow(kinds[kind].entryFields) });
+        },
+
+        removePoolEntry(index) {
+            this.poolForm.entries.splice(index, 1);
+            this.poolExpanded = {};
         },
     };
 }

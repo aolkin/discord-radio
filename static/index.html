@@ -593,7 +593,7 @@
                             </div>
 
                             <div class="modal-section">
-                                <template x-for="(block, blockIndex) in poolBlocks()" :key="blockIndex">
+                                <template x-for="(block, blockIndex) in poolDefaultBlocks()" :key="blockIndex">
                                     <div class="list-row">
                                         <div class="form-label" x-show="block.label" x-text="block.label"></div>
                                         <div class="form-row">
@@ -674,32 +674,254 @@
                                                 </div>
                                             </template>
                                         </div>
-                                        <button
-                                            type="button"
-                                            class="btn btn-secondary"
-                                            x-show="block.index !== undefined"
-                                            @click="poolForm.entries.splice(block.index, 1)"
-                                        >
-                                            Remove
-                                        </button>
                                     </div>
                                 </template>
-                                <div class="empty-state" x-show="poolForm.entries.length === 0">No entries</div>
                                 <div class="list-row">
-                                    <select class="form-input" aria-label="Entry kind" x-model="poolNewEntryKind">
-                                        <template x-for="(kind, kindName) in poolKinds" :key="kindName">
-                                            <option :value="kindName" x-text="kind.label"></option>
-                                        </template>
-                                    </select>
-                                    <button type="button" class="btn btn-secondary" @click="addPoolEntry()">
-                                        + Add Entry
-                                    </button>
                                     <button
                                         type="button"
                                         class="btn btn-secondary"
                                         @click="togglePoolHexConfig()"
                                         x-text="poolForm.segment_defaults.hex_config ? 'Remove Hex Config' : '+ Add Hex Config'"
                                     ></button>
+                                </div>
+                            </div>
+
+                            <div class="modal-section">
+                                <div class="button-group pool-grid-modes">
+                                    <button
+                                        type="button"
+                                        class="btn"
+                                        :class="poolMode === 'properties' ? 'btn-primary' : 'btn-secondary'"
+                                        @click="poolMode = 'properties'"
+                                    >
+                                        Properties
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="btn"
+                                        :class="poolMode === 'weights' ? 'btn-primary' : 'btn-secondary'"
+                                        @click="poolMode = 'weights'"
+                                    >
+                                        Weights
+                                    </button>
+                                </div>
+                                <div class="pool-grid-scroll">
+                                    <table class="pool-grid">
+                                        <thead>
+                                            <tr x-show="poolMode === 'properties'">
+                                                <th></th>
+                                                <th>Signal Profile</th>
+                                                <th>Kind</th>
+                                                <th>What</th>
+                                                <th>Length</th>
+                                                <th></th>
+                                            </tr>
+                                            <tr x-show="poolMode === 'weights'">
+                                                <th></th>
+                                                <th>Entry</th>
+                                                <th>Weight</th>
+                                                <th>Share</th>
+                                            </tr>
+                                        </thead>
+                                        <template x-for="(entry, index) in poolForm.entries" :key="index">
+                                            <tbody>
+                                                <tr x-show="poolMode === 'properties'">
+                                                    <td>
+                                                        <input
+                                                            type="checkbox"
+                                                            :aria-label="'Select entry ' + (index + 1)"
+                                                        >
+                                                    </td>
+                                                    <td>
+                                                        <select
+                                                            class="form-input"
+                                                            aria-label="Signal Profile"
+                                                            x-model="entry.signal_profile"
+                                                        >
+                                                            <option value="">(not set)</option>
+                                                            <template
+                                                                x-for="profile in poolProfileOptions(entry.signal_profile)"
+                                                                :key="profile"
+                                                            >
+                                                                <option :value="profile" x-text="profile"></option>
+                                                            </template>
+                                                        </select>
+                                                        <span
+                                                            class="field-was"
+                                                            x-show="isChanged('pools', ['entries', index, 'signal_profile'])"
+                                                            x-text="'was ' + wasValue('pools', ['entries', index, 'signal_profile'])"
+                                                        ></span>
+                                                    </td>
+                                                    <td x-text="poolKinds[entry.kind].label"></td>
+                                                    <td>
+                                                        <template
+                                                            x-for="field in poolColumn(entry, 'what')"
+                                                            :key="field.key"
+                                                        >
+                                                            <div class="pool-grid-cell">
+                                                                <input
+                                                                    type="text"
+                                                                    class="form-input"
+                                                                    :aria-label="field.label"
+                                                                    x-model="entry[field.key]"
+                                                                    :aria-invalid="fieldInvalid(field, entry[field.key])"
+                                                                    required
+                                                                >
+                                                                <button
+                                                                    type="button"
+                                                                    class="btn btn-secondary"
+                                                                    x-show="entry.kind === 'track'"
+                                                                    @click="pickPoolFile(entry)"
+                                                                >
+                                                                    Pick…
+                                                                </button>
+                                                                <span
+                                                                    class="field-was"
+                                                                    x-show="isChanged('pools', ['entries', index, field.key])"
+                                                                    x-text="'was ' + wasValue('pools', ['entries', index, field.key])"
+                                                                ></span>
+                                                            </div>
+                                                        </template>
+                                                    </td>
+                                                    <td>
+                                                        <div class="pool-grid-cell">
+                                                            <template
+                                                                x-for="field in poolColumn(entry, 'length')"
+                                                                :key="field.key"
+                                                            >
+                                                                <div>
+                                                                    <input
+                                                                        type="number"
+                                                                        class="form-input"
+                                                                        :aria-label="field.label"
+                                                                        x-model.number="entry[field.key]"
+                                                                        :step="field.step"
+                                                                        :min="field.min"
+                                                                        :required="!field.optional"
+                                                                        :aria-invalid="fieldInvalid(field, entry[field.key])"
+                                                                        :placeholder="field.placeholder ?? field.label"
+                                                                    >
+                                                                    <span
+                                                                        class="field-was"
+                                                                        x-show="isChanged('pools', ['entries', index, field.key])"
+                                                                        x-text="'was ' + wasValue('pools', ['entries', index, field.key])"
+                                                                    ></span>
+                                                                </div>
+                                                            </template>
+                                                        </div>
+                                                    </td>
+                                                    <td class="pool-grid-actions">
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-secondary"
+                                                            :aria-expanded="poolExpanded[index] === true"
+                                                            aria-label="Show more fields"
+                                                            @click="poolExpanded[index] = !poolExpanded[index]"
+                                                            x-text="poolExpanded[index] ? '▾' : '▸'"
+                                                        ></button>
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-secondary"
+                                                            @click="removePoolEntry(index)"
+                                                        >
+                                                            Remove
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                                <tr x-show="poolMode === 'properties' && poolExpanded[index]">
+                                                    <td></td>
+                                                    <td colspan="5">
+                                                        <div class="form-row">
+                                                            <template
+                                                                x-for="field in poolColumn(entry, 'expansion')"
+                                                                :key="field.key"
+                                                            >
+                                                                <div class="form-group">
+                                                                    <label class="form-label">
+                                                                        <span x-text="field.label"></span>
+                                                                        <template x-if="field.type === 'number'">
+                                                                            <input
+                                                                                type="number"
+                                                                                class="form-input"
+                                                                                x-model.number="entry[field.key]"
+                                                                                :step="field.step"
+                                                                                :min="field.min"
+                                                                                :max="field.max"
+                                                                                :aria-invalid="fieldInvalid(field, entry[field.key])"
+                                                                                placeholder="Optional"
+                                                                            >
+                                                                        </template>
+                                                                        <template x-if="field.type === 'text'">
+                                                                            <input
+                                                                                type="text"
+                                                                                class="form-input"
+                                                                                x-model="entry[field.key]"
+                                                                                placeholder="Optional"
+                                                                            >
+                                                                        </template>
+                                                                        <template x-if="field.type === 'bool'">
+                                                                            <select
+                                                                                class="form-input"
+                                                                                x-model="entry[field.key]"
+                                                                            >
+                                                                                <option value="">Default</option>
+                                                                                <option value="true">Yes</option>
+                                                                                <option value="false">No</option>
+                                                                            </select>
+                                                                        </template>
+                                                                    </label>
+                                                                    <span
+                                                                        class="field-was"
+                                                                        x-show="isChanged('pools', ['entries', index, field.key])"
+                                                                        x-text="'was ' + wasValue('pools', ['entries', index, field.key])"
+                                                                    ></span>
+                                                                </div>
+                                                            </template>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                                <tr x-show="poolMode === 'weights'">
+                                                    <td>
+                                                        <input
+                                                            type="checkbox"
+                                                            :aria-label="'Select entry ' + (index + 1)"
+                                                        >
+                                                    </td>
+                                                    <td class="pool-grid-name" x-text="poolEntryName(entry)"></td>
+                                                    <td>
+                                                        <input
+                                                            type="number"
+                                                            class="form-input"
+                                                            aria-label="Weight"
+                                                            x-model.number="entry.weight"
+                                                            step="1"
+                                                            min="0"
+                                                            required
+                                                            :aria-invalid="fieldInvalid(poolWeightField, entry.weight)"
+                                                        >
+                                                        <span
+                                                            class="field-was"
+                                                            x-show="isChanged('pools', ['entries', index, 'weight'])"
+                                                            x-text="'was ' + wasValue('pools', ['entries', index, 'weight'])"
+                                                        ></span>
+                                                    </td>
+                                                    <td x-text="poolShare(entry)"></td>
+                                                </tr>
+                                            </tbody>
+                                        </template>
+                                    </table>
+                                </div>
+                                <div class="empty-state" x-show="poolForm.entries.length === 0">No entries</div>
+                                <div class="button-group">
+                                    <button type="button" class="btn btn-secondary" @click="addPoolEntry('track')">
+                                        + Add track
+                                    </button>
+                                    <button type="button" class="btn btn-secondary" @click="addPoolEntry('hex')">
+                                        + Add hex message
+                                    </button>
+                                    <button type="button" class="btn btn-secondary" @click="addPoolEntry('noise')">
+                                        + Add noise
+                                    </button>
                                 </div>
                             </div>
                         </form>
