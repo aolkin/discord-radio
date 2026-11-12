@@ -48,7 +48,7 @@ http://localhost:3000
 
 The portal uses WebSockets for live status updates, automatically reconnecting if the connection is lost.
 
-The page has two views, picked by the switch under the header. Live (`#/live`) shows the guild cards. Edit (`#/edit`) shows a tree of DJ configs (each with the pools it uses under it), pools, signal profiles and audio files, and opens the selected item's editor beside it, or above it on a narrow screen. Each item has its own address: `#/edit/dj-configs/<name>`, `#/edit/pools/<name>` or `#/edit/signal-profiles/<name>`, and `+new` in place of the name opens a blank editor. The portal opens the same view and item on reload, from a shared link, and on Back and Forward; it opens `#/live` for an empty or unknown address.
+The page has two views, picked by the switch under the header. Live (`#/live`) shows every guild by name: guilds with a radio as cards, and guilds without one as a list below, each row with Send Message (server already chosen) and Bot Profile. Edit (`#/edit`) shows a tree of DJ configs (each with the pools it uses under it), pools, signal profiles and audio files, and opens the selected item's editor beside it, or above it on a narrow screen. Each item has its own address: `#/edit/dj-configs/<name>`, `#/edit/pools/<name>` or `#/edit/signal-profiles/<name>`, and `+new` in place of the name opens a blank editor. The portal opens the same view and item on reload, from a shared link, and on Back and Forward; it opens `#/live` for an empty or unknown address.
 
 ### DJ Management
 

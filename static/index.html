@@ -620,7 +620,7 @@
                 <template x-for="guild in guilds" :key="guild.guild_id">
                     <div class="guild-card">
                         <div class="guild-header">
-                            <div class="guild-id" x-text="'Guild: ' + guild.guild_id"></div>
+                            <div class="guild-id" x-text="guildName(guild.guild_id)"></div>
                             <span class="voice-badge" x-show="guild.in_voice">In Voice</span>
                         </div>
 
@@ -837,7 +837,35 @@
                 </template>
             </div>
 
-            <div class="no-guilds" x-show="route.view === 'live' && guilds.length === 0">
+            <div class="guild-list" x-show="route.view === 'live' && guildsWithoutRadio().length > 0">
+                <div class="section-title">Guilds without a radio</div>
+                <template x-for="guild in guildsWithoutRadio()" :key="guild.guild_id">
+                    <div class="guild-list-row">
+                        <div class="guild-id" x-text="guild.name"></div>
+                        <div class="button-group">
+                            <button
+                                type="button"
+                                class="btn btn-secondary"
+                                @click="openChannelMessageModal(guild.guild_id)"
+                            >
+                                Send Message
+                            </button>
+                            <button
+                                type="button"
+                                class="btn btn-secondary"
+                                @click="openBotProfileModal(guild.guild_id)"
+                            >
+                                Bot Profile
+                            </button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <div
+                class="no-guilds"
+                x-show="route.view === 'live' && guilds.length === 0 && guildsWithoutRadio().length === 0"
+            >
                 <div class="no-guilds-icon">💤</div>
                 <p x-text="connected ? 'No active guilds' : 'Connecting to bot...'"></p>
             </div>

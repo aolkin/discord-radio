@@ -1,9 +1,14 @@
+import { apiRequest, bodyOrStatus } from './api.js';
+
 export function connection() {
     return {
         ws: null,
         connected: false,
         statusText: 'Connecting...',
         guilds: [],
+        guildNames: {},
+        guildList: [],
+        guildListLoading: false,
         version: '',
         commitHash: '',
         lastCommitHash: null,
@@ -13,6 +18,7 @@ export function connection() {
         init() {
             this.connect();
             // Load audio files and profiles
+            this.loadGuildList();
             this.loadAudioFiles();
             this.loadProfiles();
             this.loadPools();
@@ -22,6 +28,33 @@ export function connection() {
             setInterval(() => {
                 this.currentTime = Date.now();
             }, 500);
+        },
+
+        async loadGuildList() {
+            if (this.guildListLoading) {
+                return;
+            }
+            this.guildListLoading = true;
+            try {
+                const response = await apiRequest('/api/guilds', { errorMessage: bodyOrStatus });
+                const data = await response.json();
+                this.guildList = data.guilds;
+                this.guildNames = Object.fromEntries(data.guilds.map((guild) => [guild.guild_id, guild.name]));
+            } catch (error) {
+                console.error('Failed to load guild list:', error);
+                setTimeout(() => this.loadGuildList(), 3000);
+            } finally {
+                this.guildListLoading = false;
+            }
+        },
+
+        guildName(guildId) {
+            return this.guildNames[guildId] || guildId;
+        },
+
+        guildsWithoutRadio() {
+            const withRadio = new Set(this.guilds.map((guild) => guild.guild_id));
+            return this.guildList.filter((guild) => !withRadio.has(guild.guild_id));
         },
 
         connect() {
@@ -43,6 +76,9 @@ export function connection() {
                 try {
                     const data = JSON.parse(event.data);
                     this.guilds = data.guilds || [];
+                    if (this.guilds.some((guild) => !(guild.guild_id in this.guildNames))) {
+                        this.loadGuildList();
+                    }
 
                     // Update current activity from websocket data
                     if (data.current_activity) {
