@@ -635,8 +635,19 @@ pub async fn status(ctx: Context<'_>) -> anyhow::Result<()> {
         None => format!("{} ({time})", display.name),
     };
 
+    let pool_info = match state.pool_name() {
+        Some(pool) => match state.pool_progress(ctx.data().dj_config_manager) {
+            Some(progress) => format!(
+                "\nPool: **{pool}** ({} of {})",
+                progress.played, progress.total
+            ),
+            None => format!("\nPool: **{pool}**"),
+        },
+        None => String::new(),
+    };
+
     ctx.say(format!(
-        "DJ State: {state_description}{profile_info}{announcement_info}"
+        "DJ State: {state_description}{pool_info}{profile_info}{announcement_info}"
     ))
     .await?;
 

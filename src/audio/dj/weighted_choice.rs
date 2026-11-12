@@ -114,6 +114,10 @@ impl WeightedSelector {
         Some(index)
     }
 
+    pub fn played_count(&self) -> usize {
+        self.recent_history.len()
+    }
+
     pub fn choose_unplayed<'a, T: Weighted>(
         &mut self,
         order: Order,

@@ -1,5 +1,5 @@
 use crate::activity::ActivityEntry;
-use crate::audio::dj::state_machine::ChannelStatus;
+use crate::audio::dj::state_machine::{ChannelStatus, PoolProgress};
 use crate::audio::tracks::TrackSnapshot;
 use crate::state::Data;
 use serde::{Deserialize, Serialize};
@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 pub struct DJStateInfo {
     pub state_type: String,
     pub details: String,
+    pub pool: Option<String>,
+    pub progress: Option<PoolProgress>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,7 +66,7 @@ impl BotSnapshot {
                 let dj_state_lock = guild.dj_manager.state();
                 let state = dj_state_lock.read().await;
                 (
-                    dj_state_to_info(&state),
+                    dj_state_to_info(&state, bot_state),
                     state.config_name.clone(),
                     state.signal_profile(),
                     state.channel_status(),
@@ -124,7 +126,10 @@ impl BotSnapshot {
     }
 }
 
-fn dj_state_to_info(state: &crate::audio::dj::state_machine::DJState) -> DJStateInfo {
+fn dj_state_to_info(
+    state: &crate::audio::dj::state_machine::DJState,
+    bot_state: &Data,
+) -> DJStateInfo {
     let display = state.segment.state_display();
     let elapsed = state.segment.elapsed().as_secs_f32();
     let time = match display.total {
@@ -138,5 +143,7 @@ fn dj_state_to_info(state: &crate::audio::dj::state_machine::DJState) -> DJState
     DJStateInfo {
         state_type: display.name.to_string(),
         details,
+        pool: state.pool_name().map(str::to_string),
+        progress: state.pool_progress(bot_state.dj_config_manager),
     }
 }

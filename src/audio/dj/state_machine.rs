@@ -1,4 +1,5 @@
 use crate::audio::dj::announcement::Announcement;
+use crate::audio::dj::config::registry::DJConfigRegistry;
 use crate::audio::dj::config::signal_profiles::SignalProfileEntry;
 use crate::audio::dj::config::{
     AnnouncementEntry, ChannelStatusEntry, ConfiguredPool, DurationRange, EntryPlaybackConfig,
@@ -30,6 +31,7 @@ pub struct SegmentContainer {
     pub segment: Box<dyn Segment>,
     #[serde(serialize_with = "ser_instant", deserialize_with = "deser_instant")]
     pub started_at: Instant,
+    pub pool: Option<String>,
 }
 
 impl SegmentContainer {
@@ -64,6 +66,7 @@ impl From<Box<dyn Segment>> for SegmentContainer {
         SegmentContainer {
             segment,
             started_at: Instant::now(),
+            pool: None,
         }
     }
 }
@@ -111,7 +114,29 @@ impl Default for DJState {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PoolProgress {
+    pub played: usize,
+    pub total: usize,
+}
+
 impl DJState {
+    pub fn pool_name(&self) -> Option<&str> {
+        match &self.playing_pool {
+            Some(playing) => Some(&playing.pool),
+            None => self.segment.pool.as_deref(),
+        }
+    }
+
+    pub fn pool_progress(&self, registry: &DJConfigRegistry) -> Option<PoolProgress> {
+        let playing = self.playing_pool.as_ref()?;
+        let pool = registry.pools.get(&playing.pool)?;
+        Some(PoolProgress {
+            played: playing.selector.played_count(),
+            total: pool.entries.len(),
+        })
+    }
+
     fn continuing_pool<'a>(&self, pools: &'a [ConfiguredPool]) -> Option<&'a ConfiguredPool> {
         let playing = self.playing_pool.as_ref()?;
         pools
@@ -406,9 +431,11 @@ impl DJStateMachine {
         bot_state: &Data,
         pool_name: Option<&str>,
     ) -> anyhow::Result<()> {
-        let next_state = self.next_segment(pool_name, bot_state).await?;
+        let (next_state, pool) = self.next_segment(pool_name, bot_state).await?;
         tracing::info!("DJ transitioning to state: {}", next_state.state_name());
-        self.enter_state(next_state.into(), bot_state).await
+        let mut container = SegmentContainer::from(next_state);
+        container.pool = pool;
+        self.enter_state(container, bot_state).await
     }
 
     /// Picks a segment from the pool named `pool_name`, or else from a pool
@@ -417,7 +444,7 @@ impl DJStateMachine {
         &mut self,
         pool_name: Option<&str>,
         bot_state: Data,
-    ) -> anyhow::Result<Box<dyn Segment>> {
+    ) -> anyhow::Result<(Box<dyn Segment>, Option<String>)> {
         let requested = pool_name.map(|name| self.pool_named(name)).transpose()?;
         let loaded = self.config.borrow().clone();
         let mut state = self.state.write().await;
@@ -434,10 +461,13 @@ impl DJStateMachine {
             None => {
                 state.playing_pool = None;
                 let Some(pool) = state.pool_selector.choose(Order::Weighted, &loaded.pools) else {
-                    return Ok(Box::new(NoiseSegment::from_entry(
-                        &DEFAULT_NOISE_PERIOD,
-                        &SegmentDefaults::default(),
-                    )));
+                    return Ok((
+                        Box::new(NoiseSegment::from_entry(
+                            &DEFAULT_NOISE_PERIOD,
+                            &SegmentDefaults::default(),
+                        )),
+                        None,
+                    ));
                 };
                 let name = pool.file.name.clone();
                 let entry = state
@@ -447,7 +477,8 @@ impl DJStateMachine {
             }
         };
         drop(state);
-        Ok(entry.segment(&pool.segment_defaults, &bot_state).await)
+        let segment = entry.segment(&pool.segment_defaults, &bot_state).await;
+        Ok((segment, Some(pool.file.name.clone())))
     }
 
     fn pool_named(&self, name: &str) -> anyhow::Result<ConfiguredPool> {
@@ -664,7 +695,24 @@ impl DJStateMachine {
     async fn log_state_transition(&self, bot_state: &Data) {
         let state = self.state.read().await;
         let event_type = state.segment.state_name().to_string();
-        let details = state.segment.loggable_properties();
+        let mut details = state.segment.loggable_properties();
+        if let Some(pool) = state.segment.pool.as_deref()
+            && let Some(details) = details.as_object_mut()
+        {
+            details.insert("pool".to_string(), pool.into());
+            if let Some(progress) = state
+                .pool_progress(bot_state.dj_config_manager)
+                .filter(|_| {
+                    state
+                        .playing_pool
+                        .as_ref()
+                        .is_some_and(|playing| playing.pool == pool)
+                })
+            {
+                details.insert("pool_played".to_string(), progress.played.into());
+                details.insert("pool_total".to_string(), progress.total.into());
+            }
+        }
         // Drop the read guard before awaiting the log write below so it isn't held
         // across unrelated file I/O.
         drop(state);
