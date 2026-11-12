@@ -34,7 +34,7 @@ export function channels() {
         channelMessage: emptyMessage(),
 
         // Channel Message Functions
-        async openChannelMessageModal() {
+        async openChannelMessageModal(guildId = '') {
             this.openModal('channelMessage');
             this.channelsLoading = true;
 
@@ -45,6 +45,7 @@ export function channels() {
 
                 const data = await response.json();
                 this.messageGuilds = data.guilds;
+                this.selectedGuildId = guildId;
             } catch (error) {
                 console.error('Error loading servers:', error);
                 this.channelMessage = {
@@ -54,6 +55,7 @@ export function channels() {
             } finally {
                 this.channelsLoading = false;
             }
+            await this.loadSendableChannels();
         },
 
         async loadSendableChannels() {

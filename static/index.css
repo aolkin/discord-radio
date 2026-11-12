@@ -391,6 +391,23 @@ h1 {
     font-size: 0.9rem;
 }
 
+.guild-list {
+    margin-top: 20px;
+}
+
+.guild-list-row {
+    background: white;
+    border-radius: 12px;
+    padding: 12px 20px;
+    margin-bottom: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
 .no-guilds {
     background: white;
     border-radius: 12px;
