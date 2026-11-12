@@ -32,6 +32,7 @@ jobs:
               - build.rs
               - src/**
               - crates/**
+              - preview/**
               - .github/actions/setup-rust-and-cache/**
               - .github/workflows/bot-check.yml
             frontend:

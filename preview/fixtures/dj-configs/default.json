@@ -1,0 +1,20 @@
+{
+  "name": "default",
+  "pools": {
+    "hex": { "weight": 2, "order": "weighted", "segment_defaults": {} },
+    "noise": { "weight": 50, "order": "weighted", "segment_defaults": {} },
+    "track": { "weight": 100, "order": "sequential", "segment_defaults": {} }
+  },
+  "signal_profiles": {
+    "entries": [
+      { "signal_profile": "clear", "min_duration_seconds": 60.0, "max_duration_seconds": 240.0, "weight": 40, "fade_duration_seconds": 8.0 },
+      { "signal_profile": "weak_signal", "min_duration_seconds": 4.0, "max_duration_seconds": 30.0, "weight": 5, "fade_duration_seconds": 8.0 },
+      { "signal_profile": "tuning", "min_duration_seconds": 6.0, "max_duration_seconds": 30.0, "weight": 10, "fade_duration_seconds": null }
+    ]
+  },
+  "channel_statuses": {
+    "entries": [
+      { "status": "On air", "weight": 3, "min_duration_seconds": 60.0, "max_duration_seconds": 300.0 }
+    ]
+  }
+}

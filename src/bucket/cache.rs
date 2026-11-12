@@ -1,7 +1,7 @@
 use anyhow::{Context, anyhow, bail};
 use async_trait::async_trait;
 use rand::RngExt;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -41,7 +41,7 @@ pub struct DirListing {
     pub files: Vec<ObjectInfo>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ObjectInfo {
     pub key: String,
     pub size: u64,

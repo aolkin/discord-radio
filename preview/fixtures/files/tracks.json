@@ -1,0 +1,9 @@
+{
+  "prefix": "tracks/",
+  "folders": ["tracks/ambient/", "tracks/stories/"],
+  "files": [
+    { "key": "tracks/signal.mp3", "size": 4812345, "last_modified": "2026-10-01T12:00:00.000Z" },
+    { "key": "tracks/static-lullaby.ogg", "size": 3120456, "last_modified": "2026-10-03T08:30:00.000Z" },
+    { "key": "tracks/numbers.wav", "size": 9876543, "last_modified": "2026-10-07T21:15:00.000Z" }
+  ]
+}
