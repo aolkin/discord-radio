@@ -31,13 +31,15 @@ h1 {
     padding: 5px;
     border: 1px solid var(--color-border);
     border-radius: 4px;
+    background: var(--color-surface);
+    color: var(--color-text);
 }
 
 .log-container {
-    background: white;
+    background: var(--color-surface);
     border-radius: 12px;
     padding: 20px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-sm);
 }
 
 .log-header {
