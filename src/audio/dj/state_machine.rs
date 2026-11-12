@@ -2,7 +2,7 @@ use crate::audio::dj::announcement::Announcement;
 use crate::audio::dj::config::signal_profiles::SignalProfileEntry;
 use crate::audio::dj::config::{
     AnnouncementEntry, ChannelStatusEntry, ConfiguredPool, DurationRange, EntryPlaybackConfig,
-    LoadedConfig, Order, SegmentDefaults,
+    LoadedConfig, Order, Playback, SegmentDefaults,
 };
 use crate::audio::dj::manager::{
     ADVANCE_RETRY_DELAY, DJCommand, HexMessageRequest, IdleRequest, TrackRequest,
@@ -16,7 +16,6 @@ use crate::audio::dj::signal_profile::SignalProfilePlayback;
 use crate::audio::dj::tiered::{TieredChange, TieredStateMachine, TieredValue, TimedValue};
 use crate::audio::dj::weighted_choice::WeightedSelector;
 use crate::state::Data;
-use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use serenity::model::id::{ChannelId, GuildId};
 use std::collections::{BTreeMap, BTreeSet};
@@ -85,6 +84,13 @@ pub struct DJState {
     pub announcement_channels: BTreeSet<ChannelId>,
     pub pool_selector: WeightedSelector,
     pub entry_selectors: BTreeMap<String, WeightedSelector>,
+    pub playing_pool: Option<PlayingPool>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PlayingPool {
+    pub pool: String,
+    pub selector: WeightedSelector,
 }
 
 impl Default for DJState {
@@ -97,6 +103,7 @@ impl Default for DJState {
             announcement_channels: BTreeSet::new(),
             pool_selector: WeightedSelector::default(),
             entry_selectors: BTreeMap::new(),
+            playing_pool: None,
         }
     }
 }
@@ -381,28 +388,83 @@ impl DJStateMachine {
         let requested = pool_name.map(|name| self.pool_named(name)).transpose()?;
         let loaded = self.config.borrow().clone();
         let mut state = self.state.write().await;
-        let pool = requested.or_else(|| {
-            state
-                .pool_selector
-                .choose(Order::Weighted, &loaded.pools)
-                .cloned()
-        });
-        let Some(pool) = pool else {
-            return Ok(Box::new(NoiseSegment::from_entry(
-                &DEFAULT_NOISE_PERIOD,
-                &SegmentDefaults::default(),
-            )));
+        let mut continued = false;
+        let mut next_pool = match requested {
+            Some(pool) => {
+                state.playing_pool = None;
+                Some(pool)
+            }
+            None => {
+                let current = state.playing_pool.as_ref().and_then(|playing| {
+                    loaded.pools.iter().find(|pool| {
+                        pool.file.name == playing.pool && pool.playback == Playback::All
+                    })
+                });
+                continued = current.is_some();
+                current.cloned()
+            }
         };
-        let entry = state
-            .entry_selectors
-            .entry(pool.file.name.clone())
-            .or_default()
-            .choose(pool.order, &pool.file.entries);
+        let (pool, index) = loop {
+            let pool = match next_pool.take() {
+                Some(pool) => pool,
+                None => {
+                    state.playing_pool = None;
+                    continued = false;
+                    let picked = state
+                        .pool_selector
+                        .choose(Order::Weighted, &loaded.pools)
+                        .cloned();
+                    let Some(pool) = picked else {
+                        return Ok(Box::new(NoiseSegment::from_entry(
+                            &DEFAULT_NOISE_PERIOD,
+                            &SegmentDefaults::default(),
+                        )));
+                    };
+                    pool
+                }
+            };
+            let index = match pool.playback {
+                Playback::Single => {
+                    state.playing_pool = None;
+                    state
+                        .entry_selectors
+                        .entry(pool.file.name.clone())
+                        .or_default()
+                        .choose(pool.order, &pool.file.entries)
+                        .and_then(|entry| {
+                            pool.file
+                                .entries
+                                .iter()
+                                .position(|candidate| std::ptr::eq(candidate, entry))
+                        })
+                }
+                Playback::All => {
+                    let playing = state
+                        .playing_pool
+                        .take_if(|playing| playing.pool == pool.file.name)
+                        .unwrap_or_else(|| PlayingPool {
+                            pool: pool.file.name.clone(),
+                            selector: WeightedSelector::default(),
+                        });
+                    let playing = state.playing_pool.insert(playing);
+                    playing
+                        .selector
+                        .choose_unplayed(pool.order, &pool.file.entries)
+                }
+            };
+            match index {
+                Some(index) => break (pool, index),
+                None if continued => {
+                    state.playing_pool = None;
+                    continued = false;
+                }
+                None => anyhow::bail!("pool {:?} has no entry with weight above 0", pool.file.name),
+            }
+        };
         drop(state);
-        let entry = entry.with_context(|| {
-            format!("pool {:?} has no entry with weight above 0", pool.file.name)
-        })?;
-        Ok(entry.segment(&pool.segment_defaults, &bot_state).await)
+        Ok(pool.file.entries[index]
+            .segment(&pool.segment_defaults, &bot_state)
+            .await)
     }
 
     fn pool_named(&self, name: &str) -> anyhow::Result<ConfiguredPool> {
@@ -418,6 +480,7 @@ impl DJStateMachine {
         let file = self.bot_state.dj_config_manager.pools.require(name)?;
         Ok(ConfiguredPool {
             weight: 0,
+            playback: Playback::default(),
             order: Order::default(),
             segment_defaults: file.segment_defaults.clone(),
             file,

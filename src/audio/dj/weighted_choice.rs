@@ -106,13 +106,37 @@ impl WeightedSelector {
         Some(&items[index])
     }
 
-    fn choose_sequential<'a, T: Weighted>(&mut self, items: &'a [T]) -> Option<&'a T> {
-        if items.is_empty() {
-            return None;
-        }
-        self.trim(items.len());
+    /// Returns the index of an entry not yet in the history, or `None` once
+    /// none are left (weight 0 entries never play under `Weighted`).
+    pub fn choose_unplayed<T: Weighted>(&mut self, order: Order, items: &[T]) -> Option<usize> {
+        let index = match order {
+            Order::Weighted => {
+                let identities: Vec<Identity> = items.iter().map(Weighted::identity).collect();
+                let effective_weights: Vec<f32> = items
+                    .iter()
+                    .zip(&identities)
+                    .map(|(item, identity)| {
+                        let played = self
+                            .recent_history
+                            .iter()
+                            .any(|recent| recent.identity == *identity);
+                        if played { 0.0 } else { item.weight() as f32 }
+                    })
+                    .collect();
+                choose_index(&effective_weights)?
+            }
+            Order::Sequential => self.last_index(items).map_or(0, |index| index + 1),
+        };
+        let item = items.get(index)?;
+        self.recent_history.push_back(Played {
+            identity: item.identity(),
+            index,
+        });
+        Some(index)
+    }
 
-        let last_index = self.recent_history.back().and_then(|last| {
+    fn last_index<T: Weighted>(&self, items: &[T]) -> Option<usize> {
+        self.recent_history.back().and_then(|last| {
             if items.get(last.index).map(Weighted::identity) == Some(last.identity) {
                 Some(last.index)
             } else {
@@ -120,8 +144,18 @@ impl WeightedSelector {
                     .iter()
                     .position(|item| item.identity() == last.identity)
             }
-        });
-        let index = last_index.map_or(0, |index| (index + 1) % items.len());
+        })
+    }
+
+    fn choose_sequential<'a, T: Weighted>(&mut self, items: &'a [T]) -> Option<&'a T> {
+        if items.is_empty() {
+            return None;
+        }
+        self.trim(items.len());
+
+        let index = self
+            .last_index(items)
+            .map_or(0, |index| (index + 1) % items.len());
         self.recent_history.push_back(Played {
             identity: items[index].identity(),
             index,

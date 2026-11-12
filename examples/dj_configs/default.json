@@ -9,6 +9,7 @@
     },
     "story": {
       "weight": 5,
+      "playback": "all",
       "order": "sequential"
     },
     "track": {
