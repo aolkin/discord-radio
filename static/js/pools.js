@@ -59,7 +59,7 @@ const sameRow = (a, b) => Alpine.raw(a) === Alpine.raw(b);
 
 const isIn = (rows, entry) => rows.some((row) => sameRow(row, entry));
 
-function toForm(name, pool) {
+export function poolToForm(name, pool) {
     return {
         name,
         segment_defaults: segmentDefaultsFromServer(pool.segment_defaults),
@@ -110,7 +110,7 @@ const poolEditor = registryEditor({
     list: 'pools',
     kind: 'pools',
     label: 'pool',
-    toForm,
+    toForm: poolToForm,
     toBody,
     blankForm,
     blocks,
