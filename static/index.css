@@ -550,6 +550,37 @@ h1 {
     overflow-wrap: anywhere;
 }
 
+.weight-control {
+    display: grid;
+    grid-template-columns: 6em minmax(100px, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+    min-width: 340px;
+}
+
+.weight-control .form-input {
+    min-width: 0;
+}
+
+.weight-control input[type="range"] {
+    width: 100%;
+    accent-color: var(--color-primary);
+}
+
+.weight-control input[type="range"]:disabled {
+    opacity: 0.4;
+}
+
+.weight-modes {
+    display: flex;
+    gap: 4px;
+}
+
+.weight-modes .btn {
+    padding: 6px 10px;
+    font-size: 0.8rem;
+}
+
 @media (max-width: 768px) {
     .guild-content {
         grid-template-columns: 1fr;
