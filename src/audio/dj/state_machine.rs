@@ -110,6 +110,46 @@ impl Default for DJState {
 }
 
 impl DJState {
+    fn continuing_pool(&self, pools: &[ConfiguredPool]) -> Option<ConfiguredPool> {
+        let playing = self.playing_pool.as_ref()?;
+        pools
+            .iter()
+            .find(|pool| pool.file.name == playing.pool && pool.playback == Playback::All)
+            .cloned()
+    }
+
+    fn pick_entry(&mut self, pool: ConfiguredPool) -> Option<(ConfiguredPool, usize)> {
+        let index = match pool.playback {
+            Playback::Single => {
+                self.playing_pool = None;
+                self.entry_selectors
+                    .entry(pool.file.name.clone())
+                    .or_default()
+                    .choose(pool.order, &pool.file.entries)
+                    .and_then(|entry| {
+                        pool.file
+                            .entries
+                            .iter()
+                            .position(|candidate| std::ptr::eq(candidate, entry))
+                    })
+            }
+            Playback::All => {
+                let playing = self
+                    .playing_pool
+                    .take_if(|playing| playing.pool == pool.file.name)
+                    .unwrap_or_else(|| PlayingPool {
+                        pool: pool.file.name.clone(),
+                        selector: WeightedSelector::default(),
+                    });
+                self.playing_pool
+                    .insert(playing)
+                    .selector
+                    .choose_unplayed(pool.order, &pool.file.entries)
+            }
+        }?;
+        Some((pool, index))
+    }
+
     pub fn shift_back(&mut self, by: Duration) {
         self.segment.started_at.shift_back(by);
         self.signal_profile.shift_back(by);
@@ -389,75 +429,33 @@ impl DJStateMachine {
         let requested = pool_name.map(|name| self.pool_named(name)).transpose()?;
         let loaded = self.config.borrow().clone();
         let mut state = self.state.write().await;
-        let mut next_pool = match requested {
+        let first = match requested {
             Some(pool) => {
                 state.playing_pool = None;
                 Some(pool)
             }
+            None => state.continuing_pool(&loaded.pools),
+        };
+        let (pool, index) = match first.and_then(|pool| state.pick_entry(pool)) {
+            Some(picked) => picked,
             None => {
-                let current = state.playing_pool.as_ref().and_then(|playing| {
-                    loaded.pools.iter().find(|pool| {
-                        pool.file.name == playing.pool && pool.playback == Playback::All
-                    })
-                });
-                current.cloned()
+                state.playing_pool = None;
+                let Some(pool) = state
+                    .pool_selector
+                    .choose(Order::Weighted, &loaded.pools)
+                    .cloned()
+                else {
+                    return Ok(Box::new(NoiseSegment::from_entry(
+                        &DEFAULT_NOISE_PERIOD,
+                        &SegmentDefaults::default(),
+                    )));
+                };
+                let name = pool.file.name.clone();
+                state
+                    .pick_entry(pool)
+                    .with_context(|| format!("pool {name:?} has no entry to play"))?
             }
         };
-        let mut picked_entry = None;
-        for _ in 0..2 {
-            let pool = match next_pool.take() {
-                Some(pool) => pool,
-                None => {
-                    state.playing_pool = None;
-                    let picked = state
-                        .pool_selector
-                        .choose(Order::Weighted, &loaded.pools)
-                        .cloned();
-                    let Some(pool) = picked else {
-                        return Ok(Box::new(NoiseSegment::from_entry(
-                            &DEFAULT_NOISE_PERIOD,
-                            &SegmentDefaults::default(),
-                        )));
-                    };
-                    pool
-                }
-            };
-            let index = match pool.playback {
-                Playback::Single => {
-                    state.playing_pool = None;
-                    state
-                        .entry_selectors
-                        .entry(pool.file.name.clone())
-                        .or_default()
-                        .choose(pool.order, &pool.file.entries)
-                        .and_then(|entry| {
-                            pool.file
-                                .entries
-                                .iter()
-                                .position(|candidate| std::ptr::eq(candidate, entry))
-                        })
-                }
-                Playback::All => {
-                    let playing = state
-                        .playing_pool
-                        .take_if(|playing| playing.pool == pool.file.name)
-                        .unwrap_or_else(|| PlayingPool {
-                            pool: pool.file.name.clone(),
-                            selector: WeightedSelector::default(),
-                        });
-                    let playing = state.playing_pool.insert(playing);
-                    playing
-                        .selector
-                        .choose_unplayed(pool.order, &pool.file.entries)
-                }
-            };
-            if let Some(index) = index {
-                picked_entry = Some((pool, index));
-                break;
-            }
-            state.playing_pool = None;
-        }
-        let (pool, index) = picked_entry.context("no pool has an entry to play")?;
         drop(state);
         Ok(pool.file.entries[index]
             .segment(&pool.segment_defaults, &bot_state)
