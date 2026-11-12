@@ -22,7 +22,7 @@ function distribute(amount, parts) {
 
 const keepEqual = (weights, result) => result.map((value, i) => (asWeight(weights[i]) === value ? weights[i] : value));
 
-export function rebalance(weights, index, share, pinned) {
+function rebalance(weights, index, share, pinned) {
     const scaled = scaleTo100(weights);
     const total = sum(scaled);
     const free = scaled.map((_, i) => i).filter((i) => i !== index && !pinned[i]);
@@ -43,7 +43,7 @@ export function rebalance(weights, index, share, pinned) {
     return keepEqual(weights, result);
 }
 
-export function setAlone(weights, index, share) {
+function setAlone(weights, index, share) {
     const others = sum(weights.map(asWeight)) - asWeight(weights[index]);
     if (others === 0) {
         return weights;
@@ -54,7 +54,7 @@ export function setAlone(weights, index, share) {
     return keepEqual(weights, result);
 }
 
-export function shareOf(weights, index) {
+function shareOf(weights, index) {
     const total = sum(weights.map(asWeight));
     return total > 0 ? (asWeight(weights[index]) / total) * 100 : 0;
 }
