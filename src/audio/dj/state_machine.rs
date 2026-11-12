@@ -2,7 +2,7 @@ use crate::audio::dj::announcement::Announcement;
 use crate::audio::dj::config::signal_profiles::SignalProfileEntry;
 use crate::audio::dj::config::{
     AnnouncementEntry, ChannelStatusEntry, ConfiguredPool, DurationRange, EntryPlaybackConfig,
-    LoadedConfig, SegmentDefaults,
+    LoadedConfig, Order, SegmentDefaults,
 };
 use crate::audio::dj::manager::{
     ADVANCE_RETRY_DELAY, DJCommand, HexMessageRequest, IdleRequest, TrackRequest,
@@ -381,7 +381,12 @@ impl DJStateMachine {
         let requested = pool_name.map(|name| self.pool_named(name)).transpose()?;
         let loaded = self.config.borrow().clone();
         let mut state = self.state.write().await;
-        let pool = requested.or_else(|| state.pool_selector.choose(&loaded.pools).cloned());
+        let pool = requested.or_else(|| {
+            state
+                .pool_selector
+                .choose(Order::Weighted, &loaded.pools)
+                .cloned()
+        });
         let Some(pool) = pool else {
             return Ok(Box::new(NoiseSegment::from_entry(
                 &DEFAULT_NOISE_PERIOD,
@@ -392,11 +397,11 @@ impl DJStateMachine {
             .entry_selectors
             .entry(pool.file.name.clone())
             .or_default()
-            .choose(&pool.file.entries)
-            .with_context(|| {
-                format!("pool {:?} has no entry with weight above 0", pool.file.name)
-            })?;
+            .choose(pool.order, &pool.file.entries);
         drop(state);
+        let entry = entry.with_context(|| {
+            format!("pool {:?} has no entry with weight above 0", pool.file.name)
+        })?;
         Ok(entry.segment(&pool.segment_defaults, &bot_state).await)
     }
 
@@ -413,6 +418,7 @@ impl DJStateMachine {
         let file = self.bot_state.dj_config_manager.pools.require(name)?;
         Ok(ConfiguredPool {
             weight: 0,
+            order: Order::default(),
             segment_defaults: file.segment_defaults.clone(),
             file,
         })

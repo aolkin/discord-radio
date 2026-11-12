@@ -33,9 +33,19 @@ pub struct DJConfig {
     pub channel_statuses: ChannelStatuses,
 }
 
+#[derive(Deserialize, Serialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Order {
+    #[default]
+    Weighted,
+    Sequential,
+}
+
 #[derive(Deserialize, Serialize, Debug)]
 pub struct PoolConfig {
     pub weight: NonZeroU32,
+    #[serde(default)]
+    pub order: Order,
     #[serde(default)]
     pub segment_defaults: SegmentDefaults,
 }
@@ -43,6 +53,7 @@ pub struct PoolConfig {
 #[derive(Debug, Clone)]
 pub struct ConfiguredPool {
     pub weight: u32,
+    pub order: Order,
     pub segment_defaults: SegmentDefaults,
     pub file: Arc<Pool>,
 }
