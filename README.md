@@ -6,6 +6,7 @@ A Discord bot built with Rust using Serenity and Songbird for voice functionalit
 
 - Broadcast an automated "radio station" into a Discord voice channel.
 - Shuffle across uploaded audio files with repeat avoidance.
+- Set each pool's `playback` in the DJ config: `single` (default) plays one entry per pick, and `all` plays every entry once before the DJ picks another pool. With `order: weighted`, `all` plays entries by weight, skipping those already played; with `order: sequential`, it plays them in file order and ignores weight.
 - Play messages as read-aloud voicing of their hexadecimal ASCII encoding.
 - Add static and signal processing to simulate an intermittent or weak connection.
 - Dynamically update the voice channel status based on the currently playing segment.
@@ -98,7 +99,7 @@ The portal provides:
 
 ### DJ Commands
 - `/dj join` - Join a voice channel to broadcast audio
-- `/dj skip` - Skip the DJ to its next state now, optionally to a segment from a named pool in the DJ config
+- `/dj skip` - Skip the DJ to its next state now, optionally to a segment from a named pool in the DJ config. In a pool with `playback: all`, skipping without a pool plays that pool's next entry, and naming a pool starts that pool over
 - `/dj idle` - Have the DJ go idle now, optionally playing a noise profile, for a number of seconds or until the DJ is advanced
 - `/dj track` - Have the DJ play an audio track now
 - `/dj hex` - Have the DJ play a text message as hex audio, optionally with the segment defaults of a named pool in the DJ config

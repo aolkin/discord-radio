@@ -41,9 +41,19 @@ pub enum Order {
     Sequential,
 }
 
+#[derive(Deserialize, Serialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Playback {
+    #[default]
+    Single,
+    All,
+}
+
 #[derive(Deserialize, Serialize, Debug)]
 pub struct PoolConfig {
     pub weight: NonZeroU32,
+    #[serde(default)]
+    pub playback: Playback,
     #[serde(default)]
     pub order: Order,
     #[serde(default)]
@@ -53,6 +63,7 @@ pub struct PoolConfig {
 #[derive(Debug, Clone)]
 pub struct ConfiguredPool {
     pub weight: u32,
+    pub playback: Playback,
     pub order: Order,
     pub segment_defaults: SegmentDefaults,
     pub file: Arc<Pool>,
