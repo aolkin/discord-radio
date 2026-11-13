@@ -988,3 +988,50 @@ a.guild-card {
     object-fit: cover;
     border-radius: 6px;
 }
+
+.log-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 15px 0;
+}
+
+.log-offsets {
+    margin-left: 10px;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+}
+
+.log-limit {
+    width: 80px;
+    display: inline-block;
+}
+
+.log-entry {
+    background: var(--color-surface-muted);
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    border-left: 4px solid var(--color-primary);
+}
+
+.log-entry.dj {
+    border-left-color: var(--color-success);
+}
+
+.log-time {
+    font-size: 0.85rem;
+    color: var(--color-text-faint);
+    margin-bottom: 5px;
+}
+
+.log-content {
+    font-size: 0.95rem;
+    color: var(--color-text);
+}
+
+.log-detail {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+    margin-top: 5px;
+}

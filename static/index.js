@@ -5,6 +5,7 @@ import { connection } from './js/connection.js';
 import { dj } from './js/dj.js';
 import { djConfigs } from './js/dj-configs.js';
 import { fileBrowser, modals as fileBrowserModals } from './js/file-browser.js';
+import { logs } from './js/logs.js';
 import { modalMethods, modals } from './js/modal.js';
 import { pools } from './js/pools.js';
 import { drafts } from './js/registry-editor.js';
@@ -31,6 +32,7 @@ function botPortal() {
         ...botProfile(),
         ...activity(),
         ...channels(),
+        ...logs(),
         ...actionMethods(),
         ...modalMethods,
     };
