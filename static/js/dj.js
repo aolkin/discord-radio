@@ -1,16 +1,6 @@
 import { apiRequest, bodyOrStatus, emptyMessage } from './api.js';
 
 export const modals = {
-    advanceDJ: {
-        flag: 'showAdvanceDJModal',
-        perGuild: true,
-        reset: () => ({ djStateType: '', djMessage: emptyMessage() }),
-    },
-    playHex: {
-        flag: 'showPlayHexModal',
-        perGuild: true,
-        reset: () => ({ hexMessageText: '', hexMessagePool: '', hexMessage: emptyMessage() }),
-    },
     announcementChannels: {
         flag: 'showAnnouncementChannelsModal',
         perGuild: true,
@@ -32,19 +22,19 @@ export const modals = {
     },
 };
 
+export const playForms = () => ({
+    djStateType: '',
+    djMessage: emptyMessage(),
+    hexMessageText: '',
+    hexMessagePool: '',
+    hexMessage: emptyMessage(),
+});
+
 export function dj() {
     return {
-        // DJ Modal state
-        showAdvanceDJModal: false,
-        djStateType: '',
+        ...playForms(),
         djSaving: false,
-        djMessage: emptyMessage(),
-        // Hex Message Modal state
-        showPlayHexModal: false,
-        hexMessageText: '',
-        hexMessagePool: '',
         hexSaving: false,
-        hexMessage: emptyMessage(),
         // Channel Status Modal state
         showChannelStatusModal: false,
         channelStatusSetting: 'background',
@@ -131,25 +121,22 @@ export function dj() {
                 message: 'djMessage',
                 label: 'advancing DJ state',
                 request: () =>
-                    apiRequest(`/api/guilds/${this.currentGuildId}/dj/advance`, {
+                    apiRequest(`/api/guilds/${this.route.name}/dj/advance`, {
                         method: 'POST',
                         body: { state_type: this.djStateType || null },
                     }),
                 success: 'DJ state advanced successfully!',
                 failure: 'Failed to advance DJ state',
-                afterFn: () => this.closeModal('advanceDJ'),
-                afterMs: 1500,
             });
         },
 
-        // Hex Message Modal Functions
         async playHexMessage() {
             await this.runAction({
                 saving: 'hexSaving',
                 message: 'hexMessage',
                 label: 'playing hex message',
                 request: () =>
-                    apiRequest(`/api/guilds/${this.currentGuildId}/hex/play`, {
+                    apiRequest(`/api/guilds/${this.route.name}/hex/play`, {
                         method: 'POST',
                         body: {
                             message: this.hexMessageText,
@@ -158,8 +145,6 @@ export function dj() {
                     }),
                 success: 'Hex message queued successfully!',
                 failure: 'Failed to play hex message',
-                afterFn: () => this.closeModal('playHex'),
-                afterMs: 1500,
             });
         },
 

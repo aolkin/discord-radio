@@ -80,7 +80,7 @@
                             <button type="button" role="menuitem" @click="openChannelMessageModal(guild.guild_id)">
                                 Send Message
                             </button>
-                            <button type="button" role="menuitem" @click="openModal('advanceDJ', guild.guild_id)">
+                            <button type="button" role="menuitem" @click="openGuild(guild.guild_id, 'play')">
                                 Advance DJ State
                             </button>
                             <button
@@ -1230,52 +1230,55 @@
                 </div>
             </div>
 
-            <div class="guilds-grid" x-show="route.view === 'live' && guilds.length > 0">
+            <div class="guilds-grid" x-show="route.view === 'live' && !route.name && guilds.length > 0">
                 <template x-for="guild in guilds" :key="guild.guild_id">
-                    <div
-                        class="guild-card"
-                        :id="'guild-' + guild.guild_id"
-                        :class="{ selected: route.name === guild.guild_id }"
-                    >
+                    <!-- biome-ignore lint/a11y/useValidAnchor: the href is set by :href -->
+                    <a class="guild-card" :href="'#/live/' + guild.guild_id">
+                        <div class="guild-header">
+                            <div class="guild-id" x-text="guildName(guild.guild_id)"></div>
+                            <span class="voice-badge" x-show="guild.in_voice">In Voice</span>
+                        </div>
+                        <div class="dj-state">
+                            <div class="dj-type" x-text="guild.dj_state.state_type"></div>
+                            <div class="dj-details" x-text="guild.dj_state.details"></div>
+                        </div>
+                    </a>
+                </template>
+            </div>
+
+            <div class="guild-page" x-show="route.view === 'live' && route.name">
+                <template
+                    x-for="guild in guilds.filter((candidate) => candidate.guild_id === route.name)"
+                    :key="guild.guild_id"
+                >
+                    <div class="guild-card">
                         <div class="guild-header">
                             <div class="guild-id" x-text="guildName(guild.guild_id)"></div>
                             <span class="voice-badge" x-show="guild.in_voice">In Voice</span>
                         </div>
 
-                        <div class="guild-content">
-                            <!-- DJ State -->
+                        <nav class="guild-tabs">
+                            <template x-for="tab in guildTabs" :key="tab.id">
+                                <!-- biome-ignore lint/a11y/useValidAnchor: the href is set by :href -->
+                                <!-- biome-ignore lint/a11y/useAnchorContent: the label is set by x-text -->
+                                <a
+                                    class="guild-tab"
+                                    :class="{ active: route.tab === tab.id }"
+                                    :href="'#/live/' + guild.guild_id + '/' + tab.id"
+                                    x-text="tab.label"
+                                ></a>
+                            </template>
+                        </nav>
+
+                        <div class="guild-content" x-show="route.tab === 'status'">
                             <div class="section">
                                 <div class="section-title">DJ State</div>
                                 <div class="dj-state">
                                     <div class="dj-type" x-text="guild.dj_state.state_type"></div>
                                     <div class="dj-details" x-text="guild.dj_state.details"></div>
                                 </div>
-                                <div class="button-group mt-12">
-                                    <button
-                                        type="button"
-                                        class="btn btn-secondary"
-                                        @click="openModal('advanceDJ', guild.guild_id)"
-                                    >
-                                        Advance DJ State
-                                    </button>
-                                    <button
-                                        type="button"
-                                        class="btn btn-secondary"
-                                        @click="openModal('playHex', guild.guild_id)"
-                                    >
-                                        Play Hex Message
-                                    </button>
-                                    <button
-                                        type="button"
-                                        class="btn btn-secondary"
-                                        @click="openModal('playTrack', guild.guild_id)"
-                                    >
-                                        Play Track
-                                    </button>
-                                </div>
                             </div>
 
-                            <!-- Audio Profile -->
                             <div class="section">
                                 <div class="section-title">Audio Profile</div>
                                 <div class="info-item">
@@ -1292,16 +1295,36 @@
                                         ></div>
                                     </div>
                                 </div>
-                                <button
-                                    type="button"
-                                    class="btn btn-secondary mt-12 w-full"
-                                    @click="openModal('signalProfile', guild.guild_id)"
-                                >
-                                    Change Signal Profile
-                                </button>
                             </div>
 
-                            <!-- Live Audio Stream -->
+                            <div class="section">
+                                <div class="section-title">Voice Channel Status</div>
+                                <div class="info-item">
+                                    <div class="grow">
+                                        <div
+                                            class="track-name"
+                                            x-text="guild.channel_status.status === null ? 'Unmanaged (left as it is)' : (guild.channel_status.status || 'Cleared')"
+                                        ></div>
+                                        <div
+                                            class="track-details"
+                                            x-text="'Source: ' + guild.channel_status.source"
+                                        ></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="section">
+                                <div class="section-title">Announcement Channels</div>
+                                <div class="info-item">
+                                    <div class="grow">
+                                        <div
+                                            class="track-name"
+                                            x-text="guild.announcement_channels.length ? guild.announcement_channels.map((c) => '#' + (c.name || c.channel_id)).join(', ') : 'None (announcements are off)'"
+                                        ></div>
+                                    </div>
+                                </div>
+                            </div>
+
                             <template x-if="guild.in_voice">
                                 <div class="section">
                                     <div class="section-title">Live Audio Stream</div>
@@ -1323,58 +1346,331 @@
                                     </div>
                                 </div>
                             </template>
+                        </div>
 
-                            <!-- Audio Tracks -->
-                            <template x-if="guild.tracks && guild.tracks.length > 0">
-                                <div class="section">
-                                    <div class="section-title">
-                                        Audio Tracks
-                                        <button
-                                            type="button"
-                                            class="btn btn-secondary btn-float-right"
-                                            @click="openModal('trackState', guild.guild_id)"
-                                        >
-                                            Manage Tracks
-                                        </button>
+                        <div class="guild-content" x-show="route.tab === 'play'">
+                            <div class="section">
+                                <div class="section-title">Advance DJ State</div>
+                                <form @submit.prevent="advanceDJState()">
+                                    <div
+                                        x-show="djMessage.text"
+                                        :class="djMessage.type === 'error' ? 'error-message' : 'success-message'"
+                                        x-text="djMessage.text"
+                                    ></div>
+                                    <div class="form-group">
+                                        <label class="form-label" for="advance-state-type">State Type (Optional)</label>
+                                        <select id="advance-state-type" class="form-input" x-model="djStateType">
+                                            <option value="">Any (default)</option>
+                                            <option value="track">Track</option>
+                                            <option value="hex">Hex Message</option>
+                                            <option value="noise">Noise</option>
+                                        </select>
+                                        <small class="hint">
+                                            Leave as "Any" to advance to the next state, or select a specific state type
+                                            to force.
+                                        </small>
                                     </div>
-                                    <template x-for="track in guild.tracks" :key="track.filename">
-                                        <div class="track-item">
-                                            <div class="grow">
-                                                <div class="track-name" x-text="track.name"></div>
-                                                <div class="track-details">
-                                                    <span x-text="track.filename.split('/').pop()"></span>
-                                                </div>
-                                                <template x-if="track.duration && !track.loops">
-                                                    <div>
-                                                        <div class="progress-bar">
-                                                            <div
-                                                                class="progress-fill"
-                                                                :style="'width: ' + getTrackProgress(track) + '%'"
-                                                            ></div>
-                                                        </div>
+                                    <button
+                                        type="submit"
+                                        class="btn btn-primary"
+                                        :disabled="djSaving"
+                                        x-text="djSaving ? 'Advancing...' : 'Advance State'"
+                                    ></button>
+                                </form>
+                            </div>
+
+                            <div class="section">
+                                <div class="section-title">Play Hex Message</div>
+                                <form @submit.prevent="playHexMessage()">
+                                    <div
+                                        x-show="hexMessage.text"
+                                        :class="hexMessage.type === 'error' ? 'error-message' : 'success-message'"
+                                        x-text="hexMessage.text"
+                                    ></div>
+                                    <div class="form-group">
+                                        <label class="form-label" for="hex-message">Message</label>
+                                        <input
+                                            id="hex-message"
+                                            type="text"
+                                            class="form-input"
+                                            x-model="hexMessageText"
+                                            placeholder="Enter message to play..."
+                                            required
+                                        >
+                                        <small class="hint">
+                                            Message will be played using the DJ with default settings.
+                                        </small>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label" for="hex-pool">Pool (Optional)</label>
+                                        <select id="hex-pool" class="form-input" x-model="hexMessagePool">
+                                            <option value="">No pool</option>
+                                            <template x-for="pool in pools" :key="pool">
+                                                <option :value="pool" x-text="pool"></option>
+                                            </template>
+                                        </select>
+                                        <small class="hint">
+                                            The pool's segment defaults set the loop count and announcements.
+                                        </small>
+                                    </div>
+                                    <button
+                                        type="submit"
+                                        class="btn btn-primary"
+                                        :disabled="hexSaving"
+                                        x-text="hexSaving ? 'Playing...' : 'Play Message'"
+                                    ></button>
+                                </form>
+                            </div>
+
+                            <div class="section">
+                                <div class="section-title">Play Track</div>
+                                <form @submit.prevent="playTrack()">
+                                    <div
+                                        x-show="playTrackMessage.text"
+                                        :class="playTrackMessage.type === 'error' ? 'error-message' : 'success-message'"
+                                        x-text="playTrackMessage.text"
+                                    ></div>
+                                    <div class="form-group">
+                                        <label class="form-label" for="play-track-file">Audio File</label>
+                                        <select
+                                            id="play-track-file"
+                                            class="form-input"
+                                            x-model="playTrackFilename"
+                                            required
+                                        >
+                                            <option value="">Select audio file...</option>
+                                            <template x-for="file in audioFiles" :key="file">
+                                                <option :value="file" x-text="file"></option>
+                                            </template>
+                                        </select>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label class="form-label" for="play-track-volume">Volume</label>
+                                            <input
+                                                id="play-track-volume"
+                                                type="number"
+                                                class="form-input"
+                                                x-model.number="playTrackVolume"
+                                                min="0"
+                                                max="2"
+                                                step="0.1"
+                                                placeholder="0.0-2.0"
+                                            >
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label" for="play-track-start">Start (seconds)</label>
+                                            <input
+                                                id="play-track-start"
+                                                type="number"
+                                                class="form-input"
+                                                x-model.number="playTrackStart"
+                                                min="0"
+                                                step="0.1"
+                                            >
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label" for="play-track-duration"
+                                                >Duration (seconds)</label
+                                            >
+                                            <input
+                                                id="play-track-duration"
+                                                type="number"
+                                                class="form-input"
+                                                x-model.number="playTrackDuration"
+                                                min="0"
+                                                step="0.1"
+                                            >
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="submit"
+                                        class="btn btn-primary"
+                                        :disabled="playTrackSaving"
+                                        x-text="playTrackSaving ? 'Playing...' : 'Play Track'"
+                                    ></button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <div class="guild-content" x-show="route.tab === 'tracks'">
+                            <div class="section">
+                                <div class="section-title">Audio Tracks</div>
+                                <div class="track-details" x-show="!guild.tracks || guild.tracks.length === 0">
+                                    No tracks are playing.
+                                </div>
+                                <template x-for="track in guild.tracks" :key="track.filename">
+                                    <div class="track-item">
+                                        <div class="grow">
+                                            <div class="track-name" x-text="track.name"></div>
+                                            <div class="track-details">
+                                                <span x-text="track.filename.split('/').pop()"></span>
+                                            </div>
+                                            <template x-if="track.duration && !track.loops">
+                                                <div>
+                                                    <div class="progress-bar">
                                                         <div
-                                                            class="progress-time"
-                                                            x-text="getTrackTimeDisplay(track)"
+                                                            class="progress-fill"
+                                                            :style="'width: ' + getTrackProgress(track) + '%'"
                                                         ></div>
                                                     </div>
+                                                    <div
+                                                        class="progress-time"
+                                                        x-text="getTrackTimeDisplay(track)"
+                                                    ></div>
+                                                </div>
+                                            </template>
+                                            <div class="track-details">
+                                                <span x-text="track.loops ? '🔁 Looping' : '▶️ Once'"></span>
+                                                • 🔊
+                                                <div class="volume-bar volume-bar-inline">
+                                                    <div
+                                                        class="volume-fill"
+                                                        :style="'width: ' + (track.volume * 100) + '%'"
+                                                    ></div>
+                                                </div>
+                                                <span x-text="Math.round(track.volume * 100) + '%'"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+
+                            <div class="section">
+                                <div class="section-title">Start, Stop or Update a Track</div>
+                                <form @submit.prevent="changeTrackState()">
+                                    <div
+                                        x-show="trackMessage.text"
+                                        :class="trackMessage.type === 'error' ? 'error-message' : 'success-message'"
+                                        x-text="trackMessage.text"
+                                    ></div>
+                                    <div class="form-group">
+                                        <label class="form-label" for="track-state-name">Track Name</label>
+                                        <input
+                                            id="track-state-name"
+                                            type="text"
+                                            class="form-input"
+                                            x-model="trackName"
+                                            placeholder="Track identifier..."
+                                            required
+                                        >
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label" for="track-state-action">Action</label>
+                                        <select
+                                            id="track-state-action"
+                                            class="form-input"
+                                            x-model="trackState"
+                                            @change="trackStateChanged()"
+                                        >
+                                            <option value="">Update Existing Track</option>
+                                            <option value="start">Start New Track</option>
+                                            <option value="stop">Stop Track</option>
+                                        </select>
+                                    </div>
+                                    <template x-if="trackState === 'start'">
+                                        <div class="form-group">
+                                            <label class="form-label" for="track-state-file">Audio File</label>
+                                            <select
+                                                id="track-state-file"
+                                                class="form-input"
+                                                x-model="trackFilename"
+                                                required
+                                            >
+                                                <option value="">Select audio file...</option>
+                                                <template x-for="file in audioFiles" :key="file">
+                                                    <option :value="file" x-text="file"></option>
                                                 </template>
-                                                <div class="track-details">
-                                                    <span x-text="track.loops ? '🔁 Looping' : '▶️ Once'"></span>
-                                                    • 🔊
-                                                    <div class="volume-bar volume-bar-inline">
-                                                        <div
-                                                            class="volume-fill"
-                                                            :style="'width: ' + (track.volume * 100) + '%'"
-                                                        ></div>
-                                                    </div>
-                                                    <span x-text="Math.round(track.volume * 100) + '%'"></span>
-                                                </div>
+                                            </select>
+                                        </div>
+                                    </template>
+                                    <template x-if="trackState !== 'stop'">
+                                        <div class="form-row">
+                                            <div class="form-group">
+                                                <label class="form-label" for="track-state-volume">Volume</label>
+                                                <input
+                                                    id="track-state-volume"
+                                                    type="number"
+                                                    class="form-input"
+                                                    x-model.number="trackVolume"
+                                                    min="0"
+                                                    max="2"
+                                                    step="0.1"
+                                                    placeholder="0.0-2.0"
+                                                >
+                                            </div>
+                                            <div class="form-group">
+                                                <label class="form-label" for="track-state-loop">Loop</label>
+                                                <select id="track-state-loop" class="form-input" x-model="trackLoops">
+                                                    <option value="">Default</option>
+                                                    <option value="true">Yes</option>
+                                                    <option value="false">No</option>
+                                                </select>
                                             </div>
                                         </div>
                                     </template>
-                                </div>
-                            </template>
+                                    <div class="form-group">
+                                        <label class="form-label" for="track-state-fade">Fade Time (seconds)</label>
+                                        <input
+                                            id="track-state-fade"
+                                            type="number"
+                                            class="form-input"
+                                            x-model.number="trackFadeTime"
+                                            min="0"
+                                            step="0.1"
+                                            placeholder="1.0"
+                                        >
+                                    </div>
+                                    <button
+                                        type="submit"
+                                        class="btn btn-primary"
+                                        :disabled="trackSaving"
+                                        x-text="trackSaving ? 'Saving...' : 'Apply'"
+                                    ></button>
+                                </form>
+                            </div>
+                        </div>
 
+                        <div class="guild-content" x-show="route.tab === 'signal-profile'">
+                            <div class="section">
+                                <div class="section-title">Signal Profile</div>
+                                <button
+                                    type="button"
+                                    class="btn btn-secondary w-full"
+                                    @click="openModal('signalProfile', guild.guild_id)"
+                                >
+                                    Change Signal Profile
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="guild-content" x-show="route.tab === 'channel-status'">
+                            <div class="section">
+                                <div class="section-title">Voice Channel Status</div>
+                                <button
+                                    type="button"
+                                    class="btn btn-secondary w-full"
+                                    @click="openModal('channelStatus', guild.guild_id)"
+                                >
+                                    Change Channel Status
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="guild-content" x-show="route.tab === 'announcements'">
+                            <div class="section">
+                                <div class="section-title">Announcement Channels</div>
+                                <button
+                                    type="button"
+                                    class="btn btn-secondary w-full"
+                                    @click="openAnnouncementChannelsModal(guild.guild_id)"
+                                >
+                                    Edit Announcement Channels
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="guild-content" x-show="route.tab === 'bot-profile'">
                             <div class="section">
                                 <div class="section-title">Bot Profile</div>
                                 <button
@@ -1385,50 +1681,9 @@
                                     Edit Nickname, Avatar &amp; Banner
                                 </button>
                             </div>
+                        </div>
 
-                            <div class="section">
-                                <div class="section-title">Voice Channel Status</div>
-                                <div class="info-item">
-                                    <div class="grow">
-                                        <div
-                                            class="track-name"
-                                            x-text="guild.channel_status.status === null ? 'Unmanaged (left as it is)' : (guild.channel_status.status || 'Cleared')"
-                                        ></div>
-                                        <div
-                                            class="track-details"
-                                            x-text="'Source: ' + guild.channel_status.source"
-                                        ></div>
-                                    </div>
-                                </div>
-                                <button
-                                    type="button"
-                                    class="btn btn-secondary mt-12 w-full"
-                                    @click="openModal('channelStatus', guild.guild_id)"
-                                >
-                                    Change Channel Status
-                                </button>
-                            </div>
-
-                            <div class="section">
-                                <div class="section-title">Announcement Channels</div>
-                                <div class="info-item">
-                                    <div class="grow">
-                                        <div
-                                            class="track-name"
-                                            x-text="guild.announcement_channels.length ? guild.announcement_channels.map((c) => '#' + (c.name || c.channel_id)).join(', ') : 'None (announcements are off)'"
-                                        ></div>
-                                    </div>
-                                </div>
-                                <button
-                                    type="button"
-                                    class="btn btn-secondary mt-12 w-full"
-                                    @click="openAnnouncementChannelsModal(guild.guild_id)"
-                                >
-                                    Edit Announcement Channels
-                                </button>
-                            </div>
-
-                            <!-- Activity Logs-->
+                        <div class="guild-content" x-show="route.tab === 'logs'">
                             <div class="section">
                                 <div class="section-title">Activity Logs</div>
                                 <div class="row-gap-10">
@@ -1453,9 +1708,13 @@
                         </div>
                     </div>
                 </template>
+                <div class="no-guilds" x-show="!guilds.some((candidate) => candidate.guild_id === route.name)">
+                    <p>This guild has no radio running.</p>
+                    <a href="#/live" class="btn btn-secondary">Back to guilds</a>
+                </div>
             </div>
 
-            <div class="guild-list" x-show="route.view === 'live' && guildsWithoutRadio().length > 0">
+            <div class="guild-list" x-show="route.view === 'live' && !route.name && guildsWithoutRadio().length > 0">
                 <div class="section-title">Guilds without a radio</div>
                 <template x-for="guild in guildsWithoutRadio()" :key="guild.guild_id">
                     <div class="guild-list-row">
@@ -1482,211 +1741,12 @@
 
             <div
                 class="no-guilds"
-                x-show="route.view === 'live' && guilds.length === 0 && guildsWithoutRadio().length === 0"
+                x-show="route.view === 'live' && !route.name && guilds.length === 0 && guildsWithoutRadio().length === 0"
             >
                 <div class="no-guilds-icon">💤</div>
                 <p x-text="connected ? 'No active guilds' : 'Connecting to bot...'"></p>
             </div>
         </div>
-
-        <!-- Advance DJ State Modal -->
-        <template
-            x-modal
-            data-modal="advanceDJ"
-            data-title="Advance DJ State"
-            data-message="djMessage"
-            data-submit="advanceDJState()"
-            data-saving="djSaving"
-            data-submit-label="Advance State"
-            data-busy-label="Advancing..."
-        >
-            <div class="form-group">
-                <label class="form-label" for="advance-state-type">State Type (Optional)</label>
-                <select id="advance-state-type" class="form-input" x-model="djStateType">
-                    <option value="">Any (default)</option>
-                    <option value="track">Track</option>
-                    <option value="hex">Hex Message</option>
-                    <option value="noise">Noise</option>
-                </select>
-                <small class="hint">
-                    Leave as "Any" to advance to the next state, or select a specific state type to force.
-                </small>
-            </div>
-        </template>
-
-        <!-- Play Hex Message Modal -->
-        <template
-            x-modal
-            data-modal="playHex"
-            data-title="Play Hex Message via DJ"
-            data-message="hexMessage"
-            data-submit="playHexMessage()"
-            data-saving="hexSaving"
-            data-submit-label="Play Message"
-            data-busy-label="Playing..."
-        >
-            <div class="form-group">
-                <label class="form-label" for="hex-message">Message</label>
-                <input
-                    id="hex-message"
-                    type="text"
-                    class="form-input"
-                    x-model="hexMessageText"
-                    placeholder="Enter message to play..."
-                    required
-                >
-                <small class="hint"> Message will be played using the DJ with default settings. </small>
-            </div>
-            <div class="form-group">
-                <label class="form-label" for="hex-pool">Pool (Optional)</label>
-                <select id="hex-pool" class="form-input" x-model="hexMessagePool">
-                    <option value="">No pool</option>
-                    <template x-for="pool in pools" :key="pool">
-                        <option :value="pool" x-text="pool"></option>
-                    </template>
-                </select>
-                <small class="hint"> The pool's segment defaults set the loop count and announcements. </small>
-            </div>
-        </template>
-
-        <!-- Play Track Modal -->
-        <template
-            x-modal
-            data-modal="playTrack"
-            data-title="Play Track via DJ"
-            data-message="playTrackMessage"
-            data-submit="playTrack()"
-            data-saving="playTrackSaving"
-            data-submit-label="Play Track"
-            data-busy-label="Playing..."
-        >
-            <div class="form-group">
-                <label class="form-label" for="play-track-file">Audio File</label>
-                <select id="play-track-file" class="form-input" x-model="playTrackFilename" required>
-                    <option value="">Select audio file...</option>
-                    <template x-for="file in audioFiles" :key="file">
-                        <option :value="file" x-text="file"></option>
-                    </template>
-                </select>
-            </div>
-            <div class="form-row">
-                <div class="form-group">
-                    <label class="form-label" for="play-track-volume">Volume</label>
-                    <input
-                        id="play-track-volume"
-                        type="number"
-                        class="form-input"
-                        x-model.number="playTrackVolume"
-                        min="0"
-                        max="2"
-                        step="0.1"
-                        placeholder="0.0-2.0"
-                    >
-                </div>
-                <div class="form-group">
-                    <label class="form-label" for="play-track-start">Start (seconds)</label>
-                    <input
-                        id="play-track-start"
-                        type="number"
-                        class="form-input"
-                        x-model.number="playTrackStart"
-                        min="0"
-                        step="0.1"
-                    >
-                </div>
-                <div class="form-group">
-                    <label class="form-label" for="play-track-duration">Duration (seconds)</label>
-                    <input
-                        id="play-track-duration"
-                        type="number"
-                        class="form-input"
-                        x-model.number="playTrackDuration"
-                        min="0"
-                        step="0.1"
-                    >
-                </div>
-            </div>
-        </template>
-
-        <!-- Track State Management Modal -->
-        <template
-            x-modal
-            data-modal="trackState"
-            data-title="Manage Track State"
-            data-message="trackMessage"
-            data-submit="changeTrackState()"
-            data-saving="trackSaving"
-            data-submit-label="Apply"
-            data-busy-label="Saving..."
-        >
-            <div class="form-group">
-                <label class="form-label" for="track-state-name">Track Name</label>
-                <input
-                    id="track-state-name"
-                    type="text"
-                    class="form-input"
-                    x-model="trackName"
-                    placeholder="Track identifier..."
-                    required
-                >
-            </div>
-            <div class="form-group">
-                <label class="form-label" for="track-state-action">Action</label>
-                <select id="track-state-action" class="form-input" x-model="trackState" @change="trackStateChanged()">
-                    <option value="">Update Existing Track</option>
-                    <option value="start">Start New Track</option>
-                    <option value="stop">Stop Track</option>
-                </select>
-            </div>
-            <template x-if="trackState === 'start'">
-                <div class="form-group">
-                    <label class="form-label" for="track-state-file">Audio File</label>
-                    <select id="track-state-file" class="form-input" x-model="trackFilename" required>
-                        <option value="">Select audio file...</option>
-                        <template x-for="file in audioFiles" :key="file">
-                            <option :value="file" x-text="file"></option>
-                        </template>
-                    </select>
-                </div>
-            </template>
-            <template x-if="trackState !== 'stop'">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label class="form-label" for="track-state-volume">Volume</label>
-                        <input
-                            id="track-state-volume"
-                            type="number"
-                            class="form-input"
-                            x-model.number="trackVolume"
-                            min="0"
-                            max="2"
-                            step="0.1"
-                            placeholder="0.0-2.0"
-                        >
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label" for="track-state-loop">Loop</label>
-                        <select id="track-state-loop" class="form-input" x-model="trackLoops">
-                            <option value="">Default</option>
-                            <option value="true">Yes</option>
-                            <option value="false">No</option>
-                        </select>
-                    </div>
-                </div>
-            </template>
-            <div class="form-group">
-                <label class="form-label" for="track-state-fade">Fade Time (seconds)</label>
-                <input
-                    id="track-state-fade"
-                    type="number"
-                    class="form-input"
-                    x-model.number="trackFadeTime"
-                    min="0"
-                    step="0.1"
-                    placeholder="1.0"
-                >
-            </div>
-        </template>
 
         <!-- Signal Profile Modal -->
         <template

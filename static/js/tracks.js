@@ -1,52 +1,25 @@
 import { apiRequest, emptyMessage } from './api.js';
 
-export const modals = {
-    playTrack: {
-        flag: 'showPlayTrackModal',
-        perGuild: true,
-        reset: () => ({
-            playTrackFilename: '',
-            playTrackVolume: null,
-            playTrackStart: null,
-            playTrackDuration: null,
-            playTrackMessage: emptyMessage(),
-        }),
-    },
-    trackState: {
-        flag: 'showTrackStateModal',
-        perGuild: true,
-        reset: () => ({
-            trackName: '',
-            trackState: '',
-            trackFilename: '',
-            trackVolume: null,
-            trackLoops: '',
-            trackFadeTime: null,
-            trackMessage: emptyMessage(),
-        }),
-    },
-};
+export const trackForms = () => ({
+    playTrackFilename: '',
+    playTrackVolume: null,
+    playTrackStart: null,
+    playTrackDuration: null,
+    playTrackMessage: emptyMessage(),
+    trackName: '',
+    trackState: '',
+    trackFilename: '',
+    trackVolume: null,
+    trackLoops: '',
+    trackFadeTime: null,
+    trackMessage: emptyMessage(),
+});
 
 export function tracks() {
     return {
-        // Play Track Modal state
-        showPlayTrackModal: false,
-        playTrackFilename: '',
-        playTrackVolume: null,
-        playTrackStart: null,
-        playTrackDuration: null,
+        ...trackForms(),
         playTrackSaving: false,
-        playTrackMessage: emptyMessage(),
-        // Track State Modal state
-        showTrackStateModal: false,
-        trackName: '',
-        trackState: '',
-        trackFilename: '',
-        trackVolume: null,
-        trackLoops: '',
-        trackFadeTime: null,
         trackSaving: false,
-        trackMessage: emptyMessage(),
         audioFiles: [],
 
         getTrackDurationSecs(track) {
@@ -94,7 +67,6 @@ export function tracks() {
             }
         },
 
-        // Play Track Modal Functions
         async playTrack() {
             const body = { filename: this.playTrackFilename };
 
@@ -115,18 +87,15 @@ export function tracks() {
                 message: 'playTrackMessage',
                 label: 'playing track',
                 request: () =>
-                    apiRequest(`/api/guilds/${this.currentGuildId}/track/play`, {
+                    apiRequest(`/api/guilds/${this.route.name}/track/play`, {
                         method: 'POST',
                         body,
                     }),
                 success: 'Track started successfully!',
                 failure: 'Failed to play track',
-                afterFn: () => this.closeModal('playTrack'),
-                afterMs: 1500,
             });
         },
 
-        // Track State Modal Functions
         trackStateChanged() {
             // Clear filename when not starting
             if (this.trackState !== 'start') {
@@ -161,14 +130,12 @@ export function tracks() {
                 message: 'trackMessage',
                 label: 'changing track state',
                 request: () =>
-                    apiRequest(`/api/guilds/${this.currentGuildId}/tracks`, {
+                    apiRequest(`/api/guilds/${this.route.name}/tracks`, {
                         method: 'POST',
                         body,
                     }),
                 success: 'Track state updated successfully!',
                 failure: 'Failed to change track state',
-                afterFn: () => this.closeModal('trackState'),
-                afterMs: 1500,
             });
         },
     };
