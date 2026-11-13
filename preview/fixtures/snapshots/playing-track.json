@@ -13,7 +13,7 @@
           "duration": { "secs": 187, "nanos": 500000000 }
         }
       ],
-      "dj_state": { "state_type": "PlayingTrack", "details": "s3://tracks/signal.mp3 (42.0s / 187.5s)" },
+      "dj_state": { "state_type": "PlayingTrack", "details": "s3://tracks/signal.mp3 (42.0s / 187.5s)", "pool": "track", "progress": { "played": 1, "total": 2 } },
       "dj_config": "default",
       "audio_profile": { "name": "clear", "expected_name": "clear", "transitioning": false, "source": "background" },
       "channel_status": { "status": "On air", "source": "background" },

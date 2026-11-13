@@ -186,6 +186,16 @@ export function pools() {
             this.poolForm.entries.push({ kind, ...blankRow(kinds[kind].entryFields) });
         },
 
+        movePoolEntry(index, offset) {
+            const target = index + offset;
+            if (target < 0 || target >= this.poolForm.entries.length) {
+                return;
+            }
+            const [entry] = this.poolForm.entries.splice(index, 1);
+            this.poolForm.entries.splice(target, 0, entry);
+            this.poolExpanded = {};
+        },
+
         removePoolEntry(index) {
             this.poolForm.entries.splice(index, 1);
             this.poolExpanded = {};

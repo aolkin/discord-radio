@@ -1,9 +1,9 @@
 {
   "name": "default",
   "pools": {
-    "hex": { "weight": 2, "order": "weighted", "segment_defaults": {} },
-    "noise": { "weight": 50, "order": "weighted", "segment_defaults": {} },
-    "track": { "weight": 100, "order": "sequential", "segment_defaults": {} }
+    "hex": { "weight": 2, "playback": "single", "order": "weighted", "segment_defaults": {} },
+    "noise": { "weight": 50, "playback": "single", "order": "weighted", "segment_defaults": {} },
+    "track": { "weight": 100, "playback": "all", "order": "sequential", "segment_defaults": {} }
   },
   "signal_profiles": {
     "entries": [
