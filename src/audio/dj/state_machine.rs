@@ -35,9 +35,12 @@ pub struct SegmentContainer {
 }
 
 impl SegmentContainer {
-    pub fn in_pool(mut self, pool: Option<String>) -> Self {
-        self.pool = pool;
-        self
+    pub fn new(segment: Box<dyn Segment>, pool: Option<String>) -> Self {
+        SegmentContainer {
+            segment,
+            started_at: Instant::now(),
+            pool,
+        }
     }
 
     pub fn elapsed(&self) -> Duration {
@@ -68,11 +71,7 @@ impl<S: Segment + 'static> From<S> for SegmentContainer {
 
 impl From<Box<dyn Segment>> for SegmentContainer {
     fn from(segment: Box<dyn Segment>) -> Self {
-        SegmentContainer {
-            segment,
-            started_at: Instant::now(),
-            pool: None,
-        }
+        SegmentContainer::new(segment, None)
     }
 }
 
@@ -475,7 +474,7 @@ impl DJStateMachine {
         };
         drop(state);
         let segment = entry.segment(&pool.segment_defaults, &bot_state).await;
-        Ok(SegmentContainer::from(segment).in_pool(Some(pool.file.name.clone())))
+        Ok(SegmentContainer::new(segment, Some(pool.file.name.clone())))
     }
 
     fn pool_named(&self, name: &str) -> anyhow::Result<ConfiguredPool> {
@@ -528,14 +527,16 @@ impl DJStateMachine {
         let loops = request
             .loops
             .unwrap_or_else(|| defaults.pick_loops(None, None)) as usize;
-        let next_state = SegmentContainer::from(HexSegment::new(
-            request.message,
-            request.volume.unwrap_or(1.0),
-            loops,
-            EntryPlaybackConfig::default(),
-            &segment_defaults,
-        ))
-        .in_pool(request.pool);
+        let next_state = SegmentContainer::new(
+            Box::new(HexSegment::new(
+                request.message,
+                request.volume.unwrap_or(1.0),
+                loops,
+                EntryPlaybackConfig::default(),
+                &segment_defaults,
+            )),
+            request.pool,
+        );
         self.enter_state(next_state, bot_state).await
     }
 
