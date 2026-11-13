@@ -65,6 +65,7 @@ export function weightSliders() {
     return {
         weightModes: [],
         weightDrag: null,
+        barDrag: null,
 
         weightShare(rows, index) {
             return shareOf(
@@ -91,6 +92,45 @@ export function weightSliders() {
 
         endWeightDrag() {
             this.weightDrag = null;
+        },
+
+        barSections(rows) {
+            return rows.flatMap((row, index) => (asWeight(row.weight) > 0 ? [{ row, index }] : []));
+        },
+
+        startBarDrag(rows, index, event) {
+            event.currentTarget.setPointerCapture(event.pointerId);
+            this.barDrag = {
+                row: rows[index],
+                y: event.clientY,
+                weight: rows[index].weight,
+                unit: Math.max(1, Math.round(sum(rows.map((row) => asWeight(row.weight))) / 60)),
+            };
+        },
+
+        moveBarDrag(rows, index, event) {
+            if (!this.barDrag || !sameRow(this.barDrag.row, rows[index])) {
+                return;
+            }
+            const { y, weight, unit } = this.barDrag;
+            rows[index].weight = Math.max(1, weight + Math.round((y - event.clientY) / 4) * unit);
+        },
+
+        isBarDrag(row) {
+            return this.barDrag !== null && sameRow(this.barDrag.row, row);
+        },
+
+        endBarDrag() {
+            this.barDrag = null;
+        },
+
+        keyBar(rows, index, event) {
+            const direction = { ArrowUp: 1, ArrowDown: -1 }[event.key];
+            if (direction === undefined) {
+                return;
+            }
+            event.preventDefault();
+            rows[index].weight = Math.max(1, asWeight(rows[index].weight) + direction * (event.shiftKey ? 5 : 1));
         },
 
         slideWeight(rows, index, event, min = 0) {
