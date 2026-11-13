@@ -114,8 +114,34 @@ h1 {
     box-shadow: var(--shadow-md);
 }
 
-.guild-card.selected {
-    outline: 2px solid var(--color-primary);
+a.guild-card {
+    color: inherit;
+    text-decoration: none;
+}
+
+.guild-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    border-bottom: 2px solid var(--color-divider);
+}
+
+.guild-tab {
+    padding: 8px 14px;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    color: var(--color-text-muted);
+    font-weight: 500;
+    text-decoration: none;
+}
+
+.guild-tab:hover {
+    color: var(--color-text);
+}
+
+.guild-tab.active {
+    border-bottom-color: var(--color-primary);
+    color: var(--color-text);
 }
 
 .guild-strip {

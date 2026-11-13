@@ -1,4 +1,18 @@
+import { playForms } from './dj.js';
+import { trackForms } from './tracks.js';
+
 export const newItem = '+new';
+
+export const guildTabs = [
+    { id: 'status', label: 'Status' },
+    { id: 'play', label: 'Play' },
+    { id: 'tracks', label: 'Tracks' },
+    { id: 'signal-profile', label: 'Signal profile' },
+    { id: 'channel-status', label: 'Channel status' },
+    { id: 'announcements', label: 'Announcements' },
+    { id: 'bot-profile', label: 'Bot profile' },
+    { id: 'logs', label: 'Logs' },
+];
 
 const editors = {
     'dj-configs': 'openDjConfigEditor',
@@ -10,7 +24,9 @@ function parseRoute(hash) {
     const [view, kind, ...rest] = hash.replace(/^#\/?/, '').split('/');
     const name = rest.join('/');
     if (view !== 'edit') {
-        return { view: 'live', kind: null, name: /^\d+$/.test(kind ?? '') ? kind : null };
+        const guild = /^\d+$/.test(kind ?? '');
+        const tab = guildTabs.some((candidate) => candidate.id === rest[0]) ? rest[0] : 'status';
+        return { view: 'live', kind: null, name: guild ? kind : null, tab: guild ? tab : null };
     }
     if (Object.hasOwn(editors, kind) && /^([\w-]+|\+new)$/.test(name)) {
         return { view, kind, name };
@@ -21,7 +37,10 @@ function parseRoute(hash) {
     return { view, kind: null, name: null };
 }
 
-function routeHash({ view, kind, name }) {
+function routeHash({ view, kind, name, tab }) {
+    if (tab) {
+        return `#/${view}/${name}/${tab}`;
+    }
     if (kind) {
         return `#/${view}/${kind}/${name}`;
     }
@@ -30,8 +49,9 @@ function routeHash({ view, kind, name }) {
 
 export function router() {
     return {
-        route: { view: null, kind: null, name: null },
+        route: { view: null, kind: null, name: null, tab: null },
         newItem,
+        guildTabs,
 
         initRouter() {
             window.addEventListener('hashchange', () => this.followHash());
@@ -47,8 +67,8 @@ export function router() {
             }
 
             if (this.route.view !== 'edit') {
-                if (this.route.name) {
-                    this.$nextTick(() => document.getElementById(`guild-${this.route.name}`)?.scrollIntoView());
+                if (previous.name !== this.route.name || previous.tab !== this.route.tab) {
+                    Object.assign(this, playForms(), trackForms());
                 }
                 return;
             }
@@ -75,8 +95,12 @@ export function router() {
             this.navigate(routeHash({ view: 'edit', kind, name }));
         },
 
-        openGuild(guildId) {
-            this.navigate(routeHash({ view: 'live', kind: null, name: guildId }));
+        openGuild(guildId, tab = 'status') {
+            this.navigate(routeHash({ view: 'live', kind: null, name: guildId, tab }));
+        },
+
+        currentGuild() {
+            return this.guilds.find((guild) => guild.guild_id === this.route.name);
         },
 
         isSelected(kind, name) {
