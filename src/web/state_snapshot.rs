@@ -60,11 +60,12 @@ impl BotSnapshot {
 
             let tracks = guild.track_manager.get_all_tracks().await;
 
-            let (dj_state, profile, channel_status, announcement_channels) = {
+            let (dj_state, dj_config, profile, channel_status, announcement_channels) = {
                 let dj_state_lock = guild.dj_manager.state();
                 let state = dj_state_lock.read().await;
                 (
                     dj_state_to_info(&state),
+                    state.config_name.clone(),
                     state.signal_profile(),
                     state.channel_status(),
                     state
@@ -98,7 +99,7 @@ impl BotSnapshot {
                 in_voice,
                 tracks,
                 dj_state,
-                dj_config: guild.dj_manager.config_name(),
+                dj_config,
                 audio_profile,
                 channel_status: ChannelStatusInfo {
                     status: match channel_status.value {

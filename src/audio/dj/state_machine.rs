@@ -86,6 +86,8 @@ pub struct DJState {
     pub pool_selector: WeightedSelector,
     pub entry_selectors: BTreeMap<String, WeightedSelector>,
     pub playing_pool: Option<PlayingPool>,
+    #[serde(skip)]
+    pub config_name: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -105,6 +107,7 @@ impl Default for DJState {
             pool_selector: WeightedSelector::default(),
             entry_selectors: BTreeMap::new(),
             playing_pool: None,
+            config_name: None,
         }
     }
 }
@@ -204,6 +207,7 @@ impl DJStateMachine {
 
         let mut initial_state = restored_state.unwrap_or_default();
         initial_state.announcement.changed();
+        initial_state.config_name = Some(config.borrow().config.name.clone());
 
         let _ = initial_state
             .segment
