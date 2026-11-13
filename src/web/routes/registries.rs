@@ -106,10 +106,24 @@ pub async fn put<T: RoutedEntry>(
     Ok(StatusCode::OK)
 }
 
+pub async fn post<T: RoutedEntry>(
+    State(bot_state): State<Data>,
+    Path(name): Path<String>,
+    AxumJson(body): AxumJson<serde_json::Map<String, serde_json::Value>>,
+) -> Result<StatusCode, ApiError> {
+    if T::registry(bot_state).get(&name).is_some() {
+        return Err(ApiError::conflict(format!(
+            "A {} named {name:?} already exists",
+            T::KIND
+        )));
+    }
+    put::<T>(State(bot_state), Path(name), AxumJson(body)).await
+}
+
 pub fn routes<T: RoutedEntry>() -> Router<Data> {
     Router::new().route(T::PATH, get(list::<T>)).route(
         &format!("{}/{{name}}", T::PATH),
-        get(get_entry::<T>).put(put::<T>),
+        get(get_entry::<T>).put(put::<T>).post(post::<T>),
     )
 }
 

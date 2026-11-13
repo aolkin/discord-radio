@@ -25,6 +25,10 @@ impl ApiError {
         Self::new(StatusCode::NOT_FOUND, anyhow::Error::msg(message.into()))
     }
 
+    pub fn conflict(message: impl Into<String>) -> Self {
+        Self::new(StatusCode::CONFLICT, anyhow::Error::msg(message.into()))
+    }
+
     pub fn object_store(error: anyhow::Error) -> Self {
         let status = if error.is::<NoBucket>() {
             StatusCode::SERVICE_UNAVAILABLE

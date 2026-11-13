@@ -97,6 +97,7 @@ export function registryEditor({
                 this[isNew] = name === null;
                 this[message] = emptyMessage();
                 this.draftReviewing = false;
+                this.saveAsName = null;
                 this[loading] = false;
 
                 const draft = this.drafts[kind][key];
@@ -138,6 +139,7 @@ export function drafts() {
     return {
         drafts: Object.fromEntries(Object.keys(specs).map((kind) => [kind, {}])),
         draftReviewing: false,
+        saveAsName: null,
         fieldInvalid,
 
         setDraft(kind, key, form) {
@@ -229,6 +231,48 @@ export function drafts() {
             this[specs[kind].form] = draft.form;
             this[specs[kind].message] = emptyMessage();
             this.draftReviewing = false;
+        },
+
+        openSaveAs(kind) {
+            const taken = this[specs[kind].list];
+            const base = `${this.route.name}_copy`;
+            let name = base;
+            for (let count = 2; taken.includes(name); count++) {
+                name = `${base}${count}`;
+            }
+            this.saveAsName = name;
+        },
+
+        saveAsInvalid(kind) {
+            return !/^[\w-]+$/.test(this.saveAsName) || this[specs[kind].list].includes(this.saveAsName);
+        },
+
+        async saveAs(kind) {
+            const spec = specs[kind];
+            const draft = this.drafts[kind][this.route.name];
+            const name = this.saveAsName;
+
+            await this.runAction({
+                saving: spec.saving,
+                message: spec.message,
+                label: `saving ${spec.label} as ${name}`,
+                request: () =>
+                    apiRequest(`${spec.path}/${encodeURIComponent(name)}`, {
+                        method: 'POST',
+                        body: spec.toBody(draft.form),
+                        errorMessage: bodyOrStatus,
+                    }),
+                onSuccess: async () => {
+                    draft.form = clone(draft.saved);
+                    this.saveAsName = null;
+                    this.draftReviewing = false;
+                    await this[spec.loadList]();
+                    await spec.afterSave?.call(this);
+                    this.openItem(kind, name);
+                },
+                success: `${capitalize(spec.label)} saved as ${name}`,
+                failure: `Failed to save ${spec.label} as ${name}`,
+            });
         },
 
         async applyDraft(kind) {

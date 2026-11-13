@@ -94,6 +94,9 @@ The portal provides:
 - Audio track monitoring with volume indicators
 - Hex playback status with loop counters
 - DJ state visualization
+- Save as for signal profiles, pools and DJ configs
+
+Signal profiles (`/api/profiles`), DJ configs (`/api/dj-configs`) and pools (`/api/pools`) each accept `PUT /{name}` to create or replace a file and `POST /{name}` to create a new one. `POST` takes the same body as `PUT` and returns 409 when the name already exists.
 
 ## Commands
 

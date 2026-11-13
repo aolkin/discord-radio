@@ -172,6 +172,18 @@
                 return respond(store.registries[kind][key]);
             },
         ],
+        [
+            'POST',
+            new RegExp(`^/api/${kind}/([^/]+)$`),
+            ([, name], { body }) => {
+                const key = decodeURIComponent(name);
+                if (key in store.registries[kind]) {
+                    return fail(409, `A ${kind} named "${key}" already exists`);
+                }
+                store.registries[kind][key] = { ...body, name: key };
+                return respond(store.registries[kind][key]);
+            },
+        ],
     ]);
 
     const guildRoute = (method, suffix, handler) => [

@@ -194,6 +194,14 @@
                                     <button
                                         type="button"
                                         class="btn btn-secondary"
+                                        x-show="!editorStatus(route.kind).isNew"
+                                        @click="openSaveAs(route.kind)"
+                                    >
+                                        Save as…
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="btn btn-secondary"
                                         :disabled="changeCount(route.kind, route.name) === 0"
                                         @click="discardDraft(route.kind)"
                                     >
@@ -214,6 +222,14 @@
                                     </button>
                                     <button
                                         type="button"
+                                        class="btn btn-secondary"
+                                        x-show="!editorStatus(route.kind).isNew"
+                                        @click="openSaveAs(route.kind)"
+                                    >
+                                        Save as…
+                                    </button>
+                                    <button
+                                        type="button"
                                         class="btn btn-primary"
                                         :disabled="editorStatus(route.kind).saving"
                                         @click="applyDraft(route.kind)"
@@ -221,6 +237,33 @@
                                     ></button>
                                 </div>
                             </div>
+                            <form
+                                class="draft-bar-row"
+                                x-show="saveAsName !== null"
+                                @submit.prevent="!saveAsInvalid(route.kind) && saveAs(route.kind)"
+                            >
+                                <label class="form-label" for="save-as-name">Save as</label>
+                                <input
+                                    id="save-as-name"
+                                    type="text"
+                                    class="form-input"
+                                    x-model="saveAsName"
+                                    :aria-invalid="saveAsName !== null && saveAsInvalid(route.kind)"
+                                    title="Letters, digits, - and _ only"
+                                >
+                                <div class="row-gap-10">
+                                    <button type="button" class="btn btn-secondary" @click="saveAsName = null">
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        class="btn btn-primary"
+                                        :disabled="saveAsName === null || saveAsInvalid(route.kind) || editorStatus(route.kind).saving"
+                                    >
+                                        Save copy
+                                    </button>
+                                </div>
+                            </form>
                             <table class="review-table" x-show="draftReviewing">
                                 <thead>
                                     <tr>
