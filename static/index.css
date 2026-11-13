@@ -554,6 +554,19 @@ h1 {
     white-space: nowrap;
 }
 
+.pool-grid-link {
+    display: inline-block;
+    margin-top: 4px;
+    font-size: 0.8rem;
+    color: var(--color-primary);
+}
+
+.pool-grid-note {
+    margin: 15px 0;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+}
+
 .pool-grid-name {
     overflow-wrap: anywhere;
 }

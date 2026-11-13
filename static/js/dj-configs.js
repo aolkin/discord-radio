@@ -13,7 +13,9 @@ import {
     toggleHexConfig,
     weight,
 } from './form-fields.js';
+import { poolToForm } from './pools.js';
 import { registryEditor } from './registry-editor.js';
+import { shareOf } from './weights.js';
 
 const poolWeight = { ...weight, min: 1 };
 
@@ -119,6 +121,9 @@ export function djConfigs() {
         djConfigRotations: rotations,
         djConfigWeightField: poolWeight,
         djConfigPools: {},
+        djConfigSavedPools: {},
+        djConfigExpanded: {},
+        djConfigChancesOpen: false,
 
         async loadDjConfigPools() {
             await this.loadDjConfigs();
@@ -140,6 +145,56 @@ export function djConfigs() {
             return this.pools.includes(reference.pool) || reference.pool === ''
                 ? this.pools
                 : [...this.pools, reference.pool];
+        },
+
+        async loadDjConfigChancePools() {
+            const missing = [
+                ...new Set(
+                    this.djConfigForm.pools
+                        .map((reference) => reference.pool)
+                        .filter(
+                            (name) => name !== '' && !this.drafts.pools[name] && !(name in this.djConfigSavedPools),
+                        ),
+                ),
+            ];
+            await Promise.all(
+                missing.map(async (name) => {
+                    try {
+                        const response = await apiRequest(`/api/pools/${encodeURIComponent(name)}`);
+                        this.djConfigSavedPools[name] = poolToForm(name, await response.json());
+                    } catch (error) {
+                        console.error(`Failed to load pool ${name}:`, error);
+                    }
+                }),
+            );
+        },
+
+        djConfigChances() {
+            return this.djConfigForm.pools
+                .map((reference, index) => ({ reference, share: this.weightShare(this.djConfigForm.pools, index) }))
+                .filter(({ reference }) => reference.pool !== '')
+                .map(({ reference, share }) => {
+                    const pool = this.drafts.pools[reference.pool]?.form ?? this.djConfigSavedPools[reference.pool];
+                    return {
+                        pool: reference.pool,
+                        loaded: pool !== undefined,
+                        entries: (pool?.entries ?? []).map((entry, entryIndex) => ({
+                            name: this.poolEntryName(entry),
+                            chance:
+                                (share *
+                                    shareOf(
+                                        pool.entries.map((row) => row.weight),
+                                        entryIndex,
+                                    )) /
+                                100,
+                        })),
+                    };
+                });
+        },
+
+        removeDjConfigPool(index) {
+            this.djConfigForm.pools.splice(index, 1);
+            this.djConfigExpanded = {};
         },
 
         addDjConfigPool() {

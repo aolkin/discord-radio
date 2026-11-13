@@ -330,164 +330,300 @@
 
                             <div class="modal-section">
                                 <div class="modal-section-title">Pools</div>
-                                <template
-                                    x-for="(reference, referenceIndex) in djConfigForm.pools"
-                                    :key="referenceIndex"
-                                >
-                                    <div class="list-row">
-                                        <div class="form-row">
-                                            <div class="form-group">
-                                                <label class="form-label">
-                                                    <span>Pool</span>
-                                                    <select
-                                                        class="form-input"
-                                                        x-model="reference.pool"
-                                                        :aria-invalid="reference.pool === ''"
-                                                        required
-                                                    >
-                                                        <option value="">Select a pool</option>
-                                                        <template
-                                                            x-for="name in djConfigPoolOptions(reference)"
-                                                            :key="name"
-                                                        >
-                                                            <option :value="name" x-text="name"></option>
-                                                        </template>
-                                                    </select>
-                                                </label>
-                                                <span
-                                                    class="field-was"
-                                                    x-show="isChanged('dj-configs', ['pools', referenceIndex, 'pool'])"
-                                                    x-text="'was ' + wasValue('dj-configs', ['pools', referenceIndex, 'pool'])"
-                                                ></span>
-                                            </div>
-                                            <div class="form-group">
-                                                <label class="form-label">
-                                                    <span>Weight</span>
-                                                    <input
-                                                        type="number"
-                                                        class="form-input"
-                                                        x-model.number="reference.weight"
-                                                        step="1"
-                                                        min="1"
-                                                        :aria-invalid="fieldInvalid(djConfigWeightField, reference.weight)"
-                                                        required
-                                                    >
-                                                </label>
-                                                <span
-                                                    class="field-was"
-                                                    x-show="isChanged('dj-configs', ['pools', referenceIndex, 'weight'])"
-                                                    x-text="'was ' + wasValue('dj-configs', ['pools', referenceIndex, 'weight'])"
-                                                ></span>
-                                            </div>
-                                        </div>
+                                <div class="pool-grid-scroll">
+                                    <table class="pool-grid">
+                                        <thead>
+                                            <tr>
+                                                <th></th>
+                                                <th>Pool</th>
+                                                <th>Weight</th>
+                                                <th>Share</th>
+                                                <th></th>
+                                            </tr>
+                                        </thead>
                                         <template
-                                            x-for="(block, blockIndex) in djConfigReferenceBlocks(reference, referenceIndex)"
-                                            :key="blockIndex"
+                                            x-for="(reference, referenceIndex) in djConfigForm.pools"
+                                            :key="referenceIndex"
                                         >
-                                            <div>
-                                                <div class="form-label" x-show="block.label" x-text="block.label"></div>
-                                                <div class="form-row">
-                                                    <template x-for="field in block.fields" :key="field.key">
-                                                        <div class="form-group">
-                                                            <label class="form-label">
-                                                                <span x-text="field.label"></span>
-                                                                <template x-if="field.type === 'number'">
-                                                                    <input
-                                                                        type="number"
-                                                                        class="form-input"
-                                                                        x-model.number="block.row[field.key]"
-                                                                        :step="field.step"
-                                                                        :min="field.min"
-                                                                        :max="field.max"
-                                                                        :required="!field.optional"
-                                                                        :aria-invalid="fieldInvalid(field, block.row[field.key])"
-                                                                        :placeholder="field.optional ? 'Optional' : ''"
-                                                                    >
-                                                                </template>
-                                                                <template x-if="field.type === 'text'">
-                                                                    <input
-                                                                        type="text"
-                                                                        class="form-input"
-                                                                        x-model="block.row[field.key]"
-                                                                        :list="field.profile ? 'dj-config-profile-options' : null"
-                                                                        :required="!field.optional"
-                                                                        :aria-invalid="fieldInvalid(field, block.row[field.key])"
-                                                                        :placeholder="field.optional ? 'Optional' : ''"
-                                                                    >
-                                                                </template>
-                                                                <template x-if="field.type === 'bool'">
-                                                                    <select
-                                                                        class="form-input"
-                                                                        x-model="block.row[field.key]"
-                                                                    >
-                                                                        <option value="">Default</option>
-                                                                        <option value="true">Yes</option>
-                                                                        <option value="false">No</option>
-                                                                    </select>
-                                                                </template>
-                                                            </label>
-                                                            <span
-                                                                class="field-was"
-                                                                x-show="isChanged('dj-configs', block.path.concat(field.key))"
-                                                                x-text="'was ' + wasValue('dj-configs', block.path.concat(field.key))"
-                                                            ></span>
-                                                            <template x-if="field.type === 'strings'">
-                                                                <div>
+                                            <tbody>
+                                                <tr>
+                                                    <td class="pool-grid-actions">
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-secondary"
+                                                            :aria-expanded="djConfigExpanded[referenceIndex] === true"
+                                                            aria-label="Show segment defaults"
+                                                            @click="djConfigExpanded[referenceIndex] = !djConfigExpanded[referenceIndex]"
+                                                            x-text="djConfigExpanded[referenceIndex] ? '▾' : '▸'"
+                                                        ></button>
+                                                    </td>
+                                                    <td>
+                                                        <select
+                                                            class="form-input"
+                                                            aria-label="Pool"
+                                                            x-model="reference.pool"
+                                                            :aria-invalid="reference.pool === ''"
+                                                            required
+                                                        >
+                                                            <option value="">Select a pool</option>
+                                                            <template
+                                                                x-for="name in djConfigPoolOptions(reference)"
+                                                                :key="name"
+                                                            >
+                                                                <option :value="name" x-text="name"></option>
+                                                            </template>
+                                                        </select>
+                                                        <!-- biome-ignore lint/a11y/useValidAnchor: the href comes from :href -->
+                                                        <a
+                                                            class="pool-grid-link"
+                                                            x-show="reference.pool !== ''"
+                                                            :href="'#/edit/pools/' + reference.pool"
+                                                        >
+                                                            Open pool
+                                                        </a>
+                                                        <span
+                                                            class="field-was"
+                                                            x-show="isChanged('dj-configs', ['pools', referenceIndex, 'pool'])"
+                                                            x-text="'was ' + wasValue('dj-configs', ['pools', referenceIndex, 'pool'])"
+                                                        ></span>
+                                                    </td>
+                                                    <td>
+                                                        <div class="weight-control">
+                                                            <input
+                                                                type="number"
+                                                                class="form-input"
+                                                                aria-label="Weight"
+                                                                x-model.number="reference.weight"
+                                                                step="1"
+                                                                min="1"
+                                                                required
+                                                                :aria-invalid="fieldInvalid(djConfigWeightField, reference.weight)"
+                                                            >
+                                                            <input
+                                                                type="range"
+                                                                min="0"
+                                                                max="100"
+                                                                step="0.1"
+                                                                aria-label="Share of picks"
+                                                                :value="weightShare(djConfigForm.pools, referenceIndex)"
+                                                                :disabled="weightMode(djConfigForm.pools, referenceIndex) === 'pin'"
+                                                                @input="slideWeight(djConfigForm.pools, referenceIndex, $event, djConfigWeightField.min)"
+                                                                @change="endWeightDrag()"
+                                                            >
+                                                            <div class="weight-modes">
+                                                                <button
+                                                                    type="button"
+                                                                    class="btn"
+                                                                    :class="weightMode(djConfigForm.pools, referenceIndex) === 'pin' ? 'btn-primary' : 'btn-secondary'"
+                                                                    :aria-pressed="weightMode(djConfigForm.pools, referenceIndex) === 'pin'"
+                                                                    @click="toggleWeightMode(djConfigForm.pools, referenceIndex, 'pin')"
+                                                                >
+                                                                    Pin
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    class="btn"
+                                                                    :class="weightMode(djConfigForm.pools, referenceIndex) === 'alone' ? 'btn-primary' : 'btn-secondary'"
+                                                                    :aria-pressed="weightMode(djConfigForm.pools, referenceIndex) === 'alone'"
+                                                                    @click="toggleWeightMode(djConfigForm.pools, referenceIndex, 'alone')"
+                                                                >
+                                                                    Alone
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                        <span
+                                                            class="field-was"
+                                                            x-show="isChanged('dj-configs', ['pools', referenceIndex, 'weight'])"
+                                                            x-text="'was ' + wasValue('dj-configs', ['pools', referenceIndex, 'weight'])"
+                                                        ></span>
+                                                    </td>
+                                                    <td
+                                                        x-text="weightShareText(djConfigForm.pools, referenceIndex)"
+                                                    ></td>
+                                                    <td class="pool-grid-actions">
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-secondary"
+                                                            @click="removeDjConfigPool(referenceIndex)"
+                                                        >
+                                                            Remove
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                                <tr x-show="djConfigExpanded[referenceIndex]">
+                                                    <td></td>
+                                                    <td colspan="4">
+                                                        <template
+                                                            x-for="(block, blockIndex) in djConfigReferenceBlocks(reference, referenceIndex)"
+                                                            :key="blockIndex"
+                                                        >
+                                                            <div>
+                                                                <div
+                                                                    class="form-label"
+                                                                    x-show="block.label"
+                                                                    x-text="block.label"
+                                                                ></div>
+                                                                <div class="form-row">
                                                                     <template
-                                                                        x-for="(value, valueIndex) in block.row[field.key]"
-                                                                        :key="valueIndex"
+                                                                        x-for="field in block.fields"
+                                                                        :key="field.key"
                                                                     >
-                                                                        <div class="list-row">
-                                                                            <input
-                                                                                type="text"
-                                                                                class="form-input"
-                                                                                :aria-label="field.label"
-                                                                                x-model="block.row[field.key][valueIndex]"
-                                                                                :aria-invalid="block.row[field.key][valueIndex] === ''"
-                                                                                required
-                                                                            >
-                                                                            <button
-                                                                                type="button"
-                                                                                class="btn btn-secondary"
-                                                                                @click="block.row[field.key].splice(valueIndex, 1)"
-                                                                            >
-                                                                                Remove
-                                                                            </button>
+                                                                        <div class="form-group">
+                                                                            <label class="form-label">
+                                                                                <span x-text="field.label"></span>
+                                                                                <template
+                                                                                    x-if="field.type === 'number'"
+                                                                                >
+                                                                                    <input
+                                                                                        type="number"
+                                                                                        class="form-input"
+                                                                                        x-model.number="block.row[field.key]"
+                                                                                        :step="field.step"
+                                                                                        :min="field.min"
+                                                                                        :max="field.max"
+                                                                                        :required="!field.optional"
+                                                                                        :aria-invalid="fieldInvalid(field, block.row[field.key])"
+                                                                                        :placeholder="field.optional ? 'Optional' : ''"
+                                                                                    >
+                                                                                </template>
+                                                                                <template x-if="field.type === 'text'">
+                                                                                    <input
+                                                                                        type="text"
+                                                                                        class="form-input"
+                                                                                        x-model="block.row[field.key]"
+                                                                                        :list="field.profile ? 'dj-config-profile-options' : null"
+                                                                                        :required="!field.optional"
+                                                                                        :aria-invalid="fieldInvalid(field, block.row[field.key])"
+                                                                                        :placeholder="field.optional ? 'Optional' : ''"
+                                                                                    >
+                                                                                </template>
+                                                                                <template x-if="field.type === 'bool'">
+                                                                                    <select
+                                                                                        class="form-input"
+                                                                                        x-model="block.row[field.key]"
+                                                                                    >
+                                                                                        <option value="">
+                                                                                            Default
+                                                                                        </option>
+                                                                                        <option value="true">
+                                                                                            Yes
+                                                                                        </option>
+                                                                                        <option value="false">
+                                                                                            No
+                                                                                        </option>
+                                                                                    </select>
+                                                                                </template>
+                                                                            </label>
+                                                                            <span
+                                                                                class="field-was"
+                                                                                x-show="isChanged('dj-configs', block.path.concat(field.key))"
+                                                                                x-text="'was ' + wasValue('dj-configs', block.path.concat(field.key))"
+                                                                            ></span>
+                                                                            <template x-if="field.type === 'strings'">
+                                                                                <div>
+                                                                                    <template
+                                                                                        x-for="(value, valueIndex) in block.row[field.key]"
+                                                                                        :key="valueIndex"
+                                                                                    >
+                                                                                        <div class="list-row">
+                                                                                            <input
+                                                                                                type="text"
+                                                                                                class="form-input"
+                                                                                                :aria-label="field.label"
+                                                                                                x-model="block.row[field.key][valueIndex]"
+                                                                                                :aria-invalid="block.row[field.key][valueIndex] === ''"
+                                                                                                required
+                                                                                            >
+                                                                                            <button
+                                                                                                type="button"
+                                                                                                class="btn btn-secondary"
+                                                                                                @click="block.row[field.key].splice(valueIndex, 1)"
+                                                                                            >
+                                                                                                Remove
+                                                                                            </button>
+                                                                                        </div>
+                                                                                    </template>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        class="btn btn-secondary"
+                                                                                        @click="block.row[field.key].push('')"
+                                                                                    >
+                                                                                        + Add
+                                                                                    </button>
+                                                                                </div>
+                                                                            </template>
                                                                         </div>
                                                                     </template>
-                                                                    <button
-                                                                        type="button"
-                                                                        class="btn btn-secondary"
-                                                                        @click="block.row[field.key].push('')"
-                                                                    >
-                                                                        + Add
-                                                                    </button>
                                                                 </div>
-                                                            </template>
-                                                        </div>
-                                                    </template>
-                                                </div>
-                                            </div>
+                                                            </div>
+                                                        </template>
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-secondary"
+                                                            @click="toggleDjConfigReferenceHexConfig(reference)"
+                                                            x-text="reference.segment_defaults.hex_config ? 'Remove Hex Config' : '+ Add Hex Config'"
+                                                        ></button>
+                                                    </td>
+                                                </tr>
+                                            </tbody>
                                         </template>
-                                        <button
-                                            type="button"
-                                            class="btn btn-secondary"
-                                            @click="toggleDjConfigReferenceHexConfig(reference)"
-                                            x-text="reference.segment_defaults.hex_config ? 'Remove Hex Config' : '+ Add Hex Config'"
-                                        ></button>
-                                        <button
-                                            type="button"
-                                            class="btn btn-secondary"
-                                            @click="djConfigForm.pools.splice(referenceIndex, 1)"
-                                        >
-                                            Remove
-                                        </button>
-                                    </div>
-                                </template>
+                                    </table>
+                                </div>
                                 <div class="empty-state" x-show="djConfigForm.pools.length === 0">No pools</div>
                                 <button type="button" class="btn btn-secondary" @click="addDjConfigPool()">
                                     + Add Pool
                                 </button>
+                            </div>
+
+                            <div class="modal-section">
+                                <button
+                                    type="button"
+                                    class="btn btn-secondary"
+                                    :aria-expanded="djConfigChancesOpen"
+                                    @click="djConfigChancesOpen = !djConfigChancesOpen"
+                                    x-text="(djConfigChancesOpen ? '▾' : '▸') + ' Chance of every entry'"
+                                ></button>
+                                <div
+                                    x-show="djConfigChancesOpen"
+                                    x-effect="djConfigChancesOpen && loadDjConfigChancePools()"
+                                >
+                                    <p class="pool-grid-note">
+                                        Pool share × entry share. A pool with unsaved changes uses them. The history
+                                        penalty is not modelled.
+                                    </p>
+                                    <div class="pool-grid-scroll">
+                                        <table class="pool-grid">
+                                            <thead>
+                                                <tr>
+                                                    <th>Pool</th>
+                                                    <th>Entry</th>
+                                                    <th>Chance</th>
+                                                </tr>
+                                            </thead>
+                                            <template
+                                                x-for="(group, groupIndex) in djConfigChances()"
+                                                :key="groupIndex"
+                                            >
+                                                <tbody>
+                                                    <template
+                                                        x-for="(item, itemIndex) in group.entries"
+                                                        :key="itemIndex"
+                                                    >
+                                                        <tr>
+                                                            <td x-text="group.pool"></td>
+                                                            <td class="pool-grid-name" x-text="item.name"></td>
+                                                            <td x-text="item.chance.toFixed(2) + '%'"></td>
+                                                        </tr>
+                                                    </template>
+                                                    <tr x-show="!group.loaded">
+                                                        <td x-text="group.pool"></td>
+                                                        <td colspan="2">Loading...</td>
+                                                    </tr>
+                                                </tbody>
+                                            </template>
+                                        </table>
+                                    </div>
+                                </div>
                             </div>
 
                             <template x-for="rotation in djConfigRotations" :key="rotation.key">

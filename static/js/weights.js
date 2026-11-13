@@ -93,7 +93,7 @@ export function weightSliders() {
             this.weightDrag = null;
         },
 
-        slideWeight(rows, index, event) {
+        slideWeight(rows, index, event, min = 0) {
             if (
                 !this.weightDrag ||
                 !sameRow(this.weightDrag.row, rows[index]) ||
@@ -113,8 +113,9 @@ export function weightSliders() {
                           rows.map((_, i) => this.weightMode(rows, i) === 'pin'),
                       );
             rows.forEach((row, i) => {
-                if (row.weight !== next[i]) {
-                    row.weight = next[i];
+                const value = typeof next[i] === 'number' ? Math.max(min, next[i]) : next[i];
+                if (row.weight !== value) {
+                    row.weight = value;
                 }
             });
             event.target.value = this.weightShare(rows, index);
