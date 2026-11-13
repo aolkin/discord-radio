@@ -956,6 +956,31 @@
                                         </button>
                                     </div>
                                 </div>
+                                <div class="tall-bar" x-show="poolMode === 'weights'">
+                                    <template x-for="section in barSections(poolForm.entries)" :key="section.index">
+                                        <div
+                                            class="tall-bar-section"
+                                            tabindex="0"
+                                            role="slider"
+                                            aria-orientation="vertical"
+                                            :aria-label="poolEntryName(section.row)"
+                                            :aria-valuenow="section.row.weight"
+                                            aria-valuenow="1"
+                                            aria-valuemin="1"
+                                            :style="{ flexGrow: section.row.weight }"
+                                            :class="'tall-bar-tone-' + (section.index % 4)"
+                                            @pointerdown.prevent="startBarDrag(poolForm.entries, section.index, $event)"
+                                            @pointermove="moveBarDrag(poolForm.entries, section.index, $event)"
+                                            @pointerup="endBarDrag()"
+                                            @pointercancel="endBarDrag()"
+                                            @keydown="keyBar(poolForm.entries, section.index, $event)"
+                                        >
+                                            <span
+                                                x-text="poolEntryName(section.row) + ' (' + section.row.weight + ')'"
+                                            ></span>
+                                        </div>
+                                    </template>
+                                </div>
                                 <div class="pool-grid-scroll">
                                     <table class="pool-grid">
                                         <thead>

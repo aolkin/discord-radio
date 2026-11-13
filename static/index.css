@@ -720,6 +720,59 @@ a.guild-card {
     opacity: 0.4;
 }
 
+.tall-bar {
+    display: flex;
+    flex-direction: column;
+    height: 320px;
+    margin: 10px 0;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--color-surface-muted);
+    touch-action: none;
+    user-select: none;
+}
+
+.tall-bar-section {
+    flex-basis: 0;
+    flex-shrink: 1;
+    min-height: 0;
+    overflow: hidden;
+    padding: 2px 8px;
+    font-size: 0.8rem;
+    line-height: 1.2;
+    white-space: nowrap;
+    color: var(--color-on-accent);
+    cursor: ns-resize;
+    border-bottom: 1px solid var(--color-surface);
+    touch-action: none;
+}
+
+.tall-bar-section:last-child {
+    border-bottom: 0;
+}
+
+.tall-bar-section:focus-visible {
+    outline: 2px solid var(--color-on-accent);
+    outline-offset: -4px;
+}
+
+.tall-bar-tone-0 {
+    background: var(--color-primary);
+}
+
+.tall-bar-tone-1 {
+    background: var(--color-accent);
+}
+
+.tall-bar-tone-2 {
+    background: var(--color-primary-hover);
+}
+
+.tall-bar-tone-3 {
+    background: var(--color-success-dark);
+}
+
 .weight-modes {
     display: flex;
     gap: 4px;
