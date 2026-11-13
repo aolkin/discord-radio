@@ -1,6 +1,7 @@
 import { apiRequest, bodyOrStatus, emptyMessage } from './api.js';
 import { fieldInvalid } from './form-fields.js';
-import { newItem } from './router.js';
+
+export const newItem = '+new';
 
 const capitalize = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 

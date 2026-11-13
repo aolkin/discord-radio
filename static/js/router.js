@@ -1,10 +1,9 @@
 import { botProfileForms } from './bot-profile.js';
 import { playForms } from './dj.js';
 import { logTypes } from './logs.js';
+import { newItem } from './registry-editor.js';
 import { signalProfileForms } from './signal-profiles.js';
 import { trackForms } from './tracks.js';
-
-export const newItem = '+new';
 
 export const guildTabs = [
     { id: 'status', label: 'Status' },
