@@ -5,7 +5,7 @@ use crate::audio::dj::config::{
     LoadedConfig, Order, Playback, PoolEntry, SegmentDefaults,
 };
 use crate::audio::dj::manager::{
-    ADVANCE_RETRY_DELAY, DJCommand, HexMessageRequest, IdleRequest, TrackRequest,
+    ADVANCE_RETRY_DELAY, DEFAULT_DJ_CONFIG, DJCommand, HexMessageRequest, IdleRequest, TrackRequest,
 };
 use crate::audio::dj::segments::{
     CommonSegmentPlaybackConfig, NoiseEntry, NoiseSegment, SegmentCtx,
@@ -86,6 +86,7 @@ pub struct DJState {
     pub pool_selector: WeightedSelector,
     pub entry_selectors: BTreeMap<String, WeightedSelector>,
     pub playing_pool: Option<PlayingPool>,
+    pub config_name: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -105,6 +106,7 @@ impl Default for DJState {
             pool_selector: WeightedSelector::default(),
             entry_selectors: BTreeMap::new(),
             playing_pool: None,
+            config_name: DEFAULT_DJ_CONFIG.to_string(),
         }
     }
 }
@@ -356,9 +358,7 @@ impl DJStateMachine {
 
     async fn persist_state(&self, stopped: bool) {
         let current_state = self.current_state().await;
-        let config = self.config.borrow().clone();
         let persist_state = crate::persistence::DJStateSnapshot {
-            config_name: &config.config.name,
             state_machine: &current_state,
             saved_at: SystemTime::now(),
             stopped,
@@ -472,6 +472,7 @@ impl DJStateMachine {
 
     async fn set_config(&mut self, LoadedConfig { config, pools }: &LoadedConfig) {
         let mut state = self.state.write().await;
+        state.config_name = config.name.clone();
         state
             .entry_selectors
             .retain(|name, _| pools.iter().any(|pool| pool.file.name == *name));

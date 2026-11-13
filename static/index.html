@@ -52,6 +52,50 @@
                 <a href="#/edit" class="btn" :class="route.view === 'edit' ? 'btn-primary' : 'btn-secondary'">Edit</a>
             </nav>
 
+            <div class="guild-strip" x-show="guilds.length > 0">
+                <template x-for="guild in guilds" :key="guild.guild_id">
+                    <div
+                        class="strip-card"
+                        :class="{ selected: route.view === 'live' && route.name === guild.guild_id }"
+                        x-data="{ open: false }"
+                        @click.outside="open = false"
+                        @keydown.escape="open = false"
+                    >
+                        <button type="button" class="strip-open" @click="openGuild(guild.guild_id)">
+                            <span class="strip-name" x-text="guildName(guild.guild_id)"></span>
+                            <span class="strip-state" x-text="guild.dj_state.state_type"></span>
+                        </button>
+                        <button
+                            type="button"
+                            class="strip-menu-toggle"
+                            aria-label="Guild actions"
+                            aria-haspopup="menu"
+                            :aria-expanded="open"
+                            @click="open = !open"
+                        >
+                            ⋯
+                        </button>
+                        <div class="strip-menu" role="menu" x-show="open" @click="open = false">
+                            <button type="button" role="menuitem" @click="openGuild(guild.guild_id)">Open guild</button>
+                            <button type="button" role="menuitem" @click="openChannelMessageModal(guild.guild_id)">
+                                Send Message
+                            </button>
+                            <button type="button" role="menuitem" @click="openModal('advanceDJ', guild.guild_id)">
+                                Advance DJ State
+                            </button>
+                            <button
+                                type="button"
+                                role="menuitem"
+                                :disabled="!guild.dj_config"
+                                @click="openItem('dj-configs', guild.dj_config)"
+                            >
+                                Open DJ config
+                            </button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
             <div class="edit-view" x-show="route.view === 'edit'">
                 <nav class="card">
                     <div class="section">
@@ -1188,7 +1232,11 @@
 
             <div class="guilds-grid" x-show="route.view === 'live' && guilds.length > 0">
                 <template x-for="guild in guilds" :key="guild.guild_id">
-                    <div class="guild-card">
+                    <div
+                        class="guild-card"
+                        :id="'guild-' + guild.guild_id"
+                        :class="{ selected: route.name === guild.guild_id }"
+                    >
                         <div class="guild-header">
                             <div class="guild-id" x-text="guildName(guild.guild_id)"></div>
                             <span class="voice-badge" x-show="guild.in_voice">In Voice</span>

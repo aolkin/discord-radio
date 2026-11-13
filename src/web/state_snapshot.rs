@@ -24,6 +24,7 @@ pub struct GuildState {
     pub in_voice: bool,
     pub tracks: Vec<TrackSnapshot>,
     pub dj_state: DJStateInfo,
+    pub dj_config: String,
     pub audio_profile: AudioProfileInfo,
     pub channel_status: ChannelStatusInfo,
     pub announcement_channels: Vec<AnnouncementChannelInfo>,
@@ -59,11 +60,12 @@ impl BotSnapshot {
 
             let tracks = guild.track_manager.get_all_tracks().await;
 
-            let (dj_state, profile, channel_status, announcement_channels) = {
+            let (dj_state, dj_config, profile, channel_status, announcement_channels) = {
                 let dj_state_lock = guild.dj_manager.state();
                 let state = dj_state_lock.read().await;
                 (
                     dj_state_to_info(&state),
+                    state.config_name.clone(),
                     state.signal_profile(),
                     state.channel_status(),
                     state
@@ -97,6 +99,7 @@ impl BotSnapshot {
                 in_voice,
                 tracks,
                 dj_state,
+                dj_config,
                 audio_profile,
                 channel_status: ChannelStatusInfo {
                     status: match channel_status.value {
