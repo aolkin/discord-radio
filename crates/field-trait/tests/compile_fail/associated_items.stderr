@@ -6,5 +6,3 @@ error: #[field_trait_impl] cannot implement `AssociatedItems` because `Item`, `L
 ...
 10 | #[field_trait_impl(AssociatedItems)]
    | ------------------------------------ in this attribute macro expansion
-   |
-   = note: this error originates in the macro `AssociatedItems` which comes from the expansion of the attribute macro `field_trait_impl` (in Nightly builds, run with -Z macro-backtrace for more info)
