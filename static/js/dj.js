@@ -1,33 +1,17 @@
 import { apiRequest, bodyOrStatus, emptyMessage } from './api.js';
 
-export const modals = {
-    announcementChannels: {
-        flag: 'showAnnouncementChannelsModal',
-        perGuild: true,
-        reset: () => ({
-            announcementOptions: [],
-            announcementSelection: '',
-            announcementMessage: emptyMessage(),
-        }),
-    },
-    channelStatus: {
-        flag: 'showChannelStatusModal',
-        perGuild: true,
-        reset: () => ({
-            channelStatusSetting: 'background',
-            channelStatusText: '',
-            channelStatusDuration: null,
-            channelStatusMessage: emptyMessage(),
-        }),
-    },
-};
-
 export const playForms = () => ({
     djStateType: '',
     djMessage: emptyMessage(),
     hexMessageText: '',
     hexMessagePool: '',
     hexMessage: emptyMessage(),
+    channelStatusSetting: 'background',
+    channelStatusText: '',
+    channelStatusDuration: null,
+    channelStatusMessage: emptyMessage(),
+    announcementSelection: '',
+    announcementMessage: emptyMessage(),
 });
 
 export function dj() {
@@ -35,39 +19,30 @@ export function dj() {
         ...playForms(),
         djSaving: false,
         hexSaving: false,
-        // Channel Status Modal state
-        showChannelStatusModal: false,
-        channelStatusSetting: 'background',
-        channelStatusText: '',
-        channelStatusDuration: null,
         channelStatusSaving: false,
-        channelStatusMessage: emptyMessage(),
-        // Announcement Channels Modal state
-        showAnnouncementChannelsModal: false,
         announcementOptions: [],
-        announcementSelection: '',
         announcementLoading: false,
         announcementSaving: false,
-        announcementMessage: emptyMessage(),
 
         announcementChannelsOf(guildId) {
             return this.guilds.find((guild) => guild.guild_id === guildId)?.announcement_channels ?? [];
         },
 
         availableAnnouncementOptions() {
-            const listed = this.announcementChannelsOf(this.currentGuildId).map((channel) => channel.channel_id);
+            const listed = this.announcementChannelsOf(this.route.name).map((channel) => channel.channel_id);
             return this.announcementOptions.filter((channel) => !listed.includes(channel.channel_id));
         },
 
-        async openAnnouncementChannelsModal(guildId) {
-            this.openModal('announcementChannels', guildId);
+        async loadAnnouncementOptions() {
+            const guildId = this.route.name;
+            this.announcementOptions = [];
             this.announcementLoading = true;
             try {
                 const response = await apiRequest(`/api/guilds/${guildId}/channels`, {
                     errorMessage: bodyOrStatus,
                 });
                 const data = await response.json();
-                if (guildId === this.currentGuildId) {
+                if (guildId === this.route.name) {
                     this.announcementOptions = data.channels;
                 }
             } catch (error) {
@@ -87,7 +62,7 @@ export function dj() {
                 message: 'announcementMessage',
                 label: 'adding announcement channel',
                 request: () =>
-                    apiRequest(`/api/guilds/${this.currentGuildId}/dj/announcement-channels`, {
+                    apiRequest(`/api/guilds/${this.route.name}/dj/announcement-channels`, {
                         method: 'POST',
                         body: { channel_id: this.announcementSelection },
                         errorMessage: bodyOrStatus,
@@ -106,7 +81,7 @@ export function dj() {
                 message: 'announcementMessage',
                 label: 'removing announcement channel',
                 request: () =>
-                    apiRequest(`/api/guilds/${this.currentGuildId}/dj/announcement-channels/${channelId}`, {
+                    apiRequest(`/api/guilds/${this.route.name}/dj/announcement-channels/${channelId}`, {
                         method: 'DELETE',
                         errorMessage: bodyOrStatus,
                     }),
@@ -164,14 +139,12 @@ export function dj() {
                 message: 'channelStatusMessage',
                 label: 'changing channel status',
                 request: () =>
-                    apiRequest(`/api/guilds/${this.currentGuildId}/dj/channel-status`, {
+                    apiRequest(`/api/guilds/${this.route.name}/dj/channel-status`, {
                         method: 'POST',
                         body,
                     }),
                 success: 'Channel status changed successfully!',
                 failure: 'Failed to change channel status',
-                afterFn: () => this.closeModal('channelStatus'),
-                afterMs: 1500,
             });
         },
     };

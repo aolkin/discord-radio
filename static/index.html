@@ -1671,52 +1671,218 @@
                         <div class="guild-content" x-show="route.tab === 'signal-profile'">
                             <div class="section">
                                 <div class="section-title">Signal Profile</div>
-                                <button
-                                    type="button"
-                                    class="btn btn-secondary w-full"
-                                    @click="openModal('signalProfile', guild.guild_id)"
-                                >
-                                    Change Signal Profile
-                                </button>
+                                <form @submit.prevent="changeSignalProfile()">
+                                    <div
+                                        x-show="signalProfileMessage.text"
+                                        :class="signalProfileMessage.type === 'error' ? 'error-message' : 'success-message'"
+                                        x-text="signalProfileMessage.text"
+                                    ></div>
+                                    <div class="form-group">
+                                        <label class="form-label" for="signal-profile-setting">Setting</label>
+                                        <select
+                                            id="signal-profile-setting"
+                                            class="form-input"
+                                            x-model="signalProfileSetting"
+                                        >
+                                            <option value="manual">Background (replaces rotation)</option>
+                                            <option value="override">Override (beats everything)</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label" for="signal-profile-profile">Profile</label>
+                                        <select
+                                            id="signal-profile-profile"
+                                            class="form-input"
+                                            x-model="signalProfileName"
+                                        >
+                                            <option value="">None (clear)</option>
+                                            <template x-for="profile in profiles" :key="profile">
+                                                <option :value="profile" x-text="profile"></option>
+                                            </template>
+                                        </select>
+                                    </div>
+                                    <div class="form-group" x-show="signalProfileName">
+                                        <label class="form-label" for="signal-profile-fade"
+                                            >Fade Duration (seconds)</label
+                                        >
+                                        <input
+                                            id="signal-profile-fade"
+                                            type="number"
+                                            class="form-input"
+                                            x-model.number="signalProfileFade"
+                                            min="0"
+                                            step="0.1"
+                                            :placeholder="signalProfileSetting === 'override' ? '2.0' : 'default'"
+                                        >
+                                    </div>
+                                    <div class="form-group" x-show="signalProfileName">
+                                        <label class="form-label" for="signal-profile-duration"
+                                            >Duration (seconds)</label
+                                        >
+                                        <input
+                                            id="signal-profile-duration"
+                                            type="number"
+                                            class="form-input"
+                                            x-model.number="signalProfileDuration"
+                                            min="0"
+                                            step="1"
+                                            placeholder="Until cleared"
+                                        >
+                                    </div>
+                                    <button
+                                        type="submit"
+                                        class="btn btn-primary"
+                                        :disabled="signalProfileSaving"
+                                        x-text="signalProfileSaving ? 'Applying...' : 'Apply Profile'"
+                                    ></button>
+                                </form>
                             </div>
                         </div>
 
                         <div class="guild-content" x-show="route.tab === 'channel-status'">
                             <div class="section">
                                 <div class="section-title">Voice Channel Status</div>
-                                <button
-                                    type="button"
-                                    class="btn btn-secondary w-full"
-                                    @click="openModal('channelStatus', guild.guild_id)"
-                                >
-                                    Change Channel Status
-                                </button>
+                                <form @submit.prevent="changeChannelStatus()">
+                                    <div
+                                        x-show="channelStatusMessage.text"
+                                        :class="channelStatusMessage.type === 'error' ? 'error-message' : 'success-message'"
+                                        x-text="channelStatusMessage.text"
+                                    ></div>
+                                    <div class="form-group">
+                                        <label class="form-label" for="channel-status-setting">Setting</label>
+                                        <select
+                                            id="channel-status-setting"
+                                            class="form-input"
+                                            x-model="channelStatusSetting"
+                                        >
+                                            <option value="background">Background (replaces rotation)</option>
+                                            <option value="override">
+                                                Override with a fixed status (beats everything)
+                                            </option>
+                                            <option value="unmanaged">
+                                                Override: leave the channel status unmanaged
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group" x-show="channelStatusSetting !== 'unmanaged'">
+                                        <label class="form-label" for="channel-status-text">Status</label>
+                                        <input
+                                            id="channel-status-text"
+                                            type="text"
+                                            class="form-input"
+                                            x-model="channelStatusText"
+                                            placeholder="Leave blank to clear"
+                                        >
+                                    </div>
+                                    <div
+                                        class="form-group"
+                                        x-show="channelStatusSetting === 'unmanaged' || channelStatusText"
+                                    >
+                                        <label class="form-label" for="channel-status-duration"
+                                            >Duration (seconds)</label
+                                        >
+                                        <input
+                                            id="channel-status-duration"
+                                            type="number"
+                                            class="form-input"
+                                            x-model.number="channelStatusDuration"
+                                            min="0"
+                                            step="1"
+                                            placeholder="Until cleared"
+                                        >
+                                    </div>
+                                    <button
+                                        type="submit"
+                                        class="btn btn-primary"
+                                        :disabled="channelStatusSaving"
+                                        x-text="channelStatusSaving ? 'Applying...' : 'Apply Channel Status'"
+                                    ></button>
+                                </form>
                             </div>
                         </div>
 
                         <div class="guild-content" x-show="route.tab === 'announcements'">
                             <div class="section">
                                 <div class="section-title">Announcement Channels</div>
-                                <button
-                                    type="button"
-                                    class="btn btn-secondary w-full"
-                                    @click="openAnnouncementChannelsModal(guild.guild_id)"
-                                >
-                                    Edit Announcement Channels
-                                </button>
+                                <div
+                                    x-show="announcementMessage.text"
+                                    :class="announcementMessage.type === 'error' ? 'error-message' : 'success-message'"
+                                    x-text="announcementMessage.text"
+                                ></div>
+                                <div class="loading" x-show="announcementLoading">Loading...</div>
+                                <div x-show="!announcementLoading">
+                                    <template
+                                        x-for="channel in announcementChannelsOf(route.name)"
+                                        :key="channel.channel_id"
+                                    >
+                                        <div class="info-item">
+                                            <div
+                                                class="grow track-name"
+                                                x-text="'#' + (channel.name || channel.channel_id)"
+                                            ></div>
+                                            <button
+                                                type="button"
+                                                class="btn btn-secondary"
+                                                :disabled="announcementSaving"
+                                                @click="removeAnnouncementChannel(channel.channel_id)"
+                                            >
+                                                Remove
+                                            </button>
+                                        </div>
+                                    </template>
+                                    <div class="hint" x-show="!announcementChannelsOf(route.name).length">
+                                        No announcement channels. Announcements are off.
+                                    </div>
+                                    <form class="form-group mt-12" @submit.prevent="addAnnouncementChannel()">
+                                        <label class="form-label" for="announcement-channel-select"
+                                            >Add a channel</label
+                                        >
+                                        <select
+                                            id="announcement-channel-select"
+                                            class="form-input"
+                                            x-model="announcementSelection"
+                                        >
+                                            <option value="">Choose a channel</option>
+                                            <template
+                                                x-for="channel in availableAnnouncementOptions()"
+                                                :key="channel.channel_id"
+                                            >
+                                                <option
+                                                    :value="channel.channel_id"
+                                                    x-text="'#' + channel.name"
+                                                ></option>
+                                            </template>
+                                        </select>
+                                        <button
+                                            type="submit"
+                                            class="btn btn-primary mt-12 w-full"
+                                            :disabled="announcementSaving || !announcementSelection"
+                                        >
+                                            Add Channel
+                                        </button>
+                                    </form>
+                                </div>
                             </div>
                         </div>
 
                         <div class="guild-content" x-show="route.tab === 'bot-profile'">
                             <div class="section">
                                 <div class="section-title">Bot Profile</div>
-                                <button
-                                    type="button"
-                                    class="btn btn-secondary w-full"
-                                    @click="openBotProfileModal(guild.guild_id)"
-                                >
-                                    Edit Nickname, Avatar &amp; Banner
-                                </button>
+                                <div
+                                    x-show="botProfileMessage.text"
+                                    :class="botProfileMessage.type === 'error' ? 'error-message' : 'success-message'"
+                                    x-text="botProfileMessage.text"
+                                ></div>
+                                <div class="loading" x-show="botProfileLoading">Loading...</div>
+                                <form x-show="!botProfileLoading" @submit.prevent="saveBotProfile()">
+                                    <div x-include="#bot-profile-fields"></div>
+                                    <button
+                                        type="submit"
+                                        class="btn btn-primary"
+                                        :disabled="botProfileSaving"
+                                        x-text="botProfileSaving ? 'Saving...' : 'Save'"
+                                    ></button>
+                                </form>
                             </div>
                         </div>
 
@@ -1785,144 +1951,6 @@
             </div>
         </div>
 
-        <!-- Signal Profile Modal -->
-        <template
-            x-modal
-            data-modal="signalProfile"
-            data-title="Change Signal Profile"
-            data-message="profileMessage"
-            data-submit="changeSignalProfile()"
-            data-saving="profileSaving"
-            data-submit-label="Apply Profile"
-            data-busy-label="Applying..."
-        >
-            <div class="form-group">
-                <label class="form-label" for="signal-profile-setting">Setting</label>
-                <select id="signal-profile-setting" class="form-input" x-model="profileSetting">
-                    <option value="manual">Background (replaces rotation)</option>
-                    <option value="override">Override (beats everything)</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label class="form-label" for="signal-profile-profile">Profile</label>
-                <select id="signal-profile-profile" class="form-input" x-model="selectedProfile">
-                    <option value="">None (clear)</option>
-                    <template x-for="profile in profiles" :key="profile">
-                        <option :value="profile" x-text="profile"></option>
-                    </template>
-                </select>
-            </div>
-            <div class="form-group" x-show="selectedProfile">
-                <label class="form-label" for="signal-profile-fade">Fade Duration (seconds)</label>
-                <input
-                    id="signal-profile-fade"
-                    type="number"
-                    class="form-input"
-                    x-model.number="profileFadeDuration"
-                    min="0"
-                    step="0.1"
-                    :placeholder="profileSetting === 'override' ? '2.0' : 'default'"
-                >
-            </div>
-            <div class="form-group" x-show="selectedProfile">
-                <label class="form-label" for="signal-profile-duration">Duration (seconds)</label>
-                <input
-                    id="signal-profile-duration"
-                    type="number"
-                    class="form-input"
-                    x-model.number="profileDuration"
-                    min="0"
-                    step="1"
-                    placeholder="Until cleared"
-                >
-            </div>
-        </template>
-
-        <template
-            x-modal
-            data-modal="channelStatus"
-            data-title="Change Channel Status"
-            data-message="channelStatusMessage"
-            data-submit="changeChannelStatus()"
-            data-saving="channelStatusSaving"
-            data-submit-label="Apply Channel Status"
-            data-busy-label="Applying..."
-        >
-            <div class="form-group">
-                <label class="form-label" for="channel-status-setting">Setting</label>
-                <select id="channel-status-setting" class="form-input" x-model="channelStatusSetting">
-                    <option value="background">Background (replaces rotation)</option>
-                    <option value="override">Override with a fixed status (beats everything)</option>
-                    <option value="unmanaged">Override: leave the channel status unmanaged</option>
-                </select>
-            </div>
-            <div class="form-group" x-show="channelStatusSetting !== 'unmanaged'">
-                <label class="form-label" for="channel-status-text">Status</label>
-                <input
-                    id="channel-status-text"
-                    type="text"
-                    class="form-input"
-                    x-model="channelStatusText"
-                    placeholder="Leave blank to clear"
-                >
-            </div>
-            <div class="form-group" x-show="channelStatusSetting === 'unmanaged' || channelStatusText">
-                <label class="form-label" for="channel-status-duration">Duration (seconds)</label>
-                <input
-                    id="channel-status-duration"
-                    type="number"
-                    class="form-input"
-                    x-model.number="channelStatusDuration"
-                    min="0"
-                    step="1"
-                    placeholder="Until cleared"
-                >
-            </div>
-        </template>
-
-        <template
-            x-modal
-            data-modal="announcementChannels"
-            data-title="Announcement Channels"
-            data-message="announcementMessage"
-            data-loading="announcementLoading"
-        >
-            <div x-show="!announcementLoading">
-                <template x-for="channel in announcementChannelsOf(currentGuildId)" :key="channel.channel_id">
-                    <div class="info-item">
-                        <div class="grow track-name" x-text="'#' + (channel.name || channel.channel_id)"></div>
-                        <button
-                            type="button"
-                            class="btn btn-secondary"
-                            :disabled="announcementSaving"
-                            @click="removeAnnouncementChannel(channel.channel_id)"
-                        >
-                            Remove
-                        </button>
-                    </div>
-                </template>
-                <div class="hint" x-show="!announcementChannelsOf(currentGuildId).length">
-                    No announcement channels. Announcements are off.
-                </div>
-                <form class="form-group mt-12" @submit.prevent="addAnnouncementChannel()">
-                    <label class="form-label" for="announcement-channel-select">Add a channel</label>
-                    <select id="announcement-channel-select" class="form-input" x-model="announcementSelection">
-                        <option value="">Choose a channel</option>
-                        <template x-for="channel in availableAnnouncementOptions()" :key="channel.channel_id">
-                            <option :value="channel.channel_id" x-text="'#' + channel.name"></option>
-                        </template>
-                    </select>
-                    <button
-                        type="submit"
-                        class="btn btn-primary mt-12 w-full"
-                        :disabled="announcementSaving || !announcementSelection"
-                    >
-                        Add Channel
-                    </button>
-                </form>
-            </div>
-        </template>
-
         <template
             x-modal
             data-modal="botProfile"
@@ -1936,6 +1964,10 @@
             data-cancel-label="Close"
             data-escape-unless="fileBrowser.open"
         >
+            <div x-include="#bot-profile-fields"></div>
+        </template>
+
+        <template id="bot-profile-fields">
             <div class="form-group">
                 <label class="form-label" for="bot-profile-nick">Nickname</label>
                 <input

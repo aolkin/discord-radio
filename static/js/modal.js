@@ -117,11 +117,8 @@ document.addEventListener('alpine:init', () => {
 export const modalMethods = {
     // Modals named in `modals` (see above) open and close here.
     // Both reset the modal's fields.
-    openModal(name, guildId) {
+    openModal(name) {
         const modal = modals[name];
-        if (modal.perGuild) {
-            this.currentGuildId = guildId;
-        }
         Object.assign(this, modal.reset());
         setFlag(this, modal.flag, true);
     },
@@ -129,9 +126,6 @@ export const modalMethods = {
     closeModal(name) {
         const modal = modals[name];
         setFlag(this, modal.flag, false);
-        if (modal.perGuild) {
-            this.currentGuildId = null;
-        }
         Object.assign(this, modal.reset());
     },
 };

@@ -3,7 +3,6 @@ import { apiRequest, bodyOrStatus, emptyMessage } from './api.js';
 export const modals = {
     fileBrowser: {
         flag: 'fileBrowser.open',
-        perGuild: false,
         reset: () => ({ fileBrowserOnSelect: null }),
     },
 };

@@ -1,4 +1,6 @@
+import { botProfileForms } from './bot-profile.js';
 import { playForms } from './dj.js';
+import { signalProfileForms } from './signal-profiles.js';
 import { trackForms } from './tracks.js';
 
 export const newItem = '+new';
@@ -68,7 +70,8 @@ export function router() {
 
             if (this.route.view !== 'edit') {
                 if (previous.name !== this.route.name || previous.tab !== this.route.tab) {
-                    Object.assign(this, playForms(), trackForms());
+                    Object.assign(this, playForms(), trackForms(), signalProfileForms(), botProfileForms());
+                    this.enterGuildTab();
                 }
                 return;
             }
@@ -97,6 +100,14 @@ export function router() {
 
         openGuild(guildId, tab = 'status') {
             this.navigate(routeHash({ view: 'live', kind: null, name: guildId, tab }));
+        },
+
+        enterGuildTab() {
+            if (this.route.tab === 'announcements') {
+                this.loadAnnouncementOptions();
+            } else if (this.route.tab === 'bot-profile') {
+                this.loadBotProfile(this.route.name);
+            }
         },
 
         currentGuild() {

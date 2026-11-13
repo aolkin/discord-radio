@@ -3,37 +3,41 @@ import { apiRequest, bodyOrStatus, emptyMessage } from './api.js';
 export const modals = {
     botProfile: {
         flag: 'showBotProfileModal',
-        perGuild: true,
-        reset: () => ({
-            botProfileMessage: emptyMessage(),
-            botProfileForm: { nick: '', avatar: '', banner: '' },
-        }),
+        reset: () => botProfileForms(),
     },
 };
 
+export const botProfileForms = () => ({
+    botProfileMessage: emptyMessage(),
+    botProfileForm: { nick: '', avatar: '', banner: '' },
+});
+
 export function botProfile() {
     return {
-        // Bot Profile Modal state
         showBotProfileModal: false,
+        botProfileGuildId: null,
         botProfileLoading: false,
         botProfileSaving: false,
-        botProfileMessage: emptyMessage(),
         botProfileCurrent: { nick: null, avatar_url: null, banner_url: null },
-        botProfileForm: { nick: '', avatar: '', banner: '' },
+        ...botProfileForms(),
 
         openBotProfileModal(guildId) {
-            this.openModal('botProfile', guildId);
-            return this.loadBotProfile();
+            this.openModal('botProfile');
+            return this.loadBotProfile(guildId);
         },
 
-        async loadBotProfile() {
+        async loadBotProfile(guildId) {
+            this.botProfileGuildId = guildId;
             this.botProfileLoading = true;
             try {
-                const response = await apiRequest(`/api/guilds/${this.currentGuildId}/bot-profile`, {
+                const response = await apiRequest(`/api/guilds/${guildId}/bot-profile`, {
                     errorMessage: bodyOrStatus,
                 });
-                this.botProfileCurrent = await response.json();
-                this.botProfileForm.nick = this.botProfileCurrent.nick || '';
+                const current = await response.json();
+                if (guildId === this.botProfileGuildId) {
+                    this.botProfileCurrent = current;
+                    this.botProfileForm.nick = current.nick || '';
+                }
             } catch (error) {
                 console.error('Failed to load bot profile:', error);
                 this.botProfileMessage = {
@@ -76,7 +80,7 @@ export function botProfile() {
                 message: 'botProfileMessage',
                 label: 'saving bot profile',
                 request: () =>
-                    apiRequest(`/api/guilds/${this.currentGuildId}/bot-profile`, {
+                    apiRequest(`/api/guilds/${this.botProfileGuildId}/bot-profile`, {
                         method: 'PUT',
                         body,
                         errorMessage: bodyOrStatus,
@@ -84,7 +88,7 @@ export function botProfile() {
                 onSuccess: async () => {
                     this.botProfileForm.avatar = '';
                     this.botProfileForm.banner = '';
-                    await this.loadBotProfile();
+                    await this.loadBotProfile(this.botProfileGuildId);
                 },
                 success: 'Profile saved',
                 failure: 'Failed to save the profile',
