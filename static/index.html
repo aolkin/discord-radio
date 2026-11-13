@@ -64,6 +64,11 @@
                         <button type="button" class="strip-open" @click="openGuild(guild.guild_id)">
                             <span class="strip-name" x-text="guildName(guild.guild_id)"></span>
                             <span class="strip-state" x-text="guild.dj_state.state_type"></span>
+                            <span
+                                class="strip-state"
+                                x-show="guild.dj_state.progress"
+                                x-text="guild.dj_state.pool + ' · ' + guild.dj_state.progress?.played + ' / ' + guild.dj_state.progress?.total"
+                            ></span>
                         </button>
                         <button
                             type="button"
@@ -423,6 +428,8 @@
                                             <tr>
                                                 <th></th>
                                                 <th>Pool</th>
+                                                <th>Playback</th>
+                                                <th>Order</th>
                                                 <th>Weight</th>
                                                 <th>Share</th>
                                                 <th></th>
@@ -474,6 +481,24 @@
                                                             x-text="'was ' + wasValue('dj-configs', ['pools', referenceIndex, 'pool'])"
                                                         ></span>
                                                     </td>
+                                                    <template x-for="field in djConfigModeFields" :key="field.key">
+                                                        <td>
+                                                            <select
+                                                                class="form-input"
+                                                                :aria-label="field.label"
+                                                                x-model="reference[field.key]"
+                                                            >
+                                                                <template x-for="option in field.options" :key="option">
+                                                                    <option :value="option" x-text="option"></option>
+                                                                </template>
+                                                            </select>
+                                                            <span
+                                                                class="field-was"
+                                                                x-show="isChanged('dj-configs', ['pools', referenceIndex, field.key])"
+                                                                x-text="'was ' + wasValue('dj-configs', ['pools', referenceIndex, field.key])"
+                                                            ></span>
+                                                        </td>
+                                                    </template>
                                                     <td>
                                                         <div class="weight-control">
                                                             <input
@@ -539,7 +564,7 @@
                                                 </tr>
                                                 <tr x-show="djConfigExpanded[referenceIndex]">
                                                     <td></td>
-                                                    <td colspan="4">
+                                                    <td colspan="6">
                                                         <template
                                                             x-for="(block, blockIndex) in djConfigReferenceBlocks(reference, referenceIndex)"
                                                             :key="blockIndex"
@@ -1098,6 +1123,24 @@
                                                         <button
                                                             type="button"
                                                             class="btn btn-secondary"
+                                                            aria-label="Move entry up"
+                                                            :disabled="index === 0"
+                                                            @click="movePoolEntry(index, -1)"
+                                                        >
+                                                            ↑
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-secondary"
+                                                            aria-label="Move entry down"
+                                                            :disabled="index === poolForm.entries.length - 1"
+                                                            @click="movePoolEntry(index, 1)"
+                                                        >
+                                                            ↓
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-secondary"
                                                             :aria-expanded="poolExpanded[index] === true"
                                                             aria-label="Show more fields"
                                                             @click="poolExpanded[index] = !poolExpanded[index]"
@@ -1313,6 +1356,11 @@
                                 <div class="dj-state">
                                     <div class="dj-type" x-text="guild.dj_state.state_type"></div>
                                     <div class="dj-details" x-text="guild.dj_state.details"></div>
+                                    <div
+                                        class="dj-details"
+                                        x-show="guild.dj_state.progress"
+                                        x-text="'Pool ' + guild.dj_state.pool + ': ' + guild.dj_state.progress?.played + ' of ' + guild.dj_state.progress?.total + ' played'"
+                                    ></div>
                                 </div>
                             </div>
 
