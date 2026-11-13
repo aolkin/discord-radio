@@ -635,7 +635,7 @@ pub async fn status(ctx: Context<'_>) -> anyhow::Result<()> {
         None => format!("{} ({time})", display.name),
     };
 
-    let pool_info = match state.pool_name() {
+    let pool_info = match state.segment.pool.as_deref() {
         Some(pool) => match state.pool_progress(ctx.data().dj_config_manager) {
             Some(progress) => format!(
                 "\nPool: **{pool}** ({} of {})",

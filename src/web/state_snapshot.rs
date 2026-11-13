@@ -143,7 +143,7 @@ fn dj_state_to_info(
     DJStateInfo {
         state_type: display.name.to_string(),
         details,
-        pool: state.pool_name().map(str::to_string),
+        pool: state.segment.pool.clone(),
         progress: state.pool_progress(bot_state.dj_config_manager),
     }
 }

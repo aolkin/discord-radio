@@ -35,6 +35,11 @@ pub struct SegmentContainer {
 }
 
 impl SegmentContainer {
+    pub fn in_pool(mut self, pool: Option<String>) -> Self {
+        self.pool = pool;
+        self
+    }
+
     pub fn elapsed(&self) -> Duration {
         self.started_at.elapsed()
     }
@@ -121,15 +126,11 @@ pub struct PoolProgress {
 }
 
 impl DJState {
-    pub fn pool_name(&self) -> Option<&str> {
-        match &self.playing_pool {
-            Some(playing) => Some(&playing.pool),
-            None => self.segment.pool.as_deref(),
-        }
-    }
-
     pub fn pool_progress(&self, registry: &DJConfigRegistry) -> Option<PoolProgress> {
-        let playing = self.playing_pool.as_ref()?;
+        let playing = self
+            .playing_pool
+            .as_ref()
+            .filter(|playing| self.segment.pool.as_deref() == Some(playing.pool.as_str()))?;
         let pool = registry.pools.get(&playing.pool)?;
         Some(PoolProgress {
             played: playing.selector.played_count(),
@@ -431,11 +432,9 @@ impl DJStateMachine {
         bot_state: &Data,
         pool_name: Option<&str>,
     ) -> anyhow::Result<()> {
-        let (next_state, pool) = self.next_segment(pool_name, bot_state).await?;
+        let next_state = self.next_segment(pool_name, bot_state).await?;
         tracing::info!("DJ transitioning to state: {}", next_state.state_name());
-        let mut container = SegmentContainer::from(next_state);
-        container.pool = pool;
-        self.enter_state(container, bot_state).await
+        self.enter_state(next_state, bot_state).await
     }
 
     /// Picks a segment from the pool named `pool_name`, or else from a pool
@@ -444,7 +443,7 @@ impl DJStateMachine {
         &mut self,
         pool_name: Option<&str>,
         bot_state: Data,
-    ) -> anyhow::Result<(Box<dyn Segment>, Option<String>)> {
+    ) -> anyhow::Result<SegmentContainer> {
         let requested = pool_name.map(|name| self.pool_named(name)).transpose()?;
         let loaded = self.config.borrow().clone();
         let mut state = self.state.write().await;
@@ -461,13 +460,11 @@ impl DJStateMachine {
             None => {
                 state.playing_pool = None;
                 let Some(pool) = state.pool_selector.choose(Order::Weighted, &loaded.pools) else {
-                    return Ok((
-                        Box::new(NoiseSegment::from_entry(
-                            &DEFAULT_NOISE_PERIOD,
-                            &SegmentDefaults::default(),
-                        )),
-                        None,
-                    ));
+                    return Ok(NoiseSegment::from_entry(
+                        &DEFAULT_NOISE_PERIOD,
+                        &SegmentDefaults::default(),
+                    )
+                    .into());
                 };
                 let name = pool.file.name.clone();
                 let entry = state
@@ -478,7 +475,7 @@ impl DJStateMachine {
         };
         drop(state);
         let segment = entry.segment(&pool.segment_defaults, &bot_state).await;
-        Ok((segment, Some(pool.file.name.clone())))
+        Ok(SegmentContainer::from(segment).in_pool(Some(pool.file.name.clone())))
     }
 
     fn pool_named(&self, name: &str) -> anyhow::Result<ConfiguredPool> {
@@ -531,14 +528,14 @@ impl DJStateMachine {
         let loops = request
             .loops
             .unwrap_or_else(|| defaults.pick_loops(None, None)) as usize;
-        let next_state = HexSegment::new(
+        let next_state = SegmentContainer::from(HexSegment::new(
             request.message,
             request.volume.unwrap_or(1.0),
             loops,
             EntryPlaybackConfig::default(),
             &segment_defaults,
-        )
-        .into();
+        ))
+        .in_pool(request.pool);
         self.enter_state(next_state, bot_state).await
     }
 
@@ -700,15 +697,7 @@ impl DJStateMachine {
             && let Some(details) = details.as_object_mut()
         {
             details.insert("pool".to_string(), pool.into());
-            if let Some(progress) = state
-                .pool_progress(bot_state.dj_config_manager)
-                .filter(|_| {
-                    state
-                        .playing_pool
-                        .as_ref()
-                        .is_some_and(|playing| playing.pool == pool)
-                })
-            {
+            if let Some(progress) = state.pool_progress(bot_state.dj_config_manager) {
                 details.insert("pool_played".to_string(), progress.played.into());
                 details.insert("pool_total".to_string(), progress.total.into());
             }
