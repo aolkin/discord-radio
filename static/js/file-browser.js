@@ -28,6 +28,7 @@ export function fileBrowser() {
             creatingFolder: false,
             dragging: false,
             uploads: [],
+            picked: [],
         },
         fileBrowserOnSelect: null,
         nextUploadId: 0,
@@ -52,6 +53,7 @@ export function fileBrowser() {
             this.fileBrowser.mode = mode;
             this.fileBrowser.newFolderName = '';
             this.fileBrowser.uploads = [];
+            this.fileBrowser.picked = [];
             this.openModal('fileBrowser');
             this.fileBrowserOnSelect = onSelect;
             return this.loadFileBrowser(prefix);
@@ -76,6 +78,11 @@ export function fileBrowser() {
             if (onSelect) {
                 onSelect(value);
             }
+        },
+
+        toggleFileBrowserPicked(key) {
+            const picked = this.fileBrowser.picked;
+            this.fileBrowser.picked = picked.includes(key) ? picked.filter((item) => item !== key) : [...picked, key];
         },
 
         fileBrowserKind() {

@@ -55,6 +55,10 @@ const kinds = {
     },
 };
 
+const sameRow = (a, b) => Alpine.raw(a) === Alpine.raw(b);
+
+const isIn = (rows, entry) => rows.some((row) => sameRow(row, entry));
+
 function toForm(name, pool) {
     return {
         name,
@@ -119,6 +123,8 @@ export function pools() {
         ...poolEditor.methods,
         poolMode: 'properties',
         poolExpanded: {},
+        poolSelected: [],
+        poolBulkOpen: false,
         poolKinds: kinds,
         poolWeightField: weight,
 
@@ -160,6 +166,22 @@ export function pools() {
             });
         },
 
+        pickPoolFiles() {
+            this.openFileBrowser({
+                mode: 'files',
+                prefix: 'tracks/',
+                onSelect: (keys) => {
+                    for (const key of keys) {
+                        this.poolForm.entries.push({
+                            kind: 'track',
+                            ...blankRow(kinds.track.entryFields),
+                            filename: `s3://${key}`,
+                        });
+                    }
+                },
+            });
+        },
+
         addPoolEntry(kind) {
             this.poolForm.entries.push({ kind, ...blankRow(kinds[kind].entryFields) });
         },
@@ -167,6 +189,46 @@ export function pools() {
         removePoolEntry(index) {
             this.poolForm.entries.splice(index, 1);
             this.poolExpanded = {};
+        },
+
+        poolSelectedRows() {
+            return this.poolForm.entries.filter((entry) => isIn(this.poolSelected, entry));
+        },
+
+        togglePoolSelected(entry) {
+            this.poolSelected = isIn(this.poolSelected, entry)
+                ? this.poolSelected.filter((row) => !sameRow(row, entry))
+                : [...this.poolSelected, entry];
+        },
+
+        poolBulkDelete() {
+            const rows = this.poolSelectedRows();
+            if (!confirm(`Delete ${rows.length} selected ${rows.length === 1 ? 'entry' : 'entries'}?`)) {
+                return;
+            }
+            this.poolForm.entries = this.poolForm.entries.filter((entry) => !isIn(rows, entry));
+            this.poolSelected = [];
+            this.poolExpanded = {};
+            this.poolBulkOpen = false;
+        },
+
+        poolBulkDuplicate() {
+            const rows = this.poolSelectedRows();
+            this.poolForm.entries = this.poolForm.entries.flatMap((entry) =>
+                isIn(rows, entry) ? [entry, { ...Alpine.raw(entry) }] : [entry],
+            );
+            this.poolExpanded = {};
+            this.poolBulkOpen = false;
+        },
+
+        poolBulkEqualize() {
+            const rows = this.poolSelectedRows();
+            const total = rows.reduce((sum, row) => sum + (typeof row.weight === 'number' ? row.weight : 0), 0);
+            const equal = Math.max(1, Math.round(total / rows.length));
+            for (const row of rows) {
+                row.weight = equal;
+            }
+            this.poolBulkOpen = false;
         },
     };
 }

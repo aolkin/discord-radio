@@ -508,6 +508,14 @@ h1 {
     margin: 0 0 15px;
 }
 
+.pool-bulk {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin: 0 0 15px;
+}
+
 .pool-grid-scroll {
     overflow-x: auto;
     margin-bottom: 15px;
