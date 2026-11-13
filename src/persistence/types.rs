@@ -24,7 +24,6 @@ pub struct MultiTrackPlaybackState {
 
 #[derive(Deserialize, Debug)]
 pub struct DJState {
-    pub config_name: Option<String>,
     #[serde(default)]
     pub state_machine: Option<crate::audio::dj::state_machine::DJState>,
     pub saved_at: SystemTime,
@@ -33,7 +32,6 @@ pub struct DJState {
 
 #[derive(Serialize, Debug)]
 pub struct DJStateSnapshot<'a> {
-    pub config_name: &'a str,
     pub state_machine: &'a crate::audio::dj::state_machine::DJState,
     pub saved_at: SystemTime,
     pub stopped: bool,

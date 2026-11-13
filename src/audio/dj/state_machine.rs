@@ -86,7 +86,6 @@ pub struct DJState {
     pub pool_selector: WeightedSelector,
     pub entry_selectors: BTreeMap<String, WeightedSelector>,
     pub playing_pool: Option<PlayingPool>,
-    #[serde(skip)]
     pub config_name: Option<String>,
 }
 
@@ -207,7 +206,6 @@ impl DJStateMachine {
 
         let mut initial_state = restored_state.unwrap_or_default();
         initial_state.announcement.changed();
-        initial_state.config_name = Some(config.borrow().config.name.clone());
 
         let _ = initial_state
             .segment
@@ -360,9 +358,7 @@ impl DJStateMachine {
 
     async fn persist_state(&self, stopped: bool) {
         let current_state = self.current_state().await;
-        let config = self.config.borrow().clone();
         let persist_state = crate::persistence::DJStateSnapshot {
-            config_name: &config.config.name,
             state_machine: &current_state,
             saved_at: SystemTime::now(),
             stopped,
@@ -476,6 +472,7 @@ impl DJStateMachine {
 
     async fn set_config(&mut self, LoadedConfig { config, pools }: &LoadedConfig) {
         let mut state = self.state.write().await;
+        state.config_name = Some(config.name.clone());
         state
             .entry_selectors
             .retain(|name, _| pools.iter().any(|pool| pool.file.name == *name));
