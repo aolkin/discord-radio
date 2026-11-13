@@ -956,28 +956,34 @@
                                         </button>
                                     </div>
                                 </div>
+                                <div class="tall-bar-hint" x-show="poolMode === 'weights'">
+                                    Drag a section up or down, or focus it and use the arrow keys (Shift for steps of
+                                    5). Dragging stops at 1; type a weight to set 0.
+                                </div>
                                 <div class="tall-bar" x-show="poolMode === 'weights'">
                                     <template x-for="section in barSections(poolForm.entries)" :key="section.index">
                                         <div
                                             class="tall-bar-section"
                                             tabindex="0"
                                             role="slider"
-                                            aria-orientation="vertical"
-                                            :aria-label="poolEntryName(section.row)"
+                                            :aria-label="poolEntryName(section.row) + ': weight ' + section.row.weight + ', ' + weightShareText(poolForm.entries, section.index) + ' of picks'"
                                             :aria-valuenow="section.row.weight"
                                             aria-valuenow="1"
                                             aria-valuemin="1"
-                                            :style="{ flexGrow: section.row.weight }"
-                                            :class="'tall-bar-tone-' + (section.index % 4)"
+                                            :style="{ width: weightShare(poolForm.entries, section.index) + '%' }"
+                                            :class="['tall-bar-tone-' + (section.index % 5), { 'is-drag': isBarDrag(section.row) }]"
                                             @pointerdown.prevent="startBarDrag(poolForm.entries, section.index, $event)"
                                             @pointermove="moveBarDrag(poolForm.entries, section.index, $event)"
                                             @pointerup="endBarDrag()"
                                             @pointercancel="endBarDrag()"
                                             @keydown="keyBar(poolForm.entries, section.index, $event)"
                                         >
-                                            <span
-                                                x-text="poolEntryName(section.row) + ' (' + section.row.weight + ')'"
-                                            ></span>
+                                            <template x-if="weightShare(poolForm.entries, section.index) >= 8">
+                                                <span x-text="weightShareText(poolForm.entries, section.index)"></span>
+                                            </template>
+                                            <template x-if="weightShare(poolForm.entries, section.index) >= 8">
+                                                <span x-text="'w ' + section.row.weight"></span>
+                                            </template>
                                         </div>
                                     </template>
                                 </div>
@@ -1167,7 +1173,13 @@
                                                             @change="togglePoolSelected(entry)"
                                                         >
                                                     </td>
-                                                    <td class="pool-grid-name" x-text="poolEntryName(entry)"></td>
+                                                    <td class="pool-grid-name">
+                                                        <i
+                                                            class="tall-bar-swatch"
+                                                            :class="'tall-bar-tone-' + (index % 5)"
+                                                        ></i>
+                                                        <span x-text="poolEntryName(entry)"></span>
+                                                    </td>
                                                     <td>
                                                         <div class="weight-control">
                                                             <input

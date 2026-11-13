@@ -99,14 +99,12 @@ export function weightSliders() {
         },
 
         startBarDrag(rows, index, event) {
-            const bar = event.currentTarget.parentElement;
             event.currentTarget.setPointerCapture(event.pointerId);
             this.barDrag = {
                 row: rows[index],
                 y: event.clientY,
-                height: bar.clientHeight,
-                share: this.weightShare(rows, index),
-                weights: rows.map((row) => row.weight),
+                weight: rows[index].weight,
+                unit: Math.max(1, Math.round(sum(rows.map((row) => asWeight(row.weight))) / 60)),
             };
         },
 
@@ -114,9 +112,12 @@ export function weightSliders() {
             if (!this.barDrag || !sameRow(this.barDrag.row, rows[index])) {
                 return;
             }
-            const { y, height, share, weights } = this.barDrag;
-            const next = setAlone(weights, index, share + ((y - event.clientY) / height) * 100);
-            rows[index].weight = Math.max(1, next[index]);
+            const { y, weight, unit } = this.barDrag;
+            rows[index].weight = Math.max(1, weight + Math.round((y - event.clientY) / 4) * unit);
+        },
+
+        isBarDrag(row) {
+            return this.barDrag !== null && sameRow(this.barDrag.row, row);
         },
 
         endBarDrag() {
@@ -124,12 +125,12 @@ export function weightSliders() {
         },
 
         keyBar(rows, index, event) {
-            const step = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1 }[event.key];
-            if (step === undefined) {
+            const direction = { ArrowUp: 1, ArrowDown: -1 }[event.key];
+            if (direction === undefined) {
                 return;
             }
             event.preventDefault();
-            rows[index].weight = Math.max(1, asWeight(rows[index].weight) + step);
+            rows[index].weight = Math.max(1, asWeight(rows[index].weight) + direction * (event.shiftKey ? 5 : 1));
         },
 
         slideWeight(rows, index, event, min = 0) {
