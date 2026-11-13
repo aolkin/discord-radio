@@ -14,6 +14,7 @@
         files: new Map(),
         folders: new Set(),
         botProfiles: {},
+        logs: {},
         radio: null,
     };
 
@@ -22,16 +23,19 @@
     const loadJson = async (path) => (await realFetch(`${fixtureBase}/${path}`)).json();
 
     const ready = (async () => {
-        const [guilds, channels, botProfile, listing, ...snapshots] = await Promise.all([
+        const [guilds, channels, botProfile, listing, memberLogs, djLogs, ...snapshots] = await Promise.all([
             loadJson('guilds.json'),
             loadJson('channels.json'),
             loadJson('bot-profile.json'),
             loadJson('files/tracks.json'),
+            loadJson('logs/members.json'),
+            loadJson('logs/dj.json'),
             ...modes.map((mode) => loadJson(`snapshots/playing-${mode}.json`)),
             loadJson('snapshots/no-radio.json'),
         ]);
         store.guilds = guilds;
         store.channels = channels;
+        store.logs = { members: memberLogs, dj: djLogs };
         for (const guild of guilds.guilds) {
             store.botProfiles[guild.guild_id] = { ...botProfile };
         }
@@ -208,7 +212,33 @@
             };
             return respond(store.botProfiles[guildId]);
         }),
-        guildRoute('POST', 'dj/advance', ({ body }) => {
+        guildRoute('GET', 'logs/(members|dj)', (request, _guildId, [logType]) => {
+            const lines = store.logs[logType];
+            const limit = Number(request.query.get('limit'));
+            const offset = request.query.get('offset');
+            let start;
+            let end;
+            if (request.query.get('direction') === 'forward') {
+                start = Number(offset);
+                end = Math.min(lines.length, start + limit);
+            } else {
+                end = offset === null ? lines.length : Number(offset);
+                start = Math.max(0, end - limit);
+            }
+            return respond({
+                entries: lines.slice(start, end).map((content, index) => ({
+                    content,
+                    start_offset: start + index,
+                    end_offset: start + index + 1,
+                })),
+                start_offset: start,
+                end_offset: end,
+                file_size: lines.length,
+                has_previous: start > 0,
+                has_next: end < lines.length,
+            });
+        }),
+        guildRoute('POST', 'dj/advance',({ body }) => {
             setMode(modes.includes(body.state_type) ? body.state_type : nextMode(store.radio.mode));
             return ok();
         }),

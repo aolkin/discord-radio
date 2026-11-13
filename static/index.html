@@ -1889,23 +1889,81 @@
                         <div class="guild-content" x-show="route.tab === 'logs'">
                             <div class="section">
                                 <div class="section-title">Activity Logs</div>
-                                <div class="row-gap-10">
-                                    <!-- biome-ignore lint/a11y/useValidAnchor: the href is set by :href -->
-                                    <a
-                                        :href="'/logs/?guild=' + guild.guild_id + '&type=members'"
-                                        target="_blank"
-                                        class="btn btn-secondary btn-link"
+                                <nav class="guild-tabs">
+                                    <template x-for="type in logTypes" :key="type.id">
+                                        <!-- biome-ignore lint/a11y/useValidAnchor: the href is set by :href -->
+                                        <!-- biome-ignore lint/a11y/useAnchorContent: the label is set by x-text -->
+                                        <a
+                                            class="guild-tab"
+                                            :class="{ active: route.logType === type.id }"
+                                            :href="'#/live/' + guild.guild_id + '/logs/' + type.id"
+                                            x-text="type.label"
+                                        ></a>
+                                    </template>
+                                </nav>
+                                <div class="log-header">
+                                    <div>
+                                        <strong>Entries:</strong> <span x-text="logResult?.entries.length ?? 0"></span>
+                                        <template x-if="logResult?.entries.length">
+                                            <span
+                                                class="log-offsets"
+                                                x-text="`Offset: ${logResult.start_offset} - ${logResult.end_offset} / ${logResult.file_size} bytes`"
+                                            ></span>
+                                        </template>
+                                    </div>
+                                    <label>
+                                        <input
+                                            type="number"
+                                            class="form-input log-limit"
+                                            min="10"
+                                            max="500"
+                                            x-model.number="logLimit"
+                                            @change="loadLatestLogs()"
+                                        >
+                                        entries
+                                    </label>
+                                </div>
+                                <div class="loading" x-show="logLoading">Loading logs...</div>
+                                <div class="error-message" x-show="logError" x-text="logError"></div>
+                                <div
+                                    class="empty-state"
+                                    x-show="!logLoading && !logError && logResult && logResult.entries.length === 0"
+                                >
+                                    No log entries found
+                                </div>
+                                <template x-for="entry in logResult?.entries ?? []" :key="entry.start_offset">
+                                    <div class="log-entry" :class="route.logType">
+                                        <div class="log-time" x-text="logTime(entry.content)"></div>
+                                        <div
+                                            class="log-content"
+                                            x-text="route.logType === 'dj' ? djLogTitle(entry.content) : memberLogTitle(entry.content)"
+                                        ></div>
+                                        <div
+                                            class="log-detail"
+                                            x-text="route.logType === 'dj' ? djLogDetail(entry.content) : memberLogDetail(entry.content)"
+                                        ></div>
+                                    </div>
+                                </template>
+                                <div class="button-group" x-show="logResult?.entries.length">
+                                    <button
+                                        type="button"
+                                        class="btn btn-primary"
+                                        :disabled="!logResult?.has_previous"
+                                        @click="loadPreviousLogs()"
                                     >
-                                        👥 Member Activity
-                                    </a>
-                                    <!-- biome-ignore lint/a11y/useValidAnchor: the href is set by :href -->
-                                    <a
-                                        :href="'/logs/?guild=' + guild.guild_id + '&type=dj'"
-                                        target="_blank"
-                                        class="btn btn-secondary btn-link"
+                                        ← Previous
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="btn btn-primary"
+                                        :disabled="!logResult?.has_next"
+                                        @click="loadNextLogs()"
                                     >
-                                        🎧 DJ Activity
-                                    </a>
+                                        Next →
+                                    </button>
+                                    <button type="button" class="btn btn-secondary" @click="loadLatestLogs()">
+                                        Latest
+                                    </button>
                                 </div>
                             </div>
                         </div>

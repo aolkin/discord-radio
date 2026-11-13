@@ -1,5 +1,6 @@
 import { botProfileForms } from './bot-profile.js';
 import { playForms } from './dj.js';
+import { logTypes } from './logs.js';
 import { signalProfileForms } from './signal-profiles.js';
 import { trackForms } from './tracks.js';
 
@@ -28,7 +29,14 @@ function parseRoute(hash) {
     if (view !== 'edit') {
         const guild = /^\d+$/.test(kind ?? '');
         const tab = guildTabs.some((candidate) => candidate.id === rest[0]) ? rest[0] : 'status';
-        return { view: 'live', kind: null, name: guild ? kind : null, tab: guild ? tab : null };
+        const logType = logTypes.some((candidate) => candidate.id === rest[1]) ? rest[1] : 'members';
+        return {
+            view: 'live',
+            kind: null,
+            name: guild ? kind : null,
+            tab: guild ? tab : null,
+            logType: guild && tab === 'logs' ? logType : null,
+        };
     }
     if (Object.hasOwn(editors, kind) && /^([\w-]+|\+new)$/.test(name)) {
         return { view, kind, name };
@@ -39,9 +47,9 @@ function parseRoute(hash) {
     return { view, kind: null, name: null };
 }
 
-function routeHash({ view, kind, name, tab }) {
+function routeHash({ view, kind, name, tab, logType }) {
     if (tab) {
-        return `#/${view}/${name}/${tab}`;
+        return `#/${view}/${name}/${tab}${logType ? `/${logType}` : ''}`;
     }
     if (kind) {
         return `#/${view}/${kind}/${name}`;
@@ -51,7 +59,7 @@ function routeHash({ view, kind, name, tab }) {
 
 export function router() {
     return {
-        route: { view: null, kind: null, name: null, tab: null },
+        route: { view: null, kind: null, name: null, tab: null, logType: null },
         newItem,
         guildTabs,
 
@@ -72,6 +80,13 @@ export function router() {
                 if (previous.name !== this.route.name || previous.tab !== this.route.tab) {
                     Object.assign(this, playForms(), trackForms(), signalProfileForms(), botProfileForms());
                     this.enterGuildTab();
+                }
+                if (
+                    this.route.tab === 'logs' &&
+                    (previous.name !== this.route.name || previous.logType !== this.route.logType)
+                ) {
+                    this.logResult = null;
+                    this.loadLatestLogs();
                 }
                 return;
             }

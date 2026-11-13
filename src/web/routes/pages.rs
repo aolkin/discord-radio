@@ -19,10 +19,6 @@ pub async fn index() -> Result<impl IntoResponse, StatusCode> {
     serve("index.html")
 }
 
-pub async fn logs() -> Result<impl IntoResponse, StatusCode> {
-    serve("logs.html")
-}
-
 pub async fn static_file(Path(path): Path<String>) -> Result<impl IntoResponse, StatusCode> {
     if path.ends_with(".html") {
         return Err(StatusCode::NOT_FOUND);
