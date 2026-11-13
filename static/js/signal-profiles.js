@@ -2,19 +2,13 @@ import { apiRequest, emptyMessage } from './api.js';
 import { blankRow, convertObject, fieldFromServer, fieldToServer } from './form-fields.js';
 import { registryEditor } from './registry-editor.js';
 
-export const modals = {
-    signalProfile: {
-        flag: 'showSignalProfileModal',
-        perGuild: true,
-        reset: () => ({
-            selectedProfile: '',
-            profileSetting: 'manual',
-            profileFadeDuration: null,
-            profileDuration: null,
-            profileMessage: emptyMessage(),
-        }),
-    },
-};
+export const signalProfileForms = () => ({
+    signalProfileSetting: 'manual',
+    signalProfileName: '',
+    signalProfileFade: null,
+    signalProfileDuration: null,
+    signalProfileMessage: emptyMessage(),
+});
 
 const profileFields = [
     { key: 'bandpass_low', label: 'Bandpass Low (Hz)', type: 'number', step: 'any', min: 0, default: 20 },
@@ -78,13 +72,8 @@ export function signalProfiles() {
     return {
         ...profileEditor.state(),
         ...profileEditor.methods,
-        showSignalProfileModal: false,
-        selectedProfile: '',
-        profileSetting: 'manual',
-        profileFadeDuration: null,
-        profileDuration: null,
-        profileSaving: false,
-        profileMessage: emptyMessage(),
+        ...signalProfileForms(),
+        signalProfileSaving: false,
         profileFieldRows() {
             return blocks(this.profileForm).flatMap(({ row, fields, path }) =>
                 fields.map((field) => ({ row, field, path: [...path, field.key] })),
@@ -93,30 +82,28 @@ export function signalProfiles() {
 
         async changeSignalProfile() {
             const body = {
-                tier: this.profileSetting,
-                profile: this.selectedProfile || null,
+                tier: this.signalProfileSetting,
+                profile: this.signalProfileName || null,
             };
 
-            if (body.profile && this.profileFadeDuration !== null && this.profileFadeDuration !== '') {
-                body.fade_duration = Number.parseFloat(this.profileFadeDuration);
+            if (body.profile && this.signalProfileFade !== null && this.signalProfileFade !== '') {
+                body.fade_duration = Number.parseFloat(this.signalProfileFade);
             }
-            if (body.profile && this.profileDuration !== null && this.profileDuration !== '') {
-                body.duration = Number.parseFloat(this.profileDuration);
+            if (body.profile && this.signalProfileDuration !== null && this.signalProfileDuration !== '') {
+                body.duration = Number.parseFloat(this.signalProfileDuration);
             }
 
             await this.runAction({
-                saving: 'profileSaving',
-                message: 'profileMessage',
+                saving: 'signalProfileSaving',
+                message: 'signalProfileMessage',
                 label: 'changing signal profile',
                 request: () =>
-                    apiRequest(`/api/guilds/${this.currentGuildId}/dj/profile`, {
+                    apiRequest(`/api/guilds/${this.route.name}/dj/profile`, {
                         method: 'POST',
                         body,
                     }),
                 success: 'Signal profile changed successfully!',
                 failure: 'Failed to change signal profile',
-                afterFn: () => this.closeModal('signalProfile'),
-                afterMs: 1500,
             });
         },
     };

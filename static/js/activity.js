@@ -3,7 +3,6 @@ import { apiRequest, emptyMessage } from './api.js';
 export const modals = {
     activity: {
         flag: 'showActivityModal',
-        perGuild: false,
         reset: () => ({ newActivityStatus: '', activityMessage: emptyMessage() }),
     },
 };

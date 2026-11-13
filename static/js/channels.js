@@ -3,7 +3,6 @@ import { apiRequest, bodyOrStatus, emptyMessage } from './api.js';
 export const modals = {
     channelMessage: {
         flag: 'showChannelMessageModal',
-        perGuild: false,
         reset: () => ({
             messageGuilds: [],
             selectedGuildId: '',
