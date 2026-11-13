@@ -202,7 +202,8 @@ impl DJManager {
     ) -> anyhow::Result<()> {
         let config_name = saved
             .as_ref()
-            .and_then(|saved| saved.state_machine.as_ref()?.config_name.clone())
+            .and_then(|saved| saved.state_machine.as_ref())
+            .map(|state| state.config_name.clone())
             .unwrap_or_else(|| DEFAULT_DJ_CONFIG.to_string());
         let config = self.bot_state.dj_config_manager.subscribe(&config_name)?;
         let (command_tx, command_rx) = mpsc::channel(10);

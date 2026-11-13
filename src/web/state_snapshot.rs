@@ -24,7 +24,7 @@ pub struct GuildState {
     pub in_voice: bool,
     pub tracks: Vec<TrackSnapshot>,
     pub dj_state: DJStateInfo,
-    pub dj_config: Option<String>,
+    pub dj_config: String,
     pub audio_profile: AudioProfileInfo,
     pub channel_status: ChannelStatusInfo,
     pub announcement_channels: Vec<AnnouncementChannelInfo>,
