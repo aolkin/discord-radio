@@ -136,5 +136,12 @@ export function router() {
         isSelected(kind, name) {
             return this.route.kind === kind && this.route.name === name;
         },
+
+        isConfigExpanded(config) {
+            return (
+                this.isSelected('dj-configs', config) ||
+                (this.route.kind === 'pools' && (this.djConfigPools[config] ?? []).includes(this.route.name))
+            );
+        },
     };
 }

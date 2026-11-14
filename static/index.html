@@ -129,7 +129,7 @@
                                         x-show="changeCount('dj-configs', config) > 0"
                                     ></span>
                                 </button>
-                                <div class="tree-children">
+                                <div class="tree-children" x-show="isConfigExpanded(config)">
                                     <template x-for="pool in djConfigPools[config] ?? []" :key="pool">
                                         <button
                                             type="button"
