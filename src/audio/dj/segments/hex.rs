@@ -8,7 +8,7 @@ use crate::audio::dj::weighted_choice::{Identity, Weighted};
 use crate::audio::processing::mixer::{TrackCallback, TrackCommand};
 use crate::audio::processing::processor::AudioProcessor;
 use crate::audio::tracks::open_track_source;
-use crate::bucket::FileResolver;
+use crate::bucket::{FileResolver, with_trailing_slash};
 use anyhow::{Context, bail};
 use async_trait::async_trait;
 use field_trait::field_trait_impl;
@@ -79,23 +79,11 @@ impl Weighted for HexMessageEntry {
     }
 }
 
-pub fn normalize_audio_folder(folder: &str) -> String {
-    if folder.ends_with('/') {
-        folder.to_string()
-    } else {
-        format!("{folder}/")
-    }
-}
-
 fn deserialize_audio_folder<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Option<String>, D::Error> {
-    Ok(Option::<String>::deserialize(deserializer)?.map(|folder| normalize_audio_folder(&folder)))
+    Ok(Option::<String>::deserialize(deserializer)?.map(|folder| with_trailing_slash(&folder)))
 }
-
-pub const HEX_CHARS: [char; 16] = [
-    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F',
-];
 
 pub fn hex_file_name(hex_char: char) -> String {
     format!("hex_{hex_char}.wav")
@@ -109,9 +97,9 @@ pub async fn list_missing_hex_files(
         .list_files(folder)
         .await
         .with_context(|| format!("listing hex audio folder {folder:?}"))?;
-    Ok(HEX_CHARS
-        .into_iter()
-        .map(hex_file_name)
+    Ok((0..16)
+        .filter_map(|digit| char::from_digit(digit, 16))
+        .map(|hex_char| hex_file_name(hex_char.to_ascii_uppercase()))
         .filter(|name| !present.contains(name))
         .collect())
 }

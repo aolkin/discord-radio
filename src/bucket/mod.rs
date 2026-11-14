@@ -8,6 +8,14 @@ pub use resolve::{FileResolver, NoBucket};
 use s3::creds::Credentials;
 use s3::region::Region;
 
+pub fn with_trailing_slash(path: &str) -> String {
+    if path.ends_with('/') {
+        path.to_string()
+    } else {
+        format!("{path}/")
+    }
+}
+
 pub fn init_from_env() -> Option<Box<s3::Bucket>> {
     let endpoint = std::env::var("BUCKET_ENDPOINT").ok()?;
     let access_key_id = std::env::var("BUCKET_ACCESS_KEY_ID").ok()?;

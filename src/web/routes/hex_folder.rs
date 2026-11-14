@@ -1,4 +1,5 @@
-use crate::audio::dj::segments::hex::{list_missing_hex_files, normalize_audio_folder};
+use crate::audio::dj::segments::list_missing_hex_files;
+use crate::bucket::with_trailing_slash;
 use crate::state::Data;
 use crate::web::error::ApiError;
 use crate::web::routes::files::is_plain_path;
@@ -21,7 +22,7 @@ pub async fn check_hex_folder(
     State(bot_state): State<Data>,
     Query(params): Query<HexFolderParams>,
 ) -> Result<AxumJson<HexFolderResponse>, ApiError> {
-    let folder = normalize_audio_folder(
+    let folder = with_trailing_slash(
         params
             .folder
             .as_deref()

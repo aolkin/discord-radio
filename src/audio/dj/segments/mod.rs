@@ -1,9 +1,11 @@
-pub mod hex;
+mod hex;
 mod noise;
 mod signals;
 mod track;
 
-pub use hex::{HexMessageDefaults, HexMessageEntry, HexSegment, ensure_loops};
+pub use hex::{
+    HexMessageDefaults, HexMessageEntry, HexSegment, ensure_loops, list_missing_hex_files,
+};
 pub use noise::{NoiseEntry, NoiseSegment};
 pub use track::{TrackEntry, TrackSegment};
 
