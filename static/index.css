@@ -3,27 +3,39 @@
 }
 
 .header-left {
-    flex: 1 0 auto;
     max-width: 100%;
 }
 
-.header-right {
+.view-switch {
+    margin-right: auto;
+}
+
+.header-status {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    gap: var(--space-3);
+    gap: var(--space-2);
 }
 
 .activity-display {
     display: flex;
     align-items: center;
     gap: var(--space-3);
+    min-width: 0;
     min-height: var(--control-height);
+    border: none;
     background: var(--color-surface-muted);
     padding: var(--space-2) var(--space-3);
     border-radius: var(--radius-md);
+    color: inherit;
+    font-family: inherit;
+    text-align: left;
     cursor: pointer;
     transition: background 0.2s;
+}
+
+.activity-edit {
+    margin-left: auto;
+    color: var(--color-text-muted);
 }
 
 .activity-display:hover {
@@ -622,10 +634,6 @@ textarea.form-input {
     line-height: 1;
 }
 
-.view-switch {
-    margin-bottom: var(--space-4);
-}
-
 .edit-view {
     display: grid;
     grid-template-columns: 280px minmax(0, 1fr);
@@ -993,14 +1001,6 @@ textarea.form-input {
     line-height: 1.25;
 }
 
-.btn-float-right {
-    min-height: var(--control-height-sm);
-    padding: var(--space-1) var(--space-3);
-    font-size: 0.8rem;
-    text-transform: none;
-    letter-spacing: normal;
-}
-
 .btn-link {
     flex: 1;
     text-decoration: none;
@@ -1158,17 +1158,14 @@ textarea.form-input {
         padding: var(--space-4);
     }
 
-    .header-right {
-        width: 100%;
-    }
-
+    .header-left,
     .activity-display {
         flex: 1 1 100%;
     }
 
-    .header-right .btn {
-        flex: 1 1 40%;
-        white-space: nowrap;
+    .view-switch,
+    .header-status {
+        order: 1;
     }
 
     .strip-card {

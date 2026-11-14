@@ -20,37 +20,42 @@
                         <span x-text="commitHash ? commitHash.substring(0, 7) : 'unknown'"></span>
                     </div>
                 </div>
-                <div class="header-right">
-                    <!-- Current Activity Display -->
-                    <div class="activity-display" x-show="currentActivity.status" @click="openModal('activity')">
-                        <div class="activity-icon" x-text="getActivityIcon(currentActivity.activity_type)"></div>
-                        <div class="activity-info">
-                            <div class="activity-type" x-text="currentActivity.activity_type || 'No Activity'"></div>
-                            <div class="activity-status" x-text="currentActivity.status || 'Not set'"></div>
-                        </div>
-                    </div>
-                    <button type="button" class="btn btn-primary" @click="openModal('activity')">
-                        Manage Activity
-                    </button>
-                    <button type="button" class="btn btn-primary" @click="openChannelMessageModal()">
-                        Send Message
-                    </button>
-                    <select class="theme-switch" id="themeSwitch" aria-label="Theme">
-                        <option value="system">System</option>
-                        <option value="light">Light</option>
-                        <option value="dark">Dark</option>
-                    </select>
+                <nav class="segmented view-switch" aria-label="View">
+                    <a
+                        href="#/live"
+                        :class="{ active: route.view === 'live' }"
+                        :aria-current="route.view === 'live' && 'page'"
+                    >
+                        Live
+                    </a>
+                    <a
+                        href="#/edit"
+                        :class="{ active: route.view === 'edit' }"
+                        :aria-current="route.view === 'edit' && 'page'"
+                    >
+                        Edit
+                    </a>
+                </nav>
+                <button type="button" class="activity-display" title="Edit bot activity" @click="openModal('activity')">
+                    <span class="activity-icon" x-text="getActivityIcon(currentActivity.activity_type)"></span>
+                    <span class="activity-info">
+                        <span
+                            class="activity-type"
+                            x-show="currentActivity.status"
+                            x-text="currentActivity.activity_type"
+                        ></span>
+                        <span class="activity-status" x-text="currentActivity.status || 'Set activity'"></span>
+                    </span>
+                    <span class="activity-edit" aria-hidden="true">✎</span>
+                </button>
+                <div class="header-status">
+                    <button type="button" class="btn btn-icon" id="themeSwitch"></button>
                     <div class="status-indicator">
                         <span class="status-dot" :class="{ 'disconnected': !connected }"></span>
                         <span x-text="statusText"></span>
                     </div>
                 </div>
             </header>
-
-            <nav class="row-gap-10 view-switch">
-                <a href="#/live" class="btn" :class="route.view === 'live' ? 'btn-primary' : 'btn-secondary'">Live</a>
-                <a href="#/edit" class="btn" :class="route.view === 'edit' ? 'btn-primary' : 'btn-secondary'">Edit</a>
-            </nav>
 
             <div class="guild-strip" x-show="guilds.length > 0">
                 <template x-for="guild in guilds" :key="guild.guild_id">
@@ -108,7 +113,7 @@
                             DJ Configs
                             <button
                                 type="button"
-                                class="btn btn-secondary btn-float-right"
+                                class="btn btn-secondary btn-sm"
                                 @click="openItem('dj-configs', newItem)"
                             >
                                 + New
@@ -154,11 +159,7 @@
                     <div class="section">
                         <div class="section-title">
                             Pools
-                            <button
-                                type="button"
-                                class="btn btn-secondary btn-float-right"
-                                @click="openItem('pools', newItem)"
-                            >
+                            <button type="button" class="btn btn-secondary btn-sm" @click="openItem('pools', newItem)">
                                 + New
                             </button>
                         </div>
@@ -185,7 +186,7 @@
                             Signal Profiles
                             <button
                                 type="button"
-                                class="btn btn-secondary btn-float-right"
+                                class="btn btn-secondary btn-sm"
                                 @click="openItem('signal-profiles', newItem)"
                             >
                                 + New
