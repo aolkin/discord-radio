@@ -4,6 +4,7 @@ import { channels, modals as channelsModals } from './js/channels.js';
 import { connection } from './js/connection.js';
 import { dj } from './js/dj.js';
 import { djConfigs } from './js/dj-configs.js';
+import { editTree } from './js/edit-layout.js';
 import { fileBrowser, modals as fileBrowserModals } from './js/file-browser.js';
 import { logs } from './js/logs.js';
 import { modalMethods, modals } from './js/modal.js';
@@ -27,6 +28,7 @@ function botPortal() {
         ...pools(),
         ...weightSliders(),
         ...djConfigs(),
+        ...editTree(),
         ...drafts(),
         ...fileBrowser(),
         ...botProfile(),

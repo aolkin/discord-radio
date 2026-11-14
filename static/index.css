@@ -658,6 +658,23 @@ textarea.form-input {
     min-width: 0;
 }
 
+.edit-view > .edit-tree {
+    margin-bottom: 0;
+}
+
+.edit-tree-toggle,
+.edit-tree-backdrop,
+.edit-tree-head {
+    display: none;
+}
+
+.edit-tree-head {
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-4);
+    font-weight: 600;
+}
+
 .tree-item {
     display: flex;
     justify-content: flex-start;
@@ -686,9 +703,14 @@ textarea.form-input {
 
 .draft-bar {
     position: sticky;
-    top: var(--space-2);
+    top: -1px;
     z-index: 10;
     box-shadow: var(--shadow-md);
+}
+
+.draft-bar.is-stuck {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
 }
 
 .draft-bar-row {
@@ -753,9 +775,28 @@ textarea.form-input {
 }
 
 .pool-grid-scroll {
+    --fade-width: 40px;
     overflow-x: auto;
     margin-bottom: var(--space-4);
     -webkit-overflow-scrolling: touch;
+}
+
+.pool-grid-scroll.fade-start {
+    mask-image: linear-gradient(to right, transparent, #000 var(--fade-width));
+}
+
+.pool-grid-scroll.fade-end {
+    mask-image: linear-gradient(to right, #000 calc(100% - var(--fade-width)), transparent);
+}
+
+.pool-grid-scroll.fade-start.fade-end {
+    mask-image: linear-gradient(
+        to right,
+        transparent,
+        #000 var(--fade-width),
+        #000 calc(100% - var(--fade-width)),
+        transparent
+    );
 }
 
 .pool-grid {
@@ -1201,9 +1242,72 @@ textarea.form-input {
     margin-top: var(--space-1);
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1024px) {
     .edit-view {
         grid-template-columns: minmax(0, 1fr);
+        padding-bottom: calc(var(--control-height) + var(--space-5));
+    }
+
+    .edit-tree {
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 900;
+        width: min(320px, 85vw);
+        border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+        box-shadow: var(--shadow-lg);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        transform: translateX(-100%);
+        visibility: hidden;
+        transition:
+            transform 0.2s ease,
+            visibility 0s linear 0.2s;
+    }
+
+    .tree-open .edit-tree {
+        transform: none;
+        visibility: visible;
+        transition: transform 0.2s ease;
+    }
+
+    .edit-tree-head {
+        display: flex;
+    }
+
+    .edit-tree-backdrop {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 899;
+        background: var(--color-overlay);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease;
+    }
+
+    .tree-open .edit-tree-backdrop {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    .edit-tree-toggle {
+        display: inline-flex;
+        position: fixed;
+        left: var(--page-gutter);
+        bottom: calc(var(--page-gutter) + env(safe-area-inset-bottom));
+        z-index: 800;
+        border-radius: var(--radius-pill);
+        box-shadow: var(--shadow-lg);
+    }
+}
+
+@media (max-width: 1024px) and (prefers-reduced-motion: reduce) {
+    .edit-tree,
+    .tree-open .edit-tree,
+    .edit-tree-backdrop {
+        transition: none;
     }
 }
 
@@ -1238,6 +1342,10 @@ textarea.form-input {
 
     .strip-card {
         flex: 1 1 100%;
+    }
+
+    .draft-bar {
+        position: static;
     }
 
     .draft-bar-row .row-gap-10 {

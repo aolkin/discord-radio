@@ -106,8 +106,39 @@
                 </template>
             </div>
 
-            <div class="edit-view" x-show="route.view === 'edit'">
-                <nav class="card">
+            <div
+                class="edit-view"
+                :class="{ 'tree-open': treeOpen }"
+                x-show="route.view === 'edit'"
+                x-init="initEditTree()"
+                @keydown.escape.window="closeTree()"
+            >
+                <button
+                    type="button"
+                    class="btn btn-primary edit-tree-toggle"
+                    x-ref="editTreeToggle"
+                    aria-controls="edit-tree"
+                    :aria-expanded="treeOpen"
+                    @click="openTree()"
+                >
+                    <span aria-hidden="true">☰</span>
+                    Items
+                </button>
+                <div class="edit-tree-backdrop" @click="closeTree()"></div>
+                <nav
+                    id="edit-tree"
+                    class="card edit-tree"
+                    aria-label="Items"
+                    x-ref="editTree"
+                    @click="treeClick($event)"
+                    @keydown="treeKeydown($event)"
+                >
+                    <div class="edit-tree-head">
+                        <span>Items</span>
+                        <button type="button" class="btn btn-icon" aria-label="Close items" @click="closeTree()">
+                            &times;
+                        </button>
+                    </div>
                     <div class="section">
                         <div class="section-title">
                             DJ Configs
@@ -222,7 +253,7 @@
                 <div>
                     <div class="card empty-state" x-show="!route.kind">Select an item to edit</div>
                     <template x-if="route.kind">
-                        <section class="card draft-bar" x-show="!editorStatus(route.kind).loading">
+                        <section class="card draft-bar" x-show="!editorStatus(route.kind).loading" x-stuck>
                             <div
                                 x-show="editorStatus(route.kind).message.text"
                                 :class="editorStatus(route.kind).message.type === 'error' ? 'error-message' : 'success-message'"
@@ -419,7 +450,7 @@
 
                             <div class="modal-section">
                                 <div class="modal-section-title">Pools</div>
-                                <div class="pool-grid-scroll">
+                                <div class="pool-grid-scroll" x-scroll-fade>
                                     <table class="pool-grid">
                                         <thead>
                                             <tr>
@@ -567,7 +598,7 @@
                                         Pool share × entry share. A pool with unsaved changes uses them. The history
                                         penalty is not modelled.
                                     </p>
-                                    <div class="pool-grid-scroll">
+                                    <div class="pool-grid-scroll" x-scroll-fade>
                                         <table class="pool-grid">
                                             <thead>
                                                 <tr>
@@ -909,7 +940,7 @@
                                         </div>
                                     </template>
                                 </div>
-                                <div class="pool-grid-scroll">
+                                <div class="pool-grid-scroll" x-scroll-fade>
                                     <table class="pool-grid">
                                         <thead>
                                             <tr x-show="poolMode === 'properties'">
