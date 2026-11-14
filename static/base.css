@@ -207,6 +207,8 @@ h1 {
 }
 
 .btn:focus-visible,
+.segmented > :focus-visible,
+.activity-display:focus-visible,
 .guild-tab:focus-visible,
 .strip-open:focus-visible,
 .strip-menu-toggle:focus-visible,
@@ -239,6 +241,63 @@ h1 {
     background: var(--color-button-secondary-hover);
 }
 
+.btn-sm {
+    min-height: var(--control-height-sm);
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--font-size-sm);
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+.btn-icon {
+    width: var(--control-height-sm);
+    min-height: var(--control-height-sm);
+    padding: 0;
+    background: none;
+    color: var(--color-text-muted);
+    font-size: 1rem;
+}
+
+.btn-icon:hover:not(:disabled) {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+}
+
+.segmented {
+    display: inline-flex;
+    gap: 2px;
+    padding: 2px;
+    border-radius: var(--radius-md);
+    background: var(--color-button-secondary);
+}
+
+.segmented > * {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(var(--control-height-sm) - 4px);
+    padding: 0 var(--space-3);
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--color-text-muted);
+    font-family: inherit;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.segmented > :hover {
+    color: var(--color-text);
+}
+
+.segmented > .active {
+    background: var(--color-surface);
+    color: var(--color-text);
+    box-shadow: var(--shadow-sm);
+}
+
 .loading {
     text-align: center;
     padding: var(--space-7);
@@ -257,15 +316,4 @@ h1 {
 
 .hidden {
     display: none;
-}
-
-.theme-switch {
-    min-height: var(--control-height);
-    padding: 0 var(--space-3);
-    border: 1px solid var(--color-input-border);
-    border-radius: var(--radius-sm);
-    background: var(--color-surface);
-    color: var(--color-text);
-    font-family: inherit;
-    font-size: 0.9rem;
 }
