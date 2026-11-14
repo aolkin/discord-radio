@@ -9,7 +9,12 @@ export const modals = {
 
 document.addEventListener('alpine:init', () => {
     Alpine.directive('include', (element, { expression }) => {
-        element.append(document.querySelector(expression).content.cloneNode(true));
+        const content = document.querySelector(expression).content.cloneNode(true);
+        const children = [...content.children];
+        element.append(content);
+        for (const child of children) {
+            Alpine.initTree(child);
+        }
     });
 });
 
