@@ -423,7 +423,6 @@
                                     <table class="pool-grid">
                                         <thead>
                                             <tr>
-                                                <th></th>
                                                 <th>Pool</th>
                                                 <th>Playback</th>
                                                 <th>Order</th>
@@ -438,16 +437,6 @@
                                         >
                                             <tbody>
                                                 <tr>
-                                                    <td class="pool-grid-actions">
-                                                        <button
-                                                            type="button"
-                                                            class="btn btn-icon"
-                                                            :aria-expanded="djConfigExpanded[referenceIndex] === true"
-                                                            aria-label="Show segment defaults"
-                                                            @click="djConfigExpanded[referenceIndex] = !djConfigExpanded[referenceIndex]"
-                                                            x-text="djConfigExpanded[referenceIndex] ? '▾' : '▸'"
-                                                        ></button>
-                                                    </td>
                                                     <td>
                                                         <select
                                                             class="form-input"
@@ -559,123 +548,6 @@
                                                         >
                                                             ×
                                                         </button>
-                                                    </td>
-                                                </tr>
-                                                <tr x-show="djConfigExpanded[referenceIndex]">
-                                                    <td></td>
-                                                    <td colspan="6">
-                                                        <template
-                                                            x-for="(block, blockIndex) in djConfigReferenceBlocks(reference, referenceIndex)"
-                                                            :key="blockIndex"
-                                                        >
-                                                            <div>
-                                                                <div
-                                                                    class="form-label"
-                                                                    x-show="block.label"
-                                                                    x-text="block.label"
-                                                                ></div>
-                                                                <div class="form-row">
-                                                                    <template
-                                                                        x-for="field in block.fields"
-                                                                        :key="field.key"
-                                                                    >
-                                                                        <div class="form-group">
-                                                                            <label class="form-label">
-                                                                                <span x-text="field.label"></span>
-                                                                                <template
-                                                                                    x-if="field.type === 'number'"
-                                                                                >
-                                                                                    <input
-                                                                                        type="number"
-                                                                                        class="form-input"
-                                                                                        x-model.number="block.row[field.key]"
-                                                                                        :step="field.step"
-                                                                                        :min="field.min"
-                                                                                        :max="field.max"
-                                                                                        :required="!field.optional"
-                                                                                        :aria-invalid="fieldInvalid(field, block.row[field.key])"
-                                                                                        :placeholder="field.optional ? 'Optional' : ''"
-                                                                                    >
-                                                                                </template>
-                                                                                <template x-if="field.type === 'text'">
-                                                                                    <input
-                                                                                        type="text"
-                                                                                        class="form-input"
-                                                                                        x-model="block.row[field.key]"
-                                                                                        :list="field.profile ? 'dj-config-profile-options' : null"
-                                                                                        :required="!field.optional"
-                                                                                        :aria-invalid="fieldInvalid(field, block.row[field.key])"
-                                                                                        :placeholder="field.optional ? 'Optional' : ''"
-                                                                                    >
-                                                                                </template>
-                                                                                <template x-if="field.type === 'bool'">
-                                                                                    <select
-                                                                                        class="form-input"
-                                                                                        x-model="block.row[field.key]"
-                                                                                    >
-                                                                                        <option value="">
-                                                                                            Default
-                                                                                        </option>
-                                                                                        <option value="true">
-                                                                                            Yes
-                                                                                        </option>
-                                                                                        <option value="false">
-                                                                                            No
-                                                                                        </option>
-                                                                                    </select>
-                                                                                </template>
-                                                                            </label>
-                                                                            <span
-                                                                                class="field-was"
-                                                                                x-show="isChanged('dj-configs', block.path.concat(field.key))"
-                                                                                x-text="'was ' + wasValue('dj-configs', block.path.concat(field.key))"
-                                                                            ></span>
-                                                                            <template x-if="field.type === 'strings'">
-                                                                                <div>
-                                                                                    <template
-                                                                                        x-for="(value, valueIndex) in block.row[field.key]"
-                                                                                        :key="valueIndex"
-                                                                                    >
-                                                                                        <div class="row-center-8 mt-8">
-                                                                                            <input
-                                                                                                type="text"
-                                                                                                class="form-input"
-                                                                                                :aria-label="field.label"
-                                                                                                x-model="block.row[field.key][valueIndex]"
-                                                                                                :aria-invalid="block.row[field.key][valueIndex] === ''"
-                                                                                                required
-                                                                                            >
-                                                                                            <button
-                                                                                                type="button"
-                                                                                                class="btn btn-icon"
-                                                                                                aria-label="Remove"
-                                                                                                title="Remove"
-                                                                                                @click="block.row[field.key].splice(valueIndex, 1)"
-                                                                                            >
-                                                                                                ×
-                                                                                            </button>
-                                                                                        </div>
-                                                                                    </template>
-                                                                                    <button
-                                                                                        type="button"
-                                                                                        class="btn btn-text btn-sm"
-                                                                                        @click="block.row[field.key].push('')"
-                                                                                    >
-                                                                                        + Add
-                                                                                    </button>
-                                                                                </div>
-                                                                            </template>
-                                                                        </div>
-                                                                    </template>
-                                                                </div>
-                                                            </div>
-                                                        </template>
-                                                        <button
-                                                            type="button"
-                                                            class="btn btn-secondary"
-                                                            @click="toggleDjConfigReferenceHexConfig(reference)"
-                                                            x-text="reference.segment_defaults.hex_config ? 'Remove Hex Config' : '+ Add Hex Config'"
-                                                        ></button>
                                                     </td>
                                                 </tr>
                                             </tbody>
@@ -796,6 +668,131 @@
                                     ></button>
                                 </div>
                             </template>
+
+                            <details
+                                class="modal-section disclosure disclosure-quiet"
+                                x-show="djConfigForm.pools.length > 0"
+                                x-init="$watch('route.name', () => ($el.open = djConfigDefaultsInvalid()))"
+                                x-effect="djConfigDefaultsInvalid() && ($el.open = true)"
+                            >
+                                <summary>
+                                    Pool defaults
+                                    <span
+                                        class="disclosure-changes"
+                                        x-show="djConfigDefaultsChangeCount() > 0"
+                                        x-text="djConfigDefaultsChangeCount() + ' unsaved'"
+                                    ></span>
+                                    <span class="disclosure-error" x-show="djConfigDefaultsInvalid()">Needs a fix</span>
+                                </summary>
+                                <template
+                                    x-for="(reference, referenceIndex) in djConfigForm.pools"
+                                    :key="referenceIndex"
+                                >
+                                    <div class="disclosure-block">
+                                        <div
+                                            class="section-title"
+                                            x-text="reference.pool || 'Pool ' + (referenceIndex + 1)"
+                                        ></div>
+                                        <template
+                                            x-for="(block, blockIndex) in djConfigReferenceBlocks(reference, referenceIndex)"
+                                            :key="blockIndex"
+                                        >
+                                            <div>
+                                                <div class="form-label" x-show="block.label" x-text="block.label"></div>
+                                                <div class="form-row">
+                                                    <template x-for="field in block.fields" :key="field.key">
+                                                        <div class="form-group">
+                                                            <label class="form-label">
+                                                                <span x-text="field.label"></span>
+                                                                <template x-if="field.type === 'number'">
+                                                                    <input
+                                                                        type="number"
+                                                                        class="form-input"
+                                                                        x-model.number="block.row[field.key]"
+                                                                        :step="field.step"
+                                                                        :min="field.min"
+                                                                        :max="field.max"
+                                                                        :required="!field.optional"
+                                                                        :aria-invalid="fieldInvalid(field, block.row[field.key])"
+                                                                        :placeholder="field.optional ? 'Optional' : ''"
+                                                                    >
+                                                                </template>
+                                                                <template x-if="field.type === 'text'">
+                                                                    <input
+                                                                        type="text"
+                                                                        class="form-input"
+                                                                        x-model="block.row[field.key]"
+                                                                        :list="field.profile ? 'dj-config-profile-options' : null"
+                                                                        :required="!field.optional"
+                                                                        :aria-invalid="fieldInvalid(field, block.row[field.key])"
+                                                                        :placeholder="field.optional ? 'Optional' : ''"
+                                                                    >
+                                                                </template>
+                                                                <template x-if="field.type === 'bool'">
+                                                                    <select
+                                                                        class="form-input"
+                                                                        x-model="block.row[field.key]"
+                                                                    >
+                                                                        <option value="">Default</option>
+                                                                        <option value="true">Yes</option>
+                                                                        <option value="false">No</option>
+                                                                    </select>
+                                                                </template>
+                                                            </label>
+                                                            <span
+                                                                class="field-was"
+                                                                x-show="isChanged('dj-configs', block.path.concat(field.key))"
+                                                                x-text="'was ' + wasValue('dj-configs', block.path.concat(field.key))"
+                                                            ></span>
+                                                            <template x-if="field.type === 'strings'">
+                                                                <div>
+                                                                    <template
+                                                                        x-for="(value, valueIndex) in block.row[field.key]"
+                                                                        :key="valueIndex"
+                                                                    >
+                                                                        <div class="row-center-8 mt-8">
+                                                                            <input
+                                                                                type="text"
+                                                                                class="form-input"
+                                                                                :aria-label="field.label"
+                                                                                x-model="block.row[field.key][valueIndex]"
+                                                                                :aria-invalid="block.row[field.key][valueIndex] === ''"
+                                                                                required
+                                                                            >
+                                                                            <button
+                                                                                type="button"
+                                                                                class="btn btn-icon"
+                                                                                aria-label="Remove"
+                                                                                title="Remove"
+                                                                                @click="block.row[field.key].splice(valueIndex, 1)"
+                                                                            >
+                                                                                ×
+                                                                            </button>
+                                                                        </div>
+                                                                    </template>
+                                                                    <button
+                                                                        type="button"
+                                                                        class="btn btn-text btn-sm"
+                                                                        @click="block.row[field.key].push('')"
+                                                                    >
+                                                                        + Add
+                                                                    </button>
+                                                                </div>
+                                                            </template>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                        </template>
+                                        <button
+                                            type="button"
+                                            class="btn btn-text btn-sm"
+                                            @click="toggleDjConfigReferenceHexConfig(reference)"
+                                            x-text="reference.segment_defaults.hex_config ? 'Remove Hex Config' : '+ Add Hex Config'"
+                                        ></button>
+                                    </div>
+                                </template>
+                            </details>
                         </form>
                     </section>
 
@@ -837,102 +834,6 @@
                                         pattern="[A-Za-z0-9_\-]+"
                                         title="Letters, digits, - and _ only"
                                     >
-                                </div>
-                            </div>
-
-                            <div class="modal-section">
-                                <template x-for="(block, blockIndex) in poolDefaultBlocks()" :key="blockIndex">
-                                    <div class="list-row">
-                                        <div class="form-label" x-show="block.label" x-text="block.label"></div>
-                                        <div class="form-row">
-                                            <template x-for="field in block.fields" :key="field.key">
-                                                <div class="form-group">
-                                                    <label class="form-label">
-                                                        <span x-text="field.label"></span>
-                                                        <template x-if="field.type === 'number'">
-                                                            <input
-                                                                type="number"
-                                                                class="form-input"
-                                                                x-model.number="block.row[field.key]"
-                                                                :step="field.step"
-                                                                :min="field.min"
-                                                                :max="field.max"
-                                                                :required="!field.optional"
-                                                                :aria-invalid="fieldInvalid(field, block.row[field.key])"
-                                                                :placeholder="field.optional ? 'Optional' : ''"
-                                                            >
-                                                        </template>
-                                                        <template x-if="field.type === 'text'">
-                                                            <input
-                                                                type="text"
-                                                                class="form-input"
-                                                                x-model="block.row[field.key]"
-                                                                :list="field.profile ? 'pool-editor-profile-options' : null"
-                                                                :required="!field.optional"
-                                                                :aria-invalid="fieldInvalid(field, block.row[field.key])"
-                                                                :placeholder="field.optional ? 'Optional' : ''"
-                                                            >
-                                                        </template>
-                                                        <template x-if="field.type === 'bool'">
-                                                            <select class="form-input" x-model="block.row[field.key]">
-                                                                <option value="">Default</option>
-                                                                <option value="true">Yes</option>
-                                                                <option value="false">No</option>
-                                                            </select>
-                                                        </template>
-                                                    </label>
-                                                    <span
-                                                        class="field-was"
-                                                        x-show="isChanged('pools', block.path.concat(field.key))"
-                                                        x-text="'was ' + wasValue('pools', block.path.concat(field.key))"
-                                                    ></span>
-                                                    <template x-if="field.type === 'strings'">
-                                                        <div>
-                                                            <template
-                                                                x-for="(value, valueIndex) in block.row[field.key]"
-                                                                :key="valueIndex"
-                                                            >
-                                                                <div class="row-center-8 mt-8">
-                                                                    <input
-                                                                        type="text"
-                                                                        class="form-input"
-                                                                        :aria-label="field.label"
-                                                                        x-model="block.row[field.key][valueIndex]"
-                                                                        :aria-invalid="block.row[field.key][valueIndex] === ''"
-                                                                        required
-                                                                    >
-                                                                    <button
-                                                                        type="button"
-                                                                        class="btn btn-icon"
-                                                                        aria-label="Remove"
-                                                                        title="Remove"
-                                                                        @click="block.row[field.key].splice(valueIndex, 1)"
-                                                                    >
-                                                                        ×
-                                                                    </button>
-                                                                </div>
-                                                            </template>
-                                                            <button
-                                                                type="button"
-                                                                class="btn btn-text btn-sm"
-                                                                @click="block.row[field.key].push('')"
-                                                            >
-                                                                + Add
-                                                            </button>
-                                                        </div>
-                                                    </template>
-                                                </div>
-                                            </template>
-                                        </div>
-                                    </div>
-                                </template>
-                                <div class="list-row">
-                                    <button
-                                        type="button"
-                                        class="btn btn-secondary"
-                                        @click="togglePoolHexConfig()"
-                                        x-text="poolForm.segment_defaults.hex_config ? 'Remove Hex Config' : '+ Add Hex Config'"
-                                    ></button>
                                 </div>
                             </div>
 
@@ -1313,6 +1214,115 @@
                                     </div>
                                 </div>
                             </div>
+
+                            <details
+                                class="modal-section disclosure disclosure-quiet"
+                                x-init="$watch('route.name', () => ($el.open = blocksInvalid(poolDefaultBlocks())))"
+                                x-effect="blocksInvalid(poolDefaultBlocks()) && ($el.open = true)"
+                            >
+                                <summary>
+                                    Defaults
+                                    <span
+                                        class="disclosure-changes"
+                                        x-show="sectionChangeCount('pools', ['segment_defaults']) > 0"
+                                        x-text="sectionChangeCount('pools', ['segment_defaults']) + ' unsaved'"
+                                    ></span>
+                                    <span class="disclosure-error" x-show="blocksInvalid(poolDefaultBlocks())">
+                                        Needs a fix
+                                    </span>
+                                </summary>
+                                <template x-for="(block, blockIndex) in poolDefaultBlocks()" :key="blockIndex">
+                                    <div class="disclosure-block">
+                                        <div class="form-label" x-show="block.label" x-text="block.label"></div>
+                                        <div class="form-row">
+                                            <template x-for="field in block.fields" :key="field.key">
+                                                <div class="form-group">
+                                                    <label class="form-label">
+                                                        <span x-text="field.label"></span>
+                                                        <template x-if="field.type === 'number'">
+                                                            <input
+                                                                type="number"
+                                                                class="form-input"
+                                                                x-model.number="block.row[field.key]"
+                                                                :step="field.step"
+                                                                :min="field.min"
+                                                                :max="field.max"
+                                                                :required="!field.optional"
+                                                                :aria-invalid="fieldInvalid(field, block.row[field.key])"
+                                                                :placeholder="field.optional ? 'Optional' : ''"
+                                                            >
+                                                        </template>
+                                                        <template x-if="field.type === 'text'">
+                                                            <input
+                                                                type="text"
+                                                                class="form-input"
+                                                                x-model="block.row[field.key]"
+                                                                :list="field.profile ? 'pool-editor-profile-options' : null"
+                                                                :required="!field.optional"
+                                                                :aria-invalid="fieldInvalid(field, block.row[field.key])"
+                                                                :placeholder="field.optional ? 'Optional' : ''"
+                                                            >
+                                                        </template>
+                                                        <template x-if="field.type === 'bool'">
+                                                            <select class="form-input" x-model="block.row[field.key]">
+                                                                <option value="">Default</option>
+                                                                <option value="true">Yes</option>
+                                                                <option value="false">No</option>
+                                                            </select>
+                                                        </template>
+                                                    </label>
+                                                    <span
+                                                        class="field-was"
+                                                        x-show="isChanged('pools', block.path.concat(field.key))"
+                                                        x-text="'was ' + wasValue('pools', block.path.concat(field.key))"
+                                                    ></span>
+                                                    <template x-if="field.type === 'strings'">
+                                                        <div>
+                                                            <template
+                                                                x-for="(value, valueIndex) in block.row[field.key]"
+                                                                :key="valueIndex"
+                                                            >
+                                                                <div class="row-center-8 mt-8">
+                                                                    <input
+                                                                        type="text"
+                                                                        class="form-input"
+                                                                        :aria-label="field.label"
+                                                                        x-model="block.row[field.key][valueIndex]"
+                                                                        :aria-invalid="block.row[field.key][valueIndex] === ''"
+                                                                        required
+                                                                    >
+                                                                    <button
+                                                                        type="button"
+                                                                        class="btn btn-icon"
+                                                                        aria-label="Remove"
+                                                                        title="Remove"
+                                                                        @click="block.row[field.key].splice(valueIndex, 1)"
+                                                                    >
+                                                                        ×
+                                                                    </button>
+                                                                </div>
+                                                            </template>
+                                                            <button
+                                                                type="button"
+                                                                class="btn btn-text btn-sm"
+                                                                @click="block.row[field.key].push('')"
+                                                            >
+                                                                + Add
+                                                            </button>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </template>
+                                <button
+                                    type="button"
+                                    class="btn btn-text btn-sm"
+                                    @click="togglePoolHexConfig()"
+                                    x-text="poolForm.segment_defaults.hex_config ? 'Remove Hex Config' : '+ Add Hex Config'"
+                                ></button>
+                            </details>
                         </form>
                     </section>
                     <section class="card" x-show="route.kind === 'files'">

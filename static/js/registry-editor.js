@@ -186,6 +186,15 @@ export function drafts() {
             );
         },
 
+        sectionChangeCount(kind, path) {
+            const draft = this.openDraft(kind);
+            return draft ? diff(getPath(draft.saved, path), getPath(draft.form, path)).length : 0;
+        },
+
+        blocksInvalid(blocks) {
+            return blocks.some(({ row, fields }) => fields.some((field) => fieldInvalid(field, row[field.key])));
+        },
+
         wasValue(kind, path) {
             return formatValue(getPath(this.openDraft(kind)?.saved, path));
         },
@@ -217,10 +226,7 @@ export function drafts() {
             if (this.nameInvalid(kind)) {
                 errors.unshift('Name must be new and use only letters, digits, - and _');
             }
-            const fieldsInvalid = spec
-                .blocks(draft.form)
-                .some(({ row, fields }) => fields.some((field) => fieldInvalid(field, row[field.key])));
-            if (fieldsInvalid) {
+            if (this.blocksInvalid(spec.blocks(draft.form))) {
                 errors.push('Fix the marked fields');
             }
             return errors;

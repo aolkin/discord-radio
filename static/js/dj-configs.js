@@ -128,7 +128,6 @@ export function djConfigs() {
         djConfigModeFields: poolModeFields,
         djConfigPools: {},
         djConfigSavedPools: {},
-        djConfigExpanded: {},
         djConfigChancesOpen: false,
 
         async loadDjConfigPools() {
@@ -200,7 +199,6 @@ export function djConfigs() {
 
         removeDjConfigPool(index) {
             this.djConfigForm.pools.splice(index, 1);
-            this.djConfigExpanded = {};
         },
 
         addDjConfigPool() {
@@ -213,6 +211,18 @@ export function djConfigs() {
 
         djConfigReferenceBlocks(reference, index) {
             return referenceBlocks(reference, index);
+        },
+
+        djConfigDefaultsInvalid() {
+            return this.blocksInvalid(this.djConfigForm.pools.flatMap(referenceBlocks));
+        },
+
+        djConfigDefaultsChangeCount() {
+            return this.djConfigForm.pools.reduce(
+                (total, _reference, index) =>
+                    total + this.sectionChangeCount('dj-configs', ['pools', index, 'segment_defaults']),
+                0,
+            );
         },
 
         toggleDjConfigReferenceHexConfig(reference) {
