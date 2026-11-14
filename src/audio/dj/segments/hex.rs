@@ -8,8 +8,8 @@ use crate::audio::dj::weighted_choice::{Identity, Weighted};
 use crate::audio::processing::mixer::{TrackCallback, TrackCommand};
 use crate::audio::processing::processor::AudioProcessor;
 use crate::audio::tracks::open_track_source;
-use crate::bucket::FileResolver;
-use anyhow::bail;
+use crate::bucket::{FileResolver, with_trailing_slash};
+use anyhow::{Context, bail};
 use async_trait::async_trait;
 use field_trait::field_trait_impl;
 use rand::RngExt;
@@ -29,7 +29,11 @@ pub struct HexMessageDefaults {
     pub loop_min: u32,
     #[serde(default = "default_loops")]
     pub loop_max: u32,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_audio_folder"
+    )]
     pub hex_audio_folder: Option<String>,
 }
 
@@ -49,10 +53,7 @@ fn default_loops() -> u32 {
 
 impl HexMessageDefaults {
     pub fn validate(&self) -> anyhow::Result<()> {
-        ensure_loops(self.loop_min, self.loop_max)?;
-        self.hex_audio_folder
-            .as_deref()
-            .map_or(Ok(()), ensure_audio_folder)
+        ensure_loops(self.loop_min, self.loop_max)
     }
 
     pub fn pick_loops(&self, loop_min: Option<u32>, loop_max: Option<u32>) -> u32 {
@@ -78,11 +79,29 @@ impl Weighted for HexMessageEntry {
     }
 }
 
-pub fn ensure_audio_folder(folder: &str) -> anyhow::Result<()> {
-    if !folder.ends_with('/') {
-        bail!("hex audio folder must end with '/'");
-    }
-    Ok(())
+fn deserialize_audio_folder<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<String>, D::Error> {
+    Ok(Option::<String>::deserialize(deserializer)?.map(|folder| with_trailing_slash(&folder)))
+}
+
+pub fn hex_file_name(hex_char: char) -> String {
+    format!("hex_{hex_char}.wav")
+}
+
+pub async fn list_missing_hex_files(
+    file_resolver: &FileResolver,
+    folder: &str,
+) -> anyhow::Result<Vec<String>> {
+    let present = file_resolver
+        .list_files(folder)
+        .await
+        .with_context(|| format!("listing hex audio folder {folder:?}"))?;
+    Ok((0..16)
+        .filter_map(|digit| char::from_digit(digit, 16))
+        .map(|hex_char| hex_file_name(hex_char.to_ascii_uppercase()))
+        .filter(|name| !present.contains(name))
+        .collect())
 }
 
 pub fn ensure_loops(min: u32, max: u32) -> anyhow::Result<()> {
@@ -285,7 +304,7 @@ async fn run_hex_message(
     let hex_chars = message_to_hex_sequence(&message);
     while !hex_chars.is_empty() && progress.loops.load(Ordering::Relaxed) < target_loops {
         let position = progress.position.load(Ordering::Relaxed);
-        let filename = format!("{audio_folder}hex_{}.wav", hex_chars[position]);
+        let filename = format!("{audio_folder}{}", hex_file_name(hex_chars[position]));
         match file_resolver.resolve(&filename).await {
             Ok(path) if Path::new(&path).exists() => {
                 let source = match open_track_source(&path, None) {

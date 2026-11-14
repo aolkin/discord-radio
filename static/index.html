@@ -1323,6 +1323,13 @@
                                     x-text="poolForm.segment_defaults.hex_config ? 'Remove Hex Config' : '+ Add Hex Config'"
                                 ></button>
                             </details>
+                            <div
+                                class="hint hint-warning"
+                                role="status"
+                                x-effect="watchPoolHexFolder()"
+                                x-show="poolHexFolderWarning"
+                                x-text="poolHexFolderWarning"
+                            ></div>
                         </form>
                     </section>
                     <section class="card" x-show="route.kind === 'files'">
