@@ -19,7 +19,12 @@ import { shareOf } from './weights.js';
 
 const poolWeight = { ...weight, min: 1 };
 
-const poolReferenceFields = [{ key: 'pool', label: 'Pool', type: 'text' }, poolWeight];
+const poolModeFields = [
+    { key: 'playback', label: 'Playback', type: 'select', options: ['single', 'all'], default: 'single' },
+    { key: 'order', label: 'Order', type: 'select', options: ['weighted', 'sequential'], default: 'weighted' },
+];
+
+const poolReferenceFields = [{ key: 'pool', label: 'Pool', type: 'text' }, poolWeight, ...poolModeFields];
 
 const rotations = [
     {
@@ -120,6 +125,7 @@ export function djConfigs() {
         ...djConfigEditor.methods,
         djConfigRotations: rotations,
         djConfigWeightField: poolWeight,
+        djConfigModeFields: poolModeFields,
         djConfigPools: {},
         djConfigSavedPools: {},
         djConfigExpanded: {},

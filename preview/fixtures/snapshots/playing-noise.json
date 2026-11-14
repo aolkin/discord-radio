@@ -4,7 +4,7 @@
       "guild_id": "100000000000000001",
       "in_voice": true,
       "tracks": [],
-      "dj_state": { "state_type": "PlayingNoise", "details": "weak_signal (1.0s / 2.5s)" },
+      "dj_state": { "state_type": "PlayingNoise", "details": "weak_signal (1.0s / 2.5s)", "pool": "noise", "progress": null },
       "dj_config": "default",
       "audio_profile": { "name": "clear→weak_signal", "expected_name": "weak_signal", "transitioning": true, "source": "background" },
       "channel_status": { "status": null, "source": "background" },
