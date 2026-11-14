@@ -809,6 +809,28 @@ textarea.form-input {
     cursor: pointer;
 }
 
+.disclosure-quiet > summary {
+    color: var(--color-text-muted);
+}
+
+.disclosure-quiet[open] > summary {
+    margin-bottom: var(--space-3);
+}
+
+.disclosure-changes {
+    margin-left: var(--space-2);
+    color: var(--color-warning);
+}
+
+.disclosure-error {
+    margin-left: var(--space-2);
+    color: var(--color-error);
+}
+
+.disclosure-block {
+    margin-bottom: var(--space-4);
+}
+
 .pool-grid-actions {
     white-space: nowrap;
 }
