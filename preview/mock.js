@@ -23,18 +23,21 @@
     const loadJson = async (path) => (await realFetch(`${fixtureBase}/${path}`)).json();
 
     const ready = (async () => {
-        const [guilds, channels, botProfile, listing, memberLogs, djLogs, ...snapshots] = await Promise.all([
-            loadJson('guilds.json'),
-            loadJson('channels.json'),
-            loadJson('bot-profile.json'),
-            loadJson('files/tracks.json'),
-            loadJson('logs/members.json'),
-            loadJson('logs/dj.json'),
-            ...modes.map((mode) => loadJson(`snapshots/playing-${mode}.json`)),
-            loadJson('snapshots/no-radio.json'),
-        ]);
+        const [guilds, channels, voiceChannels, botProfile, listing, memberLogs, djLogs, ...snapshots] =
+            await Promise.all([
+                loadJson('guilds.json'),
+                loadJson('channels.json'),
+                loadJson('voice-channels.json'),
+                loadJson('bot-profile.json'),
+                loadJson('files/tracks.json'),
+                loadJson('logs/members.json'),
+                loadJson('logs/dj.json'),
+                ...modes.map((mode) => loadJson(`snapshots/playing-${mode}.json`)),
+                loadJson('snapshots/no-radio.json'),
+            ]);
         store.guilds = guilds;
         store.channels = channels;
+        store.voiceChannels = voiceChannels;
         store.logs = { members: memberLogs, dj: djLogs };
         for (const guild of guilds.guilds) {
             store.botProfiles[guild.guild_id] = { ...botProfile };
@@ -202,6 +205,13 @@
         ['GET', /^\/api\/guilds$/, () => respond(store.guilds)],
         guildRoute('GET', 'channels', () => respond(store.channels)),
         guildRoute('POST', 'channels/([^/]+)/send', ok),
+        guildRoute('GET', 'voice-channels', () => respond(store.voiceChannels)),
+        guildRoute('POST', 'voice-channels/([^/]+)/join', () => {
+            if (store.radio.mode === 'none') {
+                setMode('track');
+            }
+            return ok();
+        }),
         guildRoute('GET', 'bot-profile', (_request, guildId) => respond(store.botProfiles[guildId] ?? {})),
         guildRoute('PUT', 'bot-profile', ({ body }, guildId) => {
             const current = store.botProfiles[guildId] ?? {};

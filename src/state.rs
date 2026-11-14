@@ -1,4 +1,5 @@
 use crate::activity::ActivityManager;
+use crate::audio::connection::connect_voice_channel;
 use crate::audio::dj::config::registry::DJConfigRegistry;
 use crate::audio::dj::manager::DJManager;
 use crate::audio::duration::DurationCache;
@@ -9,6 +10,7 @@ use crate::bucket::FileResolver;
 use crate::bucket::registry::JsonRegistry;
 use crate::logging::JsonLogger;
 use crate::persistence::StateStore;
+use anyhow::Context as _;
 use serde::Serialize;
 use serenity::all::{ChannelId, UserId};
 use serenity::model::id::GuildId;
@@ -131,6 +133,27 @@ impl BotState {
         let call_lock = self.songbird.get(guild_id)?;
         let call = call_lock.lock().await;
         call.current_channel().map(|id| ChannelId::new(id.0.get()))
+    }
+
+    pub async fn join_voice_channel(
+        &'static self,
+        guild_id: GuildId,
+        channel_id: ChannelId,
+    ) -> anyhow::Result<()> {
+        connect_voice_channel(&self.songbird, guild_id, channel_id, self).await?;
+        tracing::info!("Joined voice channel {}", channel_id);
+        self.dj_manager(guild_id)
+            .start()
+            .await
+            .context("starting the DJ")?;
+        if let Err(e) = self
+            .state_store
+            .save_voice_channel(guild_id, channel_id)
+            .await
+        {
+            tracing::error!("Failed to save voice channel: {e:#}");
+        }
+        Ok(())
     }
 
     pub async fn leave_voice_channel(&self, guild_id: GuildId) {

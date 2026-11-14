@@ -12,6 +12,8 @@ export const playForms = () => ({
     channelStatusMessage: emptyMessage(),
     announcementSelection: '',
     announcementMessage: emptyMessage(),
+    voiceChannelSelection: '',
+    voiceChannelMessage: emptyMessage(),
 });
 
 export function dj() {
@@ -23,6 +25,50 @@ export function dj() {
         announcementOptions: [],
         announcementLoading: false,
         announcementSaving: false,
+        voiceChannelOptions: [],
+        voiceChannelLoading: false,
+        voiceChannelSaving: false,
+
+        async loadVoiceChannelOptions() {
+            const guildId = this.route.name;
+            this.voiceChannelOptions = [];
+            this.voiceChannelLoading = true;
+            try {
+                const response = await apiRequest(`/api/guilds/${guildId}/voice-channels`, {
+                    errorMessage: bodyOrStatus,
+                });
+                const data = await response.json();
+                if (guildId === this.route.name) {
+                    this.voiceChannelOptions = data.channels;
+                }
+            } catch (error) {
+                console.error('Error loading voice channels:', error);
+                this.voiceChannelMessage = {
+                    text: `Failed to load voice channels: ${error.message}`,
+                    type: 'error',
+                };
+            } finally {
+                this.voiceChannelLoading = false;
+            }
+        },
+
+        async joinVoiceChannel() {
+            await this.runAction({
+                saving: 'voiceChannelSaving',
+                message: 'voiceChannelMessage',
+                label: 'joining voice channel',
+                request: () =>
+                    apiRequest(`/api/guilds/${this.route.name}/voice-channels/${this.voiceChannelSelection}/join`, {
+                        method: 'POST',
+                        errorMessage: bodyOrStatus,
+                    }),
+                success: 'Joined the voice channel.',
+                failure: 'Failed to join the voice channel',
+                onSuccess: () => {
+                    this.voiceChannelSelection = '';
+                },
+            });
+        },
 
         announcementChannelsOf(guildId) {
             return this.guilds.find((guild) => guild.guild_id === guildId)?.announcement_channels ?? [];

@@ -47,14 +47,14 @@ pub async fn get_guilds(
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct SendableChannelResponse {
+pub struct ChannelResponse {
     pub channel_id: String,
     pub name: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct SendableChannelsResponse {
-    pub channels: Vec<SendableChannelResponse>,
+pub struct ChannelsResponse {
+    pub channels: Vec<ChannelResponse>,
 }
 
 fn ready_cache(bot_state: &Data) -> Result<&std::sync::Arc<serenity::cache::Cache>, ApiError> {
@@ -66,9 +66,11 @@ fn ready_cache(bot_state: &Data) -> Result<&std::sync::Arc<serenity::cache::Cach
     })
 }
 
-pub fn sendable_channels(
+fn permitted_channels(
     bot_state: Data,
     guild_id: GuildId,
+    kind: ChannelType,
+    required: Permissions,
 ) -> Result<Vec<(ChannelId, String)>, ApiError> {
     let cache = ready_cache(&bot_state)?;
     let guild = cache
@@ -81,11 +83,10 @@ pub fn sendable_channels(
         )
     })?;
 
-    let required = Permissions::VIEW_CHANNEL | Permissions::SEND_MESSAGES;
     let mut channels: Vec<_> = guild
         .channels
         .values()
-        .filter(|c| c.kind == ChannelType::Text)
+        .filter(|c| c.kind == kind)
         .filter(|c| guild.user_permissions_in(c, member).contains(required))
         .collect();
     channels.sort_by_key(|c| (c.position, c.id));
@@ -96,19 +97,81 @@ pub fn sendable_channels(
         .collect())
 }
 
+pub fn sendable_channels(
+    bot_state: Data,
+    guild_id: GuildId,
+) -> Result<Vec<(ChannelId, String)>, ApiError> {
+    permitted_channels(
+        bot_state,
+        guild_id,
+        ChannelType::Text,
+        Permissions::VIEW_CHANNEL | Permissions::SEND_MESSAGES,
+    )
+}
+
+fn joinable_channels(
+    bot_state: Data,
+    guild_id: GuildId,
+) -> Result<Vec<(ChannelId, String)>, ApiError> {
+    permitted_channels(
+        bot_state,
+        guild_id,
+        ChannelType::Voice,
+        Permissions::VIEW_CHANNEL | Permissions::CONNECT,
+    )
+}
+
+fn channels_response(channels: Vec<(ChannelId, String)>) -> AxumJson<ChannelsResponse> {
+    AxumJson(ChannelsResponse {
+        channels: channels
+            .into_iter()
+            .map(|(id, name)| ChannelResponse {
+                channel_id: id.to_string(),
+                name,
+            })
+            .collect(),
+    })
+}
+
 pub async fn get_sendable_channels(
     State(bot_state): State<Data>,
     Path(guild_id): Path<GuildId>,
-) -> Result<AxumJson<SendableChannelsResponse>, ApiError> {
-    let channels = sendable_channels(bot_state, guild_id)?
-        .into_iter()
-        .map(|(id, name)| SendableChannelResponse {
-            channel_id: id.to_string(),
-            name,
-        })
-        .collect();
+) -> Result<AxumJson<ChannelsResponse>, ApiError> {
+    Ok(channels_response(sendable_channels(bot_state, guild_id)?))
+}
 
-    Ok(AxumJson(SendableChannelsResponse { channels }))
+pub async fn get_voice_channels(
+    State(bot_state): State<Data>,
+    Path(guild_id): Path<GuildId>,
+) -> Result<AxumJson<ChannelsResponse>, ApiError> {
+    Ok(channels_response(joinable_channels(bot_state, guild_id)?))
+}
+
+pub async fn join_voice_channel(
+    State(bot_state): State<Data>,
+    Path((guild_id, channel_id)): Path<(GuildId, ChannelId)>,
+) -> Result<StatusCode, ApiError> {
+    let joinable = joinable_channels(bot_state, guild_id)?
+        .iter()
+        .any(|(id, _)| *id == channel_id);
+    if !joinable {
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            anyhow::anyhow!("The bot cannot join voice channel {channel_id} in guild {guild_id}"),
+        ));
+    }
+
+    bot_state
+        .join_voice_channel(guild_id, channel_id)
+        .await
+        .map_err(|e| {
+            ApiError::new(
+                StatusCode::BAD_GATEWAY,
+                e.context(format!("Failed to join voice channel {channel_id}")),
+            )
+        })?;
+
+    Ok(StatusCode::OK)
 }
 
 #[derive(Debug, Deserialize)]

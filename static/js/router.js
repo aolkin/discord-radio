@@ -85,6 +85,9 @@ export function router() {
                     Object.assign(this, playForms(), trackForms(), signalProfileForms(), botProfileForms());
                     this.enterGuildTab();
                 }
+                if (this.route.name && previous.name !== this.route.name) {
+                    this.loadVoiceChannelOptions();
+                }
                 if (
                     this.route.tab === 'logs' &&
                     (previous.name !== this.route.name || previous.logType !== this.route.logType)
