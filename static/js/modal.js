@@ -66,7 +66,7 @@ document.addEventListener('alpine:init', () => {
         } else {
             title.textContent = config.title;
         }
-        const closeButton = element('button', { 'x-on:click': close }, 'close');
+        const closeButton = element('button', { type: 'button', 'aria-label': 'Close', 'x-on:click': close }, 'close');
         closeButton.innerHTML = '&times;';
         header.append(title, closeButton);
 
