@@ -111,11 +111,7 @@
                     <div class="section">
                         <div class="section-title">
                             DJ Configs
-                            <button
-                                type="button"
-                                class="btn btn-secondary btn-sm"
-                                @click="openItem('dj-configs', newItem)"
-                            >
+                            <button type="button" class="btn btn-text btn-sm" @click="openItem('dj-configs', newItem)">
                                 + New
                             </button>
                         </div>
@@ -159,7 +155,7 @@
                     <div class="section">
                         <div class="section-title">
                             Pools
-                            <button type="button" class="btn btn-secondary btn-sm" @click="openItem('pools', newItem)">
+                            <button type="button" class="btn btn-text btn-sm" @click="openItem('pools', newItem)">
                                 + New
                             </button>
                         </div>
@@ -186,7 +182,7 @@
                             Signal Profiles
                             <button
                                 type="button"
-                                class="btn btn-secondary btn-sm"
+                                class="btn btn-text btn-sm"
                                 @click="openItem('signal-profiles', newItem)"
                             >
                                 + New
@@ -445,7 +441,7 @@
                                                     <td class="pool-grid-actions">
                                                         <button
                                                             type="button"
-                                                            class="btn btn-secondary"
+                                                            class="btn btn-icon"
                                                             :aria-expanded="djConfigExpanded[referenceIndex] === true"
                                                             aria-label="Show segment defaults"
                                                             @click="djConfigExpanded[referenceIndex] = !djConfigExpanded[referenceIndex]"
@@ -556,10 +552,12 @@
                                                     <td class="pool-grid-actions">
                                                         <button
                                                             type="button"
-                                                            class="btn btn-secondary"
+                                                            class="btn btn-icon"
+                                                            aria-label="Remove pool"
+                                                            title="Remove pool"
                                                             @click="removeDjConfigPool(referenceIndex)"
                                                         >
-                                                            Remove
+                                                            ×
                                                         </button>
                                                     </td>
                                                 </tr>
@@ -638,7 +636,7 @@
                                                                                         x-for="(value, valueIndex) in block.row[field.key]"
                                                                                         :key="valueIndex"
                                                                                     >
-                                                                                        <div class="list-row">
+                                                                                        <div class="row-center-8 mt-8">
                                                                                             <input
                                                                                                 type="text"
                                                                                                 class="form-input"
@@ -649,16 +647,18 @@
                                                                                             >
                                                                                             <button
                                                                                                 type="button"
-                                                                                                class="btn btn-secondary"
+                                                                                                class="btn btn-icon"
+                                                                                                aria-label="Remove"
+                                                                                                title="Remove"
                                                                                                 @click="block.row[field.key].splice(valueIndex, 1)"
                                                                                             >
-                                                                                                Remove
+                                                                                                ×
                                                                                             </button>
                                                                                         </div>
                                                                                     </template>
                                                                                     <button
                                                                                         type="button"
-                                                                                        class="btn btn-secondary"
+                                                                                        class="btn btn-text btn-sm"
                                                                                         @click="block.row[field.key].push('')"
                                                                                     >
                                                                                         + Add
@@ -683,23 +683,14 @@
                                     </table>
                                 </div>
                                 <div class="empty-state" x-show="djConfigForm.pools.length === 0">No pools</div>
-                                <button type="button" class="btn btn-secondary" @click="addDjConfigPool()">
+                                <button type="button" class="btn btn-text btn-sm" @click="addDjConfigPool()">
                                     + Add Pool
                                 </button>
                             </div>
 
-                            <div class="modal-section">
-                                <button
-                                    type="button"
-                                    class="btn btn-secondary"
-                                    :aria-expanded="djConfigChancesOpen"
-                                    @click="djConfigChancesOpen = !djConfigChancesOpen"
-                                    x-text="(djConfigChancesOpen ? '▾' : '▸') + ' Chance of every entry'"
-                                ></button>
-                                <div
-                                    x-show="djConfigChancesOpen"
-                                    x-effect="djConfigChancesOpen && loadDjConfigChancePools()"
-                                >
+                            <details class="modal-section disclosure" @toggle="djConfigChancesOpen = $el.open">
+                                <summary>Chance of every entry</summary>
+                                <div x-effect="djConfigChancesOpen && loadDjConfigChancePools()">
                                     <p class="pool-grid-note">
                                         Pool share × entry share. A pool with unsaved changes uses them. The history
                                         penalty is not modelled.
@@ -737,7 +728,7 @@
                                         </table>
                                     </div>
                                 </div>
-                            </div>
+                            </details>
 
                             <template x-for="rotation in djConfigRotations" :key="rotation.key">
                                 <div class="modal-section">
@@ -785,10 +776,12 @@
                                             </div>
                                             <button
                                                 type="button"
-                                                class="btn btn-secondary"
+                                                class="btn btn-icon"
+                                                aria-label="Remove entry"
+                                                title="Remove entry"
                                                 @click="djConfigForm[rotation.key].entries.splice(index, 1)"
                                             >
-                                                Remove
+                                                ×
                                             </button>
                                         </div>
                                     </template>
@@ -797,7 +790,7 @@
                                     </div>
                                     <button
                                         type="button"
-                                        class="btn btn-secondary"
+                                        class="btn btn-text btn-sm"
                                         @click="addDjConfigRotationEntry(rotation)"
                                         x-text="rotation.addLabel"
                                     ></button>
@@ -899,7 +892,7 @@
                                                                 x-for="(value, valueIndex) in block.row[field.key]"
                                                                 :key="valueIndex"
                                                             >
-                                                                <div class="list-row">
+                                                                <div class="row-center-8 mt-8">
                                                                     <input
                                                                         type="text"
                                                                         class="form-input"
@@ -910,16 +903,18 @@
                                                                     >
                                                                     <button
                                                                         type="button"
-                                                                        class="btn btn-secondary"
+                                                                        class="btn btn-icon"
+                                                                        aria-label="Remove"
+                                                                        title="Remove"
                                                                         @click="block.row[field.key].splice(valueIndex, 1)"
                                                                     >
-                                                                        Remove
+                                                                        ×
                                                                     </button>
                                                                 </div>
                                                             </template>
                                                             <button
                                                                 type="button"
-                                                                class="btn btn-secondary"
+                                                                class="btn btn-text btn-sm"
                                                                 @click="block.row[field.key].push('')"
                                                             >
                                                                 + Add
@@ -1079,11 +1074,13 @@
                                                                 >
                                                                 <button
                                                                     type="button"
-                                                                    class="btn btn-secondary"
+                                                                    class="btn btn-icon"
+                                                                    aria-label="Pick file"
+                                                                    title="Pick file"
                                                                     x-show="entry.kind === 'track'"
                                                                     @click="pickPoolFile(entry)"
                                                                 >
-                                                                    Pick…
+                                                                    📁
                                                                 </button>
                                                                 <span
                                                                     class="field-was"
@@ -1123,8 +1120,9 @@
                                                     <td class="pool-grid-actions">
                                                         <button
                                                             type="button"
-                                                            class="btn btn-secondary"
+                                                            class="btn btn-icon"
                                                             aria-label="Move entry up"
+                                                            title="Move up"
                                                             :disabled="index === 0"
                                                             @click="movePoolEntry(index, -1)"
                                                         >
@@ -1132,8 +1130,9 @@
                                                         </button>
                                                         <button
                                                             type="button"
-                                                            class="btn btn-secondary"
+                                                            class="btn btn-icon"
                                                             aria-label="Move entry down"
+                                                            title="Move down"
                                                             :disabled="index === poolForm.entries.length - 1"
                                                             @click="movePoolEntry(index, 1)"
                                                         >
@@ -1141,7 +1140,7 @@
                                                         </button>
                                                         <button
                                                             type="button"
-                                                            class="btn btn-secondary"
+                                                            class="btn btn-icon"
                                                             :aria-expanded="poolExpanded[index] === true"
                                                             aria-label="Show more fields"
                                                             @click="poolExpanded[index] = !poolExpanded[index]"
@@ -1149,10 +1148,12 @@
                                                         ></button>
                                                         <button
                                                             type="button"
-                                                            class="btn btn-secondary"
+                                                            class="btn btn-icon"
+                                                            aria-label="Remove entry"
+                                                            title="Remove entry"
                                                             @click="removePoolEntry(index)"
                                                         >
-                                                            Remove
+                                                            ×
                                                         </button>
                                                     </td>
                                                 </tr>
@@ -1281,19 +1282,35 @@
                                     </table>
                                 </div>
                                 <div class="empty-state" x-show="poolForm.entries.length === 0">No entries</div>
-                                <div class="button-group">
-                                    <button type="button" class="btn btn-secondary" @click="addPoolEntry('track')">
-                                        + Add track
+                                <div
+                                    class="menu-anchor"
+                                    x-data="{ open: false }"
+                                    @click.outside="open = false"
+                                    @keydown.escape="open = false"
+                                >
+                                    <button
+                                        type="button"
+                                        class="btn btn-secondary btn-sm"
+                                        aria-haspopup="menu"
+                                        :aria-expanded="open"
+                                        @click="open = !open"
+                                    >
+                                        + Add entry ▾
                                     </button>
-                                    <button type="button" class="btn btn-secondary" @click="pickPoolFiles()">
-                                        Tracks from files…
-                                    </button>
-                                    <button type="button" class="btn btn-secondary" @click="addPoolEntry('hex')">
-                                        + Add hex message
-                                    </button>
-                                    <button type="button" class="btn btn-secondary" @click="addPoolEntry('noise')">
-                                        + Add noise
-                                    </button>
+                                    <div class="strip-menu menu-start" role="menu" x-show="open" @click="open = false">
+                                        <button type="button" role="menuitem" @click="addPoolEntry('track')">
+                                            Track
+                                        </button>
+                                        <button type="button" role="menuitem" @click="pickPoolFiles()">
+                                            Tracks from files…
+                                        </button>
+                                        <button type="button" role="menuitem" @click="addPoolEntry('hex')">
+                                            Hex message
+                                        </button>
+                                        <button type="button" role="menuitem" @click="addPoolEntry('noise')">
+                                            Noise
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </form>
@@ -1876,11 +1893,13 @@
                                             ></div>
                                             <button
                                                 type="button"
-                                                class="btn btn-secondary"
+                                                class="btn btn-icon"
+                                                :aria-label="'Remove #' + (channel.name || channel.channel_id)"
+                                                title="Remove"
                                                 :disabled="announcementSaving"
                                                 @click="removeAnnouncementChannel(channel.channel_id)"
                                             >
-                                                Remove
+                                                ×
                                             </button>
                                         </div>
                                     </template>
@@ -1891,29 +1910,31 @@
                                         <label class="form-label" for="announcement-channel-select"
                                             >Add a channel</label
                                         >
-                                        <select
-                                            id="announcement-channel-select"
-                                            class="form-input"
-                                            x-model="announcementSelection"
-                                        >
-                                            <option value="">Choose a channel</option>
-                                            <template
-                                                x-for="channel in availableAnnouncementOptions()"
-                                                :key="channel.channel_id"
+                                        <div class="row-center-8">
+                                            <select
+                                                id="announcement-channel-select"
+                                                class="form-input"
+                                                x-model="announcementSelection"
                                             >
-                                                <option
-                                                    :value="channel.channel_id"
-                                                    x-text="'#' + channel.name"
-                                                ></option>
-                                            </template>
-                                        </select>
-                                        <button
-                                            type="submit"
-                                            class="btn btn-primary mt-12 w-full"
-                                            :disabled="announcementSaving || !announcementSelection"
-                                        >
-                                            Add Channel
-                                        </button>
+                                                <option value="">Choose a channel</option>
+                                                <template
+                                                    x-for="channel in availableAnnouncementOptions()"
+                                                    :key="channel.channel_id"
+                                                >
+                                                    <option
+                                                        :value="channel.channel_id"
+                                                        x-text="'#' + channel.name"
+                                                    ></option>
+                                                </template>
+                                            </select>
+                                            <button
+                                                type="submit"
+                                                class="btn btn-secondary btn-sm"
+                                                :disabled="announcementSaving || !announcementSelection"
+                                            >
+                                                Add
+                                            </button>
+                                        </div>
                                     </form>
                                 </div>
                             </div>
@@ -2001,7 +2022,7 @@
                                 <div class="button-group" x-show="logResult?.entries.length">
                                     <button
                                         type="button"
-                                        class="btn btn-primary"
+                                        class="btn btn-secondary btn-sm"
                                         :disabled="!logResult?.has_previous"
                                         @click="loadPreviousLogs()"
                                     >
@@ -2009,13 +2030,13 @@
                                     </button>
                                     <button
                                         type="button"
-                                        class="btn btn-primary"
+                                        class="btn btn-secondary btn-sm"
                                         :disabled="!logResult?.has_next"
                                         @click="loadNextLogs()"
                                     >
                                         Next →
                                     </button>
-                                    <button type="button" class="btn btn-secondary" @click="loadLatestLogs()">
+                                    <button type="button" class="btn btn-secondary btn-sm" @click="loadLatestLogs()">
                                         Latest
                                     </button>
                                 </div>
@@ -2039,23 +2060,38 @@
                 <template x-for="guild in guildsWithoutRadio()" :key="guild.guild_id">
                     <div class="guild-list-row">
                         <div class="guild-id" x-text="guild.name"></div>
-                        <div class="button-group">
+                        <div class="row-center-8">
                             <!-- biome-ignore lint/a11y/useValidAnchor: the href is set by :href -->
-                            <a class="btn btn-secondary" :href="'#/live/' + guild.guild_id">Join Voice</a>
-                            <button
-                                type="button"
-                                class="btn btn-secondary"
-                                @click="openChannelMessageModal(guild.guild_id)"
+                            <a class="btn btn-secondary btn-sm" :href="'#/live/' + guild.guild_id">Join Voice</a>
+                            <div
+                                class="menu-anchor"
+                                x-data="{ open: false }"
+                                @click.outside="open = false"
+                                @keydown.escape="open = false"
                             >
-                                Send Message
-                            </button>
-                            <button
-                                type="button"
-                                class="btn btn-secondary"
-                                @click="openBotProfileModal(guild.guild_id)"
-                            >
-                                Bot Profile
-                            </button>
+                                <button
+                                    type="button"
+                                    class="btn btn-icon"
+                                    aria-label="Guild actions"
+                                    aria-haspopup="menu"
+                                    :aria-expanded="open"
+                                    @click="open = !open"
+                                >
+                                    ⋯
+                                </button>
+                                <div class="strip-menu" role="menu" x-show="open" @click="open = false">
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        @click="openChannelMessageModal(guild.guild_id)"
+                                    >
+                                        Send Message
+                                    </button>
+                                    <button type="button" role="menuitem" @click="openBotProfileModal(guild.guild_id)">
+                                        Bot Profile
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </template>

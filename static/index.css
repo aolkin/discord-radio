@@ -270,6 +270,16 @@ a.guild-card:hover {
     cursor: not-allowed;
 }
 
+.menu-anchor {
+    position: relative;
+    display: inline-block;
+}
+
+.strip-menu.menu-start {
+    right: auto;
+    left: 0;
+}
+
 .guild-content {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -545,6 +555,7 @@ textarea.form-input {
 }
 
 .list-row {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
@@ -561,6 +572,12 @@ textarea.form-input {
 
 .list-row > .btn {
     align-self: flex-start;
+}
+
+.list-row > .btn-icon {
+    position: absolute;
+    top: var(--space-2);
+    right: var(--space-2);
 }
 
 .form-row {
@@ -610,10 +627,6 @@ textarea.form-input {
     align-items: center;
     gap: var(--space-3);
     flex-wrap: wrap;
-}
-
-.guild-list-row .button-group {
-    margin-top: 0;
 }
 
 .no-guilds {
@@ -782,6 +795,18 @@ textarea.form-input {
 
 .pool-grid-cell > * {
     flex: 1;
+}
+
+.pool-grid-cell > .btn-icon {
+    flex: none;
+}
+
+.disclosure > summary {
+    width: fit-content;
+    color: var(--color-primary);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    cursor: pointer;
 }
 
 .pool-grid-actions {
@@ -1189,8 +1214,7 @@ textarea.form-input {
         flex: 1 1 100%;
     }
 
-    .draft-bar-row .row-gap-10,
-    .guild-list-row .button-group {
+    .draft-bar-row .row-gap-10 {
         width: 100%;
     }
 
