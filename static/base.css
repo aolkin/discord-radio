@@ -263,6 +263,15 @@ h1 {
     color: var(--color-text);
 }
 
+.btn-text {
+    background: none;
+    color: var(--color-primary);
+}
+
+.btn-text:hover:not(:disabled) {
+    background: var(--color-primary-tint);
+}
+
 .segmented {
     display: inline-flex;
     gap: 2px;
