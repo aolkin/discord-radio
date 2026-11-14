@@ -1,6 +1,6 @@
 use crate::audio::dj::config::{DJConfig, Pool};
 use crate::audio::profiles::SignalProfile;
-use crate::web::routes::discord::{GuildsResponse, SendableChannelsResponse};
+use crate::web::routes::discord::{ChannelsResponse, GuildsResponse};
 use crate::web::routes::files::BrowseFilesResponse;
 use crate::web::state_snapshot::BotSnapshot;
 use serde::Serialize;
@@ -48,7 +48,8 @@ macro_rules! fixture {
 #[test]
 fn preview_fixtures_round_trip() {
     fixture!(GuildsResponse, "guilds.json");
-    fixture!(SendableChannelsResponse, "channels.json");
+    fixture!(ChannelsResponse, "channels.json");
+    fixture!(ChannelsResponse, "voice-channels.json");
     fixture!(BrowseFilesResponse, "files/tracks.json");
     fixture!(BotSnapshot, "snapshots/playing-track.json");
     fixture!(BotSnapshot, "snapshots/playing-hex.json");
