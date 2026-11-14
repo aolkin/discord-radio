@@ -96,7 +96,6 @@ pub fn hex_file_name(hex_char: char) -> String {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct HexFolderCheck {
     pub folder: String,
-    pub compliant: bool,
     pub missing_trailing_slash: bool,
     pub missing_files: Vec<String>,
 }
@@ -121,7 +120,6 @@ pub async fn check_audio_folder(
     };
     Ok(HexFolderCheck {
         folder: folder.to_string(),
-        compliant: !missing_trailing_slash && missing_files.is_empty(),
         missing_trailing_slash,
         missing_files,
     })

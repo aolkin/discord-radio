@@ -1,6 +1,5 @@
 {
   "folder": "audio/hex/",
-  "compliant": false,
   "missing_trailing_slash": false,
   "missing_files": ["hex_E.wav", "hex_F.wav"]
 }

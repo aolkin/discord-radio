@@ -328,10 +328,10 @@
             (_match, { query }) => {
                 const folder = query.get('folder') ?? store.hexFolderCheck.folder;
                 if (!folder.endsWith('/')) {
-                    return respond({ folder, compliant: false, missing_trailing_slash: true, missing_files: [] });
+                    return respond({ folder, missing_trailing_slash: true, missing_files: [] });
                 }
                 if (folder === 'audio/complete/') {
-                    return respond({ folder, compliant: true, missing_trailing_slash: false, missing_files: [] });
+                    return respond({ folder, missing_trailing_slash: false, missing_files: [] });
                 }
                 return respond({ ...store.hexFolderCheck, folder });
             },
