@@ -135,6 +135,14 @@ pub async fn run_web_server(bot_state: Data, port: u16) -> anyhow::Result<()> {
             "/api/guilds/{guild_id}/channels/{channel_id}/send",
             post(routes::discord::send_channel_message),
         )
+        .route(
+            "/api/guilds/{guild_id}/voice-channels",
+            get(routes::discord::get_voice_channels),
+        )
+        .route(
+            "/api/guilds/{guild_id}/voice-channels/{channel_id}/join",
+            post(routes::discord::join_voice_channel),
+        )
         .route("/ws", get(websocket::websocket_handler))
         .route_layer(middleware::from_fn(guild_span))
         .layer(cors)

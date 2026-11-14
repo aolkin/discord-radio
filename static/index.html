@@ -1365,6 +1365,11 @@
                             </div>
 
                             <div class="section">
+                                <div class="section-title">Voice Channel</div>
+                                <div x-include="#voice-channel-join"></div>
+                            </div>
+
+                            <div class="section">
                                 <div class="section-title">Audio Profile</div>
                                 <div class="info-item">
                                     <div class="grow">
@@ -2017,10 +2022,15 @@
                         </div>
                     </div>
                 </template>
-                <div class="no-guilds" x-show="!guilds.some((candidate) => candidate.guild_id === route.name)">
-                    <p>This guild has no radio running.</p>
-                    <a href="#/live" class="btn btn-secondary">Back to guilds</a>
-                </div>
+                <template x-if="!guilds.some((candidate) => candidate.guild_id === route.name)">
+                    <div class="no-guilds">
+                        <p>This guild has no radio running.</p>
+                        <div class="section">
+                            <div x-include="#voice-channel-join"></div>
+                        </div>
+                        <a href="#/live" class="btn btn-secondary">Back to guilds</a>
+                    </div>
+                </template>
             </div>
 
             <div class="guild-list" x-show="route.view === 'live' && !route.name && guildsWithoutRadio().length > 0">
@@ -2029,6 +2039,8 @@
                     <div class="guild-list-row">
                         <div class="guild-id" x-text="guild.name"></div>
                         <div class="button-group">
+                            <!-- biome-ignore lint/a11y/useValidAnchor: the href is set by :href -->
+                            <a class="btn btn-secondary" :href="'#/live/' + guild.guild_id">Join Voice</a>
                             <button
                                 type="button"
                                 class="btn btn-secondary"
@@ -2071,6 +2083,31 @@
             data-escape-unless="fileBrowser.open"
         >
             <div x-include="#bot-profile-fields"></div>
+        </template>
+
+        <template id="voice-channel-join">
+            <div
+                x-show="voiceChannelMessage.text"
+                :class="voiceChannelMessage.type === 'error' ? 'error-message' : 'success-message'"
+                x-text="voiceChannelMessage.text"
+            ></div>
+            <div class="loading" x-show="voiceChannelLoading">Loading...</div>
+            <form class="form-group" x-show="!voiceChannelLoading" @submit.prevent="joinVoiceChannel()">
+                <label class="form-label" for="voice-channel-select">Join a voice channel</label>
+                <select id="voice-channel-select" class="form-input" x-model="voiceChannelSelection">
+                    <option value="">Choose a voice channel</option>
+                    <template x-for="channel in voiceChannelOptions" :key="channel.channel_id">
+                        <option :value="channel.channel_id" x-text="channel.name"></option>
+                    </template>
+                </select>
+                <button
+                    type="submit"
+                    class="btn btn-primary mt-12 w-full"
+                    :disabled="voiceChannelSaving || !voiceChannelSelection"
+                >
+                    Join Channel
+                </button>
+            </form>
         </template>
 
         <template id="bot-profile-fields">

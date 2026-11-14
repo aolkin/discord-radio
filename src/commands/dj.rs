@@ -1,11 +1,9 @@
-use crate::audio::connection::connect_voice_channel;
 use crate::audio::dj::manager::{
     ChannelStatusRequest, DJCommand, HexMessageRequest, IdleRequest, SignalProfileRequest,
     ensure_pool,
 };
 use crate::audio::dj::state_machine::ChannelStatus;
 use crate::audio::dj::tiered::ConfigurableTier;
-use crate::audio::processing::processor::ProcessorRef;
 use crate::commands::utils;
 use crate::commands::utils::{Context, require_guild};
 use anyhow::{Context as _, bail};
@@ -49,15 +47,10 @@ pub async fn join(
         return Ok(());
     }
 
-    join_voice_channel_helper(ctx, guild_id, channel)
+    ctx.data()
+        .join_voice_channel(guild_id, channel)
         .await
         .context("Failed to join the voice channel")?;
-
-    let _ = ctx
-        .data()
-        .state_store
-        .save_voice_channel(guild_id, channel)
-        .await;
 
     ctx.say(format!("Joined voice channel <#{}>", channel))
         .await?;
@@ -253,26 +246,6 @@ async fn autocomplete_audio_file(ctx: Context<'_>, partial: &'_ str) -> CreateAu
     results.sort();
     results.truncate(25);
     autocomplete_response(results)
-}
-
-async fn join_voice_channel_helper(
-    ctx: Context<'_>,
-    guild_id: GuildId,
-    channel_id: ChannelId,
-) -> anyhow::Result<ProcessorRef> {
-    let manager = songbird::get(ctx.serenity_context())
-        .await
-        .expect("Songbird Voice client placed in at initialisation.")
-        .clone();
-
-    let processor = connect_voice_channel(&manager, guild_id, channel_id, ctx.data()).await?;
-    tracing::info!("Joined voice channel");
-    ctx.data()
-        .dj_manager(guild_id)
-        .start()
-        .await
-        .map_err(|e| e.context("Failed to start DJ"))?;
-    Ok(processor)
 }
 
 async fn autocomplete_pool(ctx: Context<'_>, partial: &'_ str) -> CreateAutocompleteResponse {

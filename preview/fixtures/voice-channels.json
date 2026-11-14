@@ -1,0 +1,6 @@
+{
+  "channels": [
+    { "channel_id": "300000000000000001", "name": "Lounge" },
+    { "channel_id": "300000000000000002", "name": "Radio Booth" }
+  ]
+}
