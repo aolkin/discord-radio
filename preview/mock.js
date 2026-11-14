@@ -326,12 +326,10 @@
             'GET',
             /^\/api\/hex-audio-folder$/,
             (_match, { query }) => {
-                const folder = query.get('folder') ?? store.hexFolderCheck.folder;
-                if (!folder.endsWith('/')) {
-                    return respond({ folder, missing_trailing_slash: true, missing_files: [] });
-                }
+                const requested = query.get('folder') ?? store.hexFolderCheck.folder;
+                const folder = requested.endsWith('/') ? requested : `${requested}/`;
                 if (folder === 'audio/complete/') {
-                    return respond({ folder, missing_trailing_slash: false, missing_files: [] });
+                    return respond({ folder, missing_files: [] });
                 }
                 return respond({ ...store.hexFolderCheck, folder });
             },

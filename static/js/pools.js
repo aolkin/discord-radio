@@ -123,10 +123,7 @@ const hexFolderDebounceMs = 400;
 const usesHex = (form) =>
     form.segment_defaults.hex_config !== null || form.entries.some((entry) => entry.kind === 'hex');
 
-function hexFolderWarning({ folder, missing_trailing_slash: missingSlash, missing_files: missingFiles }) {
-    if (missingSlash) {
-        return `Hex audio folder "${folder}" must end with "/".`;
-    }
+function hexFolderWarning({ folder, missing_files: missingFiles }) {
     return missingFiles.length > 0 ? `Hex audio folder "${folder}" is missing ${missingFiles.join(', ')}.` : '';
 }
 

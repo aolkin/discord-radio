@@ -29,7 +29,11 @@ pub struct HexMessageDefaults {
     pub loop_min: u32,
     #[serde(default = "default_loops")]
     pub loop_max: u32,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_audio_folder"
+    )]
     pub hex_audio_folder: Option<String>,
 }
 
@@ -49,10 +53,7 @@ fn default_loops() -> u32 {
 
 impl HexMessageDefaults {
     pub fn validate(&self) -> anyhow::Result<()> {
-        ensure_loops(self.loop_min, self.loop_max)?;
-        self.hex_audio_folder
-            .as_deref()
-            .map_or(Ok(()), ensure_audio_folder)
+        ensure_loops(self.loop_min, self.loop_max)
     }
 
     pub fn pick_loops(&self, loop_min: Option<u32>, loop_max: Option<u32>) -> u32 {
@@ -78,11 +79,18 @@ impl Weighted for HexMessageEntry {
     }
 }
 
-pub fn ensure_audio_folder(folder: &str) -> anyhow::Result<()> {
-    if !folder.ends_with('/') {
-        bail!("hex audio folder must end with '/'");
+pub fn normalize_audio_folder(folder: &str) -> String {
+    if folder.ends_with('/') {
+        folder.to_string()
+    } else {
+        format!("{folder}/")
     }
-    Ok(())
+}
+
+fn deserialize_audio_folder<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<String>, D::Error> {
+    Ok(Option::<String>::deserialize(deserializer)?.map(|folder| normalize_audio_folder(&folder)))
 }
 
 pub const HEX_CHARS: [char; 16] = [
@@ -96,7 +104,6 @@ pub fn hex_file_name(hex_char: char) -> String {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct HexFolderCheck {
     pub folder: String,
-    pub missing_trailing_slash: bool,
     pub missing_files: Vec<String>,
 }
 
@@ -104,23 +111,18 @@ pub async fn check_audio_folder(
     file_resolver: &FileResolver,
     folder: &str,
 ) -> anyhow::Result<HexFolderCheck> {
-    let missing_trailing_slash = ensure_audio_folder(folder).is_err();
-    let missing_files = if missing_trailing_slash {
-        Vec::new()
-    } else {
-        let present = file_resolver
-            .folder_file_names(folder)
-            .await
-            .with_context(|| format!("listing hex audio folder {folder:?}"))?;
-        HEX_CHARS
-            .into_iter()
-            .map(hex_file_name)
-            .filter(|name| !present.contains(name))
-            .collect()
-    };
+    let folder = normalize_audio_folder(folder);
+    let present = file_resolver
+        .folder_file_names(&folder)
+        .await
+        .with_context(|| format!("listing hex audio folder {folder:?}"))?;
+    let missing_files = HEX_CHARS
+        .into_iter()
+        .map(hex_file_name)
+        .filter(|name| !present.contains(name))
+        .collect();
     Ok(HexFolderCheck {
-        folder: folder.to_string(),
-        missing_trailing_slash,
+        folder,
         missing_files,
     })
 }

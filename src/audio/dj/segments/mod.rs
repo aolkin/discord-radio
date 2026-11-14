@@ -5,7 +5,7 @@ mod track;
 
 pub use hex::{
     HexFolderCheck, HexMessageDefaults, HexMessageEntry, HexSegment, check_audio_folder,
-    ensure_audio_folder, ensure_loops,
+    ensure_loops, normalize_audio_folder,
 };
 pub use noise::{NoiseEntry, NoiseSegment};
 pub use track::{TrackEntry, TrackSegment};
