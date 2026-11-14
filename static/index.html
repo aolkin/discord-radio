@@ -2345,6 +2345,16 @@
                             :checked="fileBrowser.picked.includes(file.key)"
                             @change="toggleFileBrowserPicked(file.key)"
                         >
+                        <button
+                            type="button"
+                            class="file-browser-delete"
+                            title="Delete file"
+                            :aria-label="'Delete ' + file.key"
+                            :disabled="fileBrowser.deleting"
+                            @click="deleteFileBrowserFile(file.key)"
+                        >
+                            🗑
+                        </button>
                     </div>
                 </template>
                 <div class="empty-state" x-show="fileBrowser.folders.length === 0 && fileBrowser.files.length === 0">

@@ -60,6 +60,8 @@ pub(crate) trait ObjectBackend: Send + Sync {
     async fn list_dir(&self, prefix: &str) -> anyhow::Result<DirListing>;
 
     async fn upload(&self, key: &str, bytes: &[u8], content_type: &str) -> anyhow::Result<()>;
+
+    async fn delete(&self, key: &str) -> anyhow::Result<()>;
 }
 
 #[async_trait]
@@ -169,6 +171,29 @@ impl ObjectBackend for s3::Bucket {
         let status = response.status_code();
         if !(200..300).contains(&status) {
             bail!("unexpected status {status} uploading {key}");
+        }
+        Ok(())
+    }
+
+    async fn delete(&self, key: &str) -> anyhow::Result<()> {
+        let (_, status) = self
+            .head_object(key)
+            .await
+            .with_context(|| format!("checking {key}"))?;
+        if status == 404 {
+            return Err(NotFound.into());
+        }
+        if !(200..300).contains(&status) {
+            bail!("unexpected status {status} checking {key}");
+        }
+
+        let response = self
+            .delete_object(key)
+            .await
+            .with_context(|| format!("deleting {key}"))?;
+        let status = response.status_code();
+        if !(200..300).contains(&status) {
+            bail!("unexpected status {status} deleting {key}");
         }
         Ok(())
     }
@@ -331,6 +356,20 @@ impl Bucket {
         // fresh copy into place.
         self.present.invalidate(key).await;
         self.remote_listings.invalidate_all();
+        Ok(())
+    }
+
+    pub async fn delete(&self, key: &str) -> anyhow::Result<()> {
+        let _guard = self.locks.lock(key).await;
+        self.backend.delete(key).await?;
+        self.present.invalidate(key).await;
+        self.remote_listings.invalidate_all();
+        let cached = self.cached_path(key);
+        if let Err(e) = tokio::fs::remove_file(&cached).await
+            && e.kind() != std::io::ErrorKind::NotFound
+        {
+            tracing::warn!("Failed to remove cached copy {cached:?}: {e}");
+        }
         Ok(())
     }
 
