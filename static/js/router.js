@@ -64,6 +64,11 @@ export function router() {
 
         initRouter() {
             window.addEventListener('hashchange', () => this.followHash());
+            window.addEventListener('beforeunload', (event) => {
+                if (this.hasUnsavedDrafts()) {
+                    event.preventDefault();
+                }
+            });
             this.followHash();
         },
 

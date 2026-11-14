@@ -162,6 +162,12 @@ export function drafts() {
             };
         },
 
+        hasUnsavedDrafts() {
+            return Object.entries(this.drafts).some(([kind, byKey]) =>
+                Object.keys(byKey).some((key) => this.changeCount(kind, key) > 0),
+            );
+        },
+
         changeCount(kind, key) {
             const draft = this.drafts[kind][key];
             return draft ? diff(draft.saved, draft.form).length : 0;
