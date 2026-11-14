@@ -86,7 +86,7 @@ impl FileResolver {
         filenames
     }
 
-    pub async fn folder_file_names(&self, folder: &str) -> anyhow::Result<HashSet<String>> {
+    pub async fn list_files(&self, folder: &str) -> anyhow::Result<HashSet<String>> {
         if let Some(prefix) = folder.strip_prefix("s3://") {
             let listing = self.bucket()?.list_dir(prefix).await?;
             return Ok(listing

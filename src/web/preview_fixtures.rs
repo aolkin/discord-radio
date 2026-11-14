@@ -1,8 +1,8 @@
 use crate::audio::dj::config::{DJConfig, Pool};
-use crate::audio::dj::segments::HexFolderCheck;
 use crate::audio::profiles::SignalProfile;
 use crate::web::routes::discord::{ChannelsResponse, GuildsResponse};
 use crate::web::routes::files::BrowseFilesResponse;
+use crate::web::routes::hex_folder::HexFolderResponse;
 use crate::web::state_snapshot::BotSnapshot;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -52,7 +52,7 @@ fn preview_fixtures_round_trip() {
     fixture!(ChannelsResponse, "channels.json");
     fixture!(ChannelsResponse, "voice-channels.json");
     fixture!(BrowseFilesResponse, "files/tracks.json");
-    fixture!(HexFolderCheck, "hex-audio-folder.json");
+    fixture!(HexFolderResponse, "hex-audio-folder.json");
     fixture!(BotSnapshot, "snapshots/playing-track.json");
     fixture!(BotSnapshot, "snapshots/playing-hex.json");
     fixture!(BotSnapshot, "snapshots/playing-noise.json");

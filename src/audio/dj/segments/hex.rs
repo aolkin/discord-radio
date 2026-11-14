@@ -101,30 +101,19 @@ pub fn hex_file_name(hex_char: char) -> String {
     format!("hex_{hex_char}.wav")
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct HexFolderCheck {
-    pub folder: String,
-    pub missing_files: Vec<String>,
-}
-
-pub async fn check_audio_folder(
+pub async fn list_missing_hex_files(
     file_resolver: &FileResolver,
     folder: &str,
-) -> anyhow::Result<HexFolderCheck> {
-    let folder = normalize_audio_folder(folder);
+) -> anyhow::Result<Vec<String>> {
     let present = file_resolver
-        .folder_file_names(&folder)
+        .list_files(folder)
         .await
         .with_context(|| format!("listing hex audio folder {folder:?}"))?;
-    let missing_files = HEX_CHARS
+    Ok(HEX_CHARS
         .into_iter()
         .map(hex_file_name)
         .filter(|name| !present.contains(name))
-        .collect();
-    Ok(HexFolderCheck {
-        folder,
-        missing_files,
-    })
+        .collect())
 }
 
 pub fn ensure_loops(min: u32, max: u32) -> anyhow::Result<()> {
