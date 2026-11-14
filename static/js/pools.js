@@ -1,3 +1,4 @@
+import { apiRequest, bodyOrStatus } from './api.js';
 import {
     blankRow,
     blankSegmentDefaults,
@@ -117,10 +118,24 @@ const poolEditor = registryEditor({
     formErrors,
 });
 
+const hexFolderDebounceMs = 400;
+
+const usesHex = (form) =>
+    form.segment_defaults.hex_config !== null || form.entries.some((entry) => entry.kind === 'hex');
+
+function hexFolderWarning({ folder, missing_files: missingFiles }) {
+    return missingFiles.length > 0 ? `Hex audio folder "${folder}" is missing ${missingFiles.join(', ')}.` : '';
+}
+
 export function pools() {
+    let hexFolderKey = null;
+    let hexFolderName = null;
+    let hexFolderTimer;
+
     return {
         ...poolEditor.state(),
         ...poolEditor.methods,
+        poolHexFolderWarning: '',
         poolMode: 'properties',
         poolExpanded: {},
         poolSelected: [],
@@ -134,6 +149,41 @@ export function pools() {
 
         togglePoolHexConfig() {
             toggleHexConfig(this.poolForm.segment_defaults);
+        },
+
+        watchPoolHexFolder() {
+            const active = this.route.view === 'edit' && this.route.kind === 'pools' && usesHex(this.poolForm);
+            const folder = active ? (this.poolForm.segment_defaults.hex_config?.hex_audio_folder ?? '').trim() : '';
+            const key = active ? `${this.route.name}\n${folder}` : null;
+            if (key === hexFolderKey) {
+                return;
+            }
+            const opened = hexFolderName !== this.route.name;
+            hexFolderKey = key;
+            hexFolderName = this.route.name;
+            clearTimeout(hexFolderTimer);
+            if (key === null) {
+                this.poolHexFolderWarning = '';
+                return;
+            }
+            hexFolderTimer = setTimeout(
+                async () => {
+                    let warning;
+                    try {
+                        const query = folder === '' ? '' : `?folder=${encodeURIComponent(folder)}`;
+                        const response = await apiRequest(`/api/hex-audio-folder${query}`, {
+                            errorMessage: bodyOrStatus,
+                        });
+                        warning = hexFolderWarning(await response.json());
+                    } catch (error) {
+                        warning = `Could not check the hex audio folder: ${error.message}`;
+                    }
+                    if (key === hexFolderKey) {
+                        this.poolHexFolderWarning = warning;
+                    }
+                },
+                opened ? 0 : hexFolderDebounceMs,
+            );
         },
 
         poolDefaultBlocks() {

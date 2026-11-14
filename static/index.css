@@ -1079,6 +1079,10 @@ textarea.form-input {
     font-size: var(--font-size-sm);
 }
 
+.hint-warning {
+    color: var(--color-warning);
+}
+
 .row-gap-10 {
     display: flex;
     flex-wrap: wrap;

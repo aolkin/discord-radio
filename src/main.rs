@@ -225,10 +225,9 @@ async fn main() -> anyhow::Result<()> {
     let dj_config_manager =
         DJConfigRegistry::from_storage(dj_configs_path, pools_path, file_resolver.clone()).await;
 
-    let hex_audio_folder =
-        std::env::var("HEX_AUDIO_FOLDER").unwrap_or_else(|_| "audio/hex/".to_string());
-    audio::dj::segments::ensure_audio_folder(&hex_audio_folder)
-        .context("Invalid HEX_AUDIO_FOLDER")?;
+    let hex_audio_folder = bucket::with_trailing_slash(
+        &std::env::var("HEX_AUDIO_FOLDER").unwrap_or_else(|_| "audio/hex/".to_string()),
+    );
     tracing::info!("Using hex audio folder: {}", hex_audio_folder);
 
     let songbird = songbird::Songbird::serenity();

@@ -1,5 +1,6 @@
 use crate::bucket::Bucket;
 use anyhow::Context;
+use std::collections::HashSet;
 
 /// Marks a failure as caused by no object storage bucket being configured.
 #[derive(Debug, thiserror::Error)]
@@ -83,6 +84,34 @@ impl FileResolver {
             );
         }
         filenames
+    }
+
+    pub async fn list_files(&self, folder: &str) -> anyhow::Result<HashSet<String>> {
+        if let Some(prefix) = folder.strip_prefix("s3://") {
+            let listing = self.bucket()?.list_dir(prefix).await?;
+            return Ok(listing
+                .files
+                .into_iter()
+                .filter_map(|file| file.key.strip_prefix(prefix).map(str::to_owned))
+                .collect());
+        }
+        let path = format!("{}/{folder}", self.content_path);
+        let mut entries = match tokio::fs::read_dir(&path).await {
+            Ok(entries) => entries,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(HashSet::new()),
+            Err(e) => return Err(e).with_context(|| format!("reading {path}")),
+        };
+        let mut names = HashSet::new();
+        while let Some(entry) = entries
+            .next_entry()
+            .await
+            .with_context(|| format!("reading {path}"))?
+        {
+            if let Some(name) = entry.file_name().to_str() {
+                names.insert(name.to_owned());
+            }
+        }
+        Ok(names)
     }
 
     pub async fn resolve_contents(&self, filename: &str) -> anyhow::Result<Vec<u8>> {

@@ -50,7 +50,7 @@ sudo apt update && sudo apt install -y cmake libopus-dev pkg-config
 ./target/release/radio-bot <content_path>
 ```
 
-Where `<content_path>` is the path to the directory containing bot content (e.g. hex message audio files). Hex audio files are named `hex_<char>.wav` for `0`-`9` and uppercase `A`-`F`, and are resolved from the folder named by the `HEX_AUDIO_FOLDER` environment variable (default `audio/hex/`, must end with `/`; a value such as `s3://hex/` loads them from object storage). A hex config in a pool can set `hex_audio_folder` to use another folder. A missing file is skipped with a warning.
+Where `<content_path>` is the path to the directory containing bot content (e.g. hex message audio files). Hex audio files are named `hex_<char>.wav` for `0`-`9` and uppercase `A`-`F`, and are resolved from the folder named by the `HEX_AUDIO_FOLDER` environment variable (default `audio/hex/`; a trailing `/` is added when missing; a value such as `s3://hex/` loads them from object storage). A hex config in a pool can set `hex_audio_folder` to use another folder. A missing file is skipped with a warning.
 
 To check the build version:
 
@@ -102,6 +102,8 @@ The portal provides:
 Signal profiles (`/api/profiles`), DJ configs (`/api/dj-configs`) and pools (`/api/pools`) each accept `PUT /{name}` to create or replace a file and `POST /{name}` to create a new one. `POST` takes the same body as `PUT` and returns 409 when the name already exists.
 
 `DELETE /api/files?key=tracks/name.ogg` removes one file from object storage (the portal file browser has a delete action per file). It returns 409, listing the pools and DJ configs that reference the file, and 404 when the file does not exist.
+
+`GET /api/hex-audio-folder` checks a hex audio folder the way playback resolves it and reports whether it ends with `/` and which `hex_<char>.wav` files are missing. The optional `folder` parameter names the folder to check; without it, the check covers `HEX_AUDIO_FOLDER`.
 
 ## Commands
 
