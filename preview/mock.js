@@ -289,6 +289,38 @@
         ],
         ['GET', /^\/api\/files$/, (_match, { query }) => respond(listFiles(query.get('prefix') ?? ''))],
         [
+            'DELETE',
+            /^\/api\/files$/,
+            (_match, { query }) => {
+                const key = query.get('key') ?? '';
+                const folderUsed = (defaults) => {
+                    const folder = defaults?.hex_config?.hex_audio_folder;
+                    return folder?.startsWith('s3://') && key.startsWith(folder.slice('s3://'.length));
+                };
+                const references = [
+                    ...Object.values(store.registries.pools)
+                        .filter(
+                            (pool) =>
+                                folderUsed(pool.segment_defaults) ||
+                                pool.entries.some((entry) => entry.filename === `s3://${key}`),
+                        )
+                        .map((pool) => `pool "${pool.name}"`),
+                    ...Object.values(store.registries['dj-configs'])
+                        .filter((config) =>
+                            Object.values(config.pools).some((pool) => folderUsed(pool.segment_defaults)),
+                        )
+                        .map((config) => `DJ config "${config.name}"`),
+                ];
+                if (references.length > 0) {
+                    return fail(409, `${key} is still used by: ${references.join(', ')}`);
+                }
+                if (!store.files.delete(key)) {
+                    return fail(404, 'object not found');
+                }
+                return new Response(null, { status: 204 });
+            },
+        ],
+        [
             'POST',
             /^\/api\/files\/folders$/,
             (_match, { body }) => {

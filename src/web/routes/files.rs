@@ -151,6 +151,45 @@ pub async fn upload_file(
 }
 
 #[derive(Debug, Deserialize)]
+pub struct DeleteFileParams {
+    pub key: String,
+}
+
+pub async fn delete_file(
+    State(bot_state): State<Data>,
+    Query(params): Query<DeleteFileParams>,
+) -> Result<StatusCode, ApiError> {
+    let key = params.key;
+    let in_root = upload_root(&format!("{key}/")).is_some_and(|root| key.len() > root.len());
+    if !in_root {
+        return Err(ApiError::bad_request(format!(
+            "Invalid key {key:?}; it must be a file under {AUDIO_ROOT} or {IMAGE_ROOT}"
+        )));
+    }
+
+    let references = bot_state.dj_config_manager.files_referencing(&key);
+    if !references.is_empty() {
+        let names = references
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+        return Err(ApiError::conflict(format!(
+            "{key} is still used by: {names}"
+        )));
+    }
+
+    bot_state
+        .file_resolver
+        .bucket()
+        .map_err(ApiError::object_store)?
+        .delete(&key)
+        .await
+        .map_err(ApiError::object_store)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Debug, Deserialize)]
 pub struct CreateFolderRequest {
     pub prefix: String,
     pub name: String,

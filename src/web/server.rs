@@ -107,7 +107,10 @@ pub async fn run_web_server(bot_state: Data, port: u16) -> anyhow::Result<()> {
         .merge(registries::routes::<SignalProfile>())
         .merge(registries::routes::<DJConfig>())
         .merge(registries::routes::<Pool>())
-        .route("/api/files", get(routes::files::browse_files))
+        .route(
+            "/api/files",
+            get(routes::files::browse_files).delete(routes::files::delete_file),
+        )
         .route(
             "/api/files/upload",
             post(routes::files::upload_file)

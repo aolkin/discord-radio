@@ -58,6 +58,10 @@ impl ObjectBackend for StubBackend {
     async fn upload(&self, _key: &str, _bytes: &[u8], _content_type: &str) -> anyhow::Result<()> {
         Ok(())
     }
+
+    async fn delete(&self, _key: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
 
 struct FailingBackend;
@@ -79,6 +83,10 @@ impl ObjectBackend for FailingBackend {
     async fn upload(&self, key: &str, _bytes: &[u8], _content_type: &str) -> anyhow::Result<()> {
         Err(anyhow::anyhow!("upload failed: {key}"))
     }
+
+    async fn delete(&self, key: &str) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!("delete failed: {key}"))
+    }
 }
 
 struct NotFoundBackend;
@@ -98,6 +106,10 @@ impl ObjectBackend for NotFoundBackend {
     }
 
     async fn upload(&self, _key: &str, _bytes: &[u8], _content_type: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn delete(&self, _key: &str) -> anyhow::Result<()> {
         Ok(())
     }
 }

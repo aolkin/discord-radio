@@ -25,6 +25,7 @@ export function fileBrowser() {
             message: emptyMessage(),
             newFolderName: '',
             creatingFolder: false,
+            deleting: false,
             dragging: false,
             uploads: [],
             picked: [],
@@ -131,6 +132,27 @@ export function fileBrowser() {
                 this.fileBrowser.message = { text: `Failed to create folder: ${error.message}`, type: 'error' };
             } finally {
                 this.fileBrowser.creatingFolder = false;
+            }
+        },
+
+        async deleteFileBrowserFile(key) {
+            if (!confirm(`Delete ${key}?`)) {
+                return;
+            }
+            this.fileBrowser.deleting = true;
+            this.fileBrowser.message = emptyMessage();
+            try {
+                await apiRequest(`/api/files?key=${encodeURIComponent(key)}`, {
+                    method: 'DELETE',
+                    errorMessage: bodyOrStatus,
+                });
+                this.fileBrowser.picked = this.fileBrowser.picked.filter((item) => item !== key);
+                await this.loadFileBrowser(this.fileBrowser.prefix);
+            } catch (error) {
+                console.error('Failed to delete file:', error);
+                this.fileBrowser.message = { text: `Failed to delete file: ${error.message}`, type: 'error' };
+            } finally {
+                this.fileBrowser.deleting = false;
             }
         },
 

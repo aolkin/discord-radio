@@ -1,4 +1,6 @@
-use crate::audio::dj::config::{ConfiguredPool, DJConfig, LoadedConfig, Pool};
+use crate::audio::dj::config::{
+    ConfiguredPool, DJConfig, LoadedConfig, Pool, PoolEntry, SegmentDefaults,
+};
 use crate::audio::dj::manager::DEFAULT_DJ_CONFIG;
 use crate::bucket::FileResolver;
 use crate::bucket::registry::JsonRegistry;
@@ -123,5 +125,55 @@ impl DJConfigRegistry {
             .collect::<anyhow::Result<_>>()
             .with_context(|| format!("DJ config {name:?}"))?;
         Ok(LoadedConfig { config, pools })
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct FileReference {
+    pub kind: &'static str,
+    pub name: String,
+}
+
+impl std::fmt::Display for FileReference {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} {:?}", self.kind, self.name)
+    }
+}
+
+impl DJConfigRegistry {
+    pub fn files_referencing(&self, key: &str) -> Vec<FileReference> {
+        let uses_folder = |defaults: &SegmentDefaults| {
+            defaults
+                .hex_config
+                .as_ref()
+                .and_then(|hex| hex.hex_audio_folder.as_deref())
+                .and_then(|folder| folder.strip_prefix("s3://"))
+                .is_some_and(|folder| key.starts_with(folder))
+        };
+
+        let pools = self.pools.list().into_iter().filter_map(|name| {
+            let pool = self.pools.get(&name)?;
+            let references = uses_folder(&pool.segment_defaults)
+                || pool.entries.iter().any(|entry| {
+                    matches!(entry, PoolEntry::Track(track)
+                        if track.filename.strip_prefix("s3://") == Some(key))
+                });
+            references.then_some(FileReference { kind: "pool", name })
+        });
+        let configs = self.configs.list().into_iter().filter_map(|name| {
+            let config = self.configs.get(&name)?;
+            config
+                .pools
+                .values()
+                .any(|pool| uses_folder(&pool.segment_defaults))
+                .then_some(FileReference {
+                    kind: "DJ config",
+                    name,
+                })
+        });
+
+        let mut references: Vec<_> = pools.chain(configs).collect();
+        references.sort_by(|a, b| (a.kind, &a.name).cmp(&(b.kind, &b.name)));
+        references
     }
 }

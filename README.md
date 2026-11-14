@@ -101,6 +101,8 @@ The portal provides:
 
 Signal profiles (`/api/profiles`), DJ configs (`/api/dj-configs`) and pools (`/api/pools`) each accept `PUT /{name}` to create or replace a file and `POST /{name}` to create a new one. `POST` takes the same body as `PUT` and returns 409 when the name already exists.
 
+`DELETE /api/files?key=tracks/name.ogg` removes one file from object storage (the portal file browser has a delete action per file). It returns 409, listing the pools and DJ configs that reference the file, and 404 when the file does not exist.
+
 ## Commands
 
 ### DJ Commands
