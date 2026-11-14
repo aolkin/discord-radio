@@ -9,7 +9,7 @@ use crate::audio::processing::mixer::{TrackCallback, TrackCommand};
 use crate::audio::processing::processor::AudioProcessor;
 use crate::audio::tracks::open_track_source;
 use crate::bucket::FileResolver;
-use anyhow::bail;
+use anyhow::{Context, bail};
 use async_trait::async_trait;
 use field_trait::field_trait_impl;
 use rand::RngExt;
@@ -83,6 +83,48 @@ pub fn ensure_audio_folder(folder: &str) -> anyhow::Result<()> {
         bail!("hex audio folder must end with '/'");
     }
     Ok(())
+}
+
+pub const HEX_CHARS: [char; 16] = [
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F',
+];
+
+pub fn hex_file_name(hex_char: char) -> String {
+    format!("hex_{hex_char}.wav")
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct HexFolderCheck {
+    pub folder: String,
+    pub compliant: bool,
+    pub missing_trailing_slash: bool,
+    pub missing_files: Vec<String>,
+}
+
+pub async fn check_audio_folder(
+    file_resolver: &FileResolver,
+    folder: &str,
+) -> anyhow::Result<HexFolderCheck> {
+    let missing_trailing_slash = ensure_audio_folder(folder).is_err();
+    let missing_files = if missing_trailing_slash {
+        Vec::new()
+    } else {
+        let present = file_resolver
+            .folder_file_names(folder)
+            .await
+            .with_context(|| format!("listing hex audio folder {folder:?}"))?;
+        HEX_CHARS
+            .into_iter()
+            .map(hex_file_name)
+            .filter(|name| !present.contains(name))
+            .collect()
+    };
+    Ok(HexFolderCheck {
+        folder: folder.to_string(),
+        compliant: !missing_trailing_slash && missing_files.is_empty(),
+        missing_trailing_slash,
+        missing_files,
+    })
 }
 
 pub fn ensure_loops(min: u32, max: u32) -> anyhow::Result<()> {
@@ -285,7 +327,7 @@ async fn run_hex_message(
     let hex_chars = message_to_hex_sequence(&message);
     while !hex_chars.is_empty() && progress.loops.load(Ordering::Relaxed) < target_loops {
         let position = progress.position.load(Ordering::Relaxed);
-        let filename = format!("{audio_folder}hex_{}.wav", hex_chars[position]);
+        let filename = format!("{audio_folder}{}", hex_file_name(hex_chars[position]));
         match file_resolver.resolve(&filename).await {
             Ok(path) if Path::new(&path).exists() => {
                 let source = match open_track_source(&path, None) {

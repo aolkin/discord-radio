@@ -3,7 +3,10 @@ mod noise;
 mod signals;
 mod track;
 
-pub use hex::{HexMessageDefaults, HexMessageEntry, HexSegment, ensure_audio_folder, ensure_loops};
+pub use hex::{
+    HexFolderCheck, HexMessageDefaults, HexMessageEntry, HexSegment, check_audio_folder,
+    ensure_audio_folder, ensure_loops,
+};
 pub use noise::{NoiseEntry, NoiseSegment};
 pub use track::{TrackEntry, TrackSegment};
 

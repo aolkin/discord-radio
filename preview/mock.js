@@ -23,13 +23,14 @@
     const loadJson = async (path) => (await realFetch(`${fixtureBase}/${path}`)).json();
 
     const ready = (async () => {
-        const [guilds, channels, voiceChannels, botProfile, listing, memberLogs, djLogs, ...snapshots] =
+        const [guilds, channels, voiceChannels, botProfile, listing, hexFolderCheck, memberLogs, djLogs, ...snapshots] =
             await Promise.all([
                 loadJson('guilds.json'),
                 loadJson('channels.json'),
                 loadJson('voice-channels.json'),
                 loadJson('bot-profile.json'),
                 loadJson('files/tracks.json'),
+                loadJson('hex-audio-folder.json'),
                 loadJson('logs/members.json'),
                 loadJson('logs/dj.json'),
                 ...modes.map((mode) => loadJson(`snapshots/playing-${mode}.json`)),
@@ -38,6 +39,7 @@
         store.guilds = guilds;
         store.channels = channels;
         store.voiceChannels = voiceChannels;
+        store.hexFolderCheck = hexFolderCheck;
         store.logs = { members: memberLogs, dj: djLogs };
         for (const guild of guilds.guilds) {
             store.botProfiles[guild.guild_id] = { ...botProfile };
@@ -318,6 +320,20 @@
                     return fail(404, 'object not found');
                 }
                 return new Response(null, { status: 204 });
+            },
+        ],
+        [
+            'GET',
+            /^\/api\/hex-audio-folder$/,
+            (_match, { query }) => {
+                const folder = query.get('folder') ?? store.hexFolderCheck.folder;
+                if (!folder.endsWith('/')) {
+                    return respond({ folder, compliant: false, missing_trailing_slash: true, missing_files: [] });
+                }
+                if (folder === 'audio/complete/') {
+                    return respond({ folder, compliant: true, missing_trailing_slash: false, missing_files: [] });
+                }
+                return respond({ ...store.hexFolderCheck, folder });
             },
         ],
         [

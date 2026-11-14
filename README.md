@@ -103,6 +103,8 @@ Signal profiles (`/api/profiles`), DJ configs (`/api/dj-configs`) and pools (`/a
 
 `DELETE /api/files?key=tracks/name.ogg` removes one file from object storage (the portal file browser has a delete action per file). It returns 409, listing the pools and DJ configs that reference the file, and 404 when the file does not exist.
 
+`GET /api/hex-audio-folder` checks a hex audio folder the way playback resolves it and reports whether it ends with `/` and which `hex_<char>.wav` files are missing. The optional `folder` parameter names the folder to check; without it, the check covers `HEX_AUDIO_FOLDER`.
+
 ## Commands
 
 ### DJ Commands

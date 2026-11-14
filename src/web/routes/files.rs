@@ -21,12 +21,13 @@ fn upload_root(prefix: &str) -> Option<&'static str> {
     let root = [AUDIO_ROOT, IMAGE_ROOT]
         .into_iter()
         .find(|root| prefix.starts_with(root))?;
-    let valid = prefix.ends_with('/')
-        && prefix
-            .trim_end_matches('/')
-            .split('/')
-            .all(|segment| !segment.is_empty() && segment != "..");
-    valid.then_some(root)
+    (prefix.ends_with('/') && is_plain_path(prefix)).then_some(root)
+}
+
+pub fn is_plain_path(path: &str) -> bool {
+    path.trim_end_matches('/')
+        .split('/')
+        .all(|segment| !segment.is_empty() && segment != "..")
 }
 
 fn invalid_prefix(prefix: &str) -> ApiError {

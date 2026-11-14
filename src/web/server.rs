@@ -112,6 +112,10 @@ pub async fn run_web_server(bot_state: Data, port: u16) -> anyhow::Result<()> {
             get(routes::files::browse_files).delete(routes::files::delete_file),
         )
         .route(
+            "/api/hex-audio-folder",
+            get(routes::hex_folder::check_hex_folder),
+        )
+        .route(
             "/api/files/upload",
             post(routes::files::upload_file)
                 .layer(DefaultBodyLimit::max(routes::files::MAX_UPLOAD_BYTES)),
