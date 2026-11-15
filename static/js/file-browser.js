@@ -184,6 +184,9 @@ export function fileBrowser() {
                         upload.progress = percent;
                     });
                     upload.status = 'done';
+                    if (this.fileBrowser.open && this.fileBrowser.mode === 'files') {
+                        this.fileBrowser.picked = [...this.fileBrowser.picked, upload.detail];
+                    }
                     uploaded = true;
                 } catch (error) {
                     console.error('Failed to upload file:', error);
