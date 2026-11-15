@@ -442,7 +442,15 @@
                             <div class="modal-section">
                                 <div class="modal-section-title">Pools</div>
                                 <div class="pool-grid-scroll" x-scroll-fade>
-                                    <table class="pool-grid">
+                                    <table class="pool-grid pool-grid-config">
+                                        <colgroup>
+                                            <col class="pool-grid-col-pool">
+                                            <col class="pool-grid-col-mode">
+                                            <col class="pool-grid-col-mode">
+                                            <col>
+                                            <col class="pool-grid-col-share">
+                                            <col class="pool-grid-col-remove">
+                                        </colgroup>
                                         <thead>
                                             <tr>
                                                 <th>Pool</th>
@@ -460,34 +468,38 @@
                                             <tbody>
                                                 <tr>
                                                     <td>
-                                                        <select
-                                                            class="form-input"
-                                                            aria-label="Pool"
-                                                            x-model="reference.pool"
-                                                            :aria-invalid="reference.pool === ''"
-                                                            required
-                                                        >
-                                                            <option value="">Select a pool</option>
-                                                            <template
-                                                                x-for="name in djConfigPoolOptions(reference)"
-                                                                :key="name"
+                                                        <div class="pool-grid-cell">
+                                                            <select
+                                                                class="form-input"
+                                                                aria-label="Pool"
+                                                                x-model="reference.pool"
+                                                                :aria-invalid="reference.pool === ''"
+                                                                required
                                                             >
-                                                                <option :value="name" x-text="name"></option>
-                                                            </template>
-                                                        </select>
-                                                        <!-- biome-ignore lint/a11y/useValidAnchor: the href comes from :href -->
-                                                        <a
-                                                            class="pool-grid-link"
-                                                            x-show="reference.pool !== ''"
-                                                            :href="'#/edit/pools/' + reference.pool"
-                                                        >
-                                                            Open pool
-                                                        </a>
-                                                        <span
-                                                            class="field-was"
-                                                            x-show="isChanged('dj-configs', ['pools', referenceIndex, 'pool'])"
-                                                            x-text="'was ' + wasValue('dj-configs', ['pools', referenceIndex, 'pool'])"
-                                                        ></span>
+                                                                <option value="">Select a pool</option>
+                                                                <template
+                                                                    x-for="name in djConfigPoolOptions(reference)"
+                                                                    :key="name"
+                                                                >
+                                                                    <option :value="name" x-text="name"></option>
+                                                                </template>
+                                                            </select>
+                                                            <!-- biome-ignore lint/a11y/useValidAnchor lint/a11y/useAriaPropsSupportedByRole: the href comes from :href -->
+                                                            <a
+                                                                class="btn btn-icon"
+                                                                aria-label="Open pool"
+                                                                title="Open pool"
+                                                                :class="{ invisible: reference.pool === '' }"
+                                                                :href="'#/edit/pools/' + reference.pool"
+                                                            >
+                                                                ↗
+                                                            </a>
+                                                            <span
+                                                                class="field-was"
+                                                                x-show="isChanged('dj-configs', ['pools', referenceIndex, 'pool'])"
+                                                                x-text="'was ' + wasValue('dj-configs', ['pools', referenceIndex, 'pool'])"
+                                                            ></span>
+                                                        </div>
                                                     </td>
                                                     <template x-for="field in djConfigModeFields" :key="field.key">
                                                         <td>
@@ -557,19 +569,24 @@
                                                             x-text="'was ' + wasValue('dj-configs', ['pools', referenceIndex, 'weight'])"
                                                         ></span>
                                                     </td>
-                                                    <td
-                                                        x-text="weightShareText(djConfigForm.pools, referenceIndex)"
-                                                    ></td>
-                                                    <td class="pool-grid-actions">
-                                                        <button
-                                                            type="button"
-                                                            class="btn btn-icon"
-                                                            aria-label="Remove pool"
-                                                            title="Remove pool"
-                                                            @click="removeDjConfigPool(referenceIndex)"
-                                                        >
-                                                            ×
-                                                        </button>
+                                                    <td>
+                                                        <div
+                                                            class="pool-grid-line"
+                                                            x-text="weightShareText(djConfigForm.pools, referenceIndex)"
+                                                        ></div>
+                                                    </td>
+                                                    <td>
+                                                        <div class="pool-grid-line pool-grid-actions">
+                                                            <button
+                                                                type="button"
+                                                                class="btn btn-icon"
+                                                                aria-label="Remove pool"
+                                                                title="Remove pool"
+                                                                @click="removeDjConfigPool(referenceIndex)"
+                                                            >
+                                                                ×
+                                                            </button>
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             </tbody>
@@ -591,6 +608,11 @@
                                     </p>
                                     <div class="pool-grid-scroll" x-scroll-fade>
                                         <table class="pool-grid">
+                                            <colgroup>
+                                                <col class="pool-grid-col-pool">
+                                                <col>
+                                                <col class="pool-grid-col-share">
+                                            </colgroup>
                                             <thead>
                                                 <tr>
                                                     <th>Pool</th>
@@ -931,10 +953,18 @@
                                         </div>
                                     </template>
                                 </div>
-                                <div class="pool-grid-scroll" x-scroll-fade>
-                                    <table class="pool-grid">
+                                <div class="pool-grid-scroll" x-show="poolMode === 'properties'" x-scroll-fade>
+                                    <table class="pool-grid pool-grid-entries">
+                                        <colgroup>
+                                            <col class="pool-grid-col-check">
+                                            <col class="pool-grid-col-profile">
+                                            <col class="pool-grid-col-kind">
+                                            <col>
+                                            <col class="pool-grid-col-length">
+                                            <col class="pool-grid-col-actions">
+                                        </colgroup>
                                         <thead>
-                                            <tr x-show="poolMode === 'properties'">
+                                            <tr>
                                                 <th></th>
                                                 <th>Signal Profile</th>
                                                 <th>Kind</th>
@@ -942,23 +972,19 @@
                                                 <th>Length</th>
                                                 <th></th>
                                             </tr>
-                                            <tr x-show="poolMode === 'weights'">
-                                                <th></th>
-                                                <th>Entry</th>
-                                                <th>Weight</th>
-                                                <th>Share</th>
-                                            </tr>
                                         </thead>
                                         <template x-for="(entry, index) in poolForm.entries" :key="index">
                                             <tbody>
-                                                <tr x-show="poolMode === 'properties'">
+                                                <tr>
                                                     <td>
-                                                        <input
-                                                            type="checkbox"
-                                                            :aria-label="'Select entry ' + (index + 1)"
-                                                            :checked="poolSelected.some((row) => Alpine.raw(row) === Alpine.raw(entry))"
-                                                            @change="togglePoolSelected(entry)"
-                                                        >
+                                                        <div class="pool-grid-line">
+                                                            <input
+                                                                type="checkbox"
+                                                                :aria-label="'Select entry ' + (index + 1)"
+                                                                :checked="poolSelected.some((row) => Alpine.raw(row) === Alpine.raw(entry))"
+                                                                @change="togglePoolSelected(entry)"
+                                                            >
+                                                        </div>
                                                     </td>
                                                     <td>
                                                         <select
@@ -980,7 +1006,12 @@
                                                             x-text="'was ' + wasValue('pools', ['entries', index, 'signal_profile'])"
                                                         ></span>
                                                     </td>
-                                                    <td x-text="poolKinds[entry.kind].label"></td>
+                                                    <td>
+                                                        <div
+                                                            class="pool-grid-line"
+                                                            x-text="poolKinds[entry.kind].label"
+                                                        ></div>
+                                                    </td>
                                                     <td>
                                                         <template
                                                             x-for="field in poolColumn(entry, 'what')"
@@ -1016,10 +1047,13 @@
                                                     <td>
                                                         <div class="pool-grid-cell">
                                                             <template
-                                                                x-for="field in poolColumn(entry, 'length')"
+                                                                x-for="(field, fieldIndex) in poolColumn(entry, 'length')"
                                                                 :key="field.key"
                                                             >
-                                                                <div>
+                                                                <div class="pool-grid-range">
+                                                                    <span class="pool-grid-to" x-show="fieldIndex > 0"
+                                                                        >to</span
+                                                                    >
                                                                     <input
                                                                         type="number"
                                                                         class="form-input"
@@ -1029,7 +1063,7 @@
                                                                         :min="field.min"
                                                                         :required="!field.optional"
                                                                         :aria-invalid="fieldInvalid(field, entry[field.key])"
-                                                                        :placeholder="field.placeholder ?? field.label"
+                                                                        :placeholder="field.placeholder ?? (fieldIndex === 0 ? 'Min' : 'Max')"
                                                                     >
                                                                     <span
                                                                         class="field-was"
@@ -1040,47 +1074,49 @@
                                                             </template>
                                                         </div>
                                                     </td>
-                                                    <td class="pool-grid-actions">
-                                                        <button
-                                                            type="button"
-                                                            class="btn btn-icon"
-                                                            aria-label="Move entry up"
-                                                            title="Move up"
-                                                            :disabled="index === 0"
-                                                            @click="movePoolEntry(index, -1)"
-                                                        >
-                                                            ↑
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            class="btn btn-icon"
-                                                            aria-label="Move entry down"
-                                                            title="Move down"
-                                                            :disabled="index === poolForm.entries.length - 1"
-                                                            @click="movePoolEntry(index, 1)"
-                                                        >
-                                                            ↓
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            class="btn btn-icon"
-                                                            :aria-expanded="poolExpanded[index] === true"
-                                                            aria-label="Show more fields"
-                                                            @click="poolExpanded[index] = !poolExpanded[index]"
-                                                            x-text="poolExpanded[index] ? '▾' : '▸'"
-                                                        ></button>
-                                                        <button
-                                                            type="button"
-                                                            class="btn btn-icon"
-                                                            aria-label="Remove entry"
-                                                            title="Remove entry"
-                                                            @click="removePoolEntry(index)"
-                                                        >
-                                                            ×
-                                                        </button>
+                                                    <td>
+                                                        <div class="pool-grid-line pool-grid-actions">
+                                                            <button
+                                                                type="button"
+                                                                class="btn btn-icon"
+                                                                aria-label="Move entry up"
+                                                                title="Move up"
+                                                                :disabled="index === 0"
+                                                                @click="movePoolEntry(index, -1)"
+                                                            >
+                                                                ↑
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                class="btn btn-icon"
+                                                                aria-label="Move entry down"
+                                                                title="Move down"
+                                                                :disabled="index === poolForm.entries.length - 1"
+                                                                @click="movePoolEntry(index, 1)"
+                                                            >
+                                                                ↓
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                class="btn btn-icon"
+                                                                :aria-expanded="poolExpanded[index] === true"
+                                                                aria-label="Show more fields"
+                                                                @click="poolExpanded[index] = !poolExpanded[index]"
+                                                                x-text="poolExpanded[index] ? '▾' : '▸'"
+                                                            ></button>
+                                                            <button
+                                                                type="button"
+                                                                class="btn btn-icon"
+                                                                aria-label="Remove entry"
+                                                                title="Remove entry"
+                                                                @click="removePoolEntry(index)"
+                                                            >
+                                                                ×
+                                                            </button>
+                                                        </div>
                                                     </td>
                                                 </tr>
-                                                <tr x-show="poolMode === 'properties' && poolExpanded[index]">
+                                                <tr x-show="poolExpanded[index]">
                                                     <td></td>
                                                     <td colspan="5">
                                                         <div class="form-row">
@@ -1132,21 +1168,47 @@
                                                         </div>
                                                     </td>
                                                 </tr>
-                                                <tr x-show="poolMode === 'weights'">
+                                            </tbody>
+                                        </template>
+                                    </table>
+                                </div>
+                                <div class="pool-grid-scroll" x-show="poolMode === 'weights'" x-scroll-fade>
+                                    <table class="pool-grid pool-grid-weights">
+                                        <colgroup>
+                                            <col class="pool-grid-col-check">
+                                            <col class="pool-grid-col-entry">
+                                            <col>
+                                            <col class="pool-grid-col-share">
+                                        </colgroup>
+                                        <thead>
+                                            <tr>
+                                                <th></th>
+                                                <th>Entry</th>
+                                                <th>Weight</th>
+                                                <th>Share</th>
+                                            </tr>
+                                        </thead>
+                                        <template x-for="(entry, index) in poolForm.entries" :key="index">
+                                            <tbody>
+                                                <tr>
                                                     <td>
-                                                        <input
-                                                            type="checkbox"
-                                                            :aria-label="'Select entry ' + (index + 1)"
-                                                            :checked="poolSelected.some((row) => Alpine.raw(row) === Alpine.raw(entry))"
-                                                            @change="togglePoolSelected(entry)"
-                                                        >
+                                                        <div class="pool-grid-line">
+                                                            <input
+                                                                type="checkbox"
+                                                                :aria-label="'Select entry ' + (index + 1)"
+                                                                :checked="poolSelected.some((row) => Alpine.raw(row) === Alpine.raw(entry))"
+                                                                @change="togglePoolSelected(entry)"
+                                                            >
+                                                        </div>
                                                     </td>
-                                                    <td class="pool-grid-name">
-                                                        <i
-                                                            class="tall-bar-swatch"
-                                                            :class="'tall-bar-tone-' + (index % 5)"
-                                                        ></i>
-                                                        <span x-text="poolEntryName(entry)"></span>
+                                                    <td>
+                                                        <div class="pool-grid-line pool-grid-name">
+                                                            <i
+                                                                class="tall-bar-swatch"
+                                                                :class="'tall-bar-tone-' + (index % 5)"
+                                                            ></i>
+                                                            <span x-text="poolEntryName(entry)"></span>
+                                                        </div>
                                                     </td>
                                                     <td>
                                                         <div class="weight-control">
@@ -1198,7 +1260,12 @@
                                                             x-text="'was ' + wasValue('pools', ['entries', index, 'weight'])"
                                                         ></span>
                                                     </td>
-                                                    <td x-text="weightShareText(poolForm.entries, index)"></td>
+                                                    <td>
+                                                        <div
+                                                            class="pool-grid-line"
+                                                            x-text="weightShareText(poolForm.entries, index)"
+                                                        ></div>
+                                                    </td>
                                                 </tr>
                                             </tbody>
                                         </template>
