@@ -91,11 +91,19 @@ function referenceBlocks(reference, index) {
 function blocks(form) {
     return [
         ...form.pools.flatMap((reference, index) => [
-            { row: reference, fields: poolReferenceFields, path: ['pools', index] },
-            ...referenceBlocks(reference, index),
+            { row: reference, fields: poolReferenceFields, title: `Pool ${reference.pool}`, path: ['pools', index] },
+            ...referenceBlocks(reference, index).map((block) => ({
+                ...block,
+                title: `Pool ${reference.pool}: ${block.label}`,
+            })),
         ]),
-        ...rotations.flatMap(({ key, entryFields }) =>
-            form[key].entries.map((row, index) => ({ row, fields: entryFields, path: [key, 'entries', index] })),
+        ...rotations.flatMap(({ key, label, entryFields }) =>
+            form[key].entries.map((row, index) => ({
+                row,
+                fields: entryFields,
+                title: `${label} ${index + 1}: ${row[entryFields[0].key]}`,
+                path: [key, 'entries', index],
+            })),
         ),
     ];
 }
