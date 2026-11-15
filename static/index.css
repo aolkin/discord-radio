@@ -6,7 +6,7 @@
     max-width: 100%;
 }
 
-.view-switch {
+.edit-tree-toggle {
     margin-right: auto;
 }
 
@@ -647,32 +647,60 @@ textarea.form-input {
     line-height: 1;
 }
 
-.edit-view {
-    display: grid;
-    grid-template-columns: 280px minmax(0, 1fr);
-    gap: var(--space-5);
-    align-items: start;
+.edit-tree-layer > .edit-tree {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 900;
+    width: min(320px, 85vw);
+    margin: 0;
+    border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+    box-shadow: var(--shadow-lg);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition:
+        transform 0.2s ease,
+        visibility 0s linear 0.2s;
 }
 
-.edit-view > * {
-    min-width: 0;
+.tree-open > .edit-tree {
+    transform: none;
+    visibility: visible;
+    transition: transform 0.2s ease;
 }
 
-.edit-view > .edit-tree {
-    margin-bottom: 0;
-}
-
-.edit-tree-toggle,
-.edit-tree-backdrop,
 .edit-tree-head {
-    display: none;
-}
-
-.edit-tree-head {
+    display: flex;
     align-items: center;
     justify-content: space-between;
     margin-bottom: var(--space-4);
     font-weight: 600;
+}
+
+.edit-tree-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 899;
+    background: var(--color-overlay);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+
+.tree-open > .edit-tree-backdrop {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .edit-tree-layer > .edit-tree,
+    .tree-open > .edit-tree,
+    .edit-tree-backdrop {
+        transition: none;
+    }
 }
 
 .tree-item {
@@ -1242,75 +1270,6 @@ textarea.form-input {
     margin-top: var(--space-1);
 }
 
-@media (max-width: 1024px) {
-    .edit-view {
-        grid-template-columns: minmax(0, 1fr);
-        padding-bottom: calc(var(--control-height) + var(--space-5));
-    }
-
-    .edit-tree {
-        position: fixed;
-        top: 0;
-        bottom: 0;
-        left: 0;
-        z-index: 900;
-        width: min(320px, 85vw);
-        border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
-        box-shadow: var(--shadow-lg);
-        overflow-y: auto;
-        overscroll-behavior: contain;
-        transform: translateX(-100%);
-        visibility: hidden;
-        transition:
-            transform 0.2s ease,
-            visibility 0s linear 0.2s;
-    }
-
-    .tree-open .edit-tree {
-        transform: none;
-        visibility: visible;
-        transition: transform 0.2s ease;
-    }
-
-    .edit-tree-head {
-        display: flex;
-    }
-
-    .edit-tree-backdrop {
-        display: block;
-        position: fixed;
-        inset: 0;
-        z-index: 899;
-        background: var(--color-overlay);
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 0.2s ease;
-    }
-
-    .tree-open .edit-tree-backdrop {
-        opacity: 1;
-        pointer-events: auto;
-    }
-
-    .edit-tree-toggle {
-        display: inline-flex;
-        position: fixed;
-        left: var(--page-gutter);
-        bottom: calc(var(--page-gutter) + env(safe-area-inset-bottom));
-        z-index: 800;
-        border-radius: var(--radius-pill);
-        box-shadow: var(--shadow-lg);
-    }
-}
-
-@media (max-width: 1024px) and (prefers-reduced-motion: reduce) {
-    .edit-tree,
-    .tree-open .edit-tree,
-    .edit-tree-backdrop {
-        transition: none;
-    }
-}
-
 @media (max-width: 768px) {
     .guild-content {
         grid-template-columns: minmax(0, 1fr);
@@ -1335,7 +1294,7 @@ textarea.form-input {
         flex: 1 1 100%;
     }
 
-    .view-switch,
+    .edit-tree-toggle,
     .header-status {
         order: 1;
     }

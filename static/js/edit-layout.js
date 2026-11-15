@@ -1,5 +1,3 @@
-const drawerQuery = window.matchMedia('(max-width: 1024px)');
-
 document.addEventListener('alpine:init', () => {
     Alpine.directive('scroll-fade', (element, _directive, { cleanup }) => {
         const update = () => {
@@ -35,12 +33,6 @@ export function editTree() {
     return {
         treeOpen: false,
 
-        initEditTree() {
-            drawerQuery.addEventListener('change', () => {
-                this.treeOpen = false;
-            });
-        },
-
         openTree() {
             this.treeOpen = true;
             this.$nextTick(() => {
@@ -54,13 +46,11 @@ export function editTree() {
                 return;
             }
             this.treeOpen = false;
-            if (drawerQuery.matches) {
-                this.$refs.editTreeToggle.focus();
-            }
+            this.$refs.editTreeToggle.focus();
         },
 
         treeClick(event) {
-            if (drawerQuery.matches && event.target.closest('button')) {
+            if (event.target.closest('button')) {
                 this.closeTree();
             }
         },
