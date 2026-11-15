@@ -150,11 +150,10 @@ impl BotState {
         Ok(())
     }
 
-    pub async fn load(&'static self, guild_id: GuildId) -> anyhow::Result<bool> {
+    pub async fn load(&'static self, guild_id: GuildId) -> anyhow::Result<(GuildRadio, bool)> {
         let lifecycle = self.lifecycle(guild_id);
         let _lifecycle = lifecycle.lock().await;
-        let (_, loaded) = self.load_locked(guild_id).await?;
-        Ok(loaded)
+        self.load_locked(guild_id).await
     }
 
     async fn load_locked(&'static self, guild_id: GuildId) -> anyhow::Result<(GuildRadio, bool)> {

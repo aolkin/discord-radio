@@ -72,14 +72,13 @@ async fn restore_guild_multitrack(
     }
     tracing::info!("Restoring {} track(s)", multitrack_state.tracks.len());
 
-    if let Err(e) = bot_state.load(guild_id).await {
-        tracing::error!("Failed to load the guild to restore its tracks: {e:#}");
-        return;
-    }
-    let Some(radio) = bot_state.radio(guild_id) else {
-        return;
+    let manager = match bot_state.load(guild_id).await {
+        Ok((radio, _)) => radio.track_manager,
+        Err(e) => {
+            tracing::error!("Failed to load the guild to restore its tracks: {e:#}");
+            return;
+        }
     };
-    let manager = radio.track_manager;
 
     for track in multitrack_state.tracks {
         let start_position = if let Some(start_time) = track.start_time {
