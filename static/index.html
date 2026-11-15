@@ -1608,16 +1608,16 @@
                                         x-text="djMessage.text"
                                     ></div>
                                     <div class="form-group">
-                                        <label class="form-label" for="advance-state-type">State Type (Optional)</label>
-                                        <select id="advance-state-type" class="form-input" x-model="djStateType">
+                                        <label class="form-label" for="advance-pool">Pool (Optional)</label>
+                                        <select id="advance-pool" class="form-input" x-model="djAdvancePool">
                                             <option value="">Any (default)</option>
-                                            <option value="track">Track</option>
-                                            <option value="hex">Hex Message</option>
-                                            <option value="noise">Noise</option>
+                                            <template x-for="pool in djConfigPools[guild.dj_config] ?? []" :key="pool">
+                                                <option :value="pool" x-text="pool"></option>
+                                            </template>
                                         </select>
                                         <small class="hint">
-                                            Leave as "Any" to advance to the next state, or select a specific state type
-                                            to force.
+                                            Leave as "Any" to advance to the next state, or pick a pool of the current
+                                            DJ config to take the next segment from.
                                         </small>
                                     </div>
                                     <button
@@ -1625,6 +1625,50 @@
                                         class="btn btn-primary"
                                         :disabled="djSaving"
                                         x-text="djSaving ? 'Advancing...' : 'Advance State'"
+                                    ></button>
+                                </form>
+                            </div>
+
+                            <div class="section">
+                                <div class="section-title">Go Idle</div>
+                                <form @submit.prevent="idleDJ()">
+                                    <div
+                                        x-show="idleMessage.text"
+                                        :class="idleMessage.type === 'error' ? 'error-message' : 'success-message'"
+                                        x-text="idleMessage.text"
+                                    ></div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label class="form-label" for="idle-noise-profile">Noise Profile</label>
+                                            <select
+                                                id="idle-noise-profile"
+                                                class="form-input"
+                                                x-model="idleNoiseProfile"
+                                            >
+                                                <option value="">None</option>
+                                                <template x-for="profile in profiles" :key="profile">
+                                                    <option :value="profile" x-text="profile"></option>
+                                                </template>
+                                            </select>
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label" for="idle-duration">Duration (seconds)</label>
+                                            <input
+                                                id="idle-duration"
+                                                type="number"
+                                                class="form-input"
+                                                x-model.number="idleDuration"
+                                                min="0"
+                                                step="1"
+                                                placeholder="Until advanced"
+                                            >
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="submit"
+                                        class="btn btn-primary"
+                                        :disabled="idleSaving"
+                                        x-text="idleSaving ? 'Going idle...' : 'Go Idle'"
                                     ></button>
                                 </form>
                             </div>
@@ -1647,9 +1691,6 @@
                                             placeholder="Enter message to play..."
                                             required
                                         >
-                                        <small class="hint">
-                                            Message will be played using the DJ with default settings.
-                                        </small>
                                     </div>
                                     <div class="form-group">
                                         <label class="form-label" for="hex-pool">Pool (Optional)</label>
@@ -1662,6 +1703,33 @@
                                         <small class="hint">
                                             The pool's segment defaults set the loop count and announcements.
                                         </small>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label class="form-label" for="hex-volume">Volume</label>
+                                            <input
+                                                id="hex-volume"
+                                                type="number"
+                                                class="form-input"
+                                                x-model.number="hexMessageVolume"
+                                                min="0"
+                                                max="2"
+                                                step="0.1"
+                                                placeholder="1.0"
+                                            >
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label" for="hex-loops">Loops</label>
+                                            <input
+                                                id="hex-loops"
+                                                type="number"
+                                                class="form-input"
+                                                x-model.number="hexMessageLoops"
+                                                min="0"
+                                                step="1"
+                                                placeholder="Pool default"
+                                            >
+                                        </div>
                                     </div>
                                     <button
                                         type="submit"
