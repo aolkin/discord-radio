@@ -256,6 +256,13 @@
             setMode(modes.includes(body.state_type) ? body.state_type : nextMode(store.radio.mode));
             return ok();
         }),
+        guildRoute('POST', 'dj/idle', ({ body }) => {
+            if (body.noise_profile && !(body.noise_profile in store.registries.profiles)) {
+                return fail(404, `signal profile "${body.noise_profile}" not found`);
+            }
+            setMode('noise');
+            return ok();
+        }),
         guildRoute('POST', 'hex/play', ({ body }) => {
             setMode('hex');
             store.radio.text = body.message;
