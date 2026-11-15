@@ -3305,6 +3305,7 @@ dependencies = [
  "serenity",
  "songbird",
  "strum 0.28.0",
+ "symphonia 0.5.5",
  "symphonia 0.6.1",
  "tempfile",
  "thiserror 2.0.21",
@@ -4464,6 +4465,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5773a4c030a19d9bfaa090f49746ff35c75dfddfa700df7a5939d5e076a57039"
 dependencies = [
  "lazy_static",
+ "symphonia-codec-pcm 0.5.5",
  "symphonia-core 0.5.5",
  "symphonia-metadata 0.5.5",
 ]
@@ -4478,7 +4480,7 @@ dependencies = [
  "symphonia-bundle-flac",
  "symphonia-bundle-mp3",
  "symphonia-codec-adpcm",
- "symphonia-codec-pcm",
+ "symphonia-codec-pcm 0.6.1",
  "symphonia-codec-vorbis",
  "symphonia-core 0.6.1",
  "symphonia-format-mkv",
@@ -4518,6 +4520,16 @@ checksum = "445932ecb0c59362fde9c082dd63a75380650c5077fdb8b80b8cac850442a74c"
 dependencies = [
  "log",
  "symphonia-core 0.6.1",
+]
+
+[[package]]
+name = "symphonia-codec-pcm"
+version = "0.5.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4e89d716c01541ad3ebe7c91ce4c8d38a7cf266a3f7b2f090b108fb0cb031d95"
+dependencies = [
+ "log",
+ "symphonia-core 0.5.5",
 ]
 
 [[package]]
