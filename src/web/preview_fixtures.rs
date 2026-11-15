@@ -64,5 +64,6 @@ fn preview_fixtures_round_trip() {
     fixture!(Pool, "pools/hex.json");
     fixture!(Pool, "pools/noise.json");
     fixture!(DJConfig, "dj-configs/default.json");
+    fixture!(DJConfig, "dj-configs/quiet.json");
     fixture!(Value, "bot-profile.json");
 }

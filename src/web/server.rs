@@ -85,6 +85,10 @@ pub async fn run_web_server(bot_state: Data, port: u16) -> anyhow::Result<()> {
             post(routes::tracks::change_track_state),
         )
         .route(
+            "/api/guilds/{guild_id}/dj/config",
+            post(routes::dj::configure_dj),
+        )
+        .route(
             "/api/guilds/{guild_id}/dj/profile",
             post(routes::dj::set_dj_profile),
         )
