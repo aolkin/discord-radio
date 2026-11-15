@@ -46,7 +46,7 @@ impl serenity::EventHandler for Handler {
                 match new.channel_id {
                     None => {
                         tracing::info!("Bot was disconnected from voice, cleaning up");
-                        self.data.unload(guild_id).await;
+                        self.data.leave_voice(guild_id).await;
                     }
                     Some(channel_id) if channel_id != saved_channel => {
                         tracing::info!("Bot was moved to voice channel {}", channel_id);

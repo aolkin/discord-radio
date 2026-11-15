@@ -176,13 +176,13 @@ impl BotState {
         Ok((radio, true))
     }
 
-    pub async fn unload(&self, guild_id: GuildId) {
+    pub async fn leave_voice(&self, guild_id: GuildId) {
         let lifecycle = self.lifecycle(guild_id);
         let _lifecycle = lifecycle.lock().await;
-        self.unload_locked(guild_id).await;
+        self.leave_voice_locked(guild_id).await;
     }
 
-    async fn unload_locked(&self, guild_id: GuildId) {
+    async fn leave_voice_locked(&self, guild_id: GuildId) {
         if let Err(e) = self.state_store.remove_voice_channel(guild_id).await {
             tracing::error!("Failed to remove saved voice channel: {e:#}");
         }
@@ -191,6 +191,10 @@ impl BotState {
         {
             tracing::error!("Failed to remove voice connection: {e:#}");
         }
+    }
+
+    async fn unload_locked(&self, guild_id: GuildId) {
+        self.leave_voice_locked(guild_id).await;
         let Some(radio) = self.guilds.lock().unwrap().remove(&guild_id) else {
             return;
         };
