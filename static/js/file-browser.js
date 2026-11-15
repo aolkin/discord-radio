@@ -67,7 +67,7 @@ export function fileBrowser() {
         openFileBrowserPage(path) {
             this.fileBrowser.newFolderName = '';
             this.fileBrowser.uploads = [];
-            return this.loadFileBrowser(`${path}/`);
+            return this.loadFileBrowser(path ? `${path}/` : '');
         },
 
         browseFileBrowser(prefix) {
@@ -91,7 +91,7 @@ export function fileBrowser() {
         },
 
         fileBrowserKind() {
-            return this.fileKinds[this.fileBrowser.prefix.split('/')[0]] || this.fileKinds.tracks;
+            return this.fileKinds[this.fileBrowser.prefix.split('/')[0]] ?? null;
         },
 
         fileBrowserCrumbs() {
