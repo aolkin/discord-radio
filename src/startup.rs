@@ -49,14 +49,10 @@ pub async fn restore_voice_channels(
         .await;
     }
 
-    // Restore these features regardless of whether there are voice channels
-    // since they can now operate independently of voice connections
-    restore_multitrack_playback(bot_state).await?;
-
     Ok(())
 }
 
-async fn restore_multitrack_playback(bot_state: Data) -> anyhow::Result<()> {
+pub async fn restore_multitrack_playback(bot_state: Data) -> anyhow::Result<()> {
     let saved_multitrack = bot_state
         .state_store
         .load_multitrack_playbacks()

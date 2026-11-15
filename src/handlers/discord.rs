@@ -18,6 +18,10 @@ impl serenity::EventHandler for Handler {
             tracing::error!("Failed to restore activity state: {e:#}");
         }
 
+        if let Err(e) = crate::startup::restore_multitrack_playback(self.data).await {
+            tracing::error!("Failed to restore multitrack playback: {e:#}");
+        }
+
         if let Err(e) = crate::startup::restore_voice_channels(&ctx, self.data).await {
             tracing::error!("Failed to restore voice channels: {e:#}");
         }
