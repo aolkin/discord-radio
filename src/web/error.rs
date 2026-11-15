@@ -1,4 +1,5 @@
 use crate::bucket::{NoBucket, NotFound};
+use crate::state::GuildInactive;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 
@@ -27,6 +28,10 @@ impl ApiError {
 
     pub fn conflict(message: impl Into<String>) -> Self {
         Self::new(StatusCode::CONFLICT, anyhow::Error::msg(message.into()))
+    }
+
+    pub fn inactive(error: GuildInactive) -> Self {
+        Self::new(StatusCode::CONFLICT, error)
     }
 
     pub fn object_store(error: anyhow::Error) -> Self {

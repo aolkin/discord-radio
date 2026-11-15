@@ -22,7 +22,7 @@ impl serenity::EventHandler for Handler {
             tracing::error!("Failed to restore multitrack playback: {e:#}");
         }
 
-        if let Err(e) = crate::startup::restore_voice_channels(&ctx, self.data).await {
+        if let Err(e) = crate::startup::restore_voice_channels(self.data).await {
             tracing::error!("Failed to restore voice channels: {e:#}");
         }
     }
@@ -46,7 +46,7 @@ impl serenity::EventHandler for Handler {
                 match new.channel_id {
                     None => {
                         tracing::info!("Bot was disconnected from voice, cleaning up");
-                        self.data.leave_voice_channel(guild_id).await;
+                        self.data.unload(guild_id).await;
                     }
                     Some(channel_id) if channel_id != saved_channel => {
                         tracing::info!("Bot was moved to voice channel {}", channel_id);

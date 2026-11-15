@@ -172,7 +172,7 @@ impl HexSegment {
     }
 
     async fn start_run(&self, ctx: &SegmentCtx<'_>) {
-        let processor = ctx.audio_processor().await;
+        let processor = ctx.audio_processor().clone();
         let handle = tokio::spawn(
             run_hex_message(
                 HexRunSettings {

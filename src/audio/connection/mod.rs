@@ -1,5 +1,4 @@
 use crate::audio::processing::processor::ProcessorRef;
-use crate::state::Data;
 use anyhow::Context;
 use raw_adapter::ProcessedAudioAdapter;
 use serenity::model::id::{ChannelId, GuildId};
@@ -11,13 +10,11 @@ pub async fn connect_voice_channel(
     manager: &Songbird,
     guild_id: GuildId,
     channel_id: ChannelId,
-    bot_state: Data,
-) -> anyhow::Result<ProcessorRef> {
+    processor: ProcessorRef,
+) -> anyhow::Result<()> {
     // Songbird keeps a Call, with its events and tracks, across leave and disconnect.
     let call_exists = manager.get(guild_id).is_some();
     let handle_lock = manager.get_or_insert(guild_id);
-
-    let processor = bot_state.audio_processor(guild_id).await;
 
     if !call_exists {
         let mut call = handle_lock.lock().await;
@@ -33,7 +30,7 @@ pub async fn connect_voice_channel(
 
         drop(call);
 
-        let adapter = ProcessedAudioAdapter::new(processor.clone());
+        let adapter = ProcessedAudioAdapter::new(processor);
         adapter.start(handle_lock.clone()).await;
 
         tracing::info!("Initialized audio DSP processor");
@@ -44,5 +41,5 @@ pub async fn connect_voice_channel(
         .await
         .context("joining voice channel")?;
 
-    Ok(processor)
+    Ok(())
 }

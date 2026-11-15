@@ -18,10 +18,14 @@ use songbird::Songbird;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::sync::{Arc, Mutex as StdMutex, OnceLock};
-use tokio::sync::RwLock;
 use tokio::sync::broadcast::Receiver;
+use tokio::sync::{Mutex, RwLock};
 
 pub type Data = &'static BotState;
+
+#[derive(Debug, thiserror::Error)]
+#[error("guild {0} is not active")]
+pub struct GuildInactive(pub GuildId);
 
 #[derive(Clone)]
 pub struct GuildRadio {
@@ -35,6 +39,7 @@ pub struct BotState {
     pub state_store: Arc<dyn StateStore>,
     pub duration_cache: DurationCache,
     guilds: StdMutex<HashMap<GuildId, GuildRadio>>,
+    lifecycles: StdMutex<HashMap<GuildId, Arc<Mutex<()>>>>,
     pub profile_manager: JsonRegistry<SignalProfile>,
     pub dj_config_manager: &'static DJConfigRegistry,
     pub activity_manager: ActivityManager,
@@ -59,6 +64,7 @@ impl BotState {
             duration_cache: DurationCache::new(file_resolver.clone()),
             state_store: state_store.clone(),
             guilds: StdMutex::new(HashMap::new()),
+            lifecycles: StdMutex::new(HashMap::new()),
             profile_manager,
             dj_config_manager,
             activity_manager: ActivityManager::new(state_store),
@@ -69,28 +75,21 @@ impl BotState {
         }
     }
 
-    fn guild_radio(&'static self, guild_id: GuildId) -> GuildRadio {
-        self.guilds
+    fn lifecycle(&self, guild_id: GuildId) -> Arc<Mutex<()>> {
+        self.lifecycles
             .lock()
             .unwrap()
             .entry(guild_id)
-            .or_insert_with(|| {
-                let audio_processor = Arc::new(RwLock::new(AudioProcessor::new(
-                    self.profile_manager.default_profile(),
-                )));
-                let track_manager =
-                    Arc::new(TrackManager::new(guild_id, self, audio_processor.clone()));
-                GuildRadio {
-                    audio_processor,
-                    track_manager,
-                    dj_manager: Arc::new(DJManager::new(guild_id, self)),
-                }
-            })
+            .or_default()
             .clone()
     }
 
-    fn existing_guild_radio(&self, guild_id: GuildId) -> Option<GuildRadio> {
+    pub fn radio(&self, guild_id: GuildId) -> Option<GuildRadio> {
         self.guilds.lock().unwrap().get(&guild_id).cloned()
+    }
+
+    pub fn require_radio(&self, guild_id: GuildId) -> Result<GuildRadio, GuildInactive> {
+        self.radio(guild_id).ok_or(GuildInactive(guild_id))
     }
 
     /// Every guild that has radio state, ordered by guild id.
@@ -106,24 +105,8 @@ impl BotState {
         guilds
     }
 
-    pub fn dj_manager(&'static self, guild_id: GuildId) -> Arc<DJManager> {
-        self.guild_radio(guild_id).dj_manager
-    }
-
-    pub fn existing_dj_manager(&self, guild_id: GuildId) -> Option<Arc<DJManager>> {
-        Some(self.existing_guild_radio(guild_id)?.dj_manager)
-    }
-
-    pub async fn audio_processor(&'static self, guild_id: GuildId) -> ProcessorRef {
-        self.guild_radio(guild_id).audio_processor.clone()
-    }
-
-    pub async fn track_manager(&'static self, guild_id: GuildId) -> Arc<TrackManager> {
-        self.guild_radio(guild_id).track_manager.clone()
-    }
-
     pub async fn opus_stream(&self, guild_id: GuildId) -> Option<Receiver<Vec<u8>>> {
-        let audio_processor = self.existing_guild_radio(guild_id)?.audio_processor;
+        let audio_processor = self.radio(guild_id)?.audio_processor;
         let receiver = audio_processor.read().await.stream_opus();
         Some(receiver)
     }
@@ -140,12 +123,23 @@ impl BotState {
         guild_id: GuildId,
         channel_id: ChannelId,
     ) -> anyhow::Result<()> {
-        connect_voice_channel(&self.songbird, guild_id, channel_id, self).await?;
+        let lifecycle = self.lifecycle(guild_id);
+        let _lifecycle = lifecycle.lock().await;
+        let (radio, loaded) = self.load_locked(guild_id).await?;
+        if let Err(e) = connect_voice_channel(
+            &self.songbird,
+            guild_id,
+            channel_id,
+            radio.audio_processor.clone(),
+        )
+        .await
+        {
+            if loaded {
+                self.unload_locked(guild_id).await;
+            }
+            return Err(e);
+        }
         tracing::info!("Joined voice channel {}", channel_id);
-        self.dj_manager(guild_id)
-            .start()
-            .await
-            .context("starting the DJ")?;
         if let Err(e) = self
             .state_store
             .save_voice_channel(guild_id, channel_id)
@@ -156,18 +150,53 @@ impl BotState {
         Ok(())
     }
 
-    pub async fn leave_voice_channel(&self, guild_id: GuildId) {
+    pub async fn load(&'static self, guild_id: GuildId) -> anyhow::Result<bool> {
+        let lifecycle = self.lifecycle(guild_id);
+        let _lifecycle = lifecycle.lock().await;
+        let (_, loaded) = self.load_locked(guild_id).await?;
+        Ok(loaded)
+    }
+
+    async fn load_locked(&'static self, guild_id: GuildId) -> anyhow::Result<(GuildRadio, bool)> {
+        if let Some(radio) = self.radio(guild_id) {
+            return Ok((radio, false));
+        }
+        let audio_processor = Arc::new(RwLock::new(AudioProcessor::new(
+            self.profile_manager.default_profile(),
+        )));
+        let dj_manager = Arc::new(DJManager::new(guild_id, self, audio_processor.clone()));
+        dj_manager.start().await.context("starting the DJ")?;
+        let radio = GuildRadio {
+            track_manager: Arc::new(TrackManager::new(guild_id, self, audio_processor.clone())),
+            audio_processor,
+            dj_manager,
+        };
+        self.guilds.lock().unwrap().insert(guild_id, radio.clone());
+        tracing::info!("Loaded guild {guild_id}");
+        Ok((radio, true))
+    }
+
+    pub async fn unload(&self, guild_id: GuildId) {
+        let lifecycle = self.lifecycle(guild_id);
+        let _lifecycle = lifecycle.lock().await;
+        self.unload_locked(guild_id).await;
+    }
+
+    async fn unload_locked(&self, guild_id: GuildId) {
+        if let Err(e) = self.state_store.remove_voice_channel(guild_id).await {
+            tracing::error!("Failed to remove saved voice channel: {e:#}");
+        }
         if self.songbird.get(guild_id).is_some()
             && let Err(e) = self.songbird.remove(guild_id).await
         {
             tracing::error!("Failed to remove voice connection: {e:#}");
         }
-        if let Err(e) = self.state_store.remove_voice_channel(guild_id).await {
-            tracing::error!("Failed to remove saved voice channel: {e:#}");
-        }
-        if let Some(dj_manager) = self.existing_dj_manager(guild_id) {
-            dj_manager.stop().await;
-        }
+        let Some(radio) = self.guilds.lock().unwrap().remove(&guild_id) else {
+            return;
+        };
+        radio.dj_manager.stop().await;
+        radio.track_manager.clear().await;
+        tracing::info!("Unloaded guild {guild_id}");
     }
 
     pub async fn saved_voice_channel(&self, guild_id: GuildId) -> Option<ChannelId> {
