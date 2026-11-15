@@ -99,6 +99,8 @@ The portal provides:
 
 `GET /api/guilds/{guild_id}/voice-channels` lists the voice channels the bot can join, and `POST /api/guilds/{guild_id}/voice-channels/{channel_id}/join` joins one the same way `/dj join` does, moving the bot if it is already in another channel of that guild.
 
+`POST /api/guilds/{guild_id}/dj/config` with `{"config": "<name>"}` restarts the guild's DJ with that DJ config, the same way `/dj configure` does.
+
 Signal profiles (`/api/profiles`), DJ configs (`/api/dj-configs`) and pools (`/api/pools`) each accept `PUT /{name}` to create or replace a file and `POST /{name}` to create a new one. `POST` takes the same body as `PUT` and returns 409 when the name already exists.
 
 `DELETE /api/files?key=tracks/name.ogg` removes one file from object storage (the portal file browser has a delete action per file). It returns 409, listing the pools and DJ configs that reference the file, and 404 when the file does not exist.

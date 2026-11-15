@@ -1,6 +1,6 @@
 use crate::audio::dj::manager::{
-    ChannelStatusRequest, DJCommand, DjBusy, HexMessageRequest, IdleRequest, ProfileNotFound,
-    SignalProfileRequest, TrackRequest, ensure_pool,
+    ChannelStatusRequest, ConfigureRequest, DJCommand, DjBusy, HexMessageRequest, IdleRequest,
+    ProfileNotFound, SignalProfileRequest, TrackRequest, ensure_pool,
 };
 use crate::state::Data;
 use crate::web::error::ApiError;
@@ -91,6 +91,15 @@ pub async fn force_dj_idle(
 ) -> Result<StatusCode, ApiError> {
     request.validate(bot_state).map_err(invalid_request)?;
     send_dj_command(&bot_state, guild_id, DJCommand::ForceIdle(request))
+}
+
+pub async fn configure_dj(
+    State(bot_state): State<Data>,
+    Path(guild_id): Path<GuildId>,
+    AxumJson(request): AxumJson<ConfigureRequest>,
+) -> Result<StatusCode, ApiError> {
+    let command = request.into_command(bot_state).map_err(invalid_request)?;
+    send_dj_command(&bot_state, guild_id, command)
 }
 
 pub async fn set_dj_profile(

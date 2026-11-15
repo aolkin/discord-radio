@@ -4,7 +4,7 @@
     const registries = {
         profiles: ['clear', 'weak_signal', 'tuning'],
         pools: ['noise', 'hex', 'track'],
-        'dj-configs': ['default'],
+        'dj-configs': ['default', 'quiet'],
     };
     const modes = ['track', 'hex', 'noise'];
 
@@ -65,6 +65,7 @@
             text: null,
             profile: null,
             channelStatus: null,
+            djConfig: live.dj_config,
             announcements: structuredClone(live.announcement_channels),
             activity: structuredClone(store.snapshots.track.current_activity),
         };
@@ -125,6 +126,7 @@
             guild.channel_status = { ...guild.channel_status, status: radio.channelStatus };
         }
         guild.announcement_channels = radio.announcements;
+        guild.dj_config = radio.djConfig;
         return snapshot;
     };
 
@@ -262,6 +264,13 @@
         guildRoute('POST', 'dj/channel-status', ({ body }) => {
             const status = body.status?.fixed ?? (typeof body.status === 'string' ? body.status : null);
             store.radio.channelStatus = status;
+            return ok();
+        }),
+        guildRoute('POST', 'dj/config', ({ body }) => {
+            if (!(body.config in store.registries['dj-configs'])) {
+                return fail(400, `no DJ config "${body.config}"`);
+            }
+            store.radio.djConfig = body.config;
             return ok();
         }),
         guildRoute('POST', 'dj/profile', ({ body }) => {

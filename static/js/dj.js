@@ -2,6 +2,8 @@ import { apiRequest, bodyOrStatus, emptyMessage } from './api.js';
 
 export const playForms = () => ({
     djStateType: '',
+    djConfigSelection: '',
+    djConfigMessage: emptyMessage(),
     djMessage: emptyMessage(),
     hexMessageText: '',
     hexMessagePool: '',
@@ -20,6 +22,7 @@ export function dj() {
     return {
         ...playForms(),
         djSaving: false,
+        djConfigSaving: false,
         hexSaving: false,
         channelStatusSaving: false,
         announcementOptions: [],
@@ -148,6 +151,26 @@ export function dj() {
                     }),
                 success: 'DJ state advanced successfully!',
                 failure: 'Failed to advance DJ state',
+            });
+        },
+
+        async configureDJ() {
+            const config = this.djConfigSelection;
+            if (!confirm(`Restart the DJ with config "${config}"?`)) {
+                return;
+            }
+            await this.runAction({
+                saving: 'djConfigSaving',
+                message: 'djConfigMessage',
+                label: 'configuring DJ',
+                request: () =>
+                    apiRequest(`/api/guilds/${this.route.name}/dj/config`, {
+                        method: 'POST',
+                        body: { config },
+                        errorMessage: bodyOrStatus,
+                    }),
+                success: `DJ restarted with config "${config}".`,
+                failure: 'Failed to configure DJ',
             });
         },
 

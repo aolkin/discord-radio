@@ -1495,6 +1495,33 @@
                                         x-text="'Pool ' + guild.dj_state.pool + ': ' + guild.dj_state.progress?.played + ' of ' + guild.dj_state.progress?.total + ' played'"
                                     ></div>
                                 </div>
+                                <details
+                                    class="disclosure disclosure-quiet mt-12"
+                                    @toggle="$el.open && (djConfigSelection = guild.dj_config)"
+                                >
+                                    <summary x-text="'DJ config: ' + guild.dj_config"></summary>
+                                    <div
+                                        x-show="djConfigMessage.text"
+                                        :class="djConfigMessage.type === 'error' ? 'error-message' : 'success-message'"
+                                        x-text="djConfigMessage.text"
+                                    ></div>
+                                    <form class="row-center-8" @submit.prevent="configureDJ()">
+                                        <select class="form-input" aria-label="DJ config" x-model="djConfigSelection">
+                                            <template
+                                                x-for="config in djConfigs.includes(guild.dj_config) ? djConfigs : [guild.dj_config, ...djConfigs]"
+                                                :key="config"
+                                            >
+                                                <option :value="config" x-text="config"></option>
+                                            </template>
+                                        </select>
+                                        <button
+                                            type="submit"
+                                            class="btn btn-secondary btn-sm"
+                                            :disabled="djConfigSaving || !djConfigSelection"
+                                            x-text="djConfigSaving ? 'Restarting...' : 'Restart DJ'"
+                                        ></button>
+                                    </form>
+                                </details>
                             </div>
 
                             <div class="section">
