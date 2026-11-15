@@ -1652,19 +1652,26 @@
                                             <option value="">Any (default)</option>
                                             <template x-if="(djConfigPools[guild.dj_config] ?? []).length > 0">
                                                 <optgroup label="In this config">
-                                                    <template x-for="pool in djConfigPools[guild.dj_config]" :key="pool">
+                                                    <template
+                                                        x-for="pool in djConfigPools[guild.dj_config]"
+                                                        :key="pool"
+                                                    >
                                                         <option :value="pool" x-text="pool"></option>
                                                     </template>
                                                 </optgroup>
                                             </template>
                                             <optgroup label="Other pools">
-                                                <template x-for="pool in pools.filter((name) => !(djConfigPools[guild.dj_config] ?? []).includes(name))" :key="pool">
+                                                <template
+                                                    x-for="pool in pools.filter((name) => !(djConfigPools[guild.dj_config] ?? []).includes(name))"
+                                                    :key="pool"
+                                                >
                                                     <option :value="pool" x-text="pool"></option>
                                                 </template>
                                             </optgroup>
                                         </select>
                                         <small class="hint">
-                                            Leave as "Any" to advance to the next state, or pick any pool to take the next segment from.
+                                            Leave as "Any" to advance to the next state, or pick any pool to take the
+                                            next segment from.
                                         </small>
                                     </div>
                                     <button
