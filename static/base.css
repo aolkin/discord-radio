@@ -207,7 +207,6 @@ h1 {
 }
 
 .btn:focus-visible,
-.segmented > :focus-visible,
 .activity-display:focus-visible,
 .guild-tab:focus-visible,
 .strip-open:focus-visible,
@@ -270,41 +269,6 @@ h1 {
 
 .btn-text:hover:not(:disabled) {
     background: var(--color-primary-tint);
-}
-
-.segmented {
-    display: inline-flex;
-    gap: 2px;
-    padding: 2px;
-    border-radius: var(--radius-md);
-    background: var(--color-button-secondary);
-}
-
-.segmented > * {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: calc(var(--control-height-sm) - 4px);
-    padding: 0 var(--space-3);
-    border: none;
-    border-radius: var(--radius-sm);
-    background: none;
-    color: var(--color-text-muted);
-    font-family: inherit;
-    font-size: var(--font-size-sm);
-    font-weight: 600;
-    text-decoration: none;
-    cursor: pointer;
-}
-
-.segmented > :hover {
-    color: var(--color-text);
-}
-
-.segmented > .active {
-    background: var(--color-surface);
-    color: var(--color-text);
-    box-shadow: var(--shadow-sm);
 }
 
 .loading {

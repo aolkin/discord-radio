@@ -20,22 +20,18 @@
                         <span x-text="commitHash ? commitHash.substring(0, 7) : 'unknown'"></span>
                     </div>
                 </div>
-                <nav class="segmented view-switch" aria-label="View">
-                    <a
-                        href="#/live"
-                        :class="{ active: route.view === 'live' }"
-                        :aria-current="route.view === 'live' && 'page'"
-                    >
-                        Live
-                    </a>
-                    <a
-                        href="#/edit"
-                        :class="{ active: route.view === 'edit' }"
-                        :aria-current="route.view === 'edit' && 'page'"
-                    >
-                        Edit
-                    </a>
-                </nav>
+                <button
+                    type="button"
+                    class="btn edit-tree-toggle"
+                    :class="route.view === 'edit' ? 'btn-primary' : 'btn-secondary'"
+                    x-ref="editTreeToggle"
+                    aria-controls="edit-tree"
+                    :aria-expanded="treeOpen"
+                    @click="openTree()"
+                >
+                    <span aria-hidden="true">☰</span>
+                    Edit
+                </button>
                 <button type="button" class="activity-display" title="Edit bot activity" @click="openModal('activity')">
                     <span class="activity-icon" x-text="getActivityIcon(currentActivity.activity_type)"></span>
                     <span class="activity-info">
@@ -106,8 +102,32 @@
                 </template>
             </div>
 
-            <div class="edit-view" x-show="route.view === 'edit'">
-                <nav class="card">
+            <div class="edit-tree-layer" :class="{ 'tree-open': treeOpen }" @keydown.escape.window="closeTree()">
+                <div class="edit-tree-backdrop" @click="closeTree()"></div>
+                <nav
+                    id="edit-tree"
+                    class="card edit-tree"
+                    aria-label="Edit"
+                    x-ref="editTree"
+                    @click="treeClick($event)"
+                    @keydown="treeKeydown($event)"
+                >
+                    <div class="edit-tree-head">
+                        <span>Edit</span>
+                        <button type="button" class="btn btn-icon" aria-label="Close" @click="closeTree()">
+                            &times;
+                        </button>
+                    </div>
+                    <div class="section">
+                        <button
+                            type="button"
+                            class="btn tree-item"
+                            :class="route.view === 'live' ? 'btn-primary' : 'btn-secondary'"
+                            @click="navigate('#/live')"
+                        >
+                            Back to live
+                        </button>
+                    </div>
                     <div class="section">
                         <div class="section-title">
                             DJ Configs
@@ -218,11 +238,13 @@
                         </button>
                     </div>
                 </nav>
+            </div>
 
+            <div class="edit-view" x-show="route.view === 'edit'">
                 <div>
                     <div class="card empty-state" x-show="!route.kind">Select an item to edit</div>
                     <template x-if="route.kind">
-                        <section class="card draft-bar" x-show="!editorStatus(route.kind).loading">
+                        <section class="card draft-bar" x-show="!editorStatus(route.kind).loading" x-stuck>
                             <div
                                 x-show="editorStatus(route.kind).message.text"
                                 :class="editorStatus(route.kind).message.type === 'error' ? 'error-message' : 'success-message'"
@@ -419,7 +441,7 @@
 
                             <div class="modal-section">
                                 <div class="modal-section-title">Pools</div>
-                                <div class="pool-grid-scroll">
+                                <div class="pool-grid-scroll" x-scroll-fade>
                                     <table class="pool-grid">
                                         <thead>
                                             <tr>
@@ -567,7 +589,7 @@
                                         Pool share × entry share. A pool with unsaved changes uses them. The history
                                         penalty is not modelled.
                                     </p>
-                                    <div class="pool-grid-scroll">
+                                    <div class="pool-grid-scroll" x-scroll-fade>
                                         <table class="pool-grid">
                                             <thead>
                                                 <tr>
@@ -909,7 +931,7 @@
                                         </div>
                                     </template>
                                 </div>
-                                <div class="pool-grid-scroll">
+                                <div class="pool-grid-scroll" x-scroll-fade>
                                     <table class="pool-grid">
                                         <thead>
                                             <tr x-show="poolMode === 'properties'">
