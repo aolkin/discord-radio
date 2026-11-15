@@ -7,7 +7,7 @@ export const trackForms = () => ({
     playTrackDuration: null,
     playTrackMessage: emptyMessage(),
     trackName: '',
-    trackState: '',
+    trackMode: 'start',
     trackFilename: '',
     trackVolume: null,
     trackLoops: '',
@@ -96,28 +96,29 @@ export function tracks() {
             });
         },
 
-        trackStateChanged() {
-            // Clear filename when not starting
-            if (this.trackState !== 'start') {
-                this.trackFilename = '';
-            }
+        fileStem(filename) {
+            return filename
+                .split('/')
+                .pop()
+                .replace(/\.[^.]*$/, '');
         },
 
         async changeTrackState() {
+            const start = this.trackMode === 'start';
             const body = {
-                name: this.trackName,
-                state: this.trackState || null,
+                name: start ? this.trackName || this.fileStem(this.trackFilename) : this.trackName,
+                state: this.trackMode === 'update' ? null : this.trackMode,
             };
 
-            if (this.trackState === 'start' && this.trackFilename) {
+            if (start) {
                 body.filename = this.trackFilename;
             }
 
-            if (this.trackVolume !== null && this.trackVolume !== '') {
+            if (this.trackMode !== 'stop' && this.trackVolume !== null && this.trackVolume !== '') {
                 body.volume = Number.parseFloat(this.trackVolume);
             }
 
-            if (this.trackLoops !== '') {
+            if (this.trackMode !== 'stop' && this.trackLoops !== '') {
                 body.loops = this.trackLoops === 'true';
             }
 
