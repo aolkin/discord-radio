@@ -252,6 +252,17 @@
                 has_next: end < lines.length,
             });
         }),
+        guildRoute('POST', 'load', (_request, guildId) => {
+            if (store.radio.mode !== 'none') {
+                return fail(409, `Guild ${guildId} is already active`);
+            }
+            setMode('track');
+            return ok();
+        }),
+        guildRoute('POST', 'unload', () => {
+            setMode('none');
+            return ok();
+        }),
         guildRoute('POST', 'dj/advance',({ body }) => {
             setMode(modes.includes(body.state_type) ? body.state_type : nextMode(store.radio.mode));
             return ok();
