@@ -227,14 +227,14 @@
                     </div>
 
                     <div class="section">
-                        <div class="section-title">Audio Files</div>
+                        <div class="section-title">Files</div>
                         <button
                             type="button"
                             class="btn tree-item"
                             :class="route.kind === 'files' ? 'btn-primary' : 'btn-secondary'"
-                            @click="openItem('files', 'tracks')"
+                            @click="openItem('files', '')"
                         >
-                            Browse Audio Files
+                            Browse Files
                         </button>
                     </div>
                 </nav>
@@ -1498,7 +1498,7 @@
                     </section>
                     <section class="card" x-show="route.kind === 'files'">
                         <!-- biome-ignore lint/a11y/useHeadingContent: the heading text comes from x-text -->
-                        <h2 class="card-title" x-text="fileBrowserKind().noun + 's'"></h2>
+                        <h2 class="card-title" x-text="fileBrowserKind() ? fileBrowserKind().noun + 's' : 'Files'"></h2>
                         <div
                             x-show="fileBrowser.message.text"
                             :class="fileBrowser.message.type === 'error' ? 'error-message' : 'success-message'"
@@ -1677,13 +1677,28 @@
                                         <label class="form-label" for="advance-pool">Pool (Optional)</label>
                                         <select id="advance-pool" class="form-input" x-model="djAdvancePool">
                                             <option value="">Any (default)</option>
-                                            <template x-for="pool in djConfigPools[guild.dj_config] ?? []" :key="pool">
-                                                <option :value="pool" x-text="pool"></option>
+                                            <template x-if="(djConfigPools[guild.dj_config] ?? []).length > 0">
+                                                <optgroup label="In this config">
+                                                    <template
+                                                        x-for="pool in djConfigPools[guild.dj_config]"
+                                                        :key="pool"
+                                                    >
+                                                        <option :value="pool" x-text="pool"></option>
+                                                    </template>
+                                                </optgroup>
                                             </template>
+                                            <optgroup label="Other pools">
+                                                <template
+                                                    x-for="pool in pools.filter((name) => !(djConfigPools[guild.dj_config] ?? []).includes(name))"
+                                                    :key="pool"
+                                                >
+                                                    <option :value="pool" x-text="pool"></option>
+                                                </template>
+                                            </optgroup>
                                         </select>
                                         <small class="hint">
-                                            Leave as "Any" to advance to the next state, or pick a pool of the current
-                                            DJ config to take the next segment from.
+                                            Leave as "Any" to advance to the next state, or pick any pool to take the
+                                            next segment from.
                                         </small>
                                     </div>
                                     <button
@@ -2595,14 +2610,22 @@
                 <button
                     type="button"
                     class="btn btn-secondary"
-                    :disabled="fileBrowserCrumbs().length < 2"
-                    @click="browseFileBrowser(fileBrowserCrumbs().at(-2).prefix)"
+                    :disabled="fileBrowserCrumbs().length < (fileBrowser.open ? 2 : 1)"
+                    @click="browseFileBrowser(fileBrowserCrumbs().at(-2)?.prefix ?? '')"
                 >
                     &uarr; Up
                 </button>
+                <button
+                    type="button"
+                    class="btn btn-secondary"
+                    x-show="!fileBrowser.open"
+                    @click="browseFileBrowser('')"
+                >
+                    Root
+                </button>
                 <template x-for="(crumb, index) in fileBrowserCrumbs()" :key="crumb.prefix">
                     <span>
-                        <span x-show="index > 0">/</span>
+                        <span x-show="!fileBrowser.open || index > 0">/</span>
                         <button
                             type="button"
                             class="btn btn-secondary"
@@ -2661,6 +2684,7 @@
                         <button
                             type="button"
                             class="file-browser-delete"
+                            x-show="fileBrowserKind()"
                             title="Delete file"
                             :aria-label="'Delete ' + file.key"
                             :disabled="fileBrowser.deleting"
@@ -2675,7 +2699,11 @@
                 </div>
             </div>
 
-            <form class="file-browser-new-folder" @submit.prevent="createFileBrowserFolder()">
+            <form
+                class="file-browser-new-folder"
+                x-show="fileBrowserKind()"
+                @submit.prevent="createFileBrowserFolder()"
+            >
                 <input
                     type="text"
                     class="form-input"
@@ -2693,6 +2721,7 @@
             <!-- biome-ignore lint/a11y/noLabelWithoutControl: the file input is nested and the text comes from x-text -->
             <label
                 class="file-browser-drop"
+                x-show="fileBrowserKind()"
                 :class="{ dragging: fileBrowser.dragging }"
                 @dragover.prevent="fileBrowser.dragging = true"
                 @dragleave="fileBrowser.dragging = false"
