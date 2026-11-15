@@ -32,6 +32,32 @@ function formatValue(value) {
     return isContainer(value) ? JSON.stringify(value) : String(value);
 }
 
+const ranges = [
+    {
+        min: 'min_duration_seconds',
+        max: 'max_duration_seconds',
+        invalid: (min, max) => min >= max,
+        error: 'Min duration must be less than max duration',
+    },
+    {
+        min: 'loop_min',
+        max: 'loop_max',
+        invalid: (min, max) => min > max,
+        error: 'Loop min must not be more than loop max',
+    },
+];
+
+function rangeErrors(blocks) {
+    return ranges
+        .filter(({ min, max, invalid }) =>
+            blocks.some(
+                ({ row }) =>
+                    typeof row[min] === 'number' && typeof row[max] === 'number' && invalid(row[min], row[max]),
+            ),
+        )
+        .map(({ error }) => error);
+}
+
 const pathLabel = (path) =>
     path.map((key) => (/^\d+$/.test(key) ? `#${Number(key) + 1}` : String(key).replaceAll('_', ' '))).join(' › ');
 
@@ -222,11 +248,12 @@ export function drafts() {
                 return [];
             }
             const spec = specs[kind];
-            const errors = [...(spec.formErrors?.(draft.form) ?? [])];
+            const blocks = spec.blocks(draft.form);
+            const errors = [...(spec.formErrors?.(draft.form) ?? []), ...rangeErrors(blocks)];
             if (this.nameInvalid(kind)) {
                 errors.unshift('Name must be new and use only letters, digits, - and _');
             }
-            if (this.blocksInvalid(spec.blocks(draft.form))) {
+            if (this.blocksInvalid(blocks)) {
                 errors.push('Fix the marked fields');
             }
             return errors;
@@ -257,7 +284,16 @@ export function drafts() {
         },
 
         saveAsInvalid(kind) {
-            return !/^[\w-]+$/.test(this.saveAsName) || this[specs[kind].list].includes(this.saveAsName);
+            return this.saveAsError(kind) !== '';
+        },
+
+        saveAsError(kind) {
+            if (!/^[\w-]+$/.test(this.saveAsName)) {
+                return 'Use only letters, digits, - and _';
+            }
+            return this[specs[kind].list].includes(this.saveAsName)
+                ? `A ${specs[kind].label} named ${this.saveAsName} already exists`
+                : '';
         },
 
         async saveAs(kind) {
@@ -300,7 +336,7 @@ export function drafts() {
                 label: `saving ${spec.label}`,
                 request: () =>
                     apiRequest(`${spec.path}/${encodeURIComponent(name)}`, {
-                        method: 'PUT',
+                        method: key === newItem ? 'POST' : 'PUT',
                         body: spec.toBody(draft.form),
                         errorMessage: bodyOrStatus,
                     }),

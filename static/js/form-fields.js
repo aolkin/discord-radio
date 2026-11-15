@@ -1,12 +1,15 @@
-export const weight = { key: 'weight', label: 'Weight', type: 'number', step: 1, min: 0 };
-export const seconds = (key, label) => ({ key, label, type: 'number', step: 'any', min: 0 });
+export const weight = { key: 'weight', label: 'Weight', type: 'number', step: 1, min: 0, default: 1 };
+const seconds = (key, label, value) => ({ key, label, type: 'number', step: 'any', min: 0, default: value });
 export const optionalSeconds = (key, label) => ({ ...seconds(key, label), optional: true });
 export const profileText = (key, label, optional = false) => ({ key, label, type: 'text', optional, profile: true });
 export const optionalText = (key, label) => ({ key, label, type: 'text', optional: true });
 
+export const minDuration = seconds('min_duration_seconds', 'Min Duration (s)', 60);
+export const maxDuration = seconds('max_duration_seconds', 'Max Duration (s)', 120);
+
 export const noisePeriodFields = [
-    seconds('min_duration_seconds', 'Min Duration (s)'),
-    seconds('max_duration_seconds', 'Max Duration (s)'),
+    minDuration,
+    maxDuration,
     weight,
     optionalSeconds('fade_duration_seconds', 'Fade Duration (s)'),
 ];
