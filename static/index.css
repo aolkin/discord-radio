@@ -829,45 +829,123 @@ textarea.form-input {
 
 .pool-grid {
     width: 100%;
-    min-width: 720px;
+    table-layout: fixed;
     border-collapse: collapse;
     font-size: 0.9rem;
+}
+
+.pool-grid-config {
+    min-width: 800px;
+}
+
+.pool-grid-entries {
+    min-width: 720px;
+}
+
+.pool-grid-weights {
+    min-width: 560px;
+}
+
+.pool-grid-col-check {
+    width: 2.75rem;
+}
+
+.pool-grid-col-pool {
+    width: 20%;
+}
+
+.pool-grid-col-mode {
+    width: 8.5rem;
+}
+
+.pool-grid-col-profile {
+    width: 9rem;
+}
+
+.pool-grid-col-kind {
+    width: 6.5rem;
+}
+
+.pool-grid-col-length {
+    width: 10rem;
+}
+
+.pool-grid-col-entry {
+    width: 30%;
+}
+
+.pool-grid-col-share {
+    width: 4.5rem;
+}
+
+.pool-grid-col-remove {
+    width: calc(var(--control-height-sm) + 2 * var(--space-2));
+}
+
+.pool-grid-col-actions {
+    width: calc(4 * var(--control-height-sm) + 3 * var(--space-1) + 2 * var(--space-2));
 }
 
 .pool-grid th,
 .pool-grid td {
     padding: var(--space-2);
     text-align: left;
-    vertical-align: middle;
+    vertical-align: top;
     border-bottom: 1px solid var(--color-divider);
 }
 
 .pool-grid input[type="checkbox"] {
     width: 18px;
     height: 18px;
-    vertical-align: middle;
 }
 
 .pool-grid .form-input {
-    min-width: 96px;
+    width: 100%;
+    min-width: 0;
 }
 
-.pool-grid select.form-input {
-    min-width: 120px;
+.pool-grid-line {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-height: var(--control-height);
 }
 
 .pool-grid-cell {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: var(--space-2);
 }
 
 .pool-grid-cell > * {
     flex: 1;
+    min-width: 0;
 }
 
 .pool-grid-cell > .btn-icon {
     flex: none;
+}
+
+.pool-grid-cell > .field-was,
+.pool-grid-range > .field-was {
+    flex-basis: 100%;
+    margin-top: 0;
+}
+
+.pool-grid-range {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.pool-grid-range > .form-input {
+    flex: 1;
+}
+
+.pool-grid-to {
+    color: var(--color-text-muted);
 }
 
 .disclosure > summary {
@@ -901,14 +979,7 @@ textarea.form-input {
 }
 
 .pool-grid-actions {
-    white-space: nowrap;
-}
-
-.pool-grid-link {
-    display: inline-block;
-    margin-top: var(--space-1);
-    font-size: 0.8rem;
-    color: var(--color-primary);
+    justify-content: flex-end;
 }
 
 .pool-grid-note {
@@ -923,10 +994,9 @@ textarea.form-input {
 
 .weight-control {
     display: grid;
-    grid-template-columns: 6em minmax(100px, 1fr) auto;
+    grid-template-columns: 4.5em minmax(48px, 1fr) auto;
     gap: var(--space-2);
     align-items: center;
-    min-width: 340px;
 }
 
 .weight-control .form-input {
@@ -1305,6 +1375,10 @@ textarea.form-input {
 
     .draft-bar {
         position: static;
+    }
+
+    .pool-grid-entries {
+        min-width: 780px;
     }
 
     .draft-bar-row .row-gap-10 {
