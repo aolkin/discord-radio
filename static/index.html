@@ -243,7 +243,7 @@
             <div class="edit-view" x-show="route.view === 'edit'">
                 <div>
                     <div class="card empty-state" x-show="!route.kind">Select an item to edit</div>
-                    <template x-if="route.kind">
+                    <template x-if="route.kind && route.kind !== 'files'">
                         <section class="card draft-bar" x-show="!editorStatus(route.kind).loading" x-stuck>
                             <div
                                 x-show="editorStatus(route.kind).message.text"
@@ -284,7 +284,11 @@
                                         Review changes
                                     </button>
                                 </div>
-                                <div class="row-gap-10" x-show="draftReviewing">
+                                <div
+                                    class="row-gap-10"
+                                    x-show="draftReviewing"
+                                    @keydown.escape="draftReviewing = false"
+                                >
                                     <button type="button" class="btn btn-secondary" @click="draftReviewing = false">
                                         Back
                                     </button>
@@ -297,6 +301,7 @@
                                         Save as…
                                     </button>
                                     <button
+                                        id="draft-apply"
                                         type="button"
                                         class="btn btn-primary"
                                         :disabled="editorStatus(route.kind).saving"
@@ -309,6 +314,7 @@
                                 class="draft-bar-row"
                                 x-show="saveAsName !== null"
                                 @submit.prevent="!saveAsInvalid(route.kind) && saveAs(route.kind)"
+                                @keydown.escape="saveAsName = null"
                             >
                                 <label class="form-label" for="save-as-name">Save as</label>
                                 <input
@@ -363,6 +369,7 @@
                             x-show="!profileEditorLoading && !draftReviewing"
                             @submit.prevent="reviewDraft('signal-profiles')"
                         >
+                            <button type="submit" hidden></button>
                             <div class="form-group">
                                 <label class="form-label" for="profile-editor-name">Name</label>
                                 <input
@@ -417,6 +424,7 @@
                             x-show="!djConfigEditorLoading && !draftReviewing"
                             @submit.prevent="reviewDraft('dj-configs')"
                         >
+                            <button type="submit" hidden></button>
                             <datalist id="dj-config-profile-options">
                                 <template x-for="profile in profiles" :key="profile">
                                     <option :value="profile"></option>
@@ -859,6 +867,7 @@
                         </div>
                         <div class="loading" x-show="poolEditorLoading">Loading...</div>
                         <form x-show="!poolEditorLoading && !draftReviewing" @submit.prevent="reviewDraft('pools')">
+                            <button type="submit" hidden></button>
                             <datalist id="pool-editor-profile-options">
                                 <template x-for="profile in profiles" :key="profile">
                                     <option :value="profile"></option>
@@ -901,23 +910,33 @@
                                     </button>
                                 </div>
                                 <div class="pool-bulk">
-                                    <button
-                                        type="button"
-                                        class="btn btn-secondary"
-                                        :disabled="poolSelectedRows().length === 0"
-                                        :aria-expanded="poolBulkOpen"
-                                        @click="poolBulkOpen = !poolBulkOpen"
-                                    >
-                                        Bulk actions ▾
-                                    </button>
-                                    <div class="button-group" x-show="poolBulkOpen && poolSelectedRows().length > 0">
-                                        <button type="button" class="btn btn-secondary" @click="poolBulkDelete()">
+                                    <span
+                                        class="pool-bulk-count"
+                                        x-text="poolSelectedRows().length + ' selected'"
+                                    ></span>
+                                    <div class="button-group">
+                                        <button
+                                            type="button"
+                                            class="btn btn-secondary"
+                                            :disabled="poolSelectedRows().length === 0"
+                                            @click="poolBulkDelete()"
+                                        >
                                             Delete
                                         </button>
-                                        <button type="button" class="btn btn-secondary" @click="poolBulkDuplicate()">
+                                        <button
+                                            type="button"
+                                            class="btn btn-secondary"
+                                            :disabled="poolSelectedRows().length === 0"
+                                            @click="poolBulkDuplicate()"
+                                        >
                                             Duplicate
                                         </button>
-                                        <button type="button" class="btn btn-secondary" @click="poolBulkEqualize()">
+                                        <button
+                                            type="button"
+                                            class="btn btn-secondary"
+                                            :disabled="poolSelectedRows().length === 0"
+                                            @click="poolBulkEqualize()"
+                                        >
                                             Equalize weights
                                         </button>
                                     </div>
@@ -965,7 +984,17 @@
                                         </colgroup>
                                         <thead>
                                             <tr>
-                                                <th></th>
+                                                <th>
+                                                    <div class="pool-grid-line">
+                                                        <input
+                                                            type="checkbox"
+                                                            aria-label="Select all entries"
+                                                            :checked="poolAllSelected()"
+                                                            :disabled="poolForm.entries.length === 0"
+                                                            @change="togglePoolSelectAll()"
+                                                        >
+                                                    </div>
+                                                </th>
                                                 <th>Signal Profile</th>
                                                 <th>Kind</th>
                                                 <th>What</th>
@@ -1182,7 +1211,17 @@
                                         </colgroup>
                                         <thead>
                                             <tr>
-                                                <th></th>
+                                                <th>
+                                                    <div class="pool-grid-line">
+                                                        <input
+                                                            type="checkbox"
+                                                            aria-label="Select all entries"
+                                                            :checked="poolAllSelected()"
+                                                            :disabled="poolForm.entries.length === 0"
+                                                            @change="togglePoolSelectAll()"
+                                                        >
+                                                    </div>
+                                                </th>
                                                 <th>Entry</th>
                                                 <th>Weight</th>
                                                 <th>Share</th>
@@ -2567,7 +2606,7 @@
                     class="btn btn-primary"
                     :disabled="fileBrowser.picked.length === 0"
                     @click="selectFileBrowserEntry(fileBrowser.picked)"
-                    x-text="'Add ' + fileBrowser.picked.length + ' files'"
+                    x-text="'Add ' + fileBrowser.picked.length + (fileBrowser.picked.length === 1 ? ' file' : ' files')"
                 ></button>
             </div>
 

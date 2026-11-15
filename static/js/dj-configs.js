@@ -107,6 +107,7 @@ function blocks(form) {
 const djConfigEditor = registryEditor({
     path: '/api/dj-configs',
     prefix: 'djConfig',
+    nameInput: 'dj-config-editor-name',
     list: 'djConfigs',
     kind: 'dj-configs',
     label: 'DJ config',

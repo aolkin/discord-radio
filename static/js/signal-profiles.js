@@ -59,6 +59,7 @@ function blankForm() {
 const profileEditor = registryEditor({
     path: '/api/profiles',
     prefix: 'profile',
+    nameInput: 'profile-editor-name',
     list: 'profiles',
     kind: 'signal-profiles',
     label: 'signal profile',

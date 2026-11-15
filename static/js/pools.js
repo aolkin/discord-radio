@@ -108,6 +108,7 @@ function formErrors(form) {
 const poolEditor = registryEditor({
     path: '/api/pools',
     prefix: 'pool',
+    nameInput: 'pool-editor-name',
     list: 'pools',
     kind: 'pools',
     label: 'pool',
@@ -139,7 +140,6 @@ export function pools() {
         poolMode: 'properties',
         poolExpanded: {},
         poolSelected: [],
-        poolBulkOpen: false,
         poolKinds: kinds,
         poolWeightField: weight,
 
@@ -234,6 +234,7 @@ export function pools() {
 
         addPoolEntry(kind) {
             this.poolForm.entries.push({ kind, ...blankRow(kinds[kind].entryFields) });
+            this.focusWhenShown('.pool-grid-entries tbody:last-of-type .pool-grid-cell input');
         },
 
         movePoolEntry(index, offset) {
@@ -255,6 +256,14 @@ export function pools() {
             return this.poolForm.entries.filter((entry) => isIn(this.poolSelected, entry));
         },
 
+        poolAllSelected() {
+            return this.poolForm.entries.length > 0 && this.poolSelectedRows().length === this.poolForm.entries.length;
+        },
+
+        togglePoolSelectAll() {
+            this.poolSelected = this.poolAllSelected() ? [] : [...this.poolForm.entries];
+        },
+
         togglePoolSelected(entry) {
             this.poolSelected = isIn(this.poolSelected, entry)
                 ? this.poolSelected.filter((row) => !sameRow(row, entry))
@@ -269,7 +278,6 @@ export function pools() {
             this.poolForm.entries = this.poolForm.entries.filter((entry) => !isIn(rows, entry));
             this.poolSelected = [];
             this.poolExpanded = {};
-            this.poolBulkOpen = false;
         },
 
         poolBulkDuplicate() {
@@ -278,7 +286,6 @@ export function pools() {
                 isIn(rows, entry) ? [entry, { ...Alpine.raw(entry) }] : [entry],
             );
             this.poolExpanded = {};
-            this.poolBulkOpen = false;
         },
 
         poolBulkEqualize() {
@@ -288,7 +295,6 @@ export function pools() {
             for (const row of rows) {
                 row.weight = equal;
             }
-            this.poolBulkOpen = false;
         },
     };
 }

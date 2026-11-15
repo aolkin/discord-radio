@@ -41,6 +41,7 @@ export function registryEditor({
     list,
     kind,
     label,
+    nameInput,
     toForm,
     toBody,
     blankForm,
@@ -100,6 +101,9 @@ export function registryEditor({
                 this.draftReviewing = false;
                 this.saveAsName = null;
                 this[loading] = false;
+                if (this[isNew]) {
+                    this.focusWhenShown(`#${nameInput}`);
+                }
 
                 const draft = this.drafts[kind][key];
                 if (draft && (this[isNew] || this.changeCount(kind, key) > 0)) {
@@ -142,6 +146,19 @@ export function drafts() {
         draftReviewing: false,
         saveAsName: null,
         fieldInvalid,
+
+        focusWhenShown(selector) {
+            this.$nextTick(() =>
+                requestAnimationFrame(() => {
+                    const element = document.querySelector(selector);
+                    if (element instanceof HTMLInputElement) {
+                        element.select();
+                    } else {
+                        element?.focus();
+                    }
+                }),
+            );
+        },
 
         setDraft(kind, key, form) {
             this.drafts[kind][key] = { saved: clone(form), form };
@@ -235,6 +252,7 @@ export function drafts() {
         reviewDraft(kind) {
             if (this.changeCount(kind, this.route.name) > 0 && this.draftErrors(kind).length === 0) {
                 this.draftReviewing = true;
+                this.focusWhenShown('#draft-apply');
             }
         },
 
@@ -254,6 +272,7 @@ export function drafts() {
                 name = `${base}${count}`;
             }
             this.saveAsName = name;
+            this.focusWhenShown('#save-as-name');
         },
 
         saveAsInvalid(kind) {
@@ -306,7 +325,6 @@ export function drafts() {
                     }),
                 onSuccess: async () => {
                     draft.saved = clone(draft.form);
-                    this.draftReviewing = false;
                     if (key === newItem) {
                         delete this.drafts[kind][newItem];
                         this.drafts[kind][name] = draft;
@@ -321,6 +339,7 @@ export function drafts() {
                 success: `${capitalize(spec.label)} saved`,
                 failure: `Failed to save ${spec.label}`,
             });
+            this.draftReviewing = false;
         },
     };
 }
