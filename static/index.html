@@ -227,14 +227,14 @@
                     </div>
 
                     <div class="section">
-                        <div class="section-title">Audio Files</div>
+                        <div class="section-title">Files</div>
                         <button
                             type="button"
                             class="btn tree-item"
                             :class="route.kind === 'files' ? 'btn-primary' : 'btn-secondary'"
-                            @click="openItem('files', 'tracks')"
+                            @click="openItem('files', '')"
                         >
-                            Browse Audio Files
+                            Browse Files
                         </button>
                     </div>
                 </nav>
@@ -276,8 +276,13 @@
                             <div class="draft-bar-row">
                                 <span
                                     class="draft-count"
+                                    x-show="!draftReviewing"
                                     x-text="changeCount(route.kind, route.name) === 1 ? '1 unsaved change' : changeCount(route.kind, route.name) + ' unsaved changes'"
                                 ></span>
+                                <div x-show="draftReviewing">
+                                    <div class="review-title" x-text="'Review: ' + reviewTitle(route.kind)"></div>
+                                    <div class="hint">Nothing is saved yet.</div>
+                                </div>
                                 <div class="row-gap-10" x-show="!draftReviewing">
                                     <button
                                         type="button"
@@ -309,16 +314,16 @@
                                     x-show="draftReviewing"
                                     @keydown.escape="draftReviewing = false"
                                 >
-                                    <button type="button" class="btn btn-secondary" @click="draftReviewing = false">
-                                        Back
-                                    </button>
                                     <button
                                         type="button"
-                                        class="btn btn-secondary"
+                                        class="btn btn-text"
                                         x-show="!editorStatus(route.kind).isNew"
                                         @click="openSaveAs(route.kind)"
                                     >
-                                        Save as…
+                                        Save as a copy…
+                                    </button>
+                                    <button type="button" class="btn btn-secondary" @click="draftReviewing = false">
+                                        Keep editing
                                     </button>
                                     <button
                                         id="draft-apply"
@@ -326,7 +331,7 @@
                                         class="btn btn-primary"
                                         :disabled="editorStatus(route.kind).saving"
                                         @click="applyDraft(route.kind)"
-                                        x-text="editorStatus(route.kind).saving ? 'Applying...' : 'Apply'"
+                                        x-text="editorStatus(route.kind).saving ? 'Applying...' : editorStatus(route.kind).isNew ? 'Create' : 'Apply changes'"
                                     ></button>
                                 </div>
                             </div>
@@ -364,27 +369,49 @@
                                 x-show="saveAsName !== null && saveAsInvalid(route.kind)"
                                 x-text="saveAsName === null ? '' : saveAsError(route.kind)"
                             ></div>
-                            <table class="review-table" x-show="draftReviewing">
-                                <thead>
-                                    <tr>
-                                        <th>Field</th>
-                                        <th>Was</th>
-                                        <th>Now</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <template x-for="change in reviewList(route.kind)" :key="change.label">
-                                        <tr>
-                                            <td x-text="change.label"></td>
-                                            <td x-text="change.was"></td>
-                                            <td x-text="change.now"></td>
-                                        </tr>
-                                    </template>
-                                </tbody>
-                            </table>
                         </section>
                     </template>
-                    <section class="card" x-show="route.kind === 'signal-profiles'">
+                    <template x-if="route.kind && route.kind !== 'files' && draftReviewing">
+                        <section class="card review">
+                            <template x-for="group in reviewGroups(route.kind)" :key="group.key">
+                                <div class="review-group">
+                                    <div class="review-group-head" x-show="group.title || group.status !== 'changed'">
+                                        <span class="review-group-title" x-text="group.title"></span>
+                                        <span
+                                            class="review-badge"
+                                            :class="'review-badge-' + group.status"
+                                            x-show="group.status !== 'changed'"
+                                            x-text="group.status === 'added' ? 'Added' : 'Removed'"
+                                        ></span>
+                                    </div>
+                                    <template x-for="row in group.rows" :key="row.label">
+                                        <div class="review-row">
+                                            <span class="review-label" x-text="row.label"></span>
+                                            <span class="review-values">
+                                                <del
+                                                    class="review-was"
+                                                    x-show="row.was !== null"
+                                                    x-text="row.was"
+                                                ></del>
+                                                <span
+                                                    class="review-arrow"
+                                                    aria-hidden="true"
+                                                    x-show="row.was !== null && row.now !== null"
+                                                    >→</span
+                                                >
+                                                <ins
+                                                    class="review-now"
+                                                    x-show="row.now !== null"
+                                                    x-text="row.now"
+                                                ></ins>
+                                            </span>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+                        </section>
+                    </template>
+                    <section class="card" x-show="route.kind === 'signal-profiles' && !draftReviewing">
                         <!-- biome-ignore lint/a11y/useHeadingContent: the heading text comes from x-text -->
                         <h2
                             class="card-title"
@@ -442,7 +469,7 @@
                         </form>
                     </section>
 
-                    <section class="card" x-show="route.kind === 'dj-configs'">
+                    <section class="card" x-show="route.kind === 'dj-configs' && !draftReviewing">
                         <!-- biome-ignore lint/a11y/useHeadingContent: the heading text comes from x-text -->
                         <h2 class="card-title" x-text="djConfigEditorIsNew ? 'New DJ Config' : 'Edit DJ Config'"></h2>
                         <div class="loading" x-show="djConfigEditorLoading">Loading...</div>
@@ -893,7 +920,7 @@
                         </form>
                     </section>
 
-                    <section class="card" x-show="route.kind === 'pools'">
+                    <section class="card" x-show="route.kind === 'pools' && !draftReviewing">
                         <!-- biome-ignore lint/a11y/useHeadingContent: the heading text comes from x-text -->
                         <h2 class="card-title" x-text="poolEditorIsNew ? 'New Pool' : 'Edit Pool'"></h2>
                         <div class="modal-section" x-show="!poolEditorIsNew">
@@ -1532,7 +1559,7 @@
                     </section>
                     <section class="card" x-show="route.kind === 'files'">
                         <!-- biome-ignore lint/a11y/useHeadingContent: the heading text comes from x-text -->
-                        <h2 class="card-title" x-text="fileBrowserKind().noun + 's'"></h2>
+                        <h2 class="card-title" x-text="fileBrowserKind() ? fileBrowserKind().noun + 's' : 'Files'"></h2>
                         <div
                             x-show="fileBrowser.message.text"
                             :class="fileBrowser.message.type === 'error' ? 'error-message' : 'success-message'"
@@ -1711,13 +1738,28 @@
                                         <label class="form-label" for="advance-pool">Pool (Optional)</label>
                                         <select id="advance-pool" class="form-input" x-model="djAdvancePool">
                                             <option value="">Any (default)</option>
-                                            <template x-for="pool in djConfigPools[guild.dj_config] ?? []" :key="pool">
-                                                <option :value="pool" x-text="pool"></option>
+                                            <template x-if="(djConfigPools[guild.dj_config] ?? []).length > 0">
+                                                <optgroup label="In this config">
+                                                    <template
+                                                        x-for="pool in djConfigPools[guild.dj_config]"
+                                                        :key="pool"
+                                                    >
+                                                        <option :value="pool" x-text="pool"></option>
+                                                    </template>
+                                                </optgroup>
                                             </template>
+                                            <optgroup label="Other pools">
+                                                <template
+                                                    x-for="pool in pools.filter((name) => !(djConfigPools[guild.dj_config] ?? []).includes(name))"
+                                                    :key="pool"
+                                                >
+                                                    <option :value="pool" x-text="pool"></option>
+                                                </template>
+                                            </optgroup>
                                         </select>
                                         <small class="hint">
-                                            Leave as "Any" to advance to the next state, or pick a pool of the current
-                                            DJ config to take the next segment from.
+                                            Leave as "Any" to advance to the next state, or pick any pool to take the
+                                            next segment from.
                                         </small>
                                     </div>
                                     <button
@@ -2629,14 +2671,22 @@
                 <button
                     type="button"
                     class="btn btn-secondary"
-                    :disabled="fileBrowserCrumbs().length < 2"
-                    @click="browseFileBrowser(fileBrowserCrumbs().at(-2).prefix)"
+                    :disabled="fileBrowserCrumbs().length < (fileBrowser.open ? 2 : 1)"
+                    @click="browseFileBrowser(fileBrowserCrumbs().at(-2)?.prefix ?? '')"
                 >
                     &uarr; Up
                 </button>
+                <button
+                    type="button"
+                    class="btn btn-secondary"
+                    x-show="!fileBrowser.open"
+                    @click="browseFileBrowser('')"
+                >
+                    Root
+                </button>
                 <template x-for="(crumb, index) in fileBrowserCrumbs()" :key="crumb.prefix">
                     <span>
-                        <span x-show="index > 0">/</span>
+                        <span x-show="!fileBrowser.open || index > 0">/</span>
                         <button
                             type="button"
                             class="btn btn-secondary"
@@ -2698,6 +2748,7 @@
                         <button
                             type="button"
                             class="file-browser-delete"
+                            x-show="fileBrowserKind()"
                             title="Delete file"
                             :aria-label="'Delete ' + file.key"
                             :disabled="fileBrowser.deleting"
@@ -2712,7 +2763,11 @@
                 </div>
             </div>
 
-            <form class="file-browser-new-folder" @submit.prevent="createFileBrowserFolder()">
+            <form
+                class="file-browser-new-folder"
+                x-show="fileBrowserKind()"
+                @submit.prevent="createFileBrowserFolder()"
+            >
                 <input
                     type="text"
                     class="form-input"
@@ -2730,6 +2785,7 @@
             <!-- biome-ignore lint/a11y/noLabelWithoutControl: the file input is nested and the text comes from x-text -->
             <label
                 class="file-browser-drop"
+                x-show="fileBrowserKind()"
                 :class="{ dragging: fileBrowser.dragging }"
                 @dragover.prevent="fileBrowser.dragging = true"
                 @dragleave="fileBrowser.dragging = false"

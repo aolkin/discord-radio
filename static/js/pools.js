@@ -86,6 +86,13 @@ function blankForm() {
     };
 }
 
+function entryName(entry) {
+    if (entry.kind === 'noise') {
+        return `Noise ${entry.min_duration_seconds}-${entry.max_duration_seconds}s`;
+    }
+    return entry[kinds[entry.kind].identifier];
+}
+
 function blocks(form) {
     return [
         ...segmentDefaultsBlocks(form.segment_defaults, ['segment_defaults']),
@@ -93,6 +100,7 @@ function blocks(form) {
             row: entry,
             fields: kinds[entry.kind].entryFields,
             label: `${kinds[entry.kind].label} Entry`,
+            title: `Entry ${index + 1}: ${entryName(entry) || kinds[entry.kind].label}`,
             path: ['entries', index],
             index,
         })),
@@ -207,12 +215,7 @@ export function pools() {
             return value === '' || this.profiles.includes(value) ? this.profiles : [...this.profiles, value];
         },
 
-        poolEntryName(entry) {
-            if (entry.kind === 'noise') {
-                return `Noise ${entry.min_duration_seconds}-${entry.max_duration_seconds}s`;
-            }
-            return entry[kinds[entry.kind].identifier];
-        },
+        poolEntryName: entryName,
 
         pickPoolFile(entry) {
             this.openFileBrowser({

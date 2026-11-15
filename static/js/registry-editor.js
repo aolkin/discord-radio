@@ -59,7 +59,68 @@ function rangeErrors(blocks) {
 }
 
 const pathLabel = (path) =>
-    path.map((key) => (/^\d+$/.test(key) ? `#${Number(key) + 1}` : String(key).replaceAll('_', ' '))).join(' › ');
+    capitalize(
+        path.map((key) => (/^\d+$/.test(key) ? `#${Number(key) + 1}` : String(key).replaceAll('_', ' '))).join(' › '),
+    );
+
+function formatField(field, value) {
+    if (field?.type === 'bool' && value !== '') {
+        return value === 'true' ? 'Yes' : 'No';
+    }
+    if (Array.isArray(value)) {
+        return value.length > 0 ? value.join(', ') : '(none)';
+    }
+    return formatValue(value);
+}
+
+const isBlank = (value) => value === '' || value === null || (Array.isArray(value) && value.length === 0);
+
+const startsWith = (path, prefix) => prefix.every((key, index) => String(path[index]) === String(key));
+
+function owningBlock(blocks, path) {
+    return blocks
+        .filter((block) => startsWith(path, block.path))
+        .reduce((best, block) => (best && best.path.length >= block.path.length ? best : block), undefined);
+}
+
+function reviewGroups(spec, draft) {
+    const formBlocks = spec.blocks(draft.form);
+    const savedBlocks = spec.blocks(draft.saved);
+    const groups = new Map();
+    for (const change of diff(draft.saved, draft.form)) {
+        if (change.path.join('/') === 'name' && change.saved === '') {
+            continue;
+        }
+        const removed = change.form === undefined || change.form === null;
+        const block = owningBlock(removed ? savedBlocks : formBlocks, change.path);
+        const whole = block !== undefined && block.path.length === change.path.length && isContainer(block.row);
+        const key = block ? block.path.join('/') : '';
+        if (!groups.has(key)) {
+            groups.set(key, { key, title: block?.title ?? block?.label ?? '', status: 'changed', rows: [] });
+        }
+        const group = groups.get(key);
+        if (whole) {
+            group.status = removed ? 'removed' : 'added';
+            const row = removed ? change.saved : change.form;
+            group.rows = block.fields
+                .filter((rowField) => !isBlank(row[rowField.key]))
+                .map((rowField) => ({
+                    label: rowField.label,
+                    was: removed ? formatField(rowField, row[rowField.key]) : null,
+                    now: removed ? null : formatField(rowField, row[rowField.key]),
+                }));
+            continue;
+        }
+        const rest = block ? change.path.slice(block.path.length) : change.path;
+        const field = block?.fields.find((candidate) => String(candidate.key) === String(rest[0]));
+        group.rows.push({
+            label: field && rest.length === 1 ? field.label : pathLabel(rest),
+            was: change.saved === undefined || isBlank(change.saved) ? null : formatField(field, change.saved),
+            now: formatField(field, change.form),
+        });
+    }
+    return [...groups.values()];
+}
 
 export function registryEditor({
     path,
@@ -242,15 +303,18 @@ export function drafts() {
             return formatValue(getPath(this.openDraft(kind)?.saved, path));
         },
 
-        reviewList(kind) {
+        reviewGroups(kind) {
             const draft = this.openDraft(kind);
-            return draft
-                ? diff(draft.saved, draft.form).map((change) => ({
-                      label: pathLabel(change.path),
-                      was: formatValue(change.saved),
-                      now: formatValue(change.form),
-                  }))
-                : [];
+            return draft ? reviewGroups(specs[kind], draft) : [];
+        },
+
+        reviewTitle(kind) {
+            const count = this.changeCount(kind, this.route.name);
+            const changes = count === 1 ? '1 change' : `${count} changes`;
+            const spec = specs[kind];
+            return this[spec.isNew]
+                ? `New ${spec.label} ${this[spec.form].name}`
+                : `${changes} to ${spec.label} ${this.route.name}`;
         },
 
         nameInvalid(kind) {

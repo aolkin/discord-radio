@@ -40,8 +40,8 @@ function parseRoute(hash) {
     if (Object.hasOwn(editors, kind) && /^([\w-]+|\+new)$/.test(name)) {
         return { view, kind, name };
     }
-    if (kind === 'files' && (name === '' || /^[\w-]+(\/[\w-]+)*$/.test(name))) {
-        return { view, kind, name: name || 'tracks' };
+    if (kind === 'files' && (name === '' || /^(?!\.+(\/|$))[\w.-]+(\/(?!\.+(\/|$))[\w.-]+)*$/.test(name))) {
+        return { view, kind, name };
     }
     return { view, kind: null, name: null };
 }
