@@ -340,6 +340,13 @@ impl TrackManager {
         }
     }
 
+    pub async fn clear(&self) {
+        let mut tracks = self.tracks.lock().await;
+        tracks.clear();
+        self.audio_processor.write().await.clear_tracks();
+        self.persist_locked(&tracks).await;
+    }
+
     pub async fn stop_track(&self, name: &str, fade_time: f32) -> anyhow::Result<()> {
         let mut tracks = self.tracks.lock().await;
         self.stop_locked(&mut tracks, name, fade_time).await
