@@ -1,4 +1,6 @@
 use crate::audio::processing::processor::AudioProcessor;
+use async_trait::async_trait;
+use songbird::events::{Event, EventContext, EventHandler, TrackEvent};
 use songbird::input::RawAdapter;
 use songbird::input::core::io::MediaSource;
 use std::io::{Read, Seek, SeekFrom};
@@ -36,10 +38,25 @@ impl ProcessedAudioAdapter {
         // Play the input through Songbird
         {
             let mut call_guard = call.lock().await;
-            call_guard.play_input(raw_input.into());
+            let handle = call_guard.play_input(raw_input.into());
+            let _ = handle.add_event(Event::Track(TrackEvent::Error), TrackErrorLogger);
         }
 
         processor
+    }
+}
+
+struct TrackErrorLogger;
+
+#[async_trait]
+impl EventHandler for TrackErrorLogger {
+    async fn act(&self, ctx: &EventContext<'_>) -> Option<Event> {
+        if let EventContext::Track(tracks) = ctx {
+            for (state, _) in *tracks {
+                tracing::warn!("Voice track failed: {:?}", state.playing);
+            }
+        }
+        None
     }
 }
 
