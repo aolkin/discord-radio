@@ -250,7 +250,10 @@
                                 :class="editorStatus(route.kind).message.type === 'error' ? 'error-message' : 'success-message'"
                                 x-text="editorStatus(route.kind).message.text"
                             ></div>
-                            <template x-for="error in draftErrors(route.kind)" :key="error">
+                            <template
+                                x-for="error in changeCount(route.kind, route.name) > 0 ? draftErrors(route.kind) : []"
+                                :key="error"
+                            >
                                 <div class="error-message" x-text="error"></div>
                             </template>
                             <div class="draft-bar-row">
@@ -332,6 +335,12 @@
                                     </button>
                                 </div>
                             </form>
+                            <div
+                                class="hint hint-warning"
+                                role="status"
+                                x-show="saveAsName !== null && saveAsInvalid(route.kind)"
+                                x-text="saveAsName === null ? '' : saveAsError(route.kind)"
+                            ></div>
                             <table class="review-table" x-show="draftReviewing">
                                 <thead>
                                     <tr>
@@ -371,7 +380,7 @@
                                     class="form-input"
                                     x-model="profileForm.name"
                                     :readonly="!profileEditorIsNew"
-                                    :aria-invalid="nameInvalid('signal-profiles')"
+                                    :aria-invalid="changeCount('signal-profiles', route.name) > 0 && nameInvalid('signal-profiles')"
                                     required
                                     pattern="[A-Za-z0-9_\-]+"
                                     title="Letters, digits, - and _ only"
@@ -431,7 +440,7 @@
                                         class="form-input"
                                         x-model="djConfigForm.name"
                                         :readonly="!djConfigEditorIsNew"
-                                        :aria-invalid="nameInvalid('dj-configs')"
+                                        :aria-invalid="changeCount('dj-configs', route.name) > 0 && nameInvalid('dj-configs')"
                                         required
                                         pattern="[A-Za-z0-9_\-]+"
                                         title="Letters, digits, - and _ only"
@@ -873,7 +882,7 @@
                                         class="form-input"
                                         x-model="poolForm.name"
                                         :readonly="!poolEditorIsNew"
-                                        :aria-invalid="nameInvalid('pools')"
+                                        :aria-invalid="changeCount('pools', route.name) > 0 && nameInvalid('pools')"
                                         required
                                         pattern="[A-Za-z0-9_\-]+"
                                         title="Letters, digits, - and _ only"
