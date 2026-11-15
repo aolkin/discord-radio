@@ -20,7 +20,6 @@ export function tracks() {
         ...trackForms(),
         playTrackSaving: false,
         trackSaving: false,
-        audioFiles: [],
 
         getTrackDurationSecs(track) {
             return track.duration ? track.duration.secs + track.duration.nanos / 1e9 : null;
@@ -57,14 +56,18 @@ export function tracks() {
             return `${mins}:${secs.toString().padStart(2, '0')}`;
         },
 
-        async loadAudioFiles() {
-            try {
-                const response = await apiRequest('/api/files?prefix=tracks/');
-                const data = await response.json();
-                this.audioFiles = data.files.map((file) => `s3://${file.key}`);
-            } catch (error) {
-                console.error('Failed to load audio files:', error);
-            }
+        pickTrackFile(field) {
+            this.openFileBrowser({
+                mode: 'file',
+                prefix: 'tracks/',
+                onSelect: (key) => {
+                    this[field] = `s3://${key}`;
+                },
+            });
+        },
+
+        trackFileLabel(filename) {
+            return filename.replace(/^s3:\/\/(tracks\/)?/, '');
         },
 
         async playTrack() {

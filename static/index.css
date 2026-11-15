@@ -554,6 +554,25 @@ textarea.form-input {
     font-weight: normal;
 }
 
+.file-pick {
+    display: flex;
+    gap: var(--space-2);
+    align-items: center;
+    justify-content: space-between;
+    text-align: left;
+    cursor: pointer;
+}
+
+.file-pick > span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.file-pick-empty {
+    color: var(--color-text-faint);
+}
+
 fieldset.form-group {
     min-width: 0;
     padding: 0;

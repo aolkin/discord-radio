@@ -17,9 +17,7 @@ export function connection() {
 
         init() {
             this.connect();
-            // Load audio files and profiles
             this.loadGuildList();
-            this.loadAudioFiles();
             this.loadProfiles();
             this.loadPools();
             this.loadDjConfigPools();

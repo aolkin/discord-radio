@@ -1892,17 +1892,18 @@
                                     ></div>
                                     <div class="form-group">
                                         <label class="form-label" for="play-track-file">Audio File</label>
-                                        <select
+                                        <button
                                             id="play-track-file"
-                                            class="form-input"
-                                            x-model="playTrackFilename"
-                                            required
+                                            type="button"
+                                            class="form-input file-pick"
+                                            :class="{ 'file-pick-empty': !playTrackFilename }"
+                                            @click="pickTrackFile('playTrackFilename')"
                                         >
-                                            <option value="">Select audio file...</option>
-                                            <template x-for="file in audioFiles" :key="file">
-                                                <option :value="file" x-text="file"></option>
-                                            </template>
-                                        </select>
+                                            <span
+                                                x-text="playTrackFilename ? trackFileLabel(playTrackFilename) : 'Choose a file...'"
+                                            ></span>
+                                            <span aria-hidden="true">📁</span>
+                                        </button>
                                     </div>
                                     <div class="form-row">
                                         <div class="form-group">
@@ -1946,7 +1947,7 @@
                                     <button
                                         type="submit"
                                         class="btn btn-primary"
-                                        :disabled="playTrackSaving"
+                                        :disabled="playTrackSaving || !playTrackFilename"
                                         x-text="playTrackSaving ? 'Playing...' : 'Play Track'"
                                     ></button>
                                 </form>
@@ -2037,17 +2038,18 @@
                                         <div class="form-row" x-init="trackName = ''">
                                             <div class="form-group">
                                                 <label class="form-label" for="track-state-file">Audio File</label>
-                                                <select
+                                                <button
                                                     id="track-state-file"
-                                                    class="form-input"
-                                                    x-model="trackFilename"
-                                                    required
+                                                    type="button"
+                                                    class="form-input file-pick"
+                                                    :class="{ 'file-pick-empty': !trackFilename }"
+                                                    @click="pickTrackFile('trackFilename')"
                                                 >
-                                                    <option value="">Select audio file...</option>
-                                                    <template x-for="file in audioFiles" :key="file">
-                                                        <option :value="file" x-text="file"></option>
-                                                    </template>
-                                                </select>
+                                                    <span
+                                                        x-text="trackFilename ? trackFileLabel(trackFilename) : 'Choose a file...'"
+                                                    ></span>
+                                                    <span aria-hidden="true">📁</span>
+                                                </button>
                                             </div>
                                             <div class="form-group">
                                                 <label class="form-label" for="track-state-name">Track Name</label>
@@ -2122,7 +2124,7 @@
                                     <button
                                         type="submit"
                                         class="btn btn-primary"
-                                        :disabled="trackSaving"
+                                        :disabled="trackSaving || (trackMode === 'start' && !trackFilename)"
                                         x-text="trackSaving ? 'Saving...' : { start: 'Start Track', update: 'Update Track', stop: 'Stop Track' }[trackMode]"
                                     ></button>
                                 </form>
