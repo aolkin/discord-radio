@@ -867,7 +867,7 @@ textarea.form-input {
 }
 
 .pool-grid-col-length {
-    width: 12rem;
+    width: 10rem;
 }
 
 .pool-grid-col-entry {
@@ -979,7 +979,6 @@ textarea.form-input {
 }
 
 .pool-grid-actions {
-    flex-wrap: wrap;
     justify-content: flex-end;
 }
 
@@ -1341,12 +1340,6 @@ textarea.form-input {
     margin-top: var(--space-1);
 }
 
-@media (max-width: 900px) {
-    .pool-grid-col-actions {
-        width: calc(2 * var(--control-height-sm) + var(--space-1) + 2 * var(--space-2));
-    }
-}
-
 @media (max-width: 768px) {
     .guild-content {
         grid-template-columns: minmax(0, 1fr);
@@ -1382,6 +1375,10 @@ textarea.form-input {
 
     .draft-bar {
         position: static;
+    }
+
+    .pool-grid-entries {
+        min-width: 780px;
     }
 
     .draft-bar-row .row-gap-10 {
