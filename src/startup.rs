@@ -19,10 +19,9 @@ pub async fn restore_voice_channels(
 
     if saved_channels.is_empty() {
         tracing::info!("No saved voice channels found");
-        return Ok(());
+    } else {
+        tracing::info!("Restoring {} voice channel(s)", saved_channels.len());
     }
-
-    tracing::info!("Restoring {} voice channel(s)", saved_channels.len());
 
     let manager = songbird::get(ctx)
         .await
