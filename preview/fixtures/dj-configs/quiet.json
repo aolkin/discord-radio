@@ -1,0 +1,14 @@
+{
+  "name": "quiet",
+  "pools": {
+    "noise": { "weight": 1, "playback": "single", "order": "weighted", "segment_defaults": {} }
+  },
+  "signal_profiles": {
+    "entries": [
+      { "signal_profile": "weak_signal", "min_duration_seconds": 30.0, "max_duration_seconds": 120.0, "weight": 1, "fade_duration_seconds": 8.0 }
+    ]
+  },
+  "channel_statuses": {
+    "entries": []
+  }
+}

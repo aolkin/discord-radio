@@ -1,10 +1,17 @@
 import { apiRequest, bodyOrStatus, emptyMessage } from './api.js';
 
 export const playForms = () => ({
-    djStateType: '',
+    djAdvancePool: '',
+    djConfigSelection: '',
+    djConfigMessage: emptyMessage(),
     djMessage: emptyMessage(),
+    idleNoiseProfile: '',
+    idleDuration: null,
+    idleMessage: emptyMessage(),
     hexMessageText: '',
     hexMessagePool: '',
+    hexMessageVolume: null,
+    hexMessageLoops: null,
     hexMessage: emptyMessage(),
     channelStatusSetting: 'background',
     channelStatusText: '',
@@ -20,6 +27,8 @@ export function dj() {
     return {
         ...playForms(),
         djSaving: false,
+        djConfigSaving: false,
+        idleSaving: false,
         hexSaving: false,
         channelStatusSaving: false,
         announcementOptions: [],
@@ -144,14 +153,67 @@ export function dj() {
                 request: () =>
                     apiRequest(`/api/guilds/${this.route.name}/dj/advance`, {
                         method: 'POST',
-                        body: { state_type: this.djStateType || null },
+                        body: { state_type: this.djAdvancePool || null },
+                        errorMessage: bodyOrStatus,
                     }),
                 success: 'DJ state advanced successfully!',
                 failure: 'Failed to advance DJ state',
             });
         },
 
+        async idleDJ() {
+            const body = { noise_profile: this.idleNoiseProfile || null };
+            if (this.idleDuration !== null && this.idleDuration !== '') {
+                body.duration = Number.parseFloat(this.idleDuration);
+            }
+
+            await this.runAction({
+                saving: 'idleSaving',
+                message: 'idleMessage',
+                label: 'making the DJ idle',
+                request: () =>
+                    apiRequest(`/api/guilds/${this.route.name}/dj/idle`, {
+                        method: 'POST',
+                        body,
+                        errorMessage: bodyOrStatus,
+                    }),
+                success: 'DJ is idle.',
+                failure: 'Failed to make the DJ idle',
+            });
+        },
+
+        async configureDJ() {
+            const config = this.djConfigSelection;
+            if (!confirm(`Restart the DJ with config "${config}"?`)) {
+                return;
+            }
+            await this.runAction({
+                saving: 'djConfigSaving',
+                message: 'djConfigMessage',
+                label: 'configuring DJ',
+                request: () =>
+                    apiRequest(`/api/guilds/${this.route.name}/dj/config`, {
+                        method: 'POST',
+                        body: { config },
+                        errorMessage: bodyOrStatus,
+                    }),
+                success: `DJ restarted with config "${config}".`,
+                failure: 'Failed to configure DJ',
+            });
+        },
+
         async playHexMessage() {
+            const body = { message: this.hexMessageText };
+            if (this.hexMessagePool) {
+                body.pool = this.hexMessagePool;
+            }
+            if (this.hexMessageVolume !== null && this.hexMessageVolume !== '') {
+                body.volume = Number.parseFloat(this.hexMessageVolume);
+            }
+            if (this.hexMessageLoops !== null && this.hexMessageLoops !== '') {
+                body.loops = Number.parseInt(this.hexMessageLoops, 10);
+            }
+
             await this.runAction({
                 saving: 'hexSaving',
                 message: 'hexMessage',
@@ -159,10 +221,8 @@ export function dj() {
                 request: () =>
                     apiRequest(`/api/guilds/${this.route.name}/hex/play`, {
                         method: 'POST',
-                        body: {
-                            message: this.hexMessageText,
-                            ...(this.hexMessagePool && { pool: this.hexMessagePool }),
-                        },
+                        body,
+                        errorMessage: bodyOrStatus,
                     }),
                 success: 'Hex message queued successfully!',
                 failure: 'Failed to play hex message',

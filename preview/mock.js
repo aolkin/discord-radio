@@ -4,7 +4,7 @@
     const registries = {
         profiles: ['clear', 'weak_signal', 'tuning'],
         pools: ['noise', 'hex', 'track'],
-        'dj-configs': ['default'],
+        'dj-configs': ['default', 'quiet'],
     };
     const modes = ['track', 'hex', 'noise'];
 
@@ -65,6 +65,7 @@
             text: null,
             profile: null,
             channelStatus: null,
+            djConfig: live.dj_config,
             announcements: structuredClone(live.announcement_channels),
             activity: structuredClone(store.snapshots.track.current_activity),
         };
@@ -125,6 +126,7 @@
             guild.channel_status = { ...guild.channel_status, status: radio.channelStatus };
         }
         guild.announcement_channels = radio.announcements;
+        guild.dj_config = radio.djConfig;
         return snapshot;
     };
 
@@ -254,6 +256,13 @@
             setMode(modes.includes(body.state_type) ? body.state_type : nextMode(store.radio.mode));
             return ok();
         }),
+        guildRoute('POST', 'dj/idle', ({ body }) => {
+            if (body.noise_profile && !(body.noise_profile in store.registries.profiles)) {
+                return fail(404, `signal profile "${body.noise_profile}" not found`);
+            }
+            setMode('noise');
+            return ok();
+        }),
         guildRoute('POST', 'hex/play', ({ body }) => {
             setMode('hex');
             store.radio.text = body.message;
@@ -262,6 +271,13 @@
         guildRoute('POST', 'dj/channel-status', ({ body }) => {
             const status = body.status?.fixed ?? (typeof body.status === 'string' ? body.status : null);
             store.radio.channelStatus = status;
+            return ok();
+        }),
+        guildRoute('POST', 'dj/config', ({ body }) => {
+            if (!(body.config in store.registries['dj-configs'])) {
+                return fail(400, `no DJ config "${body.config}"`);
+            }
+            store.radio.djConfig = body.config;
             return ok();
         }),
         guildRoute('POST', 'dj/profile', ({ body }) => {

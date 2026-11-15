@@ -1,6 +1,6 @@
 use crate::audio::dj::manager::{
-    ChannelStatusRequest, DJCommand, HexMessageRequest, IdleRequest, SignalProfileRequest,
-    ensure_pool,
+    ChannelStatusRequest, ConfigureRequest, DJCommand, HexMessageRequest, IdleRequest,
+    SignalProfileRequest, ensure_pool,
 };
 use crate::audio::dj::state_machine::ChannelStatus;
 use crate::audio::dj::tiered::ConfigurableTier;
@@ -438,11 +438,12 @@ pub async fn configure(
 
     ctx.defer_ephemeral().await?;
 
-    ctx.data()
-        .dj_config_manager
-        .subscribe(&config)
-        .and_then(|loaded| send_to_dj(ctx.data(), guild_id, DJCommand::SetConfig(loaded)))
-        .context("Failed to configure DJ")?;
+    ConfigureRequest {
+        config: config.clone(),
+    }
+    .into_command(ctx.data())
+    .and_then(|command| send_to_dj(ctx.data(), guild_id, command))
+    .context("Failed to configure DJ")?;
 
     ctx.say(format!("DJ configured: configuration '{config}'"))
         .await?;

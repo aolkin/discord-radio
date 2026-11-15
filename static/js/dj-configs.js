@@ -5,7 +5,8 @@ import {
     convertObject,
     fieldFromServer,
     fieldToServer,
-    seconds,
+    maxDuration,
+    minDuration,
     segmentDefaultsBlocks,
     segmentDefaultsFromServer,
     segmentDefaultsToServer,
@@ -37,12 +38,7 @@ const rotations = [
         key: 'channel_statuses',
         label: 'Channel Status Rotation',
         addLabel: '+ Add Channel Status',
-        entryFields: [
-            { key: 'status', label: 'Status', type: 'text' },
-            weight,
-            seconds('min_duration_seconds', 'Min Duration (s)'),
-            seconds('max_duration_seconds', 'Max Duration (s)'),
-        ],
+        entryFields: [{ key: 'status', label: 'Status', type: 'text' }, weight, minDuration, maxDuration],
     },
 ];
 
@@ -104,6 +100,11 @@ function blocks(form) {
     ];
 }
 
+function formErrors(form) {
+    const names = form.pools.map((reference) => reference.pool).filter((name) => name !== '');
+    return new Set(names).size === names.length ? [] : ['Each pool can appear only once'];
+}
+
 const djConfigEditor = registryEditor({
     path: '/api/dj-configs',
     prefix: 'djConfig',
@@ -115,6 +116,7 @@ const djConfigEditor = registryEditor({
     toBody,
     blankForm,
     blocks,
+    formErrors,
     afterSave() {
         return this.loadDjConfigPools();
     },
@@ -203,9 +205,10 @@ export function djConfigs() {
         },
 
         addDjConfigPool() {
+            const used = this.djConfigForm.pools.map((reference) => reference.pool);
             this.djConfigForm.pools.push({
                 ...blankRow(poolReferenceFields),
-                pool: this.pools[0] ?? '',
+                pool: this.pools.find((name) => !used.includes(name)) ?? '',
                 segment_defaults: blankSegmentDefaults(),
             });
         },

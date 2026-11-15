@@ -22,7 +22,7 @@ export function connection() {
             this.loadAudioFiles();
             this.loadProfiles();
             this.loadPools();
-            this.loadDjConfigs();
+            this.loadDjConfigPools();
             this.initRouter();
             // Update current time every 500ms for smooth progress bars
             setInterval(() => {

@@ -250,7 +250,10 @@
                                 :class="editorStatus(route.kind).message.type === 'error' ? 'error-message' : 'success-message'"
                                 x-text="editorStatus(route.kind).message.text"
                             ></div>
-                            <template x-for="error in draftErrors(route.kind)" :key="error">
+                            <template
+                                x-for="error in changeCount(route.kind, route.name) > 0 ? draftErrors(route.kind) : []"
+                                :key="error"
+                            >
                                 <div class="error-message" x-text="error"></div>
                             </template>
                             <div class="draft-bar-row">
@@ -338,6 +341,12 @@
                                     </button>
                                 </div>
                             </form>
+                            <div
+                                class="hint hint-warning"
+                                role="status"
+                                x-show="saveAsName !== null && saveAsInvalid(route.kind)"
+                                x-text="saveAsName === null ? '' : saveAsError(route.kind)"
+                            ></div>
                             <table class="review-table" x-show="draftReviewing">
                                 <thead>
                                     <tr>
@@ -378,7 +387,7 @@
                                     class="form-input"
                                     x-model="profileForm.name"
                                     :readonly="!profileEditorIsNew"
-                                    :aria-invalid="nameInvalid('signal-profiles')"
+                                    :aria-invalid="changeCount('signal-profiles', route.name) > 0 && nameInvalid('signal-profiles')"
                                     required
                                     pattern="[A-Za-z0-9_\-]+"
                                     title="Letters, digits, - and _ only"
@@ -439,7 +448,7 @@
                                         class="form-input"
                                         x-model="djConfigForm.name"
                                         :readonly="!djConfigEditorIsNew"
-                                        :aria-invalid="nameInvalid('dj-configs')"
+                                        :aria-invalid="changeCount('dj-configs', route.name) > 0 && nameInvalid('dj-configs')"
                                         required
                                         pattern="[A-Za-z0-9_\-]+"
                                         title="Letters, digits, - and _ only"
@@ -882,7 +891,7 @@
                                         class="form-input"
                                         x-model="poolForm.name"
                                         :readonly="!poolEditorIsNew"
-                                        :aria-invalid="nameInvalid('pools')"
+                                        :aria-invalid="changeCount('pools', route.name) > 0 && nameInvalid('pools')"
                                         required
                                         pattern="[A-Za-z0-9_\-]+"
                                         title="Letters, digits, - and _ only"
@@ -1525,6 +1534,33 @@
                                         x-text="'Pool ' + guild.dj_state.pool + ': ' + guild.dj_state.progress?.played + ' of ' + guild.dj_state.progress?.total + ' played'"
                                     ></div>
                                 </div>
+                                <details
+                                    class="disclosure disclosure-quiet mt-12"
+                                    @toggle="$el.open && (djConfigSelection = guild.dj_config)"
+                                >
+                                    <summary x-text="'DJ config: ' + guild.dj_config"></summary>
+                                    <div
+                                        x-show="djConfigMessage.text"
+                                        :class="djConfigMessage.type === 'error' ? 'error-message' : 'success-message'"
+                                        x-text="djConfigMessage.text"
+                                    ></div>
+                                    <form class="row-center-8" @submit.prevent="configureDJ()">
+                                        <select class="form-input" aria-label="DJ config" x-model="djConfigSelection">
+                                            <template
+                                                x-for="config in djConfigs.includes(guild.dj_config) ? djConfigs : [guild.dj_config, ...djConfigs]"
+                                                :key="config"
+                                            >
+                                                <option :value="config" x-text="config"></option>
+                                            </template>
+                                        </select>
+                                        <button
+                                            type="submit"
+                                            class="btn btn-secondary btn-sm"
+                                            :disabled="djConfigSaving || !djConfigSelection"
+                                            x-text="djConfigSaving ? 'Restarting...' : 'Restart DJ'"
+                                        ></button>
+                                    </form>
+                                </details>
                             </div>
 
                             <div class="section">
@@ -1611,16 +1647,16 @@
                                         x-text="djMessage.text"
                                     ></div>
                                     <div class="form-group">
-                                        <label class="form-label" for="advance-state-type">State Type (Optional)</label>
-                                        <select id="advance-state-type" class="form-input" x-model="djStateType">
+                                        <label class="form-label" for="advance-pool">Pool (Optional)</label>
+                                        <select id="advance-pool" class="form-input" x-model="djAdvancePool">
                                             <option value="">Any (default)</option>
-                                            <option value="track">Track</option>
-                                            <option value="hex">Hex Message</option>
-                                            <option value="noise">Noise</option>
+                                            <template x-for="pool in djConfigPools[guild.dj_config] ?? []" :key="pool">
+                                                <option :value="pool" x-text="pool"></option>
+                                            </template>
                                         </select>
                                         <small class="hint">
-                                            Leave as "Any" to advance to the next state, or select a specific state type
-                                            to force.
+                                            Leave as "Any" to advance to the next state, or pick a pool of the current
+                                            DJ config to take the next segment from.
                                         </small>
                                     </div>
                                     <button
@@ -1628,6 +1664,50 @@
                                         class="btn btn-primary"
                                         :disabled="djSaving"
                                         x-text="djSaving ? 'Advancing...' : 'Advance State'"
+                                    ></button>
+                                </form>
+                            </div>
+
+                            <div class="section">
+                                <div class="section-title">Go Idle</div>
+                                <form @submit.prevent="idleDJ()">
+                                    <div
+                                        x-show="idleMessage.text"
+                                        :class="idleMessage.type === 'error' ? 'error-message' : 'success-message'"
+                                        x-text="idleMessage.text"
+                                    ></div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label class="form-label" for="idle-noise-profile">Noise Profile</label>
+                                            <select
+                                                id="idle-noise-profile"
+                                                class="form-input"
+                                                x-model="idleNoiseProfile"
+                                            >
+                                                <option value="">None</option>
+                                                <template x-for="profile in profiles" :key="profile">
+                                                    <option :value="profile" x-text="profile"></option>
+                                                </template>
+                                            </select>
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label" for="idle-duration">Duration (seconds)</label>
+                                            <input
+                                                id="idle-duration"
+                                                type="number"
+                                                class="form-input"
+                                                x-model.number="idleDuration"
+                                                min="0"
+                                                step="1"
+                                                placeholder="Until advanced"
+                                            >
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="submit"
+                                        class="btn btn-primary"
+                                        :disabled="idleSaving"
+                                        x-text="idleSaving ? 'Going idle...' : 'Go Idle'"
                                     ></button>
                                 </form>
                             </div>
@@ -1650,9 +1730,6 @@
                                             placeholder="Enter message to play..."
                                             required
                                         >
-                                        <small class="hint">
-                                            Message will be played using the DJ with default settings.
-                                        </small>
                                     </div>
                                     <div class="form-group">
                                         <label class="form-label" for="hex-pool">Pool (Optional)</label>
@@ -1665,6 +1742,33 @@
                                         <small class="hint">
                                             The pool's segment defaults set the loop count and announcements.
                                         </small>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label class="form-label" for="hex-volume">Volume</label>
+                                            <input
+                                                id="hex-volume"
+                                                type="number"
+                                                class="form-input"
+                                                x-model.number="hexMessageVolume"
+                                                min="0"
+                                                max="2"
+                                                step="0.1"
+                                                placeholder="1.0"
+                                            >
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label" for="hex-loops">Loops</label>
+                                            <input
+                                                id="hex-loops"
+                                                type="number"
+                                                class="form-input"
+                                                x-model.number="hexMessageLoops"
+                                                min="0"
+                                                step="1"
+                                                placeholder="Pool default"
+                                            >
+                                        </div>
                                     </div>
                                     <button
                                         type="submit"

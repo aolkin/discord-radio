@@ -98,6 +98,18 @@ impl IdleRequest {
     }
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ConfigureRequest {
+    pub config: String,
+}
+
+impl ConfigureRequest {
+    pub fn into_command(self, bot_state: Data) -> anyhow::Result<DJCommand> {
+        let config = bot_state.dj_config_manager.subscribe(&self.config)?;
+        Ok(DJCommand::SetConfig(config))
+    }
+}
+
 /// Sets (or, with `profile` unset, clears) the signal profile of `tier`.
 /// `fade_duration` and `duration` are in seconds and apply only when setting.
 #[derive(Debug, Deserialize)]
