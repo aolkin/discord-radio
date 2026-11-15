@@ -73,6 +73,9 @@ async fn on_error(error: poise::FrameworkError<'_, Data, anyhow::Error>) {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .map_err(|_| anyhow::anyhow!("a process-level crypto provider is already installed"))?;
     // Set up panic handler to crash the whole process on any thread panic
     // This ensures the OS can restart the bot instead of running in a broken state
     let default_panic = std::panic::take_hook();
