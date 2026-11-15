@@ -1,8 +1,10 @@
 use crate::activity::ActivityEntry;
-use crate::audio::dj::state_machine::{ChannelStatus, PoolProgress};
+use crate::audio::dj::state_machine::{ChannelStatus, DJState, PoolProgress};
 use crate::audio::tracks::TrackSnapshot;
-use crate::state::Data;
+use crate::state::{Data, GuildRadio};
 use serde::{Deserialize, Serialize};
+use serenity::model::id::GuildId;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DJStateInfo {
@@ -23,6 +25,7 @@ pub struct AudioProfileInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GuildState {
     pub guild_id: String,
+    pub name: Option<String>,
     pub in_voice: bool,
     pub tracks: Vec<TrackSnapshot>,
     pub dj_state: DJStateInfo,
@@ -54,67 +57,51 @@ pub struct BotSnapshot {
 
 impl BotSnapshot {
     pub async fn capture(bot_state: &Data) -> Self {
+        let radios: BTreeMap<GuildId, GuildRadio> = bot_state.guild_radios().into_iter().collect();
+        let mut guild_ids: BTreeSet<GuildId> = radios.keys().copied().collect();
+        if let Some(cache) = bot_state.cache.get() {
+            guild_ids.extend(cache.guilds());
+        }
+        let default_profile_name = bot_state.profile_manager.default_profile().name;
+
         let mut guilds = Vec::new();
-
-        for (guild_id, guild) in bot_state.guild_radios() {
-            // Check if guild is actually in voice
+        for guild_id in guild_ids {
             let in_voice = bot_state.get_voice_channel_id(guild_id).await.is_some();
-
-            let tracks = guild.track_manager.get_all_tracks().await;
-
-            let (dj_state, dj_config, profile, channel_status, announcement_channels) = {
-                let dj_state_lock = guild.dj_manager.state();
-                let state = dj_state_lock.read().await;
-                (
-                    dj_state_to_info(&state, bot_state),
-                    state.config_name.clone(),
-                    state.signal_profile(),
-                    state.channel_status(),
-                    state
-                        .announcement_channels
-                        .iter()
-                        .map(|channel| AnnouncementChannelInfo {
-                            channel_id: channel.to_string(),
-                            name: bot_state.cache.get().and_then(|cache| {
-                                cache
-                                    .guild(guild_id)
-                                    .and_then(|g| g.channels.get(channel).map(|c| c.name.clone()))
-                            }),
-                        })
-                        .collect(),
-                )
+            let guild = match radios.get(&guild_id) {
+                Some(radio) => {
+                    let tracks = radio.track_manager.get_all_tracks().await;
+                    let (profile_name, transitioning) = {
+                        let processor = radio.audio_processor.read().await;
+                        (
+                            processor.current_profile_name().to_string(),
+                            processor.is_transitioning(),
+                        )
+                    };
+                    let dj_state = radio.dj_manager.state();
+                    let state = dj_state.read().await;
+                    guild_state(
+                        bot_state,
+                        guild_id,
+                        in_voice,
+                        tracks,
+                        &state,
+                        profile_name,
+                        transitioning,
+                    )
+                }
+                None => guild_state(
+                    bot_state,
+                    guild_id,
+                    in_voice,
+                    Vec::new(),
+                    &DJState::default(),
+                    default_profile_name.clone(),
+                    false,
+                ),
             };
-
-            // Get audio profile info
-            let processor = guild.audio_processor.read().await;
-            let profile_name = processor.current_profile_name().to_string();
-
-            let audio_profile = AudioProfileInfo {
-                name: profile_name,
-                expected_name: profile.value.name,
-                transitioning: processor.is_transitioning(),
-                source: profile.tier.to_string(),
-            };
-
-            guilds.push(GuildState {
-                guild_id: guild_id.to_string(),
-                in_voice,
-                tracks,
-                dj_state,
-                dj_config,
-                audio_profile,
-                channel_status: ChannelStatusInfo {
-                    status: match channel_status.value {
-                        ChannelStatus::Unmanaged => None,
-                        ChannelStatus::Fixed(status) => Some(status),
-                    },
-                    source: channel_status.tier.to_string(),
-                },
-                announcement_channels,
-            });
+            guilds.push(guild);
         }
 
-        // Get current bot activity
         let current_activity = bot_state.activity_manager.current().await;
 
         BotSnapshot {
@@ -126,10 +113,55 @@ impl BotSnapshot {
     }
 }
 
-fn dj_state_to_info(
-    state: &crate::audio::dj::state_machine::DJState,
+fn guild_state(
     bot_state: &Data,
-) -> DJStateInfo {
+    guild_id: GuildId,
+    in_voice: bool,
+    tracks: Vec<TrackSnapshot>,
+    state: &DJState,
+    profile_name: String,
+    transitioning: bool,
+) -> GuildState {
+    let cached_guild = bot_state
+        .cache
+        .get()
+        .and_then(|cache| cache.guild(guild_id));
+    let profile = state.signal_profile();
+    let channel_status = state.channel_status();
+    GuildState {
+        guild_id: guild_id.to_string(),
+        name: cached_guild.as_ref().map(|guild| guild.name.clone()),
+        in_voice,
+        tracks,
+        dj_state: dj_state_to_info(state, bot_state),
+        dj_config: state.config_name.clone(),
+        audio_profile: AudioProfileInfo {
+            name: profile_name,
+            expected_name: profile.value.name,
+            transitioning,
+            source: profile.tier.to_string(),
+        },
+        channel_status: ChannelStatusInfo {
+            status: match channel_status.value {
+                ChannelStatus::Unmanaged => None,
+                ChannelStatus::Fixed(status) => Some(status),
+            },
+            source: channel_status.tier.to_string(),
+        },
+        announcement_channels: state
+            .announcement_channels
+            .iter()
+            .map(|channel| AnnouncementChannelInfo {
+                channel_id: channel.to_string(),
+                name: cached_guild
+                    .as_ref()
+                    .and_then(|guild| guild.channels.get(channel).map(|c| c.name.clone())),
+            })
+            .collect(),
+    }
+}
+
+fn dj_state_to_info(state: &DJState, bot_state: &Data) -> DJStateInfo {
     let display = state.segment.state_display();
     let elapsed = state.segment.elapsed().as_secs_f32();
     let time = match display.total {

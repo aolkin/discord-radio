@@ -2,6 +2,7 @@
   "guilds": [
     {
       "guild_id": "100000000000000001",
+      "name": "Night Shift Radio",
       "in_voice": true,
       "tracks": [
         {
@@ -20,6 +21,17 @@
       "announcement_channels": [
         { "channel_id": "200000000000000002", "name": "announcements" }
       ]
+    },
+    {
+      "guild_id": "100000000000000002",
+      "name": "Quiet Corner",
+      "in_voice": false,
+      "tracks": [],
+      "dj_state": { "state_type": "Idle", "details": "0.0s / 1.0s", "pool": null, "progress": null },
+      "dj_config": "default",
+      "audio_profile": { "name": "clear", "expected_name": "clear", "transitioning": false, "source": "background" },
+      "channel_status": { "status": "", "source": "background" },
+      "announcement_channels": []
     }
   ],
   "version": "1",
