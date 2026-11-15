@@ -370,7 +370,7 @@ export function drafts() {
                         }
                     }
                     await this[spec.loadList]();
-                    await spec.afterSave?.call(this);
+                    await spec.afterSave?.call(this, key === newItem ? name : null);
                 },
                 success: `${capitalize(spec.label)} saved`,
                 failure: `Failed to save ${spec.label}`,

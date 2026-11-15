@@ -15,7 +15,7 @@ import {
     weight,
 } from './form-fields.js';
 import { poolToForm } from './pools.js';
-import { registryEditor } from './registry-editor.js';
+import { newItem, registryEditor } from './registry-editor.js';
 import { shareOf } from './weights.js';
 
 const poolWeight = { ...weight, min: 1 };
@@ -84,6 +84,10 @@ function blankForm() {
     };
 }
 
+function newReference(pool) {
+    return { ...blankRow(poolReferenceFields), pool, segment_defaults: blankSegmentDefaults() };
+}
+
 function referenceBlocks(reference, index) {
     return segmentDefaultsBlocks(reference.segment_defaults, ['pools', index, 'segment_defaults']);
 }
@@ -132,6 +136,7 @@ export function djConfigs() {
         djConfigPools: {},
         djConfigSavedPools: {},
         djConfigChancesOpen: false,
+        poolCreateFor: null,
 
         async loadDjConfigPools() {
             await this.loadDjConfigs();
@@ -204,13 +209,27 @@ export function djConfigs() {
             this.djConfigForm.pools.splice(index, 1);
         },
 
-        addDjConfigPool() {
+        djConfigUnusedPools() {
             const used = this.djConfigForm.pools.map((reference) => reference.pool);
-            this.djConfigForm.pools.push({
-                ...blankRow(poolReferenceFields),
-                pool: this.pools.find((name) => !used.includes(name)) ?? '',
-                segment_defaults: blankSegmentDefaults(),
-            });
+            return this.pools.filter((name) => !used.includes(name));
+        },
+
+        addDjConfigPool(pool) {
+            if (pool === newItem) {
+                this.poolCreateFor = this.route.name;
+                this.openItem('pools', newItem);
+                return;
+            }
+            this.djConfigForm.pools.push(newReference(pool));
+        },
+
+        addCreatedPoolToDjConfig(pool) {
+            const draft = this.drafts['dj-configs'][this.poolCreateFor];
+            if (!draft) {
+                return;
+            }
+            draft.form.pools.push(newReference(pool));
+            this.openItem('dj-configs', this.poolCreateFor);
         },
 
         djConfigReferenceBlocks(reference, index) {
@@ -222,11 +241,14 @@ export function djConfigs() {
         },
 
         djConfigDefaultsChangeCount() {
-            return this.djConfigForm.pools.reduce(
-                (total, _reference, index) =>
-                    total + this.sectionChangeCount('dj-configs', ['pools', index, 'segment_defaults']),
-                0,
-            );
+            const savedCount = this.openDraft('dj-configs')?.saved.pools.length ?? 0;
+            return this.djConfigForm.pools
+                .slice(0, savedCount)
+                .reduce(
+                    (total, _reference, index) =>
+                        total + this.sectionChangeCount('dj-configs', ['pools', index, 'segment_defaults']),
+                    0,
+                );
         },
 
         toggleDjConfigReferenceHexConfig(reference) {
@@ -234,7 +256,14 @@ export function djConfigs() {
         },
 
         addDjConfigRotationEntry(rotation) {
-            this.djConfigForm[rotation.key].entries.push(blankRow(rotation.entryFields));
+            const { entries } = this.djConfigForm[rotation.key];
+            const row = blankRow(rotation.entryFields);
+            if ('signal_profile' in row) {
+                const used = entries.map((entry) => entry.signal_profile);
+                row.signal_profile = this.profiles.find((profile) => !used.includes(profile)) ?? '';
+            }
+            entries.push(row);
+            this.focusWhenShown(`[data-rotation="${rotation.key}"] .list-row:has(+ .empty-state) input`);
         },
     };
 }
