@@ -242,7 +242,24 @@
 
             <div class="edit-view" x-show="route.view === 'edit'">
                 <div>
-                    <div class="card empty-state" x-show="!route.kind">Select an item to edit</div>
+                    <div class="card" x-show="!route.kind">
+                        <div class="empty-state">Pick an item from the Edit list, or start a new one.</div>
+                        <div class="row-gap-10 mt-8">
+                            <button type="button" class="btn btn-secondary" @click="openItem('pools', newItem)">
+                                New pool
+                            </button>
+                            <button type="button" class="btn btn-secondary" @click="openItem('dj-configs', newItem)">
+                                New DJ config
+                            </button>
+                            <button
+                                type="button"
+                                class="btn btn-secondary"
+                                @click="openItem('signal-profiles', newItem)"
+                            >
+                                New signal profile
+                            </button>
+                        </div>
+                    </div>
                     <template x-if="route.kind && route.kind !== 'files'">
                         <section class="card draft-bar" x-show="!editorStatus(route.kind).loading" x-stuck>
                             <div
@@ -485,7 +502,7 @@
 
                             <div class="modal-section">
                                 <div class="modal-section-title">Pools</div>
-                                <div class="pool-grid-scroll" x-scroll-fade>
+                                <div class="pool-grid-scroll" x-show="djConfigForm.pools.length > 0" x-scroll-fade>
                                     <table class="pool-grid pool-grid-config">
                                         <colgroup>
                                             <col class="pool-grid-col-pool">
@@ -637,13 +654,27 @@
                                         </template>
                                     </table>
                                 </div>
-                                <div class="empty-state" x-show="djConfigForm.pools.length === 0">No pools</div>
-                                <button type="button" class="btn btn-text btn-sm" @click="addDjConfigPool()">
-                                    + Add Pool
-                                </button>
+                                <div class="empty-state" x-show="djConfigForm.pools.length === 0">
+                                    No pools yet. Add one to start playing.
+                                </div>
+                                <select
+                                    class="form-input add-select"
+                                    aria-label="Add a pool"
+                                    @change="addDjConfigPool($event.target.value); $event.target.value = ''"
+                                >
+                                    <option value="">+ Add a pool…</option>
+                                    <template x-for="name in djConfigUnusedPools()" :key="name">
+                                        <option :value="name" x-text="name"></option>
+                                    </template>
+                                    <option :value="newItem">New pool…</option>
+                                </select>
                             </div>
 
-                            <details class="modal-section disclosure" @toggle="djConfigChancesOpen = $el.open">
+                            <details
+                                class="modal-section disclosure"
+                                x-show="djConfigForm.pools.length > 0"
+                                @toggle="djConfigChancesOpen = $el.open"
+                            >
                                 <summary>Chance of every entry</summary>
                                 <div x-effect="djConfigChancesOpen && loadDjConfigChancePools()">
                                     <p class="pool-grid-note">
@@ -691,8 +722,13 @@
                             </details>
 
                             <template x-for="rotation in djConfigRotations" :key="rotation.key">
-                                <div class="modal-section">
-                                    <div class="modal-section-title" x-text="rotation.label"></div>
+                                <details
+                                    class="modal-section disclosure disclosure-quiet"
+                                    :data-rotation="rotation.key"
+                                    x-init="$watch('route.name', () => ($el.open = false))"
+                                    x-effect="djConfigForm[rotation.key].entries.length > 0 && ($el.open = true)"
+                                >
+                                    <summary x-text="rotation.label"></summary>
                                     <template x-for="(row, index) in djConfigForm[rotation.key].entries" :key="index">
                                         <div class="list-row">
                                             <div class="form-row">
@@ -754,7 +790,7 @@
                                         @click="addDjConfigRotationEntry(rotation)"
                                         x-text="rotation.addLabel"
                                     ></button>
-                                </div>
+                                </details>
                             </template>
 
                             <details
@@ -923,11 +959,16 @@
                                         pattern="[A-Za-z0-9_\-]+"
                                         title="Letters, digits, - and _ only"
                                     >
+                                    <div
+                                        class="hint"
+                                        x-show="poolEditorIsNew && poolCreateFor !== null"
+                                        x-text="'Applying adds this pool to ' + (poolCreateFor === newItem ? 'the new DJ config' : 'DJ config ' + poolCreateFor) + '.'"
+                                    ></div>
                                 </div>
                             </div>
 
                             <div class="modal-section">
-                                <div class="button-group pool-grid-modes">
+                                <div class="button-group pool-grid-modes" x-show="poolForm.entries.length > 0">
                                     <button
                                         type="button"
                                         class="btn"
@@ -945,7 +986,7 @@
                                         Weights
                                     </button>
                                 </div>
-                                <div class="pool-bulk">
+                                <div class="pool-bulk" x-show="poolSelectedRows().length > 0">
                                     <span
                                         class="pool-bulk-count"
                                         x-text="poolSelectedRows().length + ' selected'"
@@ -977,11 +1018,14 @@
                                         </button>
                                     </div>
                                 </div>
-                                <div class="tall-bar-hint" x-show="poolMode === 'weights'">
+                                <div
+                                    class="tall-bar-hint"
+                                    x-show="poolMode === 'weights' && poolForm.entries.length > 0"
+                                >
                                     Drag a section up or down, or focus it and use the arrow keys (Shift for steps of
                                     5). Dragging stops at 1; type a weight to set 0.
                                 </div>
-                                <div class="tall-bar" x-show="poolMode === 'weights'">
+                                <div class="tall-bar" x-show="poolMode === 'weights' && poolForm.entries.length > 0">
                                     <template x-for="section in barSections(poolForm.entries)" :key="section.index">
                                         <div
                                             class="tall-bar-section"
@@ -1008,7 +1052,11 @@
                                         </div>
                                     </template>
                                 </div>
-                                <div class="pool-grid-scroll" x-show="poolMode === 'properties'" x-scroll-fade>
+                                <div
+                                    class="pool-grid-scroll"
+                                    x-show="poolMode === 'properties' && poolForm.entries.length > 0"
+                                    x-scroll-fade
+                                >
                                     <table class="pool-grid pool-grid-entries">
                                         <colgroup>
                                             <col class="pool-grid-col-check">
@@ -1237,7 +1285,11 @@
                                         </template>
                                     </table>
                                 </div>
-                                <div class="pool-grid-scroll" x-show="poolMode === 'weights'" x-scroll-fade>
+                                <div
+                                    class="pool-grid-scroll"
+                                    x-show="poolMode === 'weights' && poolForm.entries.length > 0"
+                                    x-scroll-fade
+                                >
                                     <table class="pool-grid pool-grid-weights">
                                         <colgroup>
                                             <col class="pool-grid-col-check">
@@ -1346,35 +1398,44 @@
                                         </template>
                                     </table>
                                 </div>
-                                <div class="empty-state" x-show="poolForm.entries.length === 0">No entries</div>
-                                <div
-                                    class="menu-anchor"
-                                    x-data="{ open: false }"
-                                    @click.outside="open = false"
-                                    @keydown.escape="open = false"
-                                >
-                                    <button
-                                        type="button"
-                                        class="btn btn-secondary btn-sm"
-                                        aria-haspopup="menu"
-                                        :aria-expanded="open"
-                                        @click="open = !open"
-                                    >
-                                        + Add entry ▾
+                                <div class="empty-state" x-show="poolForm.entries.length === 0">
+                                    No entries yet. Add tracks from your audio files.
+                                </div>
+                                <div class="row-center-8">
+                                    <button type="button" class="btn btn-secondary btn-sm" @click="pickPoolFiles()">
+                                        + Add tracks…
                                     </button>
-                                    <div class="strip-menu menu-start" role="menu" x-show="open" @click="open = false">
-                                        <button type="button" role="menuitem" @click="addPoolEntry('track')">
-                                            Track
+                                    <div
+                                        class="menu-anchor"
+                                        x-data="{ open: false }"
+                                        @click.outside="open = false"
+                                        @keydown.escape="open = false"
+                                    >
+                                        <button
+                                            type="button"
+                                            class="btn btn-text btn-sm"
+                                            aria-haspopup="menu"
+                                            :aria-expanded="open"
+                                            @click="open = !open"
+                                        >
+                                            Other entry ▾
                                         </button>
-                                        <button type="button" role="menuitem" @click="pickPoolFiles()">
-                                            Tracks from files…
-                                        </button>
-                                        <button type="button" role="menuitem" @click="addPoolEntry('hex')">
-                                            Hex message
-                                        </button>
-                                        <button type="button" role="menuitem" @click="addPoolEntry('noise')">
-                                            Noise
-                                        </button>
+                                        <div
+                                            class="strip-menu menu-start"
+                                            role="menu"
+                                            x-show="open"
+                                            @click="open = false"
+                                        >
+                                            <button type="button" role="menuitem" @click="addPoolEntry('hex')">
+                                                Hex message
+                                            </button>
+                                            <button type="button" role="menuitem" @click="addPoolEntry('noise')">
+                                                Noise
+                                            </button>
+                                            <button type="button" role="menuitem" @click="addPoolEntry('track')">
+                                                Track by path
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -2659,7 +2720,10 @@
                 </template>
                 <template x-for="file in fileBrowser.files" :key="file.key">
                     <div class="file-browser-row">
-                        <div>
+                        <div
+                            :class="{ 'file-browser-pickable': fileBrowser.open && fileBrowser.mode === 'files' }"
+                            @click="fileBrowser.open && fileBrowser.mode === 'files' && toggleFileBrowserPicked(file.key)"
+                        >
                             <div class="file-browser-row-name" x-text="file.key.slice(fileBrowser.prefix.length)"></div>
                             <div
                                 class="file-browser-row-meta"

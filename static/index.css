@@ -1177,6 +1177,15 @@ textarea.form-input {
     flex: 1;
 }
 
+.add-select {
+    width: auto;
+    margin-top: var(--space-2);
+}
+
+.file-browser-pickable {
+    cursor: pointer;
+}
+
 .file-browser-row-name {
     font-weight: 500;
     word-break: break-all;

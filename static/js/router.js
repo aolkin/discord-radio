@@ -100,6 +100,9 @@ export function router() {
             if (previous.view !== 'edit') {
                 this.loadDjConfigPools();
             }
+            if (!this.isSelected('pools', newItem)) {
+                this.poolCreateFor = null;
+            }
             if (this.route.kind === 'files') {
                 this.openFileBrowserPage(this.route.name);
             } else if (this.route.kind) {

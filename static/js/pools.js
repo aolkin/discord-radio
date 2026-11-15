@@ -108,9 +108,12 @@ function blocks(form) {
 }
 
 function formErrors(form) {
+    if (form.entries.length === 0) {
+        return ['Add at least one entry'];
+    }
     return form.entries.some((entry) => typeof entry.weight === 'number' && entry.weight > 0)
         ? []
-        : ['A pool needs at least one entry with weight above 0'];
+        : ['Give at least one entry a weight above 0'];
 }
 
 const poolEditor = registryEditor({
@@ -125,6 +128,11 @@ const poolEditor = registryEditor({
     blankForm,
     blocks,
     formErrors,
+    afterSave(created) {
+        if (created) {
+            this.addCreatedPoolToDjConfig(created);
+        }
+    },
 });
 
 const hexFolderDebounceMs = 400;
