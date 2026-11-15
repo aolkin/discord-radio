@@ -34,24 +34,19 @@ fn send_dj_command(
     guild_id: GuildId,
     command: DJCommand,
 ) -> Result<StatusCode, ApiError> {
-    let no_dj = || ApiError::not_found(format!("No DJ in guild {guild_id}"));
-    let sent = bot_state
-        .existing_dj_manager(guild_id)
-        .ok_or_else(no_dj)?
-        .send(command)
-        .map_err(|e| {
-            let status = if e.is::<DjBusy>() {
-                StatusCode::SERVICE_UNAVAILABLE
-            } else {
-                StatusCode::INTERNAL_SERVER_ERROR
-            };
-            ApiError::new(
-                status,
-                e.context(format!("Failed to send DJ command for guild {guild_id}")),
-            )
-        })?;
+    let sent = bot_state.dj_manager(guild_id).send(command).map_err(|e| {
+        let status = if e.is::<DjBusy>() {
+            StatusCode::SERVICE_UNAVAILABLE
+        } else {
+            StatusCode::INTERNAL_SERVER_ERROR
+        };
+        ApiError::new(
+            status,
+            e.context(format!("Failed to send DJ command for guild {guild_id}")),
+        )
+    })?;
     if !sent {
-        return Err(no_dj());
+        return Err(ApiError::not_found(format!("No DJ in guild {guild_id}")));
     }
     Ok(StatusCode::OK)
 }
@@ -149,15 +144,13 @@ pub async fn remove_announcement_channel(
     State(bot_state): State<Data>,
     Path((guild_id, channel_id)): Path<(GuildId, ChannelId)>,
 ) -> Result<StatusCode, ApiError> {
-    let listed = match bot_state.existing_dj_manager(guild_id) {
-        Some(dj_manager) => dj_manager
-            .state()
-            .read()
-            .await
-            .announcement_channels
-            .contains(&channel_id),
-        None => false,
-    };
+    let listed = bot_state
+        .dj_manager(guild_id)
+        .state()
+        .read()
+        .await
+        .announcement_channels
+        .contains(&channel_id);
     if !listed {
         return Err(ApiError::not_found(format!(
             "Channel {channel_id} is not an announcement channel in guild {guild_id}"

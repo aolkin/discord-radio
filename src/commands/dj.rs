@@ -15,11 +15,8 @@ fn send_to_dj(
     guild_id: GuildId,
     command: DJCommand,
 ) -> anyhow::Result<()> {
-    let Some(dj_manager) = bot_state.existing_dj_manager(guild_id) else {
-        bail!("Not in a voice channel");
-    };
-    if !dj_manager.send(command)? {
-        bail!("Not in a voice channel");
+    if !bot_state.dj_manager(guild_id).send(command)? {
+        bail!("The DJ is not running");
     }
     Ok(())
 }
@@ -513,15 +510,14 @@ pub async fn announcements_remove(
 
     ctx.defer_ephemeral().await?;
 
-    let listed = match ctx.data().existing_dj_manager(guild_id) {
-        Some(dj_manager) => dj_manager
-            .state()
-            .read()
-            .await
-            .announcement_channels
-            .contains(&channel),
-        None => false,
-    };
+    let listed = ctx
+        .data()
+        .dj_manager(guild_id)
+        .state()
+        .read()
+        .await
+        .announcement_channels
+        .contains(&channel);
     if !listed {
         ctx.say(format!("<#{channel}> is not an announcement channel"))
             .await?;
