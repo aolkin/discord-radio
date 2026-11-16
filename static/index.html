@@ -1892,17 +1892,18 @@
                                     ></div>
                                     <div class="form-group">
                                         <label class="form-label" for="play-track-file">Audio File</label>
-                                        <select
+                                        <button
                                             id="play-track-file"
-                                            class="form-input"
-                                            x-model="playTrackFilename"
-                                            required
+                                            type="button"
+                                            class="form-input file-pick"
+                                            :class="{ 'file-pick-empty': !playTrackFilename }"
+                                            @click="pickTrackFile('playTrackFilename')"
                                         >
-                                            <option value="">Select audio file...</option>
-                                            <template x-for="file in audioFiles" :key="file">
-                                                <option :value="file" x-text="file"></option>
-                                            </template>
-                                        </select>
+                                            <span
+                                                x-text="playTrackFilename ? trackFileLabel(playTrackFilename) : 'Choose a file...'"
+                                            ></span>
+                                            <span aria-hidden="true">📁</span>
+                                        </button>
                                     </div>
                                     <div class="form-row">
                                         <div class="form-group">
@@ -1946,7 +1947,7 @@
                                     <button
                                         type="submit"
                                         class="btn btn-primary"
-                                        :disabled="playTrackSaving"
+                                        :disabled="playTrackSaving || !playTrackFilename"
                                         x-text="playTrackSaving ? 'Playing...' : 'Play Track'"
                                     ></button>
                                 </form>
@@ -1997,54 +1998,90 @@
                             </div>
 
                             <div class="section">
-                                <div class="section-title">Start, Stop or Update a Track</div>
+                                <div class="section-title">Start, Update or Stop a Track</div>
                                 <form @submit.prevent="changeTrackState()">
                                     <div
                                         x-show="trackMessage.text"
                                         :class="trackMessage.type === 'error' ? 'error-message' : 'success-message'"
                                         x-text="trackMessage.text"
                                     ></div>
-                                    <div class="form-group">
-                                        <label class="form-label" for="track-state-name">Track Name</label>
-                                        <input
-                                            id="track-state-name"
-                                            type="text"
-                                            class="form-input"
-                                            x-model="trackName"
-                                            placeholder="Track identifier..."
-                                            required
-                                        >
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label" for="track-state-action">Action</label>
-                                        <select
-                                            id="track-state-action"
-                                            class="form-input"
-                                            x-model="trackState"
-                                            @change="trackStateChanged()"
-                                        >
-                                            <option value="">Update Existing Track</option>
-                                            <option value="start">Start New Track</option>
-                                            <option value="stop">Stop Track</option>
-                                        </select>
-                                    </div>
-                                    <template x-if="trackState === 'start'">
-                                        <div class="form-group">
-                                            <label class="form-label" for="track-state-file">Audio File</label>
+                                    <fieldset class="form-group">
+                                        <legend class="form-label">Action</legend>
+                                        <div class="segmented">
+                                            <label class="segment">
+                                                <input type="radio" name="track-mode" value="start" x-model="trackMode">
+                                                <span>Start</span>
+                                            </label>
+                                            <label class="segment">
+                                                <input
+                                                    type="radio"
+                                                    name="track-mode"
+                                                    value="update"
+                                                    x-model="trackMode"
+                                                    :disabled="!guild.tracks?.length"
+                                                >
+                                                <span>Update</span>
+                                            </label>
+                                            <label class="segment">
+                                                <input
+                                                    type="radio"
+                                                    name="track-mode"
+                                                    value="stop"
+                                                    x-model="trackMode"
+                                                    :disabled="!guild.tracks?.length"
+                                                >
+                                                <span>Stop</span>
+                                            </label>
+                                        </div>
+                                    </fieldset>
+                                    <template x-if="trackMode === 'start'">
+                                        <div class="form-row" x-init="trackName = ''">
+                                            <div class="form-group">
+                                                <label class="form-label" for="track-state-file">Audio File</label>
+                                                <button
+                                                    id="track-state-file"
+                                                    type="button"
+                                                    class="form-input file-pick"
+                                                    :class="{ 'file-pick-empty': !trackFilename }"
+                                                    @click="pickTrackFile('trackFilename')"
+                                                >
+                                                    <span
+                                                        x-text="trackFilename ? trackFileLabel(trackFilename) : 'Choose a file...'"
+                                                    ></span>
+                                                    <span aria-hidden="true">📁</span>
+                                                </button>
+                                            </div>
+                                            <div class="form-group">
+                                                <label class="form-label" for="track-state-name">Track Name</label>
+                                                <input
+                                                    id="track-state-name"
+                                                    type="text"
+                                                    class="form-input"
+                                                    x-model="trackName"
+                                                    :placeholder="fileStem(trackFilename) || 'Named after the file'"
+                                                >
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <template x-if="trackMode !== 'start'">
+                                        <div class="form-group" x-init="trackName = guild.tracks[0]?.name ?? ''">
+                                            <label class="form-label" for="track-state-name">Track</label>
                                             <select
-                                                id="track-state-file"
+                                                id="track-state-name"
                                                 class="form-input"
-                                                x-model="trackFilename"
+                                                x-model="trackName"
                                                 required
                                             >
-                                                <option value="">Select audio file...</option>
-                                                <template x-for="file in audioFiles" :key="file">
-                                                    <option :value="file" x-text="file"></option>
+                                                <template x-for="track in guild.tracks" :key="track.name">
+                                                    <option
+                                                        :value="track.name"
+                                                        x-text="track.name + ' (' + track.filename.split('/').pop() + ')'"
+                                                    ></option>
                                                 </template>
                                             </select>
                                         </div>
                                     </template>
-                                    <template x-if="trackState !== 'stop'">
+                                    <template x-if="trackMode !== 'stop'">
                                         <div class="form-row">
                                             <div class="form-group">
                                                 <label class="form-label" for="track-state-volume">Volume</label>
@@ -2062,7 +2099,10 @@
                                             <div class="form-group">
                                                 <label class="form-label" for="track-state-loop">Loop</label>
                                                 <select id="track-state-loop" class="form-input" x-model="trackLoops">
-                                                    <option value="">Default</option>
+                                                    <option
+                                                        value=""
+                                                        x-text="trackMode === 'start' ? 'Yes (default)' : 'Unchanged'"
+                                                    ></option>
                                                     <option value="true">Yes</option>
                                                     <option value="false">No</option>
                                                 </select>
@@ -2084,8 +2124,8 @@
                                     <button
                                         type="submit"
                                         class="btn btn-primary"
-                                        :disabled="trackSaving"
-                                        x-text="trackSaving ? 'Saving...' : 'Apply'"
+                                        :disabled="trackSaving || (trackMode === 'start' && !trackFilename)"
+                                        x-text="trackSaving ? 'Saving...' : { start: 'Start Track', update: 'Update Track', stop: 'Stop Track' }[trackMode]"
                                     ></button>
                                 </form>
                             </div>
@@ -2100,17 +2140,33 @@
                                         :class="signalProfileMessage.type === 'error' ? 'error-message' : 'success-message'"
                                         x-text="signalProfileMessage.text"
                                     ></div>
-                                    <div class="form-group">
-                                        <label class="form-label" for="signal-profile-setting">Setting</label>
-                                        <select
-                                            id="signal-profile-setting"
-                                            class="form-input"
-                                            x-model="signalProfileSetting"
-                                        >
-                                            <option value="manual">Background (replaces rotation)</option>
-                                            <option value="override">Override (beats everything)</option>
-                                        </select>
-                                    </div>
+                                    <fieldset class="form-group">
+                                        <legend class="form-label">Setting</legend>
+                                        <div class="segmented">
+                                            <label class="segment">
+                                                <input
+                                                    type="radio"
+                                                    name="signal-profile-setting"
+                                                    value="manual"
+                                                    x-model="signalProfileSetting"
+                                                >
+                                                <span>Background</span>
+                                            </label>
+                                            <label class="segment">
+                                                <input
+                                                    type="radio"
+                                                    name="signal-profile-setting"
+                                                    value="override"
+                                                    x-model="signalProfileSetting"
+                                                >
+                                                <span>Override</span>
+                                            </label>
+                                        </div>
+                                        <small
+                                            class="hint"
+                                            x-text="signalProfileSetting === 'override' ? 'Beats everything.' : 'Replaces the rotation.'"
+                                        ></small>
+                                    </fieldset>
                                     <div class="form-group">
                                         <label class="form-label" for="signal-profile-profile">Profile</label>
                                         <select
@@ -2171,22 +2227,42 @@
                                         :class="channelStatusMessage.type === 'error' ? 'error-message' : 'success-message'"
                                         x-text="channelStatusMessage.text"
                                     ></div>
-                                    <div class="form-group">
-                                        <label class="form-label" for="channel-status-setting">Setting</label>
-                                        <select
-                                            id="channel-status-setting"
-                                            class="form-input"
-                                            x-model="channelStatusSetting"
-                                        >
-                                            <option value="background">Background (replaces rotation)</option>
-                                            <option value="override">
-                                                Override with a fixed status (beats everything)
-                                            </option>
-                                            <option value="unmanaged">
-                                                Override: leave the channel status unmanaged
-                                            </option>
-                                        </select>
-                                    </div>
+                                    <fieldset class="form-group">
+                                        <legend class="form-label">Setting</legend>
+                                        <div class="segmented">
+                                            <label class="segment">
+                                                <input
+                                                    type="radio"
+                                                    name="channel-status-setting"
+                                                    value="background"
+                                                    x-model="channelStatusSetting"
+                                                >
+                                                <span>Background</span>
+                                            </label>
+                                            <label class="segment">
+                                                <input
+                                                    type="radio"
+                                                    name="channel-status-setting"
+                                                    value="override"
+                                                    x-model="channelStatusSetting"
+                                                >
+                                                <span>Override</span>
+                                            </label>
+                                            <label class="segment">
+                                                <input
+                                                    type="radio"
+                                                    name="channel-status-setting"
+                                                    value="unmanaged"
+                                                    x-model="channelStatusSetting"
+                                                >
+                                                <span>Unmanaged</span>
+                                            </label>
+                                        </div>
+                                        <small
+                                            class="hint"
+                                            x-text="{ background: 'Replaces the rotation.', override: 'A fixed status that beats everything.', unmanaged: 'Leaves the channel status as it is. Beats everything.' }[channelStatusSetting]"
+                                        ></small>
+                                    </fieldset>
                                     <div class="form-group" x-show="channelStatusSetting !== 'unmanaged'">
                                         <label class="form-label" for="channel-status-text">Status</label>
                                         <input

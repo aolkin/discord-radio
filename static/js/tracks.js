@@ -7,7 +7,7 @@ export const trackForms = () => ({
     playTrackDuration: null,
     playTrackMessage: emptyMessage(),
     trackName: '',
-    trackState: '',
+    trackMode: 'start',
     trackFilename: '',
     trackVolume: null,
     trackLoops: '',
@@ -20,7 +20,6 @@ export function tracks() {
         ...trackForms(),
         playTrackSaving: false,
         trackSaving: false,
-        audioFiles: [],
 
         getTrackDurationSecs(track) {
             return track.duration ? track.duration.secs + track.duration.nanos / 1e9 : null;
@@ -57,14 +56,18 @@ export function tracks() {
             return `${mins}:${secs.toString().padStart(2, '0')}`;
         },
 
-        async loadAudioFiles() {
-            try {
-                const response = await apiRequest('/api/files?prefix=tracks/');
-                const data = await response.json();
-                this.audioFiles = data.files.map((file) => `s3://${file.key}`);
-            } catch (error) {
-                console.error('Failed to load audio files:', error);
-            }
+        pickTrackFile(field) {
+            this.openFileBrowser({
+                mode: 'file',
+                prefix: 'tracks/',
+                onSelect: (key) => {
+                    this[field] = `s3://${key}`;
+                },
+            });
+        },
+
+        trackFileLabel(filename) {
+            return filename.replace(/^s3:\/\/(tracks\/)?/, '');
         },
 
         async playTrack() {
@@ -96,28 +99,29 @@ export function tracks() {
             });
         },
 
-        trackStateChanged() {
-            // Clear filename when not starting
-            if (this.trackState !== 'start') {
-                this.trackFilename = '';
-            }
+        fileStem(filename) {
+            return filename
+                .split('/')
+                .pop()
+                .replace(/\.[^.]*$/, '');
         },
 
         async changeTrackState() {
+            const start = this.trackMode === 'start';
             const body = {
-                name: this.trackName,
-                state: this.trackState || null,
+                name: start ? this.trackName || this.fileStem(this.trackFilename) : this.trackName,
+                state: this.trackMode === 'update' ? null : this.trackMode,
             };
 
-            if (this.trackState === 'start' && this.trackFilename) {
+            if (start) {
                 body.filename = this.trackFilename;
             }
 
-            if (this.trackVolume !== null && this.trackVolume !== '') {
+            if (this.trackMode !== 'stop' && this.trackVolume !== null && this.trackVolume !== '') {
                 body.volume = Number.parseFloat(this.trackVolume);
             }
 
-            if (this.trackLoops !== '') {
+            if (this.trackMode !== 'stop' && this.trackLoops !== '') {
                 body.loops = this.trackLoops === 'true';
             }
 
