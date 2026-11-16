@@ -929,6 +929,7 @@ fieldset.form-group {
 }
 
 .pool-grid-modes {
+    width: fit-content;
     margin: 0 0 var(--space-4);
 }
 

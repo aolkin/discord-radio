@@ -968,23 +968,20 @@
                             </div>
 
                             <div class="modal-section">
-                                <div class="button-group pool-grid-modes" x-show="poolForm.entries.length > 0">
-                                    <button
-                                        type="button"
-                                        class="btn"
-                                        :class="poolMode === 'properties' ? 'btn-primary' : 'btn-secondary'"
-                                        @click="poolMode = 'properties'"
-                                    >
-                                        Properties
-                                    </button>
-                                    <button
-                                        type="button"
-                                        class="btn"
-                                        :class="poolMode === 'weights' ? 'btn-primary' : 'btn-secondary'"
-                                        @click="poolMode = 'weights'"
-                                    >
-                                        Weights
-                                    </button>
+                                <div
+                                    class="segmented pool-grid-modes"
+                                    role="radiogroup"
+                                    aria-label="Pool view"
+                                    x-show="poolForm.entries.length > 0"
+                                >
+                                    <label class="segment">
+                                        <input type="radio" name="pool-mode" value="properties" x-model="poolMode">
+                                        <span>Properties</span>
+                                    </label>
+                                    <label class="segment">
+                                        <input type="radio" name="pool-mode" value="weights" x-model="poolMode">
+                                        <span>Weights</span>
+                                    </label>
                                 </div>
                                 <div class="pool-bulk" x-show="poolForm.entries.length > 0">
                                     <span
