@@ -1,18 +1,16 @@
 use crate::audio::processing::processor::AudioProcessor;
-use crate::logging::LogThrottle;
 use async_trait::async_trait;
 use songbird::events::{Event, EventContext, EventHandler, TrackEvent};
 use songbird::input::RawAdapter;
 use songbird::input::core::io::MediaSource;
 use std::io::{Read, Seek, SeekFrom};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tokio::sync::RwLock;
 use tracing::Span;
 
 const SAMPLE_RATE: u32 = 48000;
 const CHANNELS: u16 = 2;
-const WARN_INTERVAL: Duration = Duration::from_secs(5);
 
 pub struct ProcessedAudioAdapter {
     processor: Arc<RwLock<AudioProcessor>>,
@@ -78,9 +76,6 @@ struct AudioChannelReader {
     last_generation_time: Option<Instant>,
     total_frames_generated: u64,
     span: Span,
-    drift_warnings: LogThrottle,
-    slow_warnings: LogThrottle,
-    locked_warnings: LogThrottle,
 }
 
 impl AudioChannelReader {
@@ -92,9 +87,6 @@ impl AudioChannelReader {
             last_generation_time: None,
             total_frames_generated: 0,
             span,
-            drift_warnings: LogThrottle::new(WARN_INTERVAL),
-            slow_warnings: LogThrottle::new(WARN_INTERVAL),
-            locked_warnings: LogThrottle::new(WARN_INTERVAL),
         }
     }
 
@@ -113,11 +105,8 @@ impl AudioChannelReader {
             let drift_ms = elapsed_ms - EXPECTED_INTERVAL_MS;
 
             // Log if drift is significant (more than 10ms off)
-            if drift_ms.abs() > 10.0
-                && let Some(suppressed) = self.drift_warnings.allow()
-            {
+            if drift_ms.abs() > 10.0 {
                 tracing::warn!(
-                    suppressed,
                     "Audio generation timing drift: {:.2}ms elapsed (expected {:.2}ms), drift: {:.2}ms, total_frames: {}",
                     elapsed_ms,
                     EXPECTED_INTERVAL_MS,
@@ -156,11 +145,8 @@ impl AudioChannelReader {
                 let total_generation_ms = generation_start.elapsed().as_secs_f64() * 1000.0;
                 let expected_duration_ms =
                     (CHUNKS_TO_GENERATE * CHUNK_FRAMES) as f64 / 48000.0 * 1000.0;
-                if total_generation_ms > expected_duration_ms
-                    && let Some(suppressed) = self.slow_warnings.allow()
-                {
+                if total_generation_ms > expected_duration_ms {
                     tracing::warn!(
-                        suppressed,
                         "Audio generation batch too slow: took {:.2}ms to generate {:.2}ms of audio ({}% real-time)",
                         total_generation_ms,
                         expected_duration_ms,
@@ -170,13 +156,10 @@ impl AudioChannelReader {
             }
             Err(_) => {
                 // Processor is locked, return silence for entire batch
-                if let Some(suppressed) = self.locked_warnings.allow() {
-                    tracing::warn!(
-                        suppressed,
-                        "Audio processor locked during generation, returning silence for {}ms",
-                        CHUNKS_TO_GENERATE * 20
-                    );
-                }
+                tracing::warn!(
+                    "Audio processor locked during generation, returning silence for {}ms",
+                    CHUNKS_TO_GENERATE * 20
+                );
                 let silence_frames = CHUNK_FRAMES * CHUNKS_TO_GENERATE;
                 for _ in 0..silence_frames {
                     self.buffer.extend_from_slice(&0.0f32.to_le_bytes());

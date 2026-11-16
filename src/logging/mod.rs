@@ -1,12 +1,10 @@
 mod json_logger;
 mod log_reader;
 mod span;
-mod throttle;
 
 pub use json_logger::JsonLogger;
 pub use log_reader::{LogReadResult, LogReader};
 pub(crate) use span::guild_span;
-pub use throttle::LogThrottle;
 
 use std::path::{Path, PathBuf};
 
