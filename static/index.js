@@ -14,6 +14,7 @@ import { router } from './js/router.js';
 import { actionMethods } from './js/run-action.js';
 import { signalProfiles } from './js/signal-profiles.js';
 import { tracks } from './js/tracks.js';
+import { uploads } from './js/uploads.js';
 import { weightSliders } from './js/weights.js';
 
 Object.assign(modals, activityModals, botProfileModals, channelsModals, fileBrowserModals);
@@ -31,6 +32,7 @@ function botPortal() {
         ...editTree(),
         ...drafts(),
         ...fileBrowser(),
+        ...uploads(),
         ...botProfile(),
         ...activity(),
         ...channels(),

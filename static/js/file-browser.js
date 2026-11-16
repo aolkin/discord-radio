@@ -32,11 +32,9 @@ export function fileBrowser() {
             creatingFolder: false,
             deleting: false,
             dragging: false,
-            uploads: [],
             picked: [],
         },
         fileBrowserOnSelect: null,
-        nextUploadId: 0,
         fileKinds: {
             tracks: {
                 noun: 'Audio File',
@@ -57,7 +55,6 @@ export function fileBrowser() {
         openFileBrowser({ mode, prefix, onSelect }) {
             this.fileBrowser.mode = mode;
             this.fileBrowser.newFolderName = '';
-            this.fileBrowser.uploads = [];
             this.fileBrowser.picked = [];
             this.openModal('fileBrowser');
             this.fileBrowserOnSelect = onSelect;
@@ -66,7 +63,6 @@ export function fileBrowser() {
 
         openFileBrowserPage(path) {
             this.fileBrowser.newFolderName = '';
-            this.fileBrowser.uploads = [];
             return this.loadFileBrowser(path ? `${path}/` : '');
         },
 
@@ -161,42 +157,19 @@ export function fileBrowser() {
             }
         },
 
-        async uploadFiles(fileList) {
-            const prefix = this.fileBrowser.prefix;
+        dropOnFileBrowser(event) {
+            this.fileBrowser.dragging = false;
             const kind = this.fileBrowserKind();
-            let uploaded = false;
-            for (const file of Array.from(fileList)) {
-                this.fileBrowser.uploads.push({
-                    id: this.nextUploadId++,
-                    name: file.name,
-                    progress: 0,
-                    status: 'uploading',
-                    detail: '',
-                });
-                const upload = this.fileBrowser.uploads.at(-1);
-                if (!kind.pattern.test(file.name)) {
-                    upload.status = 'error';
-                    upload.detail = `Only ${kind.extensions} files are accepted`;
-                    continue;
-                }
-                try {
-                    upload.detail = await this.sendFile(file, prefix, (percent) => {
-                        upload.progress = percent;
-                    });
-                    upload.status = 'done';
-                    if (this.fileBrowser.open && this.fileBrowser.mode === 'files') {
-                        this.fileBrowser.picked = [...this.fileBrowser.picked, upload.detail];
-                    }
-                    uploaded = true;
-                } catch (error) {
-                    console.error('Failed to upload file:', error);
-                    upload.status = 'error';
-                    upload.detail = error.message;
-                }
+            if (!kind) {
+                this.fileBrowser.message = {
+                    text: 'Uploads are only allowed inside the tracks and images folders',
+                    type: 'error',
+                };
+                return;
             }
-            if (uploaded && this.fileBrowser.prefix === prefix) {
-                await this.loadFileBrowser(prefix);
-            }
+            this.fileBrowser.message = emptyMessage();
+            const entries = Array.from(event.dataTransfer.items).map((item) => item.webkitGetAsEntry());
+            return this.uploadEntries(entries.filter(Boolean), this.fileBrowser.prefix, kind);
         },
 
         // Resolves with the uploaded key. XMLHttpRequest rather than fetch because fetch reports no upload progress.

@@ -10,7 +10,7 @@
         <link rel="stylesheet" href="/static/base.css">
         <link rel="stylesheet" href="/static/index.css">
     </head>
-    <body x-data="botPortal()">
+    <body x-data="botPortal()" @beforeunload.window="uploadsActive() && $event.preventDefault()">
         <div class="container">
             <header>
                 <div class="header-left">
@@ -2740,152 +2740,148 @@
         </template>
 
         <template id="file-browser-list">
-            <div class="file-browser-crumbs">
-                <button
-                    type="button"
-                    class="btn btn-secondary"
-                    :disabled="fileBrowserCrumbs().length < (fileBrowser.open ? 2 : 1)"
-                    @click="browseFileBrowser(fileBrowserCrumbs().at(-2)?.prefix ?? '')"
-                >
-                    &uarr; Up
-                </button>
-                <button
-                    type="button"
-                    class="btn btn-secondary"
-                    x-show="!fileBrowser.open"
-                    @click="browseFileBrowser('')"
-                >
-                    Root
-                </button>
-                <template x-for="(crumb, index) in fileBrowserCrumbs()" :key="crumb.prefix">
-                    <span>
-                        <span x-show="!fileBrowser.open || index > 0">/</span>
-                        <button
-                            type="button"
-                            class="btn btn-secondary"
-                            @click="browseFileBrowser(crumb.prefix)"
-                            x-text="crumb.name"
-                        ></button>
-                    </span>
-                </template>
-            </div>
-
-            <div class="loading" x-show="fileBrowser.loading">Loading...</div>
-
-            <div x-show="!fileBrowser.loading">
-                <template x-for="folder in fileBrowser.folders" :key="folder">
-                    <div class="file-browser-row">
-                        <button
-                            type="button"
-                            class="btn btn-secondary"
-                            @click="browseFileBrowser(folder)"
-                            x-text="'📁 ' + folder.slice(fileBrowser.prefix.length)"
-                        ></button>
-                        <button
-                            type="button"
-                            class="btn btn-primary"
-                            x-show="fileBrowser.open && fileBrowser.mode === 'folder'"
-                            @click="selectFileBrowserEntry(folder)"
-                        >
-                            Select
-                        </button>
-                    </div>
-                </template>
-                <template x-for="file in fileBrowser.files" :key="file.key">
-                    <div class="file-browser-row">
-                        <div
-                            :class="{ 'file-browser-pickable': fileBrowser.open && fileBrowser.mode === 'files' }"
-                            @click="fileBrowser.open && fileBrowser.mode === 'files' && toggleFileBrowserPicked(file.key)"
-                        >
-                            <div class="file-browser-row-name" x-text="file.key.slice(fileBrowser.prefix.length)"></div>
-                            <div
-                                class="file-browser-row-meta"
-                                x-text="file.key + ' · ' + formatBytes(file.size) + ' · ' + formatDate(file.last_modified)"
-                            ></div>
-                        </div>
-                        <button
-                            type="button"
-                            class="btn btn-primary"
-                            x-show="fileBrowser.open && fileBrowser.mode === 'file'"
-                            @click="selectFileBrowserEntry(file.key)"
-                        >
-                            Select
-                        </button>
-                        <input
-                            type="checkbox"
-                            x-show="fileBrowser.open && fileBrowser.mode === 'files'"
-                            :aria-label="'Pick ' + file.key"
-                            :checked="fileBrowser.picked.includes(file.key)"
-                            @change="toggleFileBrowserPicked(file.key)"
-                        >
-                        <button
-                            type="button"
-                            class="file-browser-delete"
-                            x-show="fileBrowserKind()"
-                            title="Delete file"
-                            :aria-label="'Delete ' + file.key"
-                            :disabled="fileBrowser.deleting"
-                            @click="deleteFileBrowserFile(file.key)"
-                        >
-                            🗑
-                        </button>
-                    </div>
-                </template>
-                <div class="empty-state" x-show="fileBrowser.folders.length === 0 && fileBrowser.files.length === 0">
-                    This folder is empty
-                </div>
-            </div>
-
-            <form
-                class="file-browser-new-folder"
-                x-show="fileBrowserKind()"
-                @submit.prevent="createFileBrowserFolder()"
-            >
-                <input
-                    type="text"
-                    class="form-input"
-                    placeholder="New folder name"
-                    x-model="fileBrowser.newFolderName"
-                    required
-                    pattern="[A-Za-z0-9_\-]+"
-                    title="Letters, digits, - and _ only"
-                >
-                <button type="submit" class="btn btn-secondary" :disabled="fileBrowser.creatingFolder">
-                    <span x-text="fileBrowser.creatingFolder ? 'Creating...' : 'New Folder'"></span>
-                </button>
-            </form>
-
-            <!-- biome-ignore lint/a11y/noLabelWithoutControl: the file input is nested and the text comes from x-text -->
-            <label
-                class="file-browser-drop"
-                x-show="fileBrowserKind()"
+            <div
+                class="file-browser-dropzone"
                 :class="{ dragging: fileBrowser.dragging }"
-                @dragover.prevent="fileBrowser.dragging = true"
-                @dragleave="fileBrowser.dragging = false"
-                @drop.prevent="fileBrowser.dragging = false; uploadFiles($event.dataTransfer.files)"
+                @dragover.prevent="$event.dataTransfer.types.includes('Files') && (fileBrowser.dragging = true)"
+                @dragleave="$el.contains($event.relatedTarget) || (fileBrowser.dragging = false)"
+                @drop.prevent="dropOnFileBrowser($event)"
             >
-                <span x-text="'Drop files here or click to choose (' + fileBrowserKind().hint + ')'"></span>
-                <input
-                    class="hidden"
-                    type="file"
-                    multiple
-                    :accept="fileBrowserKind().accept"
-                    @change="uploadFiles($event.target.files); $event.target.value = ''"
-                >
-            </label>
-
-            <template x-for="upload in fileBrowser.uploads" :key="upload.id">
-                <div class="file-browser-upload">
-                    <div class="file-browser-row-name" x-text="upload.name"></div>
-                    <progress max="100" :value="upload.progress" x-show="upload.status === 'uploading'"></progress>
-                    <div
-                        class="file-browser-row-meta"
-                        x-show="upload.status === 'done'"
-                        x-text="'Uploaded as ' + upload.detail"
-                    ></div>
-                    <div class="error-message" x-show="upload.status === 'error'" x-text="upload.detail"></div>
+                <div class="file-browser-crumbs">
+                    <button
+                        type="button"
+                        class="btn btn-secondary"
+                        :disabled="fileBrowserCrumbs().length < (fileBrowser.open ? 2 : 1)"
+                        @click="browseFileBrowser(fileBrowserCrumbs().at(-2)?.prefix ?? '')"
+                    >
+                        &uarr; Up
+                    </button>
+                    <button
+                        type="button"
+                        class="btn btn-secondary"
+                        x-show="!fileBrowser.open"
+                        @click="browseFileBrowser('')"
+                    >
+                        Root
+                    </button>
+                    <template x-for="(crumb, index) in fileBrowserCrumbs()" :key="crumb.prefix">
+                        <span>
+                            <span x-show="!fileBrowser.open || index > 0">/</span>
+                            <button
+                                type="button"
+                                class="btn btn-secondary"
+                                @click="browseFileBrowser(crumb.prefix)"
+                                x-text="crumb.name"
+                            ></button>
+                        </span>
+                    </template>
                 </div>
-            </template>
+
+                <div class="loading" x-show="fileBrowser.loading">Loading...</div>
+
+                <div x-show="!fileBrowser.loading">
+                    <template x-for="folder in fileBrowser.folders" :key="folder">
+                        <div class="file-browser-row">
+                            <button
+                                type="button"
+                                class="btn btn-secondary"
+                                @click="browseFileBrowser(folder)"
+                                x-text="'📁 ' + folder.slice(fileBrowser.prefix.length)"
+                            ></button>
+                            <button
+                                type="button"
+                                class="btn btn-primary"
+                                x-show="fileBrowser.open && fileBrowser.mode === 'folder'"
+                                @click="selectFileBrowserEntry(folder)"
+                            >
+                                Select
+                            </button>
+                        </div>
+                    </template>
+                    <template x-for="file in fileBrowser.files" :key="file.key">
+                        <div class="file-browser-row">
+                            <div
+                                :class="{ 'file-browser-pickable': fileBrowser.open && fileBrowser.mode === 'files' }"
+                                @click="fileBrowser.open && fileBrowser.mode === 'files' && toggleFileBrowserPicked(file.key)"
+                            >
+                                <div
+                                    class="file-browser-row-name"
+                                    x-text="file.key.slice(fileBrowser.prefix.length)"
+                                ></div>
+                                <div
+                                    class="file-browser-row-meta"
+                                    x-text="file.key + ' · ' + formatBytes(file.size) + ' · ' + formatDate(file.last_modified)"
+                                ></div>
+                            </div>
+                            <button
+                                type="button"
+                                class="btn btn-primary"
+                                x-show="fileBrowser.open && fileBrowser.mode === 'file'"
+                                @click="selectFileBrowserEntry(file.key)"
+                            >
+                                Select
+                            </button>
+                            <input
+                                type="checkbox"
+                                x-show="fileBrowser.open && fileBrowser.mode === 'files'"
+                                :aria-label="'Pick ' + file.key"
+                                :checked="fileBrowser.picked.includes(file.key)"
+                                @change="toggleFileBrowserPicked(file.key)"
+                            >
+                            <button
+                                type="button"
+                                class="file-browser-delete"
+                                x-show="fileBrowserKind()"
+                                title="Delete file"
+                                :aria-label="'Delete ' + file.key"
+                                :disabled="fileBrowser.deleting"
+                                @click="deleteFileBrowserFile(file.key)"
+                            >
+                                🗑
+                            </button>
+                        </div>
+                    </template>
+                    <div
+                        class="empty-state"
+                        x-show="fileBrowser.folders.length === 0 && fileBrowser.files.length === 0"
+                    >
+                        This folder is empty
+                    </div>
+                </div>
+
+                <form
+                    class="file-browser-new-folder"
+                    x-show="fileBrowserKind()"
+                    @submit.prevent="createFileBrowserFolder()"
+                >
+                    <input
+                        type="text"
+                        class="form-input"
+                        placeholder="New folder name"
+                        x-model="fileBrowser.newFolderName"
+                        required
+                        pattern="[A-Za-z0-9_\-]+"
+                        title="Letters, digits, - and _ only"
+                    >
+                    <button type="submit" class="btn btn-secondary" :disabled="fileBrowser.creatingFolder">
+                        <span x-text="fileBrowser.creatingFolder ? 'Creating...' : 'New Folder'"></span>
+                    </button>
+                </form>
+
+                <!-- biome-ignore lint/a11y/noLabelWithoutControl: the file input is nested and the text comes from x-text -->
+                <label class="file-browser-drop" x-show="fileBrowserKind()">
+                    <span
+                        x-text="'Drop files or folders here or click to choose files (' + fileBrowserKind().hint + ')'"
+                    ></span>
+                    <input
+                        class="hidden"
+                        type="file"
+                        multiple
+                        :accept="fileBrowserKind().accept"
+                        @change="uploadFiles($event.target.files); $event.target.value = ''"
+                    >
+                </label>
+            </div>
         </template>
 
         <template
@@ -2913,5 +2909,55 @@
                 </button>
             </div>
         </template>
+
+        <aside class="upload-widget" x-show="uploadQueue.items.length > 0" aria-label="Uploads">
+            <div class="upload-widget-header">
+                <div class="upload-widget-title" role="status" x-text="uploadsSummary()"></div>
+                <button
+                    type="button"
+                    class="btn btn-secondary btn-sm"
+                    :disabled="!uploadsFinished()"
+                    @click="dismissFinishedUploads()"
+                >
+                    Dismiss finished
+                </button>
+            </div>
+            <progress max="100" :value="uploadsOverallPercent()"></progress>
+            <div class="upload-widget-list">
+                <template x-for="item in uploadQueue.items" :key="item.id">
+                    <div class="upload-widget-item">
+                        <div class="upload-widget-item-row">
+                            <div class="file-browser-row-name" x-text="item.path"></div>
+                            <button
+                                type="button"
+                                class="btn btn-secondary btn-sm"
+                                x-show="item.status === 'error' && item.retryable"
+                                @click="retryUpload(item)"
+                            >
+                                Retry
+                            </button>
+                        </div>
+                        <progress
+                            max="100"
+                            :value="item.progress"
+                            x-show="item.status === 'uploading' && item.type === 'file'"
+                        ></progress>
+                        <div class="file-browser-row-meta" x-show="item.status === 'queued'">Waiting</div>
+                        <div
+                            class="file-browser-row-meta"
+                            x-show="item.status === 'uploading' && item.type === 'folder'"
+                        >
+                            Creating folder
+                        </div>
+                        <div
+                            class="file-browser-row-meta"
+                            x-show="item.status === 'done'"
+                            x-text="item.type === 'folder' ? 'Folder created' : 'Uploaded as ' + item.detail"
+                        ></div>
+                        <div class="error-message" x-show="item.status === 'error'" x-text="item.detail"></div>
+                    </div>
+                </template>
+            </div>
+        </aside>
     </body>
 </html>
