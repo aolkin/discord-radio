@@ -97,7 +97,7 @@ impl TrackSegment {
     ) -> anyhow::Result<()> {
         let path = ctx.file_resolver().resolve(&self.filename).await?;
         let source = open_track_source(&path, start_position)?;
-        let track = ctx.audio_processor().await.write().await.add_track(
+        let track = ctx.audio_processor().write().await.add_track(
             source,
             0.0,
             vec![

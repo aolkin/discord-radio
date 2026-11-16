@@ -23,6 +23,7 @@ pub struct AudioProfileInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GuildState {
     pub guild_id: String,
+    pub name: Option<String>,
     pub in_voice: bool,
     pub tracks: Vec<TrackSnapshot>,
     pub dj_state: DJStateInfo,
@@ -98,6 +99,10 @@ impl BotSnapshot {
 
             guilds.push(GuildState {
                 guild_id: guild_id.to_string(),
+                name: bot_state
+                    .cache
+                    .get()
+                    .and_then(|cache| cache.guild(guild_id).map(|guild| guild.name.clone())),
                 in_voice,
                 tracks,
                 dj_state,

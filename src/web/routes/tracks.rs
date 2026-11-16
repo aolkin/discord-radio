@@ -12,8 +12,9 @@ pub async fn change_track_state(
     AxumJson(request): AxumJson<ChangeTrackStateRequest>,
 ) -> Result<StatusCode, ApiError> {
     bot_state
-        .track_manager(guild_id)
-        .await
+        .require_radio(guild_id)
+        .map_err(ApiError::inactive)?
+        .track_manager
         .change_state(request)
         .await
         .map_err(|e| match e {

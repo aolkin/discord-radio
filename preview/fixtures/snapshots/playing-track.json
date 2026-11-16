@@ -2,6 +2,7 @@
   "guilds": [
     {
       "guild_id": "100000000000000001",
+      "name": "Night Shift Radio",
       "in_voice": true,
       "tracks": [
         {

@@ -16,6 +16,7 @@ use crate::audio::dj::serde::{ShiftBack, deser_instant, ser_instant};
 use crate::audio::dj::signal_profile::SignalProfilePlayback;
 use crate::audio::dj::tiered::{TieredChange, TieredStateMachine, TieredValue, TimedValue};
 use crate::audio::dj::weighted_choice::WeightedSelector;
+use crate::audio::processing::processor::ProcessorRef;
 use crate::state::Data;
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
@@ -203,6 +204,7 @@ pub struct DJStateMachine {
     state: Arc<RwLock<DJState>>,
     guild_id: GuildId,
     bot_state: Data,
+    audio_processor: ProcessorRef,
     config: watch::Receiver<Arc<LoadedConfig>>,
     /// An empty status is how Discord clears it.
     applied_channel_status: Option<String>,
@@ -215,6 +217,7 @@ impl DJStateMachine {
         state: Arc<RwLock<DJState>>,
         mut config: watch::Receiver<Arc<LoadedConfig>>,
         bot_state: Data,
+        audio_processor: ProcessorRef,
     ) -> Self {
         let restored_state = match saved {
             Some(saved) => {
@@ -234,7 +237,7 @@ impl DJStateMachine {
 
         let _ = initial_state
             .segment
-            .restore(&SegmentCtx::new(&guild_id, bot_state))
+            .restore(&SegmentCtx::new(&guild_id, bot_state, &audio_processor))
             .await
             .inspect_err(|e| tracing::warn!("Failed to restore segment: {e:?}"));
 
@@ -246,6 +249,7 @@ impl DJStateMachine {
             state,
             guild_id,
             bot_state,
+            audio_processor,
             config,
             applied_channel_status: None,
         };
@@ -311,7 +315,7 @@ impl DJStateMachine {
             Some(previous) if target.tier <= previous.tier => target.value.fade_in(),
             Some(previous) => previous.value.fade_out(),
         };
-        let processor_arc = self.bot_state.audio_processor(self.guild_id).await;
+        let processor_arc = self.audio_processor.clone();
         if let Some(new_profile) = self.bot_state.profile_manager.get(&target.value.name) {
             let mut processor = processor_arc.write().await;
             processor.start_profile_transition((*new_profile).clone(), fade.as_secs_f32() * 1000.0);
@@ -399,7 +403,7 @@ impl DJStateMachine {
     }
 
     fn segment_ctx(&self) -> SegmentCtx<'_> {
-        SegmentCtx::new(&self.guild_id, self.bot_state)
+        SegmentCtx::new(&self.guild_id, self.bot_state, &self.audio_processor)
     }
 
     pub async fn current_state(&self) -> RwLockReadGuard<'_, DJState> {

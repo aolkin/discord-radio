@@ -2,6 +2,7 @@
   "guilds": [
     {
       "guild_id": "100000000000000001",
+      "name": "Night Shift Radio",
       "in_voice": true,
       "tracks": [],
       "dj_state": { "state_type": "PlayingHexMessage", "details": "once upon a time (3.5s / 12.0s)", "pool": "hex", "progress": null },

@@ -2,7 +2,7 @@ use crate::audio::dj::manager::{
     ChannelStatusRequest, ConfigureRequest, DJCommand, DjBusy, HexMessageRequest, IdleRequest,
     ProfileNotFound, SignalProfileRequest, TrackRequest, ensure_pool,
 };
-use crate::state::Data;
+use crate::state::{Data, GuildInactive};
 use crate::web::error::ApiError;
 use crate::web::routes::discord::sendable_channels;
 use axum::Json as AxumJson;
@@ -34,19 +34,24 @@ fn send_dj_command(
     guild_id: GuildId,
     command: DJCommand,
 ) -> Result<StatusCode, ApiError> {
-    let sent = bot_state.dj_manager(guild_id).send(command).map_err(|e| {
-        let status = if e.is::<DjBusy>() {
-            StatusCode::SERVICE_UNAVAILABLE
-        } else {
-            StatusCode::INTERNAL_SERVER_ERROR
-        };
-        ApiError::new(
-            status,
-            e.context(format!("Failed to send DJ command for guild {guild_id}")),
-        )
-    })?;
+    let sent = bot_state
+        .require_radio(guild_id)
+        .map_err(ApiError::inactive)?
+        .dj_manager
+        .send(command)
+        .map_err(|e| {
+            let status = if e.is::<DjBusy>() {
+                StatusCode::SERVICE_UNAVAILABLE
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            };
+            ApiError::new(
+                status,
+                e.context(format!("Failed to send DJ command for guild {guild_id}")),
+            )
+        })?;
     if !sent {
-        return Err(ApiError::not_found(format!("No DJ in guild {guild_id}")));
+        return Err(ApiError::inactive(GuildInactive(guild_id)));
     }
     Ok(StatusCode::OK)
 }
@@ -145,7 +150,9 @@ pub async fn remove_announcement_channel(
     Path((guild_id, channel_id)): Path<(GuildId, ChannelId)>,
 ) -> Result<StatusCode, ApiError> {
     let listed = bot_state
-        .dj_manager(guild_id)
+        .require_radio(guild_id)
+        .map_err(ApiError::inactive)?
+        .dj_manager
         .state()
         .read()
         .await

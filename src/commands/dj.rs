@@ -6,6 +6,7 @@ use crate::audio::dj::state_machine::ChannelStatus;
 use crate::audio::dj::tiered::ConfigurableTier;
 use crate::commands::utils;
 use crate::commands::utils::{Context, require_guild};
+use crate::state::GuildInactive;
 use anyhow::{Context as _, bail};
 use serenity::all::{ChannelId, ChannelType, CreateAutocompleteResponse, GuildId};
 use std::path::Path;
@@ -15,8 +16,12 @@ fn send_to_dj(
     guild_id: GuildId,
     command: DJCommand,
 ) -> anyhow::Result<()> {
-    if !bot_state.dj_manager(guild_id).send(command)? {
-        bail!("Not in a voice channel");
+    if !bot_state
+        .require_radio(guild_id)?
+        .dj_manager
+        .send(command)?
+    {
+        bail!(GuildInactive(guild_id));
     }
     Ok(())
 }
@@ -512,7 +517,8 @@ pub async fn announcements_remove(
 
     let listed = ctx
         .data()
-        .dj_manager(guild_id)
+        .require_radio(guild_id)?
+        .dj_manager
         .state()
         .read()
         .await
@@ -576,7 +582,7 @@ pub async fn status(ctx: Context<'_>) -> anyhow::Result<()> {
 
     ctx.defer_ephemeral().await?;
 
-    let state_arc = ctx.data().dj_manager(guild_id).state();
+    let state_arc = ctx.data().require_radio(guild_id)?.dj_manager.state();
 
     let state = state_arc.read().await;
 

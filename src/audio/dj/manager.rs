@@ -2,6 +2,7 @@ use crate::audio::dj::config::{LoadedConfig, optional_seconds};
 use crate::audio::dj::signal_profile::{SignalProfilePlayback, default_profile_fade};
 use crate::audio::dj::state_machine::{ChannelStatus, DJState, DJStateMachine};
 use crate::audio::dj::tiered::{ConfigurableTier, TimedValue};
+use crate::audio::processing::processor::ProcessorRef;
 use crate::state::Data;
 use anyhow::{Context, bail};
 use serde::Deserialize;
@@ -162,6 +163,7 @@ pub struct DJManager {
     running: RwLock<Option<Running>>,
     guild_id: GuildId,
     bot_state: Data,
+    audio_processor: ProcessorRef,
 }
 
 struct Running {
@@ -175,12 +177,13 @@ struct Running {
 pub struct DjBusy;
 
 impl DJManager {
-    pub fn new(guild_id: GuildId, bot_state: Data) -> Self {
+    pub fn new(guild_id: GuildId, bot_state: Data, audio_processor: ProcessorRef) -> Self {
         Self {
             state: Arc::default(),
             running: RwLock::new(None),
             guild_id,
             bot_state,
+            audio_processor,
         }
     }
 
@@ -222,13 +225,21 @@ impl DJManager {
         let guild_id = self.guild_id;
         let task_state = self.state.clone();
         let bot_state = self.bot_state;
+        let audio_processor = self.audio_processor.clone();
         let span = tracing::info_span!("dj", guild_id = %guild_id);
         let task_handle = tokio::spawn(
             async move {
-                DJStateMachine::new(guild_id, saved, task_state, config, bot_state)
-                    .await
-                    .run(command_rx)
-                    .await;
+                DJStateMachine::new(
+                    guild_id,
+                    saved,
+                    task_state,
+                    config,
+                    bot_state,
+                    audio_processor,
+                )
+                .await
+                .run(command_rx)
+                .await;
             }
             .instrument(span),
         );

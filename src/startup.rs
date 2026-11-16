@@ -1,4 +1,3 @@
-use crate::audio::connection::connect_voice_channel;
 use crate::audio::tracks::StartTrackArgs;
 use crate::persistence::MultiTrackPlaybackState;
 use crate::state::Data;
@@ -7,10 +6,7 @@ use serenity::model::id::GuildId;
 use std::time::Duration;
 use tracing::Instrument;
 
-pub async fn restore_voice_channels(
-    ctx: &poise::serenity_prelude::Context,
-    bot_state: Data,
-) -> anyhow::Result<()> {
+pub async fn restore_voice_channels(bot_state: Data) -> anyhow::Result<()> {
     let saved_channels = bot_state
         .state_store
         .load_voice_channels()
@@ -23,22 +19,11 @@ pub async fn restore_voice_channels(
         tracing::info!("Restoring {} voice channel(s)", saved_channels.len());
     }
 
-    let manager = songbird::get(ctx)
-        .await
-        .expect("Songbird Voice client placed in at initialisation.")
-        .clone();
-
     for (guild_id, channel_id) in saved_channels {
         let span = tracing::info_span!("restore_voice", guild_id = %guild_id);
         async {
-            match connect_voice_channel(&manager, guild_id, channel_id, bot_state).await {
-                Ok(_) => {
-                    tracing::info!("Rejoined voice channel {}", channel_id);
-
-                    if let Err(e) = bot_state.dj_manager(guild_id).start().await {
-                        tracing::error!("Failed to start DJ: {e:#}");
-                    }
-                }
+            match bot_state.join_voice_channel(guild_id, channel_id).await {
+                Ok(()) => tracing::info!("Rejoined voice channel {}", channel_id),
                 Err(e) => {
                     tracing::error!("Failed to rejoin voice channel {}: {:?}", channel_id, e);
                     let _ = bot_state.state_store.remove_voice_channel(guild_id).await;
@@ -82,9 +67,18 @@ async fn restore_guild_multitrack(
     guild_id: GuildId,
     multitrack_state: MultiTrackPlaybackState,
 ) {
+    if multitrack_state.tracks.is_empty() {
+        return;
+    }
     tracing::info!("Restoring {} track(s)", multitrack_state.tracks.len());
 
-    let manager = bot_state.track_manager(guild_id).await;
+    let manager = match bot_state.load(guild_id).await {
+        Ok((radio, _)) => radio.track_manager,
+        Err(e) => {
+            tracing::error!("Failed to load the guild to restore its tracks: {e:#}");
+            return;
+        }
+    };
 
     for track in multitrack_state.tracks {
         let start_position = if let Some(start_time) = track.start_time {

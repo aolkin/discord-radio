@@ -27,18 +27,20 @@ use std::time::Duration;
 pub struct SegmentCtx<'a> {
     pub guild_id: &'a GuildId,
     bot_state: Data,
+    audio_processor: &'a ProcessorRef,
 }
 
 impl<'a> SegmentCtx<'a> {
-    pub fn new(guild_id: &'a GuildId, bot_state: Data) -> Self {
+    pub fn new(guild_id: &'a GuildId, bot_state: Data, audio_processor: &'a ProcessorRef) -> Self {
         Self {
             guild_id,
             bot_state,
+            audio_processor,
         }
     }
 
-    pub async fn audio_processor(&self) -> ProcessorRef {
-        self.bot_state.audio_processor(*self.guild_id).await
+    pub fn audio_processor(&self) -> &ProcessorRef {
+        self.audio_processor
     }
 
     pub fn file_resolver(&self) -> &FileResolver {
