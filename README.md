@@ -102,7 +102,7 @@ The portal provides:
 
 `POST /api/guilds/{guild_id}/dj/config` with `{"config": "<name>"}` restarts the guild's DJ with that DJ config, the same way `/dj configure` does.
 
-`POST /api/guilds/{guild_id}/load` makes a guild active by starting its DJ without joining voice, and returns 409 when the guild is already active. Joining voice makes a guild active too, and does not restart a running DJ. `POST /api/guilds/{guild_id}/unload` stops the DJ and its tracks and leaves voice; a disconnect from voice keeps the guild active. The bot reports only active guilds in the status snapshot. Without voice, the DJ skips channel status and announcements, and the bot does not load the guild again after a restart unless it has tracks.
+`POST /api/guilds/{guild_id}/load` makes a guild active by starting its DJ without joining voice, and returns 409 when the guild is already active. Joining voice makes a guild active too, and does not restart a running DJ. `POST /api/guilds/{guild_id}/unload` stops the DJ and its tracks and leaves voice, keeping their saved state; a disconnect from voice keeps the guild active. The bot reports only active guilds in the status snapshot. Without voice, the DJ skips channel status and announcements, and the bot does not load the guild again after a restart unless it has saved tracks.
 
 Signal profiles (`/api/profiles`), DJ configs (`/api/dj-configs`) and pools (`/api/pools`) each accept `PUT /{name}` to create or replace a file and `POST /{name}` to create a new one. `POST` takes the same body as `PUT` and returns 409 when the name already exists.
 
