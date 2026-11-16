@@ -53,7 +53,7 @@ export function uploads() {
             });
             if (!kind.pattern.test(file.name)) {
                 item.status = 'error';
-                item.detail = `Only ${kind.extensions} files are accepted`;
+                item.detail = `Unsupported file type (only ${kind.extensions} are accepted)`;
                 item.retryable = false;
             }
         },
@@ -61,9 +61,7 @@ export function uploads() {
         async queueEntry(entry, prefix, kind, parent) {
             if (entry.isFile) {
                 const file = await new Promise((resolve, reject) => entry.file(resolve, reject));
-                if (!parent || kind.pattern.test(file.name)) {
-                    this.queueFile(file, prefix, kind, parent);
-                }
+                this.queueFile(file, prefix, kind, parent);
                 return;
             }
             const folder = this.addUpload({
@@ -79,6 +77,17 @@ export function uploads() {
         },
 
         async uploadEntries(entries, prefix, kind) {
+            if (!kind) {
+                for (const entry of entries) {
+                    this.addUpload({
+                        path: entry.name,
+                        status: 'error',
+                        detail: 'Uploads are only allowed inside the tracks and images folders',
+                        retryable: false,
+                    });
+                }
+                return;
+            }
             for (const entry of entries) {
                 await this.queueEntry(entry, prefix, kind, null);
             }
@@ -173,6 +182,10 @@ export function uploads() {
                 }
             }
             this.runUploads();
+        },
+
+        dismissUpload(item) {
+            this.uploadQueue.items = this.uploadQueue.items.filter((other) => other.id !== item.id);
         },
 
         dismissFinishedUploads() {

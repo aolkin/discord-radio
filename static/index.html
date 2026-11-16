@@ -2936,6 +2936,15 @@
                             >
                                 Retry
                             </button>
+                            <button
+                                type="button"
+                                class="btn btn-secondary btn-sm"
+                                x-show="item.status === 'done' || item.status === 'error'"
+                                aria-label="Dismiss"
+                                @click="dismissUpload(item)"
+                            >
+                                &times;
+                            </button>
                         </div>
                         <progress
                             max="100"

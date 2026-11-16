@@ -159,17 +159,10 @@ export function fileBrowser() {
 
         dropOnFileBrowser(event) {
             this.fileBrowser.dragging = false;
-            const kind = this.fileBrowserKind();
-            if (!kind) {
-                this.fileBrowser.message = {
-                    text: 'Uploads are only allowed inside the tracks and images folders',
-                    type: 'error',
-                };
-                return;
-            }
-            this.fileBrowser.message = emptyMessage();
-            const entries = Array.from(event.dataTransfer.items).map((item) => item.webkitGetAsEntry());
-            return this.uploadEntries(entries.filter(Boolean), this.fileBrowser.prefix, kind);
+            const entries = Array.from(event.dataTransfer.items)
+                .map((item) => item.webkitGetAsEntry())
+                .filter(Boolean);
+            return this.uploadEntries(entries, this.fileBrowser.prefix, this.fileBrowserKind());
         },
 
         // Resolves with the uploaded key. XMLHttpRequest rather than fetch because fetch reports no upload progress.
