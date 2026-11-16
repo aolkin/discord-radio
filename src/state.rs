@@ -134,6 +134,7 @@ impl BotState {
         call.current_channel().map(|id| ChannelId::new(id.0.get()))
     }
 
+    #[tracing::instrument(skip_all, fields(guild_id = guild_id.get()))]
     pub async fn join_voice_channel(
         &'static self,
         guild_id: GuildId,
@@ -172,6 +173,7 @@ impl BotState {
         Ok(())
     }
 
+    #[tracing::instrument(skip_all, fields(guild_id = guild_id.get()))]
     pub async fn load(&'static self, guild_id: GuildId) -> anyhow::Result<(GuildRadio, bool)> {
         let lifecycle = self.lifecycle(guild_id);
         let _lifecycle = lifecycle.lock().await;
@@ -197,7 +199,7 @@ impl BotState {
             radio.start_clock(guild_id);
         }
         self.guilds.lock().unwrap().insert(guild_id, radio.clone());
-        tracing::info!("Loaded guild {guild_id}");
+        tracing::info!("Loaded guild");
         Ok((radio, true))
     }
 
@@ -207,6 +209,7 @@ impl BotState {
         self.unload_locked(guild_id).await;
     }
 
+    #[tracing::instrument(skip_all, fields(guild_id = guild_id.get()))]
     pub async fn leave_voice(&self, guild_id: GuildId) {
         let lifecycle = self.lifecycle(guild_id);
         let _lifecycle = lifecycle.lock().await;
@@ -228,6 +231,7 @@ impl BotState {
         }
     }
 
+    #[tracing::instrument(skip_all, fields(guild_id = guild_id.get()))]
     async fn unload_locked(&self, guild_id: GuildId) {
         let radio = self.guilds.lock().unwrap().remove(&guild_id);
         if let Some(radio) = &radio {
@@ -239,7 +243,7 @@ impl BotState {
         };
         radio.dj_manager.stop().await;
         radio.track_manager.clear().await;
-        tracing::info!("Unloaded guild {guild_id}");
+        tracing::info!("Unloaded guild");
     }
 
     pub async fn saved_voice_channel(&self, guild_id: GuildId) -> Option<ChannelId> {
