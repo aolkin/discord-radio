@@ -1,7 +1,7 @@
 {
   "name": "hex",
   "segment_defaults": {
-    "signal_profile": "locked",
+    "signal_profile": "strong_signal",
     "announcements": [],
     "hex_config": {
       "loop_min": 2,

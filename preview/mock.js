@@ -2,10 +2,11 @@
     const realFetch = window.fetch.bind(window);
     const fixtureBase = '/preview/fixtures';
     const registries = {
-        profiles: ['clear', 'weak_signal', 'tuning'],
+        profiles: ['clear', 'weak_signal', 'fading_signal'],
         pools: ['noise', 'hex', 'track'],
         'dj-configs': ['default', 'quiet'],
     };
+    const defaultProfiles = new Set(registries.profiles);
     const modes = ['track', 'hex', 'noise'];
 
     const store = {
@@ -177,7 +178,16 @@
     const fail = (status, message) => new Response(message, { status });
 
     const registryRoutes = Object.keys(registries).flatMap((kind) => [
-        ['GET', new RegExp(`^/api/${kind}$`), () => respond(Object.keys(store.registries[kind]))],
+        [
+            'GET',
+            new RegExp(`^/api/${kind}$`),
+            () => {
+                const names = Object.keys(store.registries[kind]);
+                return respond(
+                    kind === 'profiles' ? names.map((name) => ({ name, default: defaultProfiles.has(name) })) : names,
+                );
+            },
+        ],
         [
             'GET',
             new RegExp(`^/api/${kind}/([^/]+)$`),
@@ -191,6 +201,9 @@
             new RegExp(`^/api/${kind}/([^/]+)$`),
             ([, name], { body }) => {
                 const key = decodeURIComponent(name);
+                if (kind === 'profiles' && defaultProfiles.has(key)) {
+                    return fail(409, 'default entries cannot be overwritten; use Save as');
+                }
                 store.registries[kind][key] = { ...body, name: key };
                 return respond(store.registries[kind][key]);
             },

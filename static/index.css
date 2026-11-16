@@ -809,6 +809,15 @@ fieldset.form-group {
     border-left: 2px solid var(--color-divider);
 }
 
+.default-tag {
+    margin-left: 8px;
+    padding: 1px 6px;
+    border: 1px solid currentColor;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    opacity: 0.75;
+}
+
 .draft-dot {
     display: inline-block;
     flex: 0 0 auto;

@@ -1,8 +1,8 @@
 use crate::bucket::FileResolver;
-use anyhow::{Context, bail};
+use anyhow::{Context, anyhow, bail};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use tokio::sync::broadcast;
 
@@ -12,6 +12,7 @@ const CHANGE_CAPACITY: usize = 64;
 /// holds the name it is stored under.
 pub trait RegistryEntry: Serialize + DeserializeOwned {
     const KIND: &'static str;
+    const DEFAULTS: &'static [&'static str] = &[];
 
     fn name(&self) -> &str;
 
@@ -30,28 +31,43 @@ pub enum RegistryError {
     Storage(#[from] anyhow::Error),
     #[error(transparent)]
     Parse(anyhow::Error),
+    #[error("default entries cannot be overwritten; use Save as")]
+    Default,
 }
 
 pub struct JsonRegistry<T> {
     entries: RwLock<HashMap<String, Arc<T>>>,
+    defaults: HashSet<String>,
     changes: broadcast::Sender<String>,
     path: String,
     file_resolver: FileResolver,
 }
 
 impl<T: RegistryEntry> JsonRegistry<T> {
-    /// Loads every entry under `path` locally and in object storage. An entry
-    /// in object storage replaces a local entry of the same name.
+    /// Loads the built-in defaults, then every entry under `path` locally and
+    /// in object storage. An entry in object storage replaces a local entry of
+    /// the same name. A stored entry named like a default is skipped.
     pub async fn from_storage(path: String, file_resolver: FileResolver) -> Self {
         let mut entries = HashMap::new();
+        let mut defaults = HashSet::new();
+        for json in T::DEFAULTS {
+            let entry: T = serde_json::from_str(json).expect("a default entry parses");
+            entry.validate().expect("a default entry is valid");
+            defaults.insert(entry.name().to_string());
+            entries.insert(entry.name().to_string(), Arc::new(entry));
+        }
 
         let filenames = file_resolver.list(&path).await;
         for filename in filenames.iter().filter(|f| f.ends_with(".json")) {
             let name = file_name_stem(filename);
-            let parsed = file_resolver
-                .resolve_contents(filename)
-                .await
-                .and_then(|bytes| parse::<T>(&bytes, name));
+            let parsed = if defaults.contains(name) {
+                Err(anyhow!("a default {} has this name", T::KIND))
+            } else {
+                file_resolver
+                    .resolve_contents(filename)
+                    .await
+                    .and_then(|bytes| parse::<T>(&bytes, name))
+            };
             match parsed {
                 Ok(entry) => {
                     tracing::info!("Loaded {} {name} from {filename}", T::KIND);
@@ -69,6 +85,7 @@ impl<T: RegistryEntry> JsonRegistry<T> {
 
         Self {
             entries: RwLock::new(entries),
+            defaults,
             changes: broadcast::channel(CHANGE_CAPACITY).0,
             path,
             file_resolver,
@@ -104,13 +121,20 @@ impl<T: RegistryEntry> JsonRegistry<T> {
         self.entries.read().unwrap().keys().cloned().collect()
     }
 
+    pub fn is_default(&self, name: &str) -> bool {
+        self.defaults.contains(name)
+    }
+
     /// Writes `body` to object storage as the entry named `name`, replacing
-    /// any entry of the same name.
+    /// any entry of the same name. Defaults are rejected.
     pub async fn save(
         &self,
         name: &str,
         mut body: serde_json::Map<String, serde_json::Value>,
     ) -> Result<(), RegistryError> {
+        if self.is_default(name) {
+            return Err(RegistryError::Default);
+        }
         let key = self.remote_key(name)?;
         body.entry("name").or_insert_with(|| name.into());
         let entry: T =
@@ -128,8 +152,11 @@ impl<T: RegistryEntry> JsonRegistry<T> {
     }
 
     /// Re-fetches the entry named `name` from object storage and replaces the
-    /// in-memory copy with it.
+    /// in-memory copy with it. A default is returned without fetching.
     pub async fn refresh(&self, name: &str) -> Result<Arc<T>, RegistryError> {
+        if let Some(entry) = self.get(name).filter(|_| self.is_default(name)) {
+            return Ok(entry);
+        }
         let key = self.remote_key(name)?;
         let bytes = self.file_resolver.bucket()?.fetch_bytes(&key).await?;
         let entry = Arc::new(parse::<T>(&bytes, name).map_err(RegistryError::Parse)?);

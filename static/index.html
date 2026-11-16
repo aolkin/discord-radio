@@ -217,6 +217,7 @@
                                 @click="openItem('signal-profiles', profile)"
                             >
                                 <span x-text="profile"></span>
+                                <span class="default-tag" x-show="isDefault('signal-profiles', profile)">Default</span>
                                 <span
                                     class="draft-dot"
                                     title="Unsaved changes"
@@ -304,7 +305,8 @@
                                     <button
                                         type="button"
                                         class="btn btn-primary"
-                                        :disabled="changeCount(route.kind, route.name) === 0 || draftErrors(route.kind).length > 0"
+                                        :disabled="changeCount(route.kind, route.name) === 0 || draftErrors(route.kind).length > 0 || isDefault(route.kind, route.name)"
+                                        :title="isDefault(route.kind, route.name) ? 'Default profiles cannot be overwritten. Use Save as.' : ''"
                                         @click="reviewDraft(route.kind)"
                                     >
                                         Review changes

@@ -58,7 +58,7 @@ fn preview_fixtures_round_trip() {
     fixture!(BotSnapshot, "snapshots/playing-noise.json");
     fixture!(SignalProfile, "profiles/clear.json");
     fixture!(SignalProfile, "profiles/weak_signal.json");
-    fixture!(SignalProfile, "profiles/tuning.json");
+    fixture!(SignalProfile, "profiles/fading_signal.json");
     fixture!(Pool, "pools/track.json");
     fixture!(Pool, "pools/hex.json");
     fixture!(Pool, "pools/noise.json");
