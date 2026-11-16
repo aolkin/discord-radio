@@ -16,6 +16,8 @@
         botProfiles: {},
         logs: {},
         radio: null,
+        active: new Set(),
+        voice: new Set(),
     };
 
     const forcedMode = new URLSearchParams(window.location.search).get('dj');
@@ -34,7 +36,6 @@
                 loadJson('logs/members.json'),
                 loadJson('logs/dj.json'),
                 ...modes.map((mode) => loadJson(`snapshots/playing-${mode}.json`)),
-                loadJson('snapshots/no-radio.json'),
             ]);
         store.guilds = guilds;
         store.channels = channels;
@@ -53,14 +54,15 @@
         modes.forEach((mode, index) => {
             store.snapshots[mode] = snapshots[index];
         });
-        store.snapshots.none = snapshots[modes.length];
         for (const [kind, names] of Object.entries(registries)) {
             const items = await Promise.all(names.map((name) => loadJson(`${kind}/${name}.json`)));
             store.registries[kind] = Object.fromEntries(items.map((item) => [item.name, item]));
         }
         const live = store.snapshots.track.guilds[0];
+        store.active.add(live.guild_id);
+        store.voice.add(live.guild_id);
         store.radio = {
-            mode: modes.includes(forcedMode) || forcedMode === 'none' ? forcedMode : 'track',
+            mode: modes.includes(forcedMode) ? forcedMode : 'track',
             startedAt: Date.now(),
             text: null,
             profile: null,
@@ -89,18 +91,29 @@
 
     const buildSnapshot = () => {
         const { radio } = store;
-        if (radio.mode !== 'none') {
-            const total = durationOf(store.snapshots[radio.mode].guilds[0]);
-            if (total > 0 && (Date.now() - radio.startedAt) / 1000 >= total) {
-                setMode(forcedMode ? radio.mode : nextMode(radio.mode));
-            }
+        const modeTotal = durationOf(store.snapshots[radio.mode].guilds[0]);
+        if (modeTotal > 0 && (Date.now() - radio.startedAt) / 1000 >= modeTotal) {
+            setMode(forcedMode ? radio.mode : nextMode(radio.mode));
         }
         const snapshot = structuredClone(store.snapshots[radio.mode]);
         snapshot.current_activity = radio.activity;
-        const guild = snapshot.guilds[0];
-        if (!guild) {
-            return snapshot;
+        const template = snapshot.guilds[0];
+        snapshot.guilds = store.guilds.guilds
+            .filter((entry) => store.active.has(entry.guild_id))
+            .map((entry) => ({
+                ...structuredClone(template),
+                guild_id: entry.guild_id,
+                name: entry.name,
+                in_voice: store.voice.has(entry.guild_id),
+            }));
+        for (const guild of snapshot.guilds) {
+            decorate(guild);
         }
+        return snapshot;
+    };
+
+    const decorate = (guild) => {
+        const { radio } = store;
         const elapsed = Math.max(0, (Date.now() - radio.startedAt) / 1000);
         const total = durationOf(guild);
         const track = guild.tracks[0];
@@ -127,7 +140,6 @@
         }
         guild.announcement_channels = radio.announcements;
         guild.dj_config = radio.djConfig;
-        return snapshot;
     };
 
     const folderOf = (key) => key.slice(0, key.lastIndexOf('/') + 1);
@@ -210,10 +222,8 @@
         guildRoute('GET', 'channels', () => respond(store.channels)),
         guildRoute('POST', 'channels/([^/]+)/send', ok),
         guildRoute('GET', 'voice-channels', () => respond(store.voiceChannels)),
-        guildRoute('POST', 'voice-channels/([^/]+)/join', () => {
-            if (store.radio.mode === 'none') {
-                setMode('track');
-            }
+        guildRoute('POST', 'voice-channels/([^/]+)/join', (_request, guildId) => {
+            store.voice.add(guildId);
             return ok();
         }),
         guildRoute('GET', 'bot-profile', (_request, guildId) => respond(store.botProfiles[guildId] ?? {})),
@@ -253,14 +263,15 @@
             });
         }),
         guildRoute('POST', 'load', (_request, guildId) => {
-            if (store.radio.mode !== 'none') {
+            if (store.active.has(guildId)) {
                 return fail(409, `Guild ${guildId} is already active`);
             }
-            setMode('track');
+            store.active.add(guildId);
             return ok();
         }),
-        guildRoute('POST', 'unload', () => {
-            setMode('none');
+        guildRoute('POST', 'unload', (_request, guildId) => {
+            store.active.delete(guildId);
+            store.voice.delete(guildId);
             return ok();
         }),
         guildRoute('POST', 'dj/advance',({ body }) => {

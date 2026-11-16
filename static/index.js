@@ -1,4 +1,5 @@
 import { activity, modals as activityModals } from './js/activity.js';
+import './js/audio-stream.js';
 import { botProfile, modals as botProfileModals } from './js/bot-profile.js';
 import { channels, modals as channelsModals } from './js/channels.js';
 import { connection } from './js/connection.js';

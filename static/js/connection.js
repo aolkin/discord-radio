@@ -1,4 +1,4 @@
-import { apiRequest, bodyOrStatus } from './api.js';
+import { apiRequest, bodyOrStatus, emptyMessage } from './api.js';
 
 export function connection() {
     return {
@@ -9,6 +9,8 @@ export function connection() {
         guildNames: {},
         guildList: [],
         guildListLoading: false,
+        guildToggling: false,
+        guildMessage: emptyMessage(),
         version: '',
         commitHash: '',
         lastCommitHash: null,
@@ -50,9 +52,40 @@ export function connection() {
             return this.guildNames[guildId] || guildId;
         },
 
-        guildsWithoutRadio() {
-            const withRadio = new Set(this.guilds.map((guild) => guild.guild_id));
-            return this.guildList.filter((guild) => !withRadio.has(guild.guild_id));
+        inactiveGuilds() {
+            const active = new Set(this.guilds.map((guild) => guild.guild_id));
+            return this.guildList.filter((guild) => !active.has(guild.guild_id));
+        },
+
+        async loadGuild(guildId) {
+            const name = this.guildName(guildId);
+            await this.runAction({
+                saving: 'guildToggling',
+                message: 'guildMessage',
+                label: 'loading guild',
+                request: () =>
+                    apiRequest(`/api/guilds/${guildId}/load`, { method: 'POST', errorMessage: bodyOrStatus }),
+                success: `Loaded ${name}.`,
+                failure: `Failed to load ${name}`,
+            });
+        },
+
+        async unloadGuild(guildId) {
+            const name = this.guildName(guildId);
+            const inVoice = this.guilds.some((guild) => guild.guild_id === guildId && guild.in_voice);
+            const warning = inVoice ? ' The bot is in a voice channel there and will leave it.' : '';
+            if (!confirm(`Unload ${name}?${warning}`)) {
+                return;
+            }
+            await this.runAction({
+                saving: 'guildToggling',
+                message: 'guildMessage',
+                label: 'unloading guild',
+                request: () =>
+                    apiRequest(`/api/guilds/${guildId}/unload`, { method: 'POST', errorMessage: bodyOrStatus }),
+                success: `Unloaded ${name}.`,
+                failure: `Failed to unload ${name}`,
+            });
         },
 
         connect() {

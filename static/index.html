@@ -97,6 +97,7 @@
                             >
                                 Open DJ config
                             </button>
+                            <button type="button" role="menuitem" @click="unloadGuild(guild.guild_id)">Unload</button>
                         </div>
                     </div>
                 </template>
@@ -1588,11 +1589,26 @@
                     x-for="guild in guilds.filter((candidate) => candidate.guild_id === route.name)"
                     :key="guild.guild_id"
                 >
-                    <div class="guild-card">
+                    <div class="guild-card" x-init="loadVoiceChannelOptions()">
                         <div class="guild-header">
                             <div class="guild-id" x-text="guildName(guild.guild_id)"></div>
-                            <span class="voice-badge" x-show="guild.in_voice">In Voice</span>
+                            <div class="row-center-8">
+                                <span class="voice-badge" x-show="guild.in_voice">In Voice</span>
+                                <button
+                                    type="button"
+                                    class="btn btn-secondary btn-sm"
+                                    :disabled="guildToggling"
+                                    @click="unloadGuild(guild.guild_id)"
+                                >
+                                    Unload
+                                </button>
+                            </div>
                         </div>
+                        <div
+                            x-show="guildMessage.text"
+                            :class="guildMessage.type === 'error' ? 'error-message' : 'success-message'"
+                            x-text="guildMessage.text"
+                        ></div>
 
                         <nav class="guild-tabs">
                             <template x-for="tab in guildTabs" :key="tab.id">
@@ -1707,6 +1723,7 @@
                                             <!-- biome-ignore lint/a11y/useMediaCaption: live stream, no caption track exists -->
                                             <audio
                                                 class="w-full mt-8"
+                                                x-audio-stream
                                                 :src="'/api/guilds/' + guild.guild_id + '/audio-stream'"
                                                 controls
                                                 preload="none"
@@ -1723,7 +1740,10 @@
                         </div>
 
                         <div class="guild-content" x-show="route.tab === 'play'">
-                            <div class="section">
+                            <div class="track-details" x-show="!guild.in_voice">
+                                Join a voice channel from the Status tab to use playback controls.
+                            </div>
+                            <div class="section" x-show="guild.in_voice">
                                 <div class="section-title">Advance DJ State</div>
                                 <form @submit.prevent="advanceDJState()">
                                     <div
@@ -1768,7 +1788,7 @@
                                 </form>
                             </div>
 
-                            <div class="section">
+                            <div class="section" x-show="guild.in_voice">
                                 <div class="section-title">Go Idle</div>
                                 <form @submit.prevent="idleDJ()">
                                     <div
@@ -1812,7 +1832,7 @@
                                 </form>
                             </div>
 
-                            <div class="section">
+                            <div class="section" x-show="guild.in_voice">
                                 <div class="section-title">Play Hex Message</div>
                                 <form @submit.prevent="playHexMessage()">
                                     <div
@@ -1879,7 +1899,7 @@
                                 </form>
                             </div>
 
-                            <div class="section">
+                            <div class="section" x-show="guild.in_voice">
                                 <div class="section-title">Play Track</div>
                                 <form @submit.prevent="playTrack()">
                                     <div
@@ -2469,62 +2489,52 @@
                         </div>
                     </div>
                 </template>
-                <template x-if="!guilds.some((candidate) => candidate.guild_id === route.name)">
+                <template x-if="!currentGuild()">
                     <div class="no-guilds">
-                        <p>This guild has no radio running.</p>
-                        <div class="section">
-                            <div x-include="#voice-channel-join"></div>
-                        </div>
+                        <p x-text="guildName(route.name) + ' is not active.'"></p>
+                        <div
+                            x-show="guildMessage.text"
+                            :class="guildMessage.type === 'error' ? 'error-message' : 'success-message'"
+                            x-text="guildMessage.text"
+                        ></div>
+                        <button
+                            type="button"
+                            class="btn btn-primary"
+                            :disabled="guildToggling"
+                            @click="loadGuild(route.name)"
+                        >
+                            Load
+                        </button>
                         <a href="#/live" class="btn btn-secondary">Back to guilds</a>
                     </div>
                 </template>
             </div>
 
-            <div class="guild-list" x-show="route.view === 'live' && !route.name && guildsWithoutRadio().length > 0">
-                <div class="section-title">Guilds without a radio</div>
-                <template x-for="guild in guildsWithoutRadio()" :key="guild.guild_id">
+            <div class="guild-list" x-show="route.view === 'live' && !route.name && guildList.length > 0">
+                <div
+                    x-show="guildMessage.text"
+                    :class="guildMessage.type === 'error' ? 'error-message' : 'success-message'"
+                    x-text="guildMessage.text"
+                ></div>
+                <div class="section-title" x-show="inactiveGuilds().length > 0">Inactive guilds</div>
+                <template x-for="guild in inactiveGuilds()" :key="guild.guild_id">
                     <div class="guild-list-row">
                         <div class="guild-id" x-text="guild.name"></div>
-                        <div class="row-center-8">
-                            <!-- biome-ignore lint/a11y/useValidAnchor: the href is set by :href -->
-                            <a class="btn btn-secondary btn-sm" :href="'#/live/' + guild.guild_id">Join Voice</a>
-                            <div
-                                class="menu-anchor"
-                                x-data="{ open: false }"
-                                @click.outside="open = false"
-                                @keydown.escape="open = false"
-                            >
-                                <button
-                                    type="button"
-                                    class="btn btn-icon"
-                                    aria-label="Guild actions"
-                                    aria-haspopup="menu"
-                                    :aria-expanded="open"
-                                    @click="open = !open"
-                                >
-                                    ⋯
-                                </button>
-                                <div class="strip-menu" role="menu" x-show="open" @click="open = false">
-                                    <button
-                                        type="button"
-                                        role="menuitem"
-                                        @click="openChannelMessageModal(guild.guild_id)"
-                                    >
-                                        Send Message
-                                    </button>
-                                    <button type="button" role="menuitem" @click="openBotProfileModal(guild.guild_id)">
-                                        Bot Profile
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
+                        <button
+                            type="button"
+                            class="btn btn-primary btn-sm"
+                            :disabled="guildToggling"
+                            @click="loadGuild(guild.guild_id)"
+                        >
+                            Load
+                        </button>
                     </div>
                 </template>
             </div>
 
             <div
                 class="no-guilds"
-                x-show="route.view === 'live' && !route.name && guilds.length === 0 && guildsWithoutRadio().length === 0"
+                x-show="route.view === 'live' && !route.name && guilds.length === 0 && inactiveGuilds().length === 0"
             >
                 <div class="no-guilds-icon">💤</div>
                 <p x-text="connected ? 'No active guilds' : 'Connecting to bot...'"></p>
