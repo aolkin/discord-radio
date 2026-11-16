@@ -354,6 +354,9 @@
             'POST',
             /^\/api\/files\/folders$/,
             (_match, { body }) => {
+                if (!/^[A-Za-z0-9_-]+$/.test(body.name)) {
+                    return fail(400, 'Folder names may contain only letters, digits, - and _');
+                }
                 store.folders.add(`${body.prefix}${body.name}/`);
                 return ok();
             },
@@ -408,6 +411,8 @@
     }
     window.WebSocket = MockWebSocket;
 
+    const failedUploads = new Set();
+
     class MockUploadRequest {
         constructor() {
             this.upload = { onprogress: null };
@@ -430,6 +435,13 @@
                 if (loaded === 100) {
                     clearInterval(timer);
                     const key = `${this.prefix}${file.name}`;
+                    if (file.name.startsWith('fail') && !failedUploads.has(key)) {
+                        failedUploads.add(key);
+                        this.status = 500;
+                        this.responseText = 'Simulated upload failure';
+                        this.onload?.({});
+                        return;
+                    }
                     addFile(key, file.size);
                     this.status = 200;
                     this.responseText = JSON.stringify({ key });
