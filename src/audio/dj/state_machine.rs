@@ -239,7 +239,7 @@ impl DJStateMachine {
             .segment
             .restore(&SegmentCtx::new(&guild_id, bot_state, &audio_processor))
             .await
-            .inspect_err(|e| tracing::warn!("Failed to restore segment: {e:?}"));
+            .inspect_err(|e| tracing::warn!("Failed to restore segment: {e:#}"));
 
         *state.write().await = initial_state;
 
@@ -285,7 +285,7 @@ impl DJStateMachine {
                 }
                 _ = self.state_completed() => {
                     if let Err(e) = self.force_advance(&bot_state, None).await {
-                        tracing::error!("Failed to advance to next state: {}", e);
+                        tracing::error!("Failed to advance to next state: {e:#}");
                         tokio::time::sleep(ADVANCE_RETRY_DELAY).await;
                     }
                 }
@@ -398,7 +398,7 @@ impl DJStateMachine {
             .save_dj_state(self.guild_id, &persist_state)
             .await
         {
-            tracing::warn!("Failed to persist DJ state: {}", e);
+            tracing::warn!("Failed to persist DJ state: {e:#}");
         }
     }
 
@@ -636,7 +636,6 @@ impl DJStateMachine {
         let cmd_name: &'static str = (&command).into();
         let result = match command {
             DJCommand::ForceAdvance(pool_name) => {
-                tracing::info!("Processing force advance for DJ");
                 self.force_advance(&bot_state, pool_name.as_deref()).await
             }
             DJCommand::ForceHexMessage(request) => {

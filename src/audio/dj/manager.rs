@@ -3,6 +3,7 @@ use crate::audio::dj::signal_profile::{SignalProfilePlayback, default_profile_fa
 use crate::audio::dj::state_machine::{ChannelStatus, DJState, DJStateMachine};
 use crate::audio::dj::tiered::{ConfigurableTier, TimedValue};
 use crate::audio::processing::processor::ProcessorRef;
+use crate::logging::guild_span;
 use crate::state::Data;
 use anyhow::{Context, bail};
 use serde::Deserialize;
@@ -226,7 +227,7 @@ impl DJManager {
         let task_state = self.state.clone();
         let bot_state = self.bot_state;
         let audio_processor = self.audio_processor.clone();
-        let span = tracing::info_span!("dj", guild_id = %guild_id);
+        let span = guild_span!(root "dj", guild_id);
         let task_handle = tokio::spawn(
             async move {
                 DJStateMachine::new(
@@ -250,7 +251,7 @@ impl DJManager {
         Ok(())
     }
 
-    #[tracing::instrument(skip_all, fields(guild_id = %self.guild_id))]
+    #[tracing::instrument(skip_all, fields(guild_id = self.guild_id.get()))]
     pub async fn stop(&self) {
         let mut running = self.running.write().await;
         let Some(Running {
@@ -264,7 +265,7 @@ impl DJManager {
             .send_timeout(DJCommand::Stop, STOP_SEND_TIMEOUT)
             .await
         {
-            tracing::warn!("Failed to send stop command to DJ task, aborting it: {}", e);
+            tracing::warn!("Failed to send stop command to DJ task, aborting it: {e:#}");
             task_handle.abort();
             let _ = task_handle.await;
             return;
@@ -285,7 +286,7 @@ impl DJManager {
 
     /// Starts the DJ task if it is not running, resuming its saved state when
     /// there is one.
-    #[tracing::instrument(skip_all, fields(guild_id = %self.guild_id))]
+    #[tracing::instrument(skip_all, fields(guild_id = self.guild_id.get()))]
     pub async fn start(&self) -> anyhow::Result<()> {
         let mut running = self.running.write().await;
         if running.is_some() {

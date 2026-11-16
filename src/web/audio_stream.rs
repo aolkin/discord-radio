@@ -47,16 +47,18 @@ pub struct OpusOggStream<'a> {
     granule_position: u64,
     stream_serial: u32,
     packet_count: u64,
+    span: tracing::Span,
 }
 
 impl<'a> OpusOggStream<'a> {
-    pub fn new(receiver: broadcast::Receiver<Vec<u8>>) -> Self {
+    pub fn new(receiver: broadcast::Receiver<Vec<u8>>, span: tracing::Span) -> Self {
         Self {
             receiver: BroadcastStream::new(receiver),
             packet_writer: None,
             granule_position: 0,
             stream_serial: rand::random(),
             packet_count: 0,
+            span,
         }
     }
 
@@ -116,6 +118,9 @@ impl<'a> Stream for OpusOggStream<'a> {
     type Item = Result<Vec<u8>, std::io::Error>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let span = self.span.clone();
+        let _entered = span.enter();
+
         // Initialize stream on first poll
         if self.packet_writer.is_none() {
             match self.initialize_stream() {
@@ -131,7 +136,7 @@ impl<'a> Stream for OpusOggStream<'a> {
                 Err(e) => Poll::Ready(Some(Err(e))),
             },
             Poll::Ready(Some(Err(e))) => {
-                tracing::warn!("Broadcast receive error (lagged): {:?}", e);
+                tracing::warn!("Broadcast receive error (lagged): {e:#}");
                 // Skip lagged messages and continue
                 cx.waker().wake_by_ref();
                 Poll::Pending
@@ -153,7 +158,7 @@ pub async fn audio_stream(
         .ok_or_else(|| ApiError::not_found(format!("No audio stream for guild {guild_id}")))?;
 
     // Create the streaming response with Ogg-wrapped Opus packets
-    let stream = OpusOggStream::new(receiver);
+    let stream = OpusOggStream::new(receiver, tracing::Span::current());
 
     // Return streaming response with appropriate headers
     let body = axum::body::Body::from_stream(stream);

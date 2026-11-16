@@ -1,4 +1,5 @@
 use crate::audio::processing::processor::ProcessorRef;
+use crate::logging::guild_span;
 use anyhow::Context;
 use raw_adapter::ProcessedAudioAdapter;
 use serenity::model::id::{ChannelId, GuildId};
@@ -30,7 +31,7 @@ pub async fn connect_voice_channel(
 
         drop(call);
 
-        let adapter = ProcessedAudioAdapter::new(processor);
+        let adapter = ProcessedAudioAdapter::new(processor, guild_span!("audio", guild_id));
         adapter.start(handle_lock.clone()).await;
 
         tracing::info!("Initialized audio DSP processor");

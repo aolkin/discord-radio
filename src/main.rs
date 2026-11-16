@@ -37,7 +37,7 @@ pub fn discord_token() -> String {
 async fn on_error(error: poise::FrameworkError<'_, Data, anyhow::Error>) {
     match error {
         poise::FrameworkError::Command { error, ctx, .. } => {
-            tracing::error!("Error in command '{}': {:?}", ctx.command().name, error);
+            tracing::error!("Error in command '{}': {error:#}", ctx.command().name);
             let reply = poise::CreateReply::default()
                 .content(format!("{error:#}"))
                 .ephemeral(true);
@@ -46,27 +46,29 @@ async fn on_error(error: poise::FrameworkError<'_, Data, anyhow::Error>) {
             }
         }
         poise::FrameworkError::CommandCheckFailed { error, ctx, .. } => {
-            tracing::error!(
-                "Command check failed for '{}': {:?}",
-                ctx.command().name,
-                error
-            );
+            let name = &ctx.command().name;
+            match error {
+                Some(error) => tracing::error!("Command check failed for '{name}': {error:#}"),
+                None => tracing::error!("Command check failed for '{name}'"),
+            }
         }
         poise::FrameworkError::ArgumentParse { error, ctx, .. } => {
             tracing::error!(
-                "Failed to parse arguments for '{}': {}",
-                ctx.command().name,
-                error
+                "Failed to parse arguments for '{}': {error:#}",
+                ctx.command().name
             );
         }
         poise::FrameworkError::Setup { error, .. } => {
-            tracing::error!("Setup error: {:?}", error);
+            tracing::error!("Setup error: {error:#}");
         }
         poise::FrameworkError::EventHandler { error, event, .. } => {
-            tracing::error!("Error in event handler for {:?}: {:?}", event, error);
+            tracing::error!(
+                "Error in event handler for {}: {error:#}",
+                event.snake_case_name()
+            );
         }
         error => {
-            tracing::error!("Other framework error: {:?}", error);
+            tracing::error!("Other framework error: {error}");
         }
     }
 }
@@ -81,7 +83,7 @@ async fn main() -> anyhow::Result<()> {
     let default_panic = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |panic_info| {
         default_panic(panic_info);
-        tracing::error!("Thread panicked, exiting process: {:?}", panic_info);
+        tracing::error!("Thread panicked, exiting process: {panic_info}");
         std::process::exit(1);
     }));
 

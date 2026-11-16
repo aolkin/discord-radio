@@ -15,19 +15,18 @@ use std::net::SocketAddr;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing::Instrument;
 
-async fn guild_span(params: RawPathParams, request: Request, next: Next) -> Response {
+async fn request_span(params: RawPathParams, request: Request, next: Next) -> Response {
     let guild_id = params
         .iter()
         .find(|(name, _)| *name == "guild_id")
-        .map(|(_, value)| value.to_string());
-    match guild_id {
-        Some(guild_id) => {
-            next.run(request)
-                .instrument(tracing::info_span!("request", guild_id))
-                .await
-        }
-        None => next.run(request).await,
-    }
+        .and_then(|(_, value)| value.parse::<u64>().ok());
+    let span = tracing::info_span!(
+        "request",
+        method = %request.method(),
+        path = request.uri().path(),
+        guild_id,
+    );
+    next.run(request).instrument(span).await
 }
 
 pub async fn run_web_server(bot_state: Data, port: u16) -> anyhow::Result<()> {
@@ -155,7 +154,7 @@ pub async fn run_web_server(bot_state: Data, port: u16) -> anyhow::Result<()> {
             post(routes::discord::join_voice_channel),
         )
         .route("/ws", get(websocket::websocket_handler))
-        .route_layer(middleware::from_fn(guild_span))
+        .route_layer(middleware::from_fn(request_span))
         .layer(cors)
         .with_state(bot_state);
 

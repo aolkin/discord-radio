@@ -331,7 +331,7 @@ impl Bucket {
             if let Err(cleanup_err) = tokio::fs::remove_file(&temp_dest).await
                 && cleanup_err.kind() != std::io::ErrorKind::NotFound
             {
-                tracing::warn!("Failed to clean up temp file {temp_dest:?}: {cleanup_err}");
+                tracing::warn!("Failed to clean up temp file {temp_dest:?}: {cleanup_err:#}");
             }
             return Err(e).with_context(|| format!("writing {temp_dest:?}"));
         }
@@ -368,7 +368,7 @@ impl Bucket {
         if let Err(e) = tokio::fs::remove_file(&cached).await
             && e.kind() != std::io::ErrorKind::NotFound
         {
-            tracing::warn!("Failed to remove cached copy {cached:?}: {e}");
+            tracing::warn!("Failed to remove cached copy {cached:?}: {e:#}");
         }
         Ok(())
     }
@@ -645,7 +645,7 @@ async fn mark_accessed(path: &Path) {
     })
     .await;
     if let Ok(Err(e)) = result {
-        tracing::warn!("Failed to record an access to a cached file: {e}");
+        tracing::warn!("Failed to record an access to a cached file: {e:#}");
     }
 }
 
@@ -700,7 +700,7 @@ fn list_cached_files(
         let metadata = match entry.metadata() {
             Ok(metadata) => metadata,
             Err(e) => {
-                tracing::warn!("Keeping {path:?}, its metadata is unreadable: {e}");
+                tracing::warn!("Keeping {path:?}, its metadata is unreadable: {e:#}");
                 listing.stats.read_failures += 1;
                 continue;
             }
@@ -708,7 +708,7 @@ fn list_cached_files(
         let accessed = match metadata.accessed() {
             Ok(accessed) => Some(accessed),
             Err(e) => {
-                tracing::warn!("Keeping {path:?}, its access time is unreadable: {e}");
+                tracing::warn!("Keeping {path:?}, its access time is unreadable: {e:#}");
                 listing.stats.read_failures += 1;
                 None
             }
@@ -756,7 +756,7 @@ fn remove_best_effort(path: &Path) -> bool {
     match std::fs::remove_file(path) {
         Ok(()) => true,
         Err(e) => {
-            tracing::warn!("Failed to remove {path:?} from the cache dir: {e}");
+            tracing::warn!("Failed to remove {path:?} from the cache dir: {e:#}");
             false
         }
     }

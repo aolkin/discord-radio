@@ -1,24 +1,28 @@
 use crate::audio::processing::processor::AudioProcessor;
+use crate::logging::LogThrottle;
 use async_trait::async_trait;
 use songbird::events::{Event, EventContext, EventHandler, TrackEvent};
 use songbird::input::RawAdapter;
 use songbird::input::core::io::MediaSource;
 use std::io::{Read, Seek, SeekFrom};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
+use tracing::Span;
 
 const SAMPLE_RATE: u32 = 48000;
 const CHANNELS: u16 = 2;
+const WARN_INTERVAL: Duration = Duration::from_secs(5);
 
 pub struct ProcessedAudioAdapter {
     processor: Arc<RwLock<AudioProcessor>>,
+    span: Span,
 }
 
 impl ProcessedAudioAdapter {
     /// Create a new adapter with an existing processor
-    pub fn new(processor: Arc<RwLock<AudioProcessor>>) -> Self {
-        Self { processor }
+    pub fn new(processor: Arc<RwLock<AudioProcessor>>, span: Span) -> Self {
+        Self { processor, span }
     }
 
     pub async fn start(
@@ -30,7 +34,7 @@ impl ProcessedAudioAdapter {
         // Create audio reader that generates on-demand
         // Use a std::sync::Mutex wrapper for the processor to allow sync access from Read::read()
         let sync_processor = Arc::new(Mutex::new(processor.clone()));
-        let reader = AudioChannelReader::new(sync_processor);
+        let reader = AudioChannelReader::new(sync_processor, self.span.clone());
 
         // Create RawAdapter for Songbird (expects interleaved f32 PCM)
         let raw_input = RawAdapter::new(reader, SAMPLE_RATE, CHANNELS as u32);
@@ -39,18 +43,24 @@ impl ProcessedAudioAdapter {
         {
             let mut call_guard = call.lock().await;
             let handle = call_guard.play_input(raw_input.into());
-            let _ = handle.add_event(Event::Track(TrackEvent::Error), TrackErrorLogger);
+            let _ = handle.add_event(
+                Event::Track(TrackEvent::Error),
+                TrackErrorLogger { span: self.span },
+            );
         }
 
         processor
     }
 }
 
-struct TrackErrorLogger;
+struct TrackErrorLogger {
+    span: Span,
+}
 
 #[async_trait]
 impl EventHandler for TrackErrorLogger {
     async fn act(&self, ctx: &EventContext<'_>) -> Option<Event> {
+        let _entered = self.span.enter();
         if let EventContext::Track(tracks) = ctx {
             for (state, _) in *tracks {
                 tracing::warn!("Voice track failed: {:?}", state.playing);
@@ -67,16 +77,24 @@ struct AudioChannelReader {
     position: usize,
     last_generation_time: Option<Instant>,
     total_frames_generated: u64,
+    span: Span,
+    drift_warnings: LogThrottle,
+    slow_warnings: LogThrottle,
+    locked_warnings: LogThrottle,
 }
 
 impl AudioChannelReader {
-    fn new(processor: Arc<Mutex<Arc<RwLock<AudioProcessor>>>>) -> Self {
+    fn new(processor: Arc<Mutex<Arc<RwLock<AudioProcessor>>>>, span: Span) -> Self {
         Self {
             processor,
             buffer: Vec::new(),
             position: 0,
             last_generation_time: None,
             total_frames_generated: 0,
+            span,
+            drift_warnings: LogThrottle::new(WARN_INTERVAL),
+            slow_warnings: LogThrottle::new(WARN_INTERVAL),
+            locked_warnings: LogThrottle::new(WARN_INTERVAL),
         }
     }
 
@@ -95,8 +113,11 @@ impl AudioChannelReader {
             let drift_ms = elapsed_ms - EXPECTED_INTERVAL_MS;
 
             // Log if drift is significant (more than 10ms off)
-            if drift_ms.abs() > 10.0 {
+            if drift_ms.abs() > 10.0
+                && let Some(suppressed) = self.drift_warnings.allow()
+            {
                 tracing::warn!(
+                    suppressed,
                     "Audio generation timing drift: {:.2}ms elapsed (expected {:.2}ms), drift: {:.2}ms, total_frames: {}",
                     elapsed_ms,
                     EXPECTED_INTERVAL_MS,
@@ -135,8 +156,11 @@ impl AudioChannelReader {
                 let total_generation_ms = generation_start.elapsed().as_secs_f64() * 1000.0;
                 let expected_duration_ms =
                     (CHUNKS_TO_GENERATE * CHUNK_FRAMES) as f64 / 48000.0 * 1000.0;
-                if total_generation_ms > expected_duration_ms {
+                if total_generation_ms > expected_duration_ms
+                    && let Some(suppressed) = self.slow_warnings.allow()
+                {
                     tracing::warn!(
+                        suppressed,
                         "Audio generation batch too slow: took {:.2}ms to generate {:.2}ms of audio ({}% real-time)",
                         total_generation_ms,
                         expected_duration_ms,
@@ -146,10 +170,13 @@ impl AudioChannelReader {
             }
             Err(_) => {
                 // Processor is locked, return silence for entire batch
-                tracing::warn!(
-                    "Audio processor locked during generation, returning silence for {}ms",
-                    CHUNKS_TO_GENERATE * 20
-                );
+                if let Some(suppressed) = self.locked_warnings.allow() {
+                    tracing::warn!(
+                        suppressed,
+                        "Audio processor locked during generation, returning silence for {}ms",
+                        CHUNKS_TO_GENERATE * 20
+                    );
+                }
                 let silence_frames = CHUNK_FRAMES * CHUNKS_TO_GENERATE;
                 for _ in 0..silence_frames {
                     self.buffer.extend_from_slice(&0.0f32.to_le_bytes());
@@ -165,6 +192,8 @@ impl AudioChannelReader {
 impl Read for AudioChannelReader {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         // If we've consumed the current buffer, generate more audio
+        let span = self.span.clone();
+        let _entered = span.enter();
         if self.position >= self.buffer.len() {
             self.generate_audio_chunk();
         }

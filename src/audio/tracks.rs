@@ -3,6 +3,7 @@ use crate::audio::processing::mixer::{
     AudioSource, StopReason, TrackCallback, TrackCommand, TrackHandle, TrackId,
 };
 use crate::audio::processing::processor::ProcessorRef;
+use crate::logging::guild_span;
 use crate::state::Data;
 use anyhow::{Context, bail};
 use serde::{Deserialize, Serialize};
@@ -144,7 +145,7 @@ impl TrackManager {
         tokio::spawn(
             async move {
                 let reason = ended.await.unwrap_or_else(|e| {
-                    tracing::error!("Track '{name}' lost its end signal: {e}");
+                    tracing::error!("Track '{name}' lost its end signal: {e:#}");
                     StopReason::Lost
                 });
                 tracing::debug!("Track '{name}' left the mixer: {reason:?}");
@@ -152,7 +153,7 @@ impl TrackManager {
                     manager.remove_handle(ended_track.id).await;
                 }
             }
-            .instrument(tracing::Span::current()),
+            .instrument(guild_span!(root "track", self.guild_id)),
         );
 
         // If we're starting from a position other than the beginning, adjust start_time
@@ -415,7 +416,7 @@ impl TrackManager {
             .save_multitrack_playback(self.guild_id, &state)
             .await
         {
-            tracing::warn!("Failed to persist multitrack state: {}", e);
+            tracing::warn!("Failed to persist multitrack state: {e:#}");
         }
     }
 }

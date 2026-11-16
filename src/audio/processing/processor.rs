@@ -2,14 +2,16 @@ use crate::audio::codec::opus_encoder::OpusEncoder;
 use crate::audio::dsp::chain::RadioEffectChain;
 use crate::audio::processing::mixer::{AudioSource, Mixer, TrackCommand, TrackHandle};
 use crate::audio::profiles::SignalProfile;
+use crate::logging::LogThrottle;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tokio::sync::broadcast::Receiver;
 use tokio::sync::{RwLock, broadcast};
 
 const SAMPLE_RATE: u32 = 48000;
 const FRAME_SIZE: usize = 960; // 20ms at 48kHz
 
+const WARN_INTERVAL: Duration = Duration::from_secs(5);
 const CHANNEL_CAPACITY: usize = 16; // Buffer up to 16 chunks (320ms at 20ms per chunk)
 
 pub struct ProfileTransition {
@@ -55,6 +57,8 @@ pub struct AudioProcessor {
     samples_processed: u64, // Total stereo frames processed (not individual samples)
     opus_encoder: OpusEncoder,
     opus_stream: broadcast::Sender<Vec<u8>>,
+    encode_warnings: LogThrottle,
+    slow_warnings: LogThrottle,
 }
 
 impl AudioProcessor {
@@ -71,6 +75,8 @@ impl AudioProcessor {
             samples_processed: 0,
             opus_encoder,
             opus_stream: broadcast::channel(CHANNEL_CAPACITY).0,
+            encode_warnings: LogThrottle::new(WARN_INTERVAL),
+            slow_warnings: LogThrottle::new(WARN_INTERVAL),
         }
     }
 
@@ -160,8 +166,9 @@ impl AudioProcessor {
                 .opus_encoder
                 .encode(&buffer)
                 .map(|packet| self.opus_stream.send(packet))
+            && let Some(suppressed) = self.encode_warnings.allow()
         {
-            tracing::error!("Opus encoding error: {:?}", e);
+            tracing::error!(suppressed, "Opus encoding error: {e:#}");
         }
 
         // Check if generation is keeping up with real-time
@@ -170,8 +177,11 @@ impl AudioProcessor {
         let generation_time_ms = elapsed.as_secs_f64() * 1000.0;
 
         // Warn if we're taking longer than the audio duration (not keeping up with real-time)
-        if generation_time_ms > audio_duration_ms {
+        if generation_time_ms > audio_duration_ms
+            && let Some(suppressed) = self.slow_warnings.allow()
+        {
             tracing::warn!(
+                suppressed,
                 "Audio generation too slow: took {:.2}ms to generate {:.2}ms of audio ({}% real-time)",
                 generation_time_ms,
                 audio_duration_ms,
