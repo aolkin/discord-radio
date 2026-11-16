@@ -18,7 +18,7 @@ cache:
 metrics:
   intervalSeconds: 60
 logging:
-  rustLog: info,radio_bot::audio::dj=debug,radio_bot::audio::tracks=warn,songbird=warn,symphonia_core=warn,symphonia_format_ogg=warn
+  rustLog: info,songbird=warn,symphonia_core=warn,symphonia_format_ogg=warn
 hexAudioFolder: ""
 persistence:
   size: 64Mi
