@@ -36,6 +36,7 @@ sudo apt update && sudo apt install -y cmake libopus-dev pkg-config
    ```
    DISCORD_TOKEN=your_discord_bot_token_here
    WEB_PORT=3000  # Optional, defaults to 3000
+   RUST_LOG=info  # Optional, log filter, defaults to info
    ```
 
 2. **Build the Project**

@@ -85,20 +85,14 @@ async fn main() -> anyhow::Result<()> {
         std::process::exit(1);
     }));
 
+    dotenvy::dotenv().ok();
+
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                tracing_subscriber::EnvFilter::new("info")
-                    .add_directive("radio_bot::audio::dj=debug".parse().unwrap())
-                    .add_directive("radio_bot::audio::tracks=warn".parse().unwrap())
-                    .add_directive("songbird=warn".parse().unwrap())
-                    .add_directive("symphonia_core=warn".parse().unwrap())
-                    .add_directive("symphonia_format_ogg=warn".parse().unwrap())
-            }),
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
         )
         .init();
-
-    dotenvy::dotenv().ok();
 
     let run_number = env!("BUILD_RUN_NUMBER");
     let commit_hash = env!("BUILD_COMMIT_HASH");
