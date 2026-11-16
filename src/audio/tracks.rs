@@ -138,7 +138,7 @@ impl TrackManager {
             ],
         );
 
-        let manager = Arc::clone(self);
+        let manager = Arc::downgrade(self);
         let name = args.name.clone();
         let ended_track = mixer_handle.clone();
         tokio::spawn(
@@ -148,7 +148,9 @@ impl TrackManager {
                     StopReason::Lost
                 });
                 tracing::debug!("Track '{name}' left the mixer: {reason:?}");
-                manager.remove_handle(ended_track.id).await;
+                if let Some(manager) = manager.upgrade() {
+                    manager.remove_handle(ended_track.id).await;
+                }
             }
             .instrument(tracing::Span::current()),
         );
