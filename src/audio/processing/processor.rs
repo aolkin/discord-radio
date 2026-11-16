@@ -83,10 +83,6 @@ impl AudioProcessor {
         self.mixer.add_track(source, volume, commands)
     }
 
-    pub fn clear_tracks(&mut self) {
-        self.mixer.clear();
-    }
-
     pub fn stream_opus(&self) -> Receiver<Vec<u8>> {
         self.opus_stream.subscribe()
     }

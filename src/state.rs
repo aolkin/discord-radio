@@ -242,7 +242,6 @@ impl BotState {
             return;
         };
         radio.dj_manager.stop().await;
-        radio.track_manager.drop_tracks().await;
         tracing::info!("Unloaded guild");
     }
 

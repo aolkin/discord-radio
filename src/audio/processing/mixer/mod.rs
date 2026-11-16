@@ -395,10 +395,6 @@ impl Mixer {
         }
     }
 
-    pub fn clear(&mut self) {
-        self.tracks.clear();
-    }
-
     /// Applies the edits sent through each track's [`TrackHandle`].
     pub fn drain_commands(&mut self) {
         for track in self.tracks.values_mut() {
