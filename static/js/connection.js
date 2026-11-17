@@ -57,12 +57,13 @@ export function connection() {
             return this.guildList.filter((guild) => !active.has(guild.guild_id));
         },
 
-        async loadGuild(guildId) {
+        async loadGuild(guildId, open = false) {
             const name = this.guildName(guildId);
             await this.runAction({
                 saving: 'guildToggling',
                 message: 'guildMessage',
                 label: 'loading guild',
+                onSuccess: open ? () => this.openGuild(guildId) : undefined,
                 request: () =>
                     apiRequest(`/api/guilds/${guildId}/load`, { method: 'POST', errorMessage: bodyOrStatus }),
                 success: `Loaded ${name}.`,

@@ -230,6 +230,21 @@ a.guild-card:hover {
     box-shadow: var(--shadow-sm);
 }
 
+.strip-load {
+    display: flex;
+    align-items: stretch;
+    flex: 0 0 auto;
+}
+
+.strip-load .strip-load-select {
+    width: auto;
+    min-width: 200px;
+    height: 100%;
+    border: 2px solid transparent;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+}
+
 .strip-card.selected {
     box-shadow:
         var(--shadow-sm),
@@ -1758,8 +1773,13 @@ fieldset.form-group {
         order: 1;
     }
 
-    .strip-card {
+    .strip-card,
+    .strip-load {
         flex: 1 1 100%;
+    }
+
+    .strip-load .strip-load-select {
+        width: 100%;
     }
 
     .draft-bar {
