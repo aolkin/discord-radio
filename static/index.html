@@ -275,7 +275,7 @@
                             >
                                 <div class="error-message" x-text="error"></div>
                             </template>
-                            <div class="draft-bar-row">
+                            <div class="draft-bar-row" x-show="saveAsName === null">
                                 <span
                                     class="draft-count"
                                     x-show="!draftReviewing"
@@ -339,7 +339,7 @@
                                 </div>
                             </div>
                             <form
-                                class="draft-bar-row"
+                                class="draft-bar-row draft-bar-save-as"
                                 x-show="saveAsName !== null"
                                 @submit.prevent="!saveAsInvalid(route.kind) && saveAs(route.kind)"
                                 @keydown.escape="saveAsName = null"
@@ -924,20 +924,22 @@
                     </section>
 
                     <section class="card" x-show="route.kind === 'pools' && !draftReviewing">
-                        <!-- biome-ignore lint/a11y/useHeadingContent: the heading text comes from x-text -->
-                        <h2 class="card-title" x-text="poolEditorIsNew ? 'New Pool' : 'Edit Pool'"></h2>
-                        <div class="modal-section" x-show="!poolEditorIsNew">
-                            <div class="modal-section-title">Used By</div>
-                            <div class="chip-list">
+                        <div class="pool-header">
+                            <!-- biome-ignore lint/a11y/useHeadingContent: the heading text comes from x-text -->
+                            <h2 class="card-title" x-text="poolEditorIsNew ? 'New Pool' : 'Edit Pool'"></h2>
+                            <div class="pool-users" x-show="!poolEditorIsNew">
+                                <span class="pool-users-label">Used by</span>
                                 <template x-for="config in poolUsers(route.name)" :key="config">
                                     <button
                                         type="button"
-                                        class="btn btn-secondary"
+                                        class="btn btn-text btn-sm"
                                         @click="openItem('dj-configs', config)"
                                         x-text="config"
                                     ></button>
                                 </template>
-                                <div class="empty-state" x-show="poolUsers(route.name).length === 0">No DJ configs</div>
+                                <span class="empty-state" x-show="poolUsers(route.name).length === 0"
+                                    >No DJ configs</span
+                                >
                             </div>
                         </div>
                         <div class="loading" x-show="poolEditorLoading">Loading...</div>
@@ -971,51 +973,48 @@
                             </div>
 
                             <div class="modal-section">
-                                <div
-                                    class="segmented pool-grid-modes"
-                                    role="radiogroup"
-                                    aria-label="Pool view"
-                                    x-show="poolForm.entries.length > 0"
-                                >
-                                    <label class="segment">
-                                        <input type="radio" name="pool-mode" value="properties" x-model="poolMode">
-                                        <span>Properties</span>
-                                    </label>
-                                    <label class="segment">
-                                        <input type="radio" name="pool-mode" value="weights" x-model="poolMode">
-                                        <span>Weights</span>
-                                    </label>
-                                </div>
-                                <div class="pool-bulk" x-show="poolForm.entries.length > 0">
-                                    <span
-                                        class="pool-bulk-count"
-                                        x-text="poolSelectedRows().length + ' selected'"
-                                    ></span>
-                                    <div class="button-group">
-                                        <button
-                                            type="button"
-                                            class="btn btn-secondary"
-                                            :disabled="poolSelectedRows().length === 0"
-                                            @click="poolBulkDelete()"
-                                        >
-                                            Delete
-                                        </button>
-                                        <button
-                                            type="button"
-                                            class="btn btn-secondary"
-                                            :disabled="poolSelectedRows().length === 0"
-                                            @click="poolBulkDuplicate()"
-                                        >
-                                            Duplicate
-                                        </button>
-                                        <button
-                                            type="button"
-                                            class="btn btn-secondary"
-                                            :disabled="poolSelectedRows().length === 0"
-                                            @click="poolBulkEqualize()"
-                                        >
-                                            Equalize weights
-                                        </button>
+                                <div class="pool-toolbar" x-show="poolForm.entries.length > 0">
+                                    <div class="segmented pool-grid-modes" role="radiogroup" aria-label="Pool view">
+                                        <label class="segment">
+                                            <input type="radio" name="pool-mode" value="properties" x-model="poolMode">
+                                            <span>Properties</span>
+                                        </label>
+                                        <label class="segment">
+                                            <input type="radio" name="pool-mode" value="weights" x-model="poolMode">
+                                            <span>Weights</span>
+                                        </label>
+                                    </div>
+                                    <div class="pool-bulk">
+                                        <span
+                                            class="pool-bulk-count"
+                                            x-text="poolSelectedRows().length + ' selected'"
+                                        ></span>
+                                        <div class="button-group">
+                                            <button
+                                                type="button"
+                                                class="btn btn-secondary"
+                                                :disabled="poolSelectedRows().length === 0"
+                                                @click="poolBulkDelete()"
+                                            >
+                                                Delete
+                                            </button>
+                                            <button
+                                                type="button"
+                                                class="btn btn-secondary"
+                                                :disabled="poolSelectedRows().length === 0"
+                                                @click="poolBulkDuplicate()"
+                                            >
+                                                Duplicate
+                                            </button>
+                                            <button
+                                                type="button"
+                                                class="btn btn-secondary"
+                                                :disabled="poolSelectedRows().length === 0"
+                                                @click="poolBulkEqualize()"
+                                            >
+                                                Equalize weights
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                                 <div

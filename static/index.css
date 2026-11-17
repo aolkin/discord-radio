@@ -655,10 +655,6 @@ fieldset.form-group {
     background: var(--color-surface);
 }
 
-.list-row > .form-group:last-of-type {
-    margin-bottom: 0;
-}
-
 .list-row > .btn {
     align-self: flex-start;
 }
@@ -673,6 +669,14 @@ fieldset.form-group {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 0 var(--space-4);
+}
+
+.list-row > .form-row {
+    margin-bottom: calc(-1 * var(--space-4));
+}
+
+.list-row > .form-row > .form-group:last-child:nth-child(even) {
+    grid-column: 1 / -1;
 }
 
 .button-group {
@@ -695,6 +699,11 @@ fieldset.form-group {
 .empty-state {
     font-style: italic;
     font-size: 0.9rem;
+    margin-bottom: var(--space-2);
+}
+
+.pool-users .empty-state {
+    margin-bottom: 0;
 }
 
 .guild-list {
@@ -859,6 +868,20 @@ fieldset.form-group {
     color: var(--color-warning);
 }
 
+.form-input[readonly] {
+    background: var(--color-surface-muted);
+    color: var(--color-text-muted);
+}
+
+.draft-bar-save-as .form-input {
+    flex: 1 1 16rem;
+    width: auto;
+}
+
+.draft-bar-save-as .form-label {
+    margin-bottom: 0;
+}
+
 .form-input[aria-invalid="true"] {
     border-color: var(--color-error);
 }
@@ -937,9 +960,35 @@ fieldset.form-group {
     color: var(--color-text-muted);
 }
 
+.pool-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-1) var(--space-4);
+    margin-bottom: var(--space-4);
+}
+
+.pool-users {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-1) var(--space-2);
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+}
+
+.pool-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2) var(--space-4);
+    margin-bottom: var(--space-4);
+}
+
 .pool-grid-modes {
     width: fit-content;
-    margin: 0 0 var(--space-4);
 }
 
 .pool-bulk {
@@ -947,7 +996,6 @@ fieldset.form-group {
     flex-wrap: wrap;
     gap: var(--space-2);
     align-items: center;
-    margin: 0 0 var(--space-4);
 }
 
 .pool-bulk .button-group {
@@ -1433,6 +1481,10 @@ fieldset.form-group {
     margin-bottom: var(--space-4);
     font-size: 1.35rem;
     line-height: 1.25;
+}
+
+.pool-header .card-title {
+    margin-bottom: 0;
 }
 
 .btn-link {
