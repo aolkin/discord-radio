@@ -101,7 +101,7 @@ The portal provides:
 
 `GET /api/guilds/{guild_id}/voice-channels` lists the voice channels the bot can join, and `POST /api/guilds/{guild_id}/voice-channels/{channel_id}/join` joins one the same way `/dj join` does, moving the bot if it is already in another channel of that guild. `POST /api/guilds/{guild_id}/voice-channels/leave` leaves voice and keeps the guild loaded.
 
-`POST /api/guilds/{guild_id}/dj/config` with `{"config": "<name>"}` restarts the guild's DJ with that DJ config, the same way `/dj configure` does.
+`POST /api/guilds/{guild_id}/dj/config` with `{"config": "<name>"}` switches the guild's DJ to that DJ config, the same way `/dj configure` does.
 
 `POST /api/guilds/{guild_id}/load` makes a guild active by starting its DJ without joining voice, and returns 409 when the guild is already active. Joining voice makes a guild active too, and does not restart a running DJ. `POST /api/guilds/{guild_id}/unload` stops the DJ and its tracks and leaves voice, keeping their saved state; a disconnect from voice keeps the guild active. The bot reports only active guilds in the status snapshot. Without voice, the DJ skips channel status and announcements, and the bot does not load the guild again after a restart unless it has saved tracks.
 
@@ -122,7 +122,7 @@ Signal profiles (`/api/profiles`), DJ configs (`/api/dj-configs`) and pools (`/a
 - `/dj track` - Have the DJ play an audio track now
 - `/dj hex` - Have the DJ play a text message as hex audio, optionally with the segment defaults of a named pool in the DJ config
 - `/dj status` - Get the current status of the DJ
-- `/dj configure` - Restart the DJ with a chosen configuration (the DJ runs whenever the bot is in a voice channel)
+- `/dj configure` - Switch the DJ to a chosen configuration (the DJ runs whenever the guild is loaded)
 - `/dj announcements add` - Add a text channel to the DJ announcement channels (the DJ posts each announcement to every channel in the list; adding a listed channel changes nothing)
 - `/dj announcements remove` - Remove a channel from the DJ announcement channels (an empty list turns announcements off)
 - `/dj signal_profile` - Set the DJ's signal profile with an optional fade used to fade in and out of it (0 switches instantly) and an optional duration in seconds, or clear it; by default this sets the background profile (clearing returns to rotation), and `override: true` sets the override that beats every other profile (default fade 2 seconds)
