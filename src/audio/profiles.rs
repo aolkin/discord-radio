@@ -65,6 +65,15 @@ impl SignalProfile {
 
 impl RegistryEntry for SignalProfile {
     const KIND: &'static str = "signal profile";
+    const DEFAULTS: &'static [&'static str] = &[
+        include_str!("default_profiles/clear_signal.json"),
+        include_str!("default_profiles/strong_signal.json"),
+        include_str!("default_profiles/fading_signal.json"),
+        include_str!("default_profiles/weak_signal.json"),
+        include_str!("default_profiles/noise_pink.json"),
+        include_str!("default_profiles/noise_brown.json"),
+        include_str!("default_profiles/noise_white.json"),
+    ];
 
     fn name(&self) -> &str {
         &self.name
@@ -72,28 +81,10 @@ impl RegistryEntry for SignalProfile {
 }
 
 impl JsonRegistry<SignalProfile> {
-    /// The "clear" profile, or a built-in equivalent when none is loaded.
     pub fn default_profile(&self) -> SignalProfile {
-        if let Some(profile) = self.get("clear") {
-            return (*profile).clone();
-        }
-
-        tracing::debug!("Default 'clear' profile not found, using fallback");
-        SignalProfile {
-            name: "clear".to_string(),
-            bandpass_low: 20.0,
-            bandpass_high: 20000.0,
-            white_noise_level: 0.0,
-            pink_noise_level: 0.0,
-            brown_noise_level: 0.0,
-            tremolo_depth: 0.0,
-            tremolo_rate: 0.0,
-            tremolo_jitter: 0.0,
-            clip_pregain: 1.0,
-            clip_threshold: 1.0,
-            bitcrush_bits: None,
-            dropout_probability: 0.0,
-            dropout_duration_ms: (0.0, 0.0),
-        }
+        (*self
+            .get("clear_signal")
+            .expect("clear_signal is a default profile"))
+        .clone()
     }
 }

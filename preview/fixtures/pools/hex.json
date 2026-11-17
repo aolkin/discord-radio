@@ -2,7 +2,7 @@
   "name": "hex",
   "segment_defaults": {
     "hex_config": { "loop_min": 2, "loop_max": 3 },
-    "signal_profile": "tuning"
+    "signal_profile": "fading_signal"
   },
   "entries": [
     { "text": "once upon a time", "weight": 1, "loop_min": null, "loop_max": null, "signal_profile": null, "channel_status": null, "announcement": null },

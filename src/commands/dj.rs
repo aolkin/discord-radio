@@ -269,15 +269,23 @@ async fn autocomplete_pool(ctx: Context<'_>, partial: &'_ str) -> CreateAutocomp
 }
 
 async fn autocomplete_profile(ctx: Context<'_>, partial: &'_ str) -> CreateAutocompleteResponse {
-    let mut profiles: Vec<String> = ctx
-        .data()
-        .profile_manager
+    let registry = &ctx.data().profile_manager;
+    let mut profiles: Vec<String> = registry
         .list()
         .into_iter()
         .filter(|name| name.starts_with(partial))
         .collect();
     profiles.sort();
-    autocomplete_response(profiles)
+    profiles
+        .into_iter()
+        .fold(CreateAutocompleteResponse::new(), |response, name| {
+            let label = if registry.is_default(&name) {
+                format!("{name} (Default)")
+            } else {
+                name.clone()
+            };
+            response.add_string_choice(label, name)
+        })
 }
 
 fn for_duration(duration: Option<f32>) -> String {

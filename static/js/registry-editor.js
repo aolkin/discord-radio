@@ -125,6 +125,7 @@ function reviewGroups(spec, draft) {
 export function registryEditor({
     path,
     prefix,
+    flagsDefaults = false,
     list,
     kind,
     label,
@@ -143,10 +144,12 @@ export function registryEditor({
     const saving = `${editor}Saving`;
     const message = `${editor}Message`;
     const loadList = `load${capitalize(list)}`;
+    const defaults = flagsDefaults ? `${prefix}Defaults` : null;
 
     specs[kind] = {
         path,
         list,
+        defaults,
         label,
         toBody,
         blocks,
@@ -163,6 +166,7 @@ export function registryEditor({
     return {
         state: () => ({
             [list]: [],
+            ...(defaults && { [defaults]: [] }),
             [isNew]: false,
             [loading]: false,
             [saving]: false,
@@ -175,7 +179,12 @@ export function registryEditor({
                 try {
                     const response = await apiRequest(path);
                     const data = await response.json();
-                    this[list] = data.sort();
+                    if (defaults) {
+                        this[defaults] = data.filter((item) => item.default).map((item) => item.name);
+                        this[list] = data.map((item) => item.name).sort();
+                    } else {
+                        this[list] = data.sort();
+                    }
                 } catch (error) {
                     console.error(`Failed to load ${label}s:`, error);
                 }
@@ -250,6 +259,11 @@ export function drafts() {
         setDraft(kind, key, form) {
             this.drafts[kind][key] = { saved: clone(form), form };
             this[specs[kind].form] = this.drafts[kind][key].form;
+        },
+
+        isDefault(kind, name) {
+            const defaults = specs[kind].defaults;
+            return defaults !== null && this[defaults].includes(name);
         },
 
         openDraft(kind) {

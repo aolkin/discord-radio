@@ -1,5 +1,5 @@
 {
-  "name": "locked",
+  "name": "strong_signal",
   "bandpass_low": 800.0,
   "bandpass_high": 4500.0,
   "white_noise_level": 0.333,

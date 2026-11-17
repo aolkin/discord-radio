@@ -106,6 +106,8 @@ The portal provides:
 
 Signal profiles (`/api/profiles`), DJ configs (`/api/dj-configs`) and pools (`/api/pools`) each accept `PUT /{name}` to create or replace a file and `POST /{name}` to create a new one. `POST` takes the same body as `PUT` and returns 409 when the name already exists.
 
+`GET /api/profiles` returns `{name, default}` objects. The default profiles are built in and read-only: `PUT` and `POST` on one return 409 ("use Save as"). The portal tags them "Default" and turns off its save action for them.
+
 `DELETE /api/files?key=tracks/name.ogg` removes one file from object storage (the portal file browser has a delete action per file). It returns 409, listing the pools and DJ configs that reference the file, and 404 when the file does not exist.
 
 `GET /api/hex-audio-folder` checks a hex audio folder the way playback resolves it and reports whether it ends with `/` and which `hex_<char>.wav` files are missing. The optional `folder` parameter names the folder to check; without it, the check covers `HEX_AUDIO_FOLDER`.

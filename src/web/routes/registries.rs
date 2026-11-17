@@ -13,6 +13,7 @@ use std::sync::Arc;
 
 pub trait RoutedEntry: RegistryEntry + Send + Sync + 'static {
     const PATH: &'static str;
+    const FLAG_DEFAULTS: bool = false;
 
     fn registry(bot_state: Data) -> &'static JsonRegistry<Self>;
 
@@ -26,6 +27,7 @@ pub trait RoutedEntry: RegistryEntry + Send + Sync + 'static {
 
 impl RoutedEntry for SignalProfile {
     const PATH: &'static str = "/api/profiles";
+    const FLAG_DEFAULTS: bool = true;
 
     fn registry(bot_state: Data) -> &'static JsonRegistry<Self> {
         &bot_state.profile_manager
@@ -70,8 +72,17 @@ pub struct RefreshParams {
     pub refresh: bool,
 }
 
-pub async fn list<T: RoutedEntry>(State(bot_state): State<Data>) -> AxumJson<Vec<String>> {
-    AxumJson(T::registry(bot_state).list())
+pub async fn list<T: RoutedEntry>(State(bot_state): State<Data>) -> AxumJson<serde_json::Value> {
+    let registry = T::registry(bot_state);
+    let names = registry.list();
+    AxumJson(if T::FLAG_DEFAULTS {
+        names
+            .into_iter()
+            .map(|name| serde_json::json!({ "default": registry.is_default(&name), "name": name }))
+            .collect()
+    } else {
+        names.into()
+    })
 }
 
 pub async fn get_entry<T: RoutedEntry>(
@@ -133,5 +144,6 @@ fn registry_error(e: RegistryError) -> ApiError {
         RegistryError::Invalid(e) => ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, e),
         RegistryError::Storage(e) => ApiError::object_store(e),
         RegistryError::Parse(e) => ApiError::new(StatusCode::BAD_GATEWAY, e),
+        RegistryError::Default => ApiError::conflict(e.to_string()),
     }
 }

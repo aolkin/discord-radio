@@ -1,5 +1,5 @@
 {
-  "name": "tuning",
+  "name": "fading_signal",
   "bandpass_low": 500.0,
   "bandpass_high": 5000.0,
   "white_noise_level": 0.0,

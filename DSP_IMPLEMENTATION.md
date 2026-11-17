@@ -96,14 +96,16 @@ Bridges the DSP output to Songbird's voice system.
 
 ## Signal Profiles
 
-Sample effect presets are in `examples/audio_profiles/`. The bot loads profiles from the `SIGNAL_PROFILES_PATH` directory (default `signal_profiles/`, under the content root); it does not load them from `examples/`. Without a stored `clear` profile, the bot uses a built-in `clear` profile.
+The bot ships seven default profiles, embedded from `src/audio/default_profiles/`: `clear_signal`, `strong_signal`, `fading_signal`, `weak_signal`, `noise_pink`, `noise_brown` and `noise_white`. Defaults are read-only: saving over one returns 409 (use Save as), and a stored file with a default's name is skipped with a warning.
 
-### `clear.json`
+More sample presets are in `examples/audio_profiles/`. The bot loads profiles from the `SIGNAL_PROFILES_PATH` directory (default `signal_profiles/`, under the content root); it does not load them from `examples/`.
+
+### `clear_signal`
 
 - No effects, full bandwidth (20Hz-20kHz)
 - For clean audio playback
 
-### `weak_signal.json`
+### `weak_signal`
 
 - Heavy degradation: moderate pink noise (≈-24dB), 30% tremolo
 - Frequent dropouts (30% probability)
@@ -114,13 +116,13 @@ Sample effect presets are in `examples/audio_profiles/`. The bot loads profiles 
 
 - Light white noise (≈-40dB)
 
-### `tuning.json`
+### `fading_signal`
 
 - Moderate effects: light pink noise (≈-34dB), 20% tremolo
 - Rare dropouts (5% probability)
-- Simulates active tuning
+- Simulates a signal that is fading
 
-### `locked.json`
+### `strong_signal`
 
 - Narrow bandpass (800Hz-4.5kHz)
 - Minimal white noise (≈-40dB)
@@ -130,12 +132,12 @@ Sample effect presets are in `examples/audio_profiles/`. The bot loads profiles 
 ### Discord Command
 
 ```
-/dj signal_profile profile:clear fade_duration:2.0
+/dj signal_profile profile:clear_signal fade_duration:2.0
 ```
 
 **Parameters:**
 
-- `profile`: Profile name (clear, weak_signal, detuned, tuning, locked)
+- `profile`: Profile name (for example clear_signal, strong_signal, fading_signal, weak_signal)
 - `fade_duration`: Transition time in seconds (default: 2.0)
 
 ### Profile Format

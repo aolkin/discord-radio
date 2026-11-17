@@ -37,7 +37,7 @@ impl Weighted for SignalProfileEntry {
 impl Default for SignalProfileEntry {
     fn default() -> Self {
         Self {
-            signal_profile: "clear".to_string(),
+            signal_profile: "clear_signal".to_string(),
             weight: 1,
             fade_duration_seconds: Some(3.0),
             duration: DurationRange::default(),
