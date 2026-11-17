@@ -16,21 +16,29 @@ use std::net::SocketAddr;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing::Instrument;
 
-async fn request_span(
+fn path_guild_id(params: &RawPathParams) -> Option<u64> {
+    params
+        .iter()
+        .find(|(name, _)| *name == "guild_id")
+        .and_then(|(_, value)| value.parse::<u64>().ok())
+}
+
+async fn touch_guild(
     State(bot_state): State<Data>,
     params: RawPathParams,
     request: Request,
     next: Next,
 ) -> Response {
-    let guild_id = params
-        .iter()
-        .find(|(name, _)| *name == "guild_id")
-        .and_then(|(_, value)| value.parse::<u64>().ok());
-    if let Some(guild_id) = guild_id
+    if let Some(guild_id) = path_guild_id(&params)
         && !request.method().is_safe()
     {
         bot_state.touch(GuildId::new(guild_id));
     }
+    next.run(request).await
+}
+
+async fn request_span(params: RawPathParams, request: Request, next: Next) -> Response {
+    let guild_id = path_guild_id(&params);
     let span = tracing::info_span!(
         "request",
         method = %request.method(),
@@ -173,7 +181,8 @@ pub async fn run_web_server(bot_state: Data, port: u16) -> anyhow::Result<()> {
             post(routes::discord::join_voice_channel),
         )
         .route("/ws", get(websocket::websocket_handler))
-        .route_layer(middleware::from_fn_with_state(bot_state, request_span))
+        .route_layer(middleware::from_fn(request_span))
+        .route_layer(middleware::from_fn_with_state(bot_state, touch_guild))
         .layer(cors)
         .with_state(bot_state);
 
