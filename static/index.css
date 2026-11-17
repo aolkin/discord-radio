@@ -111,12 +111,6 @@ h1 {
     animation: none;
 }
 
-.guilds-grid {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-5);
-}
-
 .guild-card {
     background: var(--color-surface);
     border-radius: var(--radius-lg);
@@ -126,15 +120,6 @@ h1 {
     display: flex;
     flex-direction: column;
     min-width: 0;
-}
-
-a.guild-card {
-    color: inherit;
-    text-decoration: none;
-}
-
-a.guild-card:hover {
-    box-shadow: var(--shadow-md);
 }
 
 .guild-tabs {
@@ -333,6 +318,13 @@ a.guild-card:hover {
     display: inline-block;
 }
 
+.strip-menu.menu-up {
+    top: auto;
+    bottom: 100%;
+    margin-top: 0;
+    margin-bottom: var(--space-1);
+}
+
 .strip-menu.menu-start {
     right: auto;
     left: 0;
@@ -374,6 +366,10 @@ a.guild-card:hover {
     font-weight: 600;
     color: var(--color-text);
     overflow-wrap: anywhere;
+}
+
+.guild-header .guild-id {
+    color: var(--color-primary);
 }
 
 .voice-badge {
@@ -569,15 +565,6 @@ a.guild-card:hover {
 
 .modal-section:last-child {
     margin-bottom: 0;
-}
-
-.modal-section-title {
-    font-size: 1.05rem;
-    font-weight: 600;
-    color: var(--color-primary);
-    margin-bottom: var(--space-4);
-    padding-bottom: var(--space-2);
-    border-bottom: 2px solid var(--color-divider);
 }
 
 .form-group {
@@ -1227,18 +1214,34 @@ fieldset.form-group {
 }
 
 .disclosure > summary {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
     width: fit-content;
-    color: var(--color-primary);
+    min-height: var(--control-height-sm);
     font-size: var(--font-size-sm);
     font-weight: 600;
-    cursor: pointer;
-}
-
-.disclosure-quiet > summary {
     color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    list-style: none;
 }
 
-.disclosure-quiet[open] > summary {
+.disclosure > summary::-webkit-details-marker {
+    display: none;
+}
+
+.disclosure > summary::before {
+    content: "▸";
+    transition: transform 0.15s;
+}
+
+.disclosure[open] > summary::before {
+    transform: rotate(90deg);
+}
+
+.disclosure[open] > summary {
     margin-bottom: var(--space-3);
 }
 
