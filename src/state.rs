@@ -146,6 +146,12 @@ impl BotState {
         Some(receiver)
     }
 
+    pub fn channel_name(&self, guild_id: GuildId, channel_id: ChannelId) -> Option<String> {
+        let cache = self.cache.get()?;
+        let guild = cache.guild(guild_id)?;
+        guild.channels.get(&channel_id).map(|c| c.name.clone())
+    }
+
     /// Get the current voice channel ID for a guild
     pub async fn get_voice_channel_id(&self, guild_id: GuildId) -> Option<ChannelId> {
         let call_lock = self.songbird.get(guild_id)?;

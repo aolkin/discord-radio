@@ -62,13 +62,8 @@ impl BotSnapshot {
             // Check if guild is actually in voice
             let voice_channel_id = bot_state.get_voice_channel_id(guild_id).await;
             let in_voice = voice_channel_id.is_some();
-            let voice_channel_name = voice_channel_id.and_then(|channel_id| {
-                bot_state.cache.get().and_then(|cache| {
-                    cache
-                        .guild(guild_id)
-                        .and_then(|g| g.channels.get(&channel_id).map(|c| c.name.clone()))
-                })
-            });
+            let voice_channel_name = voice_channel_id
+                .and_then(|channel_id| bot_state.channel_name(guild_id, channel_id));
 
             let tracks = guild.track_manager.get_all_tracks().await;
 
@@ -85,11 +80,7 @@ impl BotSnapshot {
                         .iter()
                         .map(|channel| AnnouncementChannelInfo {
                             channel_id: channel.to_string(),
-                            name: bot_state.cache.get().and_then(|cache| {
-                                cache
-                                    .guild(guild_id)
-                                    .and_then(|g| g.channels.get(channel).map(|c| c.name.clone()))
-                            }),
+                            name: bot_state.channel_name(guild_id, *channel),
                         })
                         .collect(),
                 )
