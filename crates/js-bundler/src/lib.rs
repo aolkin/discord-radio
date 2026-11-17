@@ -8,7 +8,8 @@ use swc_common::{FileName, GLOBALS, Globals, Mark, SourceMap, Span};
 use swc_ecma_ast::{EsVersion, KeyValueProp};
 use swc_ecma_codegen::Emitter;
 use swc_ecma_codegen::text_writer::JsWriter;
-use swc_ecma_loader::resolve::{Resolution, Resolve};
+use swc_ecma_loader::TargetEnv;
+use swc_ecma_loader::resolvers::node::NodeModulesResolver;
 use swc_ecma_minifier::option::{
     CompressOptions, ExtraOptions, MangleOptions, MinifyOptions, TopLevelOptions,
 };
@@ -25,29 +26,6 @@ impl Hook for NoMetaHook {
         _module_record: &ModuleRecord,
     ) -> Result<Vec<KeyValueProp>, Error> {
         Ok(Vec::new())
-    }
-}
-
-struct RelativeResolver;
-
-impl Resolve for RelativeResolver {
-    fn resolve(&self, base: &FileName, module_specifier: &str) -> Result<Resolution, Error> {
-        let FileName::Real(base_path) = base else {
-            return Err(anyhow!("cannot resolve imports from {base:?}"));
-        };
-        if !module_specifier.starts_with("./") && !module_specifier.starts_with("../") {
-            return Err(anyhow!("unsupported import specifier {module_specifier}"));
-        }
-        let dir = base_path
-            .parent()
-            .ok_or_else(|| anyhow!("{} has no parent directory", base_path.display()))?;
-        let path = dir.join(module_specifier).canonicalize().with_context(|| {
-            format!("resolving {module_specifier} from {}", base_path.display())
-        })?;
-        Ok(Resolution {
-            filename: FileName::Real(path),
-            slug: None,
-        })
     }
 }
 
@@ -87,7 +65,7 @@ pub fn bundle(entry: &Path, minify: bool) -> Result<String, Error> {
         globals,
         cm.clone(),
         FileLoader { cm: cm.clone() },
-        RelativeResolver,
+        NodeModulesResolver::new(TargetEnv::Node, Default::default(), true),
         swc_bundler::Config {
             require: false,
             disable_inliner: true,

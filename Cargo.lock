@@ -2756,6 +2756,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "610a5acd306ec67f907abe5567859a3c693fb9886eb1f012ab8f2a47bef3db51"
 
 [[package]]
+name = "normpath"
+version = "1.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b11ce00d2594068e8a27c9146fdc5cf9f3ac38eb42c7cd34d05fea618873ac9f"
+dependencies = [
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "ntapi"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3215,6 +3224,12 @@ name = "pastey"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2ee67f1008b1ba2321834326597b8e186293b049a023cdef258527550b9935b4"
+
+[[package]]
+name = "path-clean"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "17359afc20d7ab31fdb42bb844c8b3bb1dabd7dcf7e68428492da7f16966fcef"
 
 [[package]]
 name = "pathdiff"
@@ -5130,9 +5145,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce6e0b74a455f7443bf0e9b0c0d14c7f819f3e4cf8fe30075ac822743d9bd2ca"
 dependencies = [
  "anyhow",
+ "dashmap 6.2.1",
+ "normpath",
+ "once_cell",
+ "path-clean",
  "pathdiff",
  "rustc-hash",
  "serde",
+ "serde_json",
  "swc_atoms",
  "swc_common",
  "tracing",
