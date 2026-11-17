@@ -88,10 +88,10 @@
                         <div class="strip-menu" role="menu" x-show="open" @click="open = false">
                             <button type="button" role="menuitem" @click="openGuild(guild.guild_id)">Open guild</button>
                             <button type="button" role="menuitem" @click="openChannelMessageModal(guild.guild_id)">
-                                Send Message
+                                Send message
                             </button>
                             <button type="button" role="menuitem" @click="openGuild(guild.guild_id, 'play')">
-                                Advance DJ State
+                                Advance DJ state
                             </button>
                             <button
                                 type="button"
@@ -516,7 +516,7 @@
                             </div>
 
                             <div class="modal-section">
-                                <div class="modal-section-title">Pools</div>
+                                <div class="section-title">Pools</div>
                                 <div class="pool-grid-scroll" x-show="djConfigForm.pools.length > 0" x-scroll-fade>
                                     <table class="pool-grid pool-grid-config">
                                         <colgroup>
@@ -738,7 +738,7 @@
 
                             <template x-for="rotation in djConfigRotations" :key="rotation.key">
                                 <details
-                                    class="modal-section disclosure disclosure-quiet"
+                                    class="modal-section disclosure"
                                     :data-rotation="rotation.key"
                                     x-init="$watch('route.name', () => ($el.open = false))"
                                     x-effect="djConfigForm[rotation.key].entries.length > 0 && ($el.open = true)"
@@ -809,7 +809,7 @@
                             </template>
 
                             <details
-                                class="modal-section disclosure disclosure-quiet"
+                                class="modal-section disclosure"
                                 x-show="djConfigForm.pools.length > 0"
                                 x-init="$watch('route.name', () => ($el.open = djConfigDefaultsInvalid()))"
                                 x-effect="djConfigDefaultsInvalid() && ($el.open = true)"
@@ -1413,7 +1413,7 @@
                                     No entries yet. Add tracks from your audio files.
                                 </div>
                                 <div class="row-center-8">
-                                    <button type="button" class="btn btn-secondary btn-sm" @click="pickPoolFiles()">
+                                    <button type="button" class="btn btn-text btn-sm" @click="pickPoolFiles()">
                                         + Add tracks…
                                     </button>
                                     <div
@@ -1432,7 +1432,7 @@
                                             Other entry ▾
                                         </button>
                                         <div
-                                            class="strip-menu menu-start"
+                                            class="strip-menu menu-start menu-up"
                                             role="menu"
                                             x-show="open"
                                             @click="open = false"
@@ -1452,7 +1452,7 @@
                             </div>
 
                             <details
-                                class="modal-section disclosure disclosure-quiet"
+                                class="modal-section disclosure"
                                 x-init="$watch('route.name', () => ($el.open = blocksInvalid(poolDefaultBlocks())))"
                                 x-effect="blocksInvalid(poolDefaultBlocks()) && ($el.open = true)"
                             >
@@ -1576,22 +1576,6 @@
                 </div>
             </div>
 
-            <div class="guilds-grid" x-show="route.view === 'live' && !route.name && guilds.length > 0">
-                <template x-for="guild in guilds" :key="guild.guild_id">
-                    <!-- biome-ignore lint/a11y/useValidAnchor: the href is set by :href -->
-                    <a class="guild-card" :href="'#/live/' + guild.guild_id">
-                        <div class="guild-header">
-                            <div class="guild-id" x-text="guildName(guild.guild_id)"></div>
-                            <span class="voice-badge" x-show="guild.in_voice">In Voice</span>
-                        </div>
-                        <div class="dj-state">
-                            <div class="dj-type" x-text="guild.dj_state.state_type"></div>
-                            <div class="dj-details" x-text="guild.dj_state.details"></div>
-                        </div>
-                    </a>
-                </template>
-            </div>
-
             <div class="guild-page" x-show="route.view === 'live' && route.name">
                 <template
                     x-for="guild in guilds.filter((candidate) => candidate.guild_id === route.name)"
@@ -1662,7 +1646,7 @@
                                     ></div>
                                 </div>
                                 <details
-                                    class="disclosure disclosure-quiet mt-12"
+                                    class="disclosure mt-12"
                                     @toggle="$el.open && (djConfigSelection = guild.dj_config)"
                                 >
                                     <summary x-text="'DJ config: ' + guild.dj_config"></summary>
@@ -2527,7 +2511,6 @@
             data-saving="botProfileSaving"
             data-submit-label="Save"
             data-busy-label="Saving..."
-            data-cancel-label="Close"
             data-escape-unless="fileBrowser.open"
         >
             <div x-include="#bot-profile-fields"></div>
@@ -2590,7 +2573,7 @@
         <template x-modal data-modal="activity" data-title="Manage Bot Activity">
             <!-- Current Activity Section -->
             <div class="modal-section">
-                <div class="modal-section-title">Current Activity</div>
+                <div class="section-title">Current Activity</div>
                 <template x-if="currentActivity.status">
                     <div class="info-item info-item-accent">
                         <div class="grow">
@@ -2610,7 +2593,7 @@
 
             <!-- Set Activity Form -->
             <div class="modal-section">
-                <div class="modal-section-title">Set New Activity</div>
+                <div class="section-title">Set New Activity</div>
                 <form @submit.prevent="setActivity()">
                     <div class="form-group">
                         <label class="form-label" for="activity-type">Activity Type</label>
@@ -2633,6 +2616,7 @@
                         >
                     </div>
                     <div class="button-group">
+                        <button type="button" class="btn btn-secondary" @click="closeModal('activity')">Cancel</button>
                         <button type="submit" class="btn btn-primary" :disabled="activitySaving">
                             <span x-text="activitySaving ? 'Setting...' : 'Set Activity'"></span>
                         </button>
@@ -2698,7 +2682,7 @@
             </div>
 
             <div class="form-group">
-                <label class="form-label" for="channel-message-title">Embed Title (Optional)</label>
+                <label class="form-label" for="channel-message-title">Embed Title</label>
                 <input
                     id="channel-message-title"
                     type="text"
@@ -2709,7 +2693,7 @@
             </div>
 
             <div class="form-group">
-                <label class="form-label" for="channel-message-description">Embed Description (Optional)</label>
+                <label class="form-label" for="channel-message-description">Embed Description</label>
                 <textarea
                     id="channel-message-description"
                     class="form-input"

@@ -24,7 +24,6 @@ function setFlag(state, flag, value) {
 //   data-disabled-when expression; Submit is also disabled while true
 //   data-submit-label  Submit button text
 //   data-busy-label    Submit button text while saving
-//   data-cancel-label  Cancel button text (default "Cancel")
 //   data-loading       property; while true, shows "Loading..." and
 //                      hides the form
 //   data-escape-unless expression; Escape does not close while true
@@ -93,7 +92,7 @@ document.addEventListener('alpine:init', () => {
                 form.setAttribute('x-show', `!${config.loading}`);
             }
             const cancel = element('button', { type: 'button', 'x-on:click': close }, 'btn btn-secondary');
-            cancel.textContent = config.cancelLabel || 'Cancel';
+            cancel.textContent = 'Cancel';
             const disabled = config.disabledWhen ? `${config.saving} || (${config.disabledWhen})` : config.saving;
             const submit = element('button', { type: 'submit', ':disabled': disabled }, 'btn btn-primary');
             submit.append(
