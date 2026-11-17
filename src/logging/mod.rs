@@ -10,7 +10,6 @@ pub use throttle::LogThrottle;
 
 use std::path::{Path, PathBuf};
 
-
 /// Get the logs directory path for a given base path
 pub fn logs_dir(base_path: &Path) -> PathBuf {
     base_path.join("logs")
