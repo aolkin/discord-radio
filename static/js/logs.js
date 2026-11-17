@@ -75,7 +75,8 @@ export function logs() {
         },
 
         djLogTitle(content) {
-            return `${djEmoji[content.event_type] || '•'} ${content.event_type.replace(/_/g, ' ').toUpperCase()}`;
+            const label = content.event_type.replace(/_/g, ' ');
+            return `${djEmoji[content.event_type] || '•'} ${label.charAt(0).toUpperCase()}${label.slice(1)}`;
         },
 
         djLogDetail(content) {

@@ -144,6 +144,47 @@ a.guild-card:hover {
     scrollbar-width: none;
     box-shadow: inset 0 -2px 0 var(--color-divider);
     -webkit-overflow-scrolling: touch;
+    mask-image: linear-gradient(
+        to right,
+        transparent,
+        #000 var(--fade-start),
+        #000 calc(100% - var(--fade-end)),
+        transparent
+    );
+    animation: guild-tabs-fade linear both;
+    animation-timeline: scroll(self inline);
+}
+
+@property --fade-start {
+    syntax: "<length>";
+    inherits: false;
+    initial-value: 0px;
+}
+
+@property --fade-end {
+    syntax: "<length>";
+    inherits: false;
+    initial-value: 0px;
+}
+
+@keyframes guild-tabs-fade {
+    0% {
+        --fade-start: 0px;
+        --fade-end: 32px;
+    }
+
+    5% {
+        --fade-start: 32px;
+    }
+
+    95% {
+        --fade-end: 32px;
+    }
+
+    100% {
+        --fade-start: 32px;
+        --fade-end: 0px;
+    }
 }
 
 .guild-tabs::-webkit-scrollbar {
@@ -190,7 +231,9 @@ a.guild-card:hover {
 }
 
 .strip-card.selected {
-    border-color: var(--color-primary);
+    box-shadow:
+        var(--shadow-sm),
+        inset 0 -4px 0 var(--color-primary);
 }
 
 .strip-open {
@@ -291,6 +334,16 @@ a.guild-card:hover {
     min-width: 0;
 }
 
+.guild-content-columns {
+    display: block;
+    columns: 2;
+    column-gap: var(--space-6);
+}
+
+.guild-content .form-row > .form-group:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+}
+
 .guild-header {
     display: flex;
     align-items: center;
@@ -324,6 +377,11 @@ a.guild-card:hover {
 .section:last-child,
 .guild-content > .section {
     margin-bottom: 0;
+}
+
+.guild-content.guild-content-columns > .section {
+    break-inside: avoid;
+    margin-bottom: var(--space-6);
 }
 
 .section-title {
@@ -1592,6 +1650,12 @@ fieldset.form-group {
     display: inline-block;
 }
 
+.log-list {
+    max-height: 60vh;
+    overflow-y: auto;
+    margin-bottom: var(--space-3);
+}
+
 .log-entry {
     background: var(--color-surface-muted);
     padding: var(--space-3) var(--space-4);
@@ -1626,6 +1690,10 @@ fieldset.form-group {
 @media (max-width: 768px) {
     .guild-content {
         grid-template-columns: minmax(0, 1fr);
+    }
+
+    .guild-content-columns {
+        columns: 1;
     }
 
     h1 {
