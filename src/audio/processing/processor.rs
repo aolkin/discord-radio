@@ -93,6 +93,10 @@ impl AudioProcessor {
         self.opus_stream.subscribe()
     }
 
+    pub fn listener_count(&self) -> usize {
+        self.opus_stream.receiver_count()
+    }
+
     pub fn start_profile_transition(&mut self, to_profile: SignalProfile, duration_ms: f32) {
         // If already transitioning, start from the current interpolated position
         // to avoid jarring jumps back to the old profile

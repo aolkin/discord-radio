@@ -5,21 +5,32 @@ use crate::web::routes::registries;
 use crate::web::{audio_stream, routes, websocket};
 use axum::{
     Router,
-    extract::{DefaultBodyLimit, RawPathParams, Request},
+    extract::{DefaultBodyLimit, RawPathParams, Request, State},
     middleware::{self, Next},
     response::Response,
     routing::{delete, get, post},
 };
 use http::header::{AUTHORIZATION, CONTENT_TYPE};
+use serenity::model::id::GuildId;
 use std::net::SocketAddr;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing::Instrument;
 
-async fn request_span(params: RawPathParams, request: Request, next: Next) -> Response {
+async fn request_span(
+    State(bot_state): State<Data>,
+    params: RawPathParams,
+    request: Request,
+    next: Next,
+) -> Response {
     let guild_id = params
         .iter()
         .find(|(name, _)| *name == "guild_id")
         .and_then(|(_, value)| value.parse::<u64>().ok());
+    if let Some(guild_id) = guild_id
+        && !request.method().is_safe()
+    {
+        bot_state.touch(GuildId::new(guild_id));
+    }
     let span = tracing::info_span!(
         "request",
         method = %request.method(),
@@ -162,7 +173,7 @@ pub async fn run_web_server(bot_state: Data, port: u16) -> anyhow::Result<()> {
             post(routes::discord::join_voice_channel),
         )
         .route("/ws", get(websocket::websocket_handler))
-        .route_layer(middleware::from_fn(request_span))
+        .route_layer(middleware::from_fn_with_state(bot_state, request_span))
         .layer(cors)
         .with_state(bot_state);
 

@@ -14,6 +14,7 @@ mod web;
 
 use crate::audio::dj::config::registry::DJConfigRegistry;
 use crate::bucket::registry::JsonRegistry;
+use crate::logging::guild_span;
 use crate::state::{BotState, Data};
 use anyhow::Context;
 use poise::serenity_prelude::{self as serenity, GatewayIntents};
@@ -21,6 +22,7 @@ use songbird::SerenityInit;
 use std::path::PathBuf;
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;
+use tracing::Instrument;
 
 /// Discord client with the default ratelimiter.
 static HTTP: LazyLock<serenity::Http> =
@@ -240,6 +242,28 @@ async fn main() -> anyhow::Result<()> {
         songbird.clone(),
     )));
 
+    let guild_idle_unload_secs = std::env::var("GUILD_IDLE_UNLOAD_SECS")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(15 * 60);
+    if guild_idle_unload_secs > 0 {
+        tracing::info!("Unloading guilds idle for {}s", guild_idle_unload_secs);
+        let timeout = Duration::from_secs(guild_idle_unload_secs);
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(60));
+            loop {
+                interval.tick().await;
+                for (guild_id, _) in data.guild_radios() {
+                    data.unload_if_idle(guild_id, timeout)
+                        .instrument(guild_span!("idle_unload", guild_id))
+                        .await;
+                }
+            }
+        });
+    } else {
+        tracing::info!("Idle guild unloading is disabled");
+    }
+
     // Start gauge update task if metrics are configured
     if let Some(bot_metrics) = metrics::get() {
         metrics::start_gauge_update_task(bot_metrics, data);
@@ -253,6 +277,13 @@ async fn main() -> anyhow::Result<()> {
                 commands::dj::dj(),
             ],
             on_error: |error| Box::pin(on_error(error)),
+            pre_command: |ctx| {
+                Box::pin(async move {
+                    if let Some(guild_id) = ctx.guild_id() {
+                        ctx.data().touch(guild_id);
+                    }
+                })
+            },
             ..Default::default()
         })
         .setup(move |ctx, _ready, framework| {
