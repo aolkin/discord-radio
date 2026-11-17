@@ -11,6 +11,7 @@ use axum::{
     response::Response,
     routing::{delete, get, post},
 };
+use http::HeaderMap;
 use http::header::{AUTHORIZATION, CONTENT_TYPE};
 use serenity::model::id::GuildId;
 use std::net::SocketAddr;
@@ -117,7 +118,10 @@ pub async fn run_web_server(bot_state: Data, port: u16, bot_name: &str) -> anyho
         .route_layer(middleware::from_fn_with_state(bot_state, guild_scope));
 
     let app = Router::new()
-        .route("/", get(move || std::future::ready(index.clone())))
+        .route(
+            "/",
+            get(move |headers: HeaderMap| routes::pages::index(index.clone(), headers)),
+        )
         .route("/static/{*path}", get(routes::pages::static_file))
         .route("/api/status", get(routes::status::get_status))
         .route("/api/health", get(routes::status::health))
