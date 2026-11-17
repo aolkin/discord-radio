@@ -5,7 +5,7 @@ use crate::web::routes::registries;
 use crate::web::{audio_stream, routes, websocket};
 use axum::{
     Router,
-    extract::{DefaultBodyLimit, RawPathParams, Request, State},
+    extract::{DefaultBodyLimit, Path, Request, State},
     middleware::{self, Next},
     response::Response,
     routing::{delete, get, post},
@@ -16,34 +16,25 @@ use std::net::SocketAddr;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing::Instrument;
 
-fn path_guild_id(params: &RawPathParams) -> Option<u64> {
-    params
-        .iter()
-        .find(|(name, _)| *name == "guild_id")
-        .and_then(|(_, value)| value.parse::<u64>().ok())
-}
-
-async fn touch_guild(
+async fn guild_scope(
     State(bot_state): State<Data>,
-    params: RawPathParams,
+    Path(guild_id): Path<u64>,
     request: Request,
     next: Next,
 ) -> Response {
-    if let Some(guild_id) = path_guild_id(&params)
-        && !request.method().is_safe()
-    {
+    tracing::Span::current().record("guild_id", guild_id);
+    if !request.method().is_safe() {
         bot_state.touch(GuildId::new(guild_id));
     }
     next.run(request).await
 }
 
-async fn request_span(params: RawPathParams, request: Request, next: Next) -> Response {
-    let guild_id = path_guild_id(&params);
+async fn request_span(request: Request, next: Next) -> Response {
     let span = tracing::info_span!(
         "request",
         method = %request.method(),
         path = request.uri().path(),
-        guild_id,
+        guild_id = tracing::field::Empty,
     );
     next.run(request).instrument(span).await
 }
@@ -77,63 +68,53 @@ pub async fn run_web_server(bot_state: Data, port: u16) -> anyhow::Result<()> {
     .allow_methods(tower_http::cors::Any)
     .allow_headers([CONTENT_TYPE, AUTHORIZATION]);
 
+    let guild_routes = Router::new()
+        .route("/load", post(routes::discord::load_guild))
+        .route("/unload", post(routes::discord::unload_guild))
+        .route("/dj/advance", post(routes::dj::advance_dj_state))
+        .route("/hex/play", post(routes::dj::play_hex_message))
+        .route("/dj/idle", post(routes::dj::force_dj_idle))
+        .route("/track/play", post(routes::dj::play_track))
+        .route("/tracks", post(routes::tracks::change_track_state))
+        .route("/dj/config", post(routes::dj::configure_dj))
+        .route("/dj/profile", post(routes::dj::set_dj_profile))
+        .route(
+            "/dj/channel-status",
+            post(routes::dj::set_dj_channel_status),
+        )
+        .route(
+            "/dj/announcement-channels",
+            post(routes::dj::add_announcement_channel),
+        )
+        .route(
+            "/dj/announcement-channels/{channel_id}",
+            delete(routes::dj::remove_announcement_channel),
+        )
+        .route(
+            "/bot-profile",
+            get(routes::discord::get_bot_profile).put(routes::discord::set_bot_profile),
+        )
+        .route("/audio-stream", get(audio_stream::audio_stream))
+        .route("/logs/{log_type}", get(routes::logs::get_logs))
+        .route("/channels", get(routes::discord::get_sendable_channels))
+        .route(
+            "/channels/{channel_id}/send",
+            post(routes::discord::send_channel_message),
+        )
+        .route("/voice-channels", get(routes::discord::get_voice_channels))
+        .route(
+            "/voice-channels/{channel_id}/join",
+            post(routes::discord::join_voice_channel),
+        )
+        .route_layer(middleware::from_fn_with_state(bot_state, guild_scope));
+
     let app = Router::new()
         .route("/", get(routes::pages::index))
         .route("/static/{*path}", get(routes::pages::static_file))
         .route("/api/status", get(routes::status::get_status))
         .route("/api/health", get(routes::status::health))
-        .route(
-            "/api/guilds/{guild_id}/load",
-            post(routes::discord::load_guild),
-        )
-        .route(
-            "/api/guilds/{guild_id}/unload",
-            post(routes::discord::unload_guild),
-        )
-        .route(
-            "/api/guilds/{guild_id}/dj/advance",
-            post(routes::dj::advance_dj_state),
-        )
-        .route(
-            "/api/guilds/{guild_id}/hex/play",
-            post(routes::dj::play_hex_message),
-        )
-        .route(
-            "/api/guilds/{guild_id}/dj/idle",
-            post(routes::dj::force_dj_idle),
-        )
-        .route(
-            "/api/guilds/{guild_id}/track/play",
-            post(routes::dj::play_track),
-        )
-        .route(
-            "/api/guilds/{guild_id}/tracks",
-            post(routes::tracks::change_track_state),
-        )
-        .route(
-            "/api/guilds/{guild_id}/dj/config",
-            post(routes::dj::configure_dj),
-        )
-        .route(
-            "/api/guilds/{guild_id}/dj/profile",
-            post(routes::dj::set_dj_profile),
-        )
-        .route(
-            "/api/guilds/{guild_id}/dj/channel-status",
-            post(routes::dj::set_dj_channel_status),
-        )
-        .route(
-            "/api/guilds/{guild_id}/dj/announcement-channels",
-            post(routes::dj::add_announcement_channel),
-        )
-        .route(
-            "/api/guilds/{guild_id}/dj/announcement-channels/{channel_id}",
-            delete(routes::dj::remove_announcement_channel),
-        )
-        .route(
-            "/api/guilds/{guild_id}/bot-profile",
-            get(routes::discord::get_bot_profile).put(routes::discord::set_bot_profile),
-        )
+        .route("/api/guilds", get(routes::discord::get_guilds))
+        .nest("/api/guilds/{guild_id}", guild_routes)
         .merge(registries::routes::<SignalProfile>())
         .merge(registries::routes::<DJConfig>())
         .merge(registries::routes::<Pool>())
@@ -155,34 +136,8 @@ pub async fn run_web_server(bot_state: Data, port: u16) -> anyhow::Result<()> {
             "/api/activity/set",
             post(routes::activity::set_bot_activity),
         )
-        .route(
-            "/api/guilds/{guild_id}/audio-stream",
-            get(audio_stream::audio_stream),
-        )
-        .route(
-            "/api/guilds/{guild_id}/logs/{log_type}",
-            get(routes::logs::get_logs),
-        )
-        .route("/api/guilds", get(routes::discord::get_guilds))
-        .route(
-            "/api/guilds/{guild_id}/channels",
-            get(routes::discord::get_sendable_channels),
-        )
-        .route(
-            "/api/guilds/{guild_id}/channels/{channel_id}/send",
-            post(routes::discord::send_channel_message),
-        )
-        .route(
-            "/api/guilds/{guild_id}/voice-channels",
-            get(routes::discord::get_voice_channels),
-        )
-        .route(
-            "/api/guilds/{guild_id}/voice-channels/{channel_id}/join",
-            post(routes::discord::join_voice_channel),
-        )
         .route("/ws", get(websocket::websocket_handler))
         .route_layer(middleware::from_fn(request_span))
-        .route_layer(middleware::from_fn_with_state(bot_state, touch_guild))
         .layer(cors)
         .with_state(bot_state);
 
