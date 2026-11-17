@@ -1,4 +1,4 @@
-import { apiRequest, bodyOrStatus, emptyMessage } from './api.js';
+import { apiRequest, bodyOrStatus } from './api.js';
 
 export function connection() {
     return {
@@ -10,7 +10,6 @@ export function connection() {
         guildList: [],
         guildListLoading: false,
         guildToggling: false,
-        guildMessage: emptyMessage(),
         version: '',
         commitHash: '',
         lastCommitHash: null,
@@ -61,7 +60,6 @@ export function connection() {
             const name = this.guildName(guildId);
             await this.runAction({
                 saving: 'guildToggling',
-                message: 'guildMessage',
                 label: 'loading guild',
                 onSuccess: open ? () => this.openGuild(guildId) : undefined,
                 request: () =>
@@ -80,7 +78,6 @@ export function connection() {
             }
             await this.runAction({
                 saving: 'guildToggling',
-                message: 'guildMessage',
                 label: 'unloading guild',
                 request: () =>
                     apiRequest(`/api/guilds/${guildId}/unload`, { method: 'POST', errorMessage: bodyOrStatus }),

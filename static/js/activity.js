@@ -1,9 +1,9 @@
-import { apiRequest, emptyMessage } from './api.js';
+import { apiRequest } from './api.js';
 
 export const modals = {
     activity: {
         flag: 'showActivityModal',
-        reset: () => ({ newActivityStatus: '', activityMessage: emptyMessage() }),
+        reset: () => ({ newActivityStatus: '' }),
     },
 };
 
@@ -15,7 +15,6 @@ export function activity() {
         newActivityType: 'playing',
         newActivityStatus: '',
         activitySaving: false,
-        activityMessage: emptyMessage(),
 
         getActivityIcon(activityType) {
             const icons = {
@@ -31,7 +30,6 @@ export function activity() {
         async performActivityAction(endpoint, activityType, status, successMessage, statusField) {
             await this.runAction({
                 saving: 'activitySaving',
-                message: 'activityMessage',
                 label: 'performing activity action',
                 request: () =>
                     apiRequest(endpoint, {
@@ -48,10 +46,6 @@ export function activity() {
                 },
                 success: successMessage,
                 failure: 'Failed to perform action',
-                afterFn: () => {
-                    this.activityMessage = emptyMessage();
-                },
-                afterMs: 2000,
             });
         },
 

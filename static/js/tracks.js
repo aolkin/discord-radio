@@ -1,18 +1,16 @@
-import { apiRequest, emptyMessage } from './api.js';
+import { apiRequest } from './api.js';
 
 export const trackForms = () => ({
     playTrackFilename: '',
     playTrackVolume: null,
     playTrackStart: null,
     playTrackDuration: null,
-    playTrackMessage: emptyMessage(),
     trackName: '',
     trackMode: 'start',
     trackFilename: '',
     trackVolume: null,
     trackLoops: '',
     trackFadeTime: null,
-    trackMessage: emptyMessage(),
 });
 
 export function tracks() {
@@ -87,7 +85,6 @@ export function tracks() {
 
             await this.runAction({
                 saving: 'playTrackSaving',
-                message: 'playTrackMessage',
                 label: 'playing track',
                 request: () =>
                     apiRequest(`/api/guilds/${this.route.name}/track/play`, {
@@ -131,7 +128,6 @@ export function tracks() {
 
             await this.runAction({
                 saving: 'trackSaving',
-                message: 'trackMessage',
                 label: 'changing track state',
                 request: () =>
                     apiRequest(`/api/guilds/${this.route.name}/tracks`, {

@@ -47,10 +47,7 @@ export function channels() {
                 this.selectedGuildId = guildId;
             } catch (error) {
                 console.error('Error loading servers:', error);
-                this.channelMessage = {
-                    type: 'error',
-                    text: error.message || 'Failed to load servers. Please try again.',
-                };
+                this.showToast(error.message || 'Failed to load servers. Please try again.', 'error');
             } finally {
                 this.channelsLoading = false;
             }
@@ -60,7 +57,6 @@ export function channels() {
         async loadSendableChannels() {
             this.sendableChannels = [];
             this.selectedChannelId = '';
-            this.channelMessage = emptyMessage();
             if (!this.selectedGuildId) {
                 return;
             }
@@ -78,10 +74,7 @@ export function channels() {
                 }
             } catch (error) {
                 console.error('Error loading channels:', error);
-                this.channelMessage = {
-                    type: 'error',
-                    text: error.message || 'Failed to load channels. Please try again.',
-                };
+                this.showToast(error.message || 'Failed to load channels. Please try again.', 'error');
             } finally {
                 this.channelListLoading = false;
             }
@@ -109,7 +102,6 @@ export function channels() {
 
             await this.runAction({
                 saving: 'channelMessageSaving',
-                message: 'channelMessage',
                 label: 'sending message',
                 request: () =>
                     apiRequest(`/api/guilds/${this.selectedGuildId}/channels/${this.selectedChannelId}/send`, {
@@ -124,12 +116,6 @@ export function channels() {
                 },
                 success: 'Message sent successfully!',
                 failure: 'Failed to send message',
-                afterFn: () => {
-                    if (this.channelMessage.type === 'success') {
-                        this.channelMessage = emptyMessage();
-                    }
-                },
-                afterMs: 3000,
             });
         },
     };

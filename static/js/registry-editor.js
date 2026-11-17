@@ -1,4 +1,4 @@
-import { apiRequest, bodyOrStatus, emptyMessage } from './api.js';
+import { apiRequest, bodyOrStatus } from './api.js';
 import { fieldInvalid } from './form-fields.js';
 
 export const newItem = '+new';
@@ -142,7 +142,6 @@ export function registryEditor({
     const isNew = `${editor}IsNew`;
     const loading = `${editor}Loading`;
     const saving = `${editor}Saving`;
-    const message = `${editor}Message`;
     const loadList = `load${capitalize(list)}`;
     const defaults = flagsDefaults ? `${prefix}Defaults` : null;
 
@@ -159,7 +158,6 @@ export function registryEditor({
         isNew,
         loading,
         saving,
-        message,
         loadList,
     };
 
@@ -170,7 +168,6 @@ export function registryEditor({
             [isNew]: false,
             [loading]: false,
             [saving]: false,
-            [message]: emptyMessage(),
             [form]: blankForm(),
         }),
 
@@ -193,7 +190,6 @@ export function registryEditor({
             async [`open${capitalize(editor)}`](name) {
                 const key = name ?? newItem;
                 this[isNew] = name === null;
-                this[message] = emptyMessage();
                 this.draftReviewing = false;
                 this.saveAsName = null;
                 this[loading] = false;
@@ -224,7 +220,7 @@ export function registryEditor({
                 } catch (error) {
                     console.error(`Failed to load ${label}:`, error);
                     if (this.isSelected(kind, name)) {
-                        this[message] = { text: `Failed to load ${label}: ${error.message}`, type: 'error' };
+                        this.showToast(`Failed to load ${label}: ${error.message}`, 'error');
                     }
                 } finally {
                     if (this.isSelected(kind, name)) {
@@ -273,7 +269,6 @@ export function drafts() {
         editorStatus(kind) {
             const spec = specs[kind];
             return {
-                message: this[spec.message],
                 saving: this[spec.saving],
                 loading: this[spec.loading],
                 isNew: this[spec.isNew],
@@ -365,7 +360,6 @@ export function drafts() {
             const draft = this.openDraft(kind);
             draft.form = clone(draft.saved);
             this[specs[kind].form] = draft.form;
-            this[specs[kind].message] = emptyMessage();
             this.draftReviewing = false;
         },
 
@@ -400,7 +394,6 @@ export function drafts() {
 
             await this.runAction({
                 saving: spec.saving,
-                message: spec.message,
                 label: `saving ${spec.label} as ${name}`,
                 request: () =>
                     apiRequest(`${spec.path}/${encodeURIComponent(name)}`, {
@@ -429,7 +422,6 @@ export function drafts() {
 
             await this.runAction({
                 saving: spec.saving,
-                message: spec.message,
                 label: `saving ${spec.label}`,
                 request: () =>
                     apiRequest(`${spec.path}/${encodeURIComponent(name)}`, {

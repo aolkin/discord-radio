@@ -14,6 +14,7 @@ import { drafts } from './js/registry-editor.js';
 import { router } from './js/router.js';
 import { actionMethods } from './js/run-action.js';
 import { signalProfiles } from './js/signal-profiles.js';
+import { toasts } from './js/toasts.js';
 import { tracks } from './js/tracks.js';
 import { uploads } from './js/uploads.js';
 import { weightSliders } from './js/weights.js';
@@ -38,6 +39,7 @@ function botPortal() {
         ...activity(),
         ...channels(),
         ...logs(),
+        ...toasts(),
         ...actionMethods(),
         ...modalMethods,
     };

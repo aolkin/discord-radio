@@ -1893,3 +1893,73 @@ fieldset.form-group {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
+.toast-stack {
+    position: fixed;
+    top: var(--space-4);
+    right: var(--space-4);
+    z-index: 1300;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    width: min(360px, calc(100vw - 2 * var(--space-4)));
+    max-height: calc(100vh - 2 * var(--space-4));
+    overflow-y: auto;
+    pointer-events: none;
+}
+
+.toast {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    margin-bottom: 0;
+    box-shadow: var(--shadow-lg);
+    pointer-events: auto;
+    animation: toast-in 0.2s ease;
+}
+
+.toast.success-message {
+    background-image: linear-gradient(var(--color-success-bg), var(--color-success-bg));
+    background-color: var(--color-surface);
+}
+
+.toast.error-message {
+    background-image: linear-gradient(var(--color-error-bg), var(--color-error-bg));
+    background-color: var(--color-surface);
+}
+
+.toast-text {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.toast-close {
+    flex: 0 0 auto;
+    padding: 0 var(--space-1);
+    color: inherit;
+    font-size: 1.25rem;
+    line-height: 1;
+    background: none;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+
+.toast-close:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+}
+
+@keyframes toast-in {
+    from {
+        opacity: 0;
+        transform: translateY(calc(-1 * var(--space-2)));
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .toast {
+        animation: none;
+    }
+}
