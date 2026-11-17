@@ -1,5 +1,5 @@
 {
-  "name": "clear",
+  "name": "clear_signal",
   "bandpass_low": 20.0,
   "bandpass_high": 20000.0,
   "white_noise_level": 0.0,

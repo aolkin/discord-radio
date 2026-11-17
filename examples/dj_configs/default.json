@@ -19,7 +19,7 @@
   "signal_profiles": {
     "entries": [
       {
-        "signal_profile": "clear",
+        "signal_profile": "clear_signal",
         "weight": 40,
         "fade_duration_seconds": 8.0,
         "min_duration_seconds": 60.0,

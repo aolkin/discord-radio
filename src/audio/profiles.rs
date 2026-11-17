@@ -66,7 +66,7 @@ impl SignalProfile {
 impl RegistryEntry for SignalProfile {
     const KIND: &'static str = "signal profile";
     const DEFAULTS: &'static [&'static str] = &[
-        include_str!("default_profiles/clear.json"),
+        include_str!("default_profiles/clear_signal.json"),
         include_str!("default_profiles/strong_signal.json"),
         include_str!("default_profiles/fading_signal.json"),
         include_str!("default_profiles/weak_signal.json"),
@@ -82,6 +82,9 @@ impl RegistryEntry for SignalProfile {
 
 impl JsonRegistry<SignalProfile> {
     pub fn default_profile(&self) -> SignalProfile {
-        (*self.get("clear").expect("clear is a default profile")).clone()
+        (*self
+            .get("clear_signal")
+            .expect("clear_signal is a default profile"))
+        .clone()
     }
 }

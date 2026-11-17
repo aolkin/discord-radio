@@ -2,7 +2,7 @@
     const realFetch = window.fetch.bind(window);
     const fixtureBase = '/preview/fixtures';
     const registries = {
-        profiles: ['clear', 'weak_signal', 'fading_signal'],
+        profiles: ['clear_signal', 'weak_signal', 'fading_signal'],
         pools: ['noise', 'hex', 'track'],
         'dj-configs': ['default', 'quiet'],
     };
