@@ -5,6 +5,9 @@ use raw_adapter::ProcessedAudioAdapter;
 use serenity::model::id::{ChannelId, GuildId};
 use songbird::Songbird;
 
+pub use clock::AudioClock;
+
+mod clock;
 mod raw_adapter;
 
 pub async fn connect_voice_channel(

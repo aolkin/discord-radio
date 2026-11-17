@@ -375,6 +375,14 @@ impl DJStateMachine {
             };
             (announcement, state.announcement_channels.clone())
         };
+        if self
+            .bot_state
+            .get_voice_channel_id(self.guild_id)
+            .await
+            .is_none()
+        {
+            return;
+        }
         for channel in channels {
             if let Err(e) = channel
                 .say(crate::http(), announcement.message.clone())

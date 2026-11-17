@@ -1,6 +1,7 @@
 use crate::bot_profile::ProfileEdit;
 use crate::state::Data;
 use crate::web::error::{ApiError, WithStatus};
+use anyhow::Context as _;
 use axum::Json as AxumJson;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
@@ -66,6 +67,43 @@ fn ready_cache(bot_state: &Data) -> Result<&std::sync::Arc<serenity::cache::Cach
     })
 }
 
+fn unknown_guild(guild_id: GuildId) -> ApiError {
+    ApiError::not_found(format!("Guild {guild_id} is not known to the bot"))
+}
+
+fn require_guild(bot_state: &Data, guild_id: GuildId) -> Result<(), ApiError> {
+    match ready_cache(bot_state)?.guild(guild_id) {
+        Some(_) => Ok(()),
+        None => Err(unknown_guild(guild_id)),
+    }
+}
+
+pub async fn load_guild(
+    State(bot_state): State<Data>,
+    Path(guild_id): Path<GuildId>,
+) -> Result<StatusCode, ApiError> {
+    require_guild(&bot_state, guild_id)?;
+    let (_, loaded) = bot_state
+        .load(guild_id)
+        .await
+        .with_context(|| format!("Failed to load guild {guild_id}"))?;
+    if !loaded {
+        return Err(ApiError::conflict(format!(
+            "Guild {guild_id} is already active"
+        )));
+    }
+    Ok(StatusCode::OK)
+}
+
+pub async fn unload_guild(
+    State(bot_state): State<Data>,
+    Path(guild_id): Path<GuildId>,
+) -> Result<StatusCode, ApiError> {
+    require_guild(&bot_state, guild_id)?;
+    bot_state.unload(guild_id).await;
+    Ok(StatusCode::OK)
+}
+
 fn permitted_channels(
     bot_state: Data,
     guild_id: GuildId,
@@ -75,7 +113,7 @@ fn permitted_channels(
     let cache = ready_cache(&bot_state)?;
     let guild = cache
         .guild(guild_id)
-        .ok_or_else(|| ApiError::not_found(format!("Guild {guild_id} is not known to the bot")))?;
+        .ok_or_else(|| unknown_guild(guild_id))?;
     let member = guild.members.get(&bot_state.bot_user_id).ok_or_else(|| {
         ApiError::new(
             StatusCode::SERVICE_UNAVAILABLE,

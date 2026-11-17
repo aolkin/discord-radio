@@ -64,6 +64,14 @@ pub async fn run_web_server(bot_state: Data, port: u16) -> anyhow::Result<()> {
         .route("/api/status", get(routes::status::get_status))
         .route("/api/health", get(routes::status::health))
         .route(
+            "/api/guilds/{guild_id}/load",
+            post(routes::discord::load_guild),
+        )
+        .route(
+            "/api/guilds/{guild_id}/unload",
+            post(routes::discord::unload_guild),
+        )
+        .route(
             "/api/guilds/{guild_id}/dj/advance",
             post(routes::dj::advance_dj_state),
         )
