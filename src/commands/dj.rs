@@ -434,7 +434,7 @@ pub async fn dj(_ctx: Context<'_>) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Restart the DJ with a configuration
+/// Switch the DJ to a configuration
 #[poise::command(slash_command, guild_only)]
 #[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
 pub async fn configure(

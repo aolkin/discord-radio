@@ -201,7 +201,7 @@ export function dj() {
 
         async configureDJ() {
             const config = this.djConfigSelection;
-            if (!confirm(`Restart the DJ with config "${config}"?`)) {
+            if (!confirm(`Switch the DJ to config "${config}"?`)) {
                 return;
             }
             await this.runAction({
@@ -214,7 +214,7 @@ export function dj() {
                         body: { config },
                         errorMessage: bodyOrStatus,
                     }),
-                success: `DJ restarted with config "${config}".`,
+                success: `DJ switched to config "${config}".`,
                 failure: 'Failed to configure DJ',
             });
         },
