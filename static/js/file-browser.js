@@ -1,4 +1,4 @@
-import { apiRequest, bodyOrStatus, emptyMessage } from './api.js';
+import { apiRequest, bodyOrStatus } from './api.js';
 
 export const modals = {
     fileBrowser: {
@@ -27,7 +27,6 @@ export function fileBrowser() {
             folders: [],
             files: [],
             loading: false,
-            message: emptyMessage(),
             newFolderName: '',
             creatingFolder: false,
             deleting: false,
@@ -100,7 +99,6 @@ export function fileBrowser() {
 
         async loadFileBrowser(prefix) {
             this.fileBrowser.loading = true;
-            this.fileBrowser.message = emptyMessage();
             try {
                 const response = await apiRequest(`/api/files?prefix=${encodeURIComponent(prefix)}`, {
                     errorMessage: bodyOrStatus,
@@ -111,7 +109,7 @@ export function fileBrowser() {
                 this.fileBrowser.files = listing.files;
             } catch (error) {
                 console.error('Failed to load files:', error);
-                this.fileBrowser.message = { text: `Failed to load files: ${error.message}`, type: 'error' };
+                this.showToast(`Failed to load files: ${error.message}`, 'error');
             } finally {
                 this.fileBrowser.loading = false;
             }
@@ -119,7 +117,6 @@ export function fileBrowser() {
 
         async createFileBrowserFolder() {
             this.fileBrowser.creatingFolder = true;
-            this.fileBrowser.message = emptyMessage();
             try {
                 await apiRequest('/api/files/folders', {
                     method: 'POST',
@@ -130,7 +127,7 @@ export function fileBrowser() {
                 await this.loadFileBrowser(this.fileBrowser.prefix);
             } catch (error) {
                 console.error('Failed to create folder:', error);
-                this.fileBrowser.message = { text: `Failed to create folder: ${error.message}`, type: 'error' };
+                this.showToast(`Failed to create folder: ${error.message}`, 'error');
             } finally {
                 this.fileBrowser.creatingFolder = false;
             }
@@ -141,7 +138,6 @@ export function fileBrowser() {
                 return;
             }
             this.fileBrowser.deleting = true;
-            this.fileBrowser.message = emptyMessage();
             try {
                 await apiRequest(`/api/files?key=${encodeURIComponent(key)}`, {
                     method: 'DELETE',
@@ -151,7 +147,7 @@ export function fileBrowser() {
                 await this.loadFileBrowser(this.fileBrowser.prefix);
             } catch (error) {
                 console.error('Failed to delete file:', error);
-                this.fileBrowser.message = { text: `Failed to delete file: ${error.message}`, type: 'error' };
+                this.showToast(`Failed to delete file: ${error.message}`, 'error');
             } finally {
                 this.fileBrowser.deleting = false;
             }

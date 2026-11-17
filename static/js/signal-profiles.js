@@ -1,4 +1,4 @@
-import { apiRequest, emptyMessage } from './api.js';
+import { apiRequest } from './api.js';
 import { blankRow, convertObject, fieldFromServer, fieldToServer } from './form-fields.js';
 import { registryEditor } from './registry-editor.js';
 
@@ -7,7 +7,6 @@ export const signalProfileForms = () => ({
     signalProfileName: '',
     signalProfileFade: null,
     signalProfileDuration: null,
-    signalProfileMessage: emptyMessage(),
 });
 
 const profileFields = [
@@ -97,7 +96,6 @@ export function signalProfiles() {
 
             await this.runAction({
                 saving: 'signalProfileSaving',
-                message: 'signalProfileMessage',
                 label: 'changing signal profile',
                 request: () =>
                     apiRequest(`/api/guilds/${this.route.name}/dj/profile`, {

@@ -40,10 +40,7 @@ export function botProfile() {
                 }
             } catch (error) {
                 console.error('Failed to load bot profile:', error);
-                this.botProfileMessage = {
-                    text: `Failed to load the current profile: ${error.message}`,
-                    type: 'error',
-                };
+                this.showToast(`Failed to load the current profile: ${error.message}`, 'error');
             } finally {
                 this.botProfileLoading = false;
             }
@@ -77,7 +74,6 @@ export function botProfile() {
 
             await this.runAction({
                 saving: 'botProfileSaving',
-                message: 'botProfileMessage',
                 label: 'saving bot profile',
                 request: () =>
                     apiRequest(`/api/guilds/${this.botProfileGuildId}/bot-profile`, {

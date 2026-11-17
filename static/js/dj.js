@@ -1,26 +1,19 @@
-import { apiRequest, bodyOrStatus, emptyMessage } from './api.js';
+import { apiRequest, bodyOrStatus } from './api.js';
 
 export const playForms = () => ({
     djAdvancePool: '',
     djConfigSelection: '',
-    djConfigMessage: emptyMessage(),
-    djMessage: emptyMessage(),
     idleNoiseProfile: '',
     idleDuration: null,
-    idleMessage: emptyMessage(),
     hexMessageText: '',
     hexMessagePool: '',
     hexMessageVolume: null,
     hexMessageLoops: null,
-    hexMessage: emptyMessage(),
     channelStatusSetting: 'background',
     channelStatusText: '',
     channelStatusDuration: null,
-    channelStatusMessage: emptyMessage(),
     announcementSelection: '',
-    announcementMessage: emptyMessage(),
     voiceChannelSelection: '',
-    voiceChannelMessage: emptyMessage(),
 });
 
 export function dj() {
@@ -53,10 +46,7 @@ export function dj() {
                 }
             } catch (error) {
                 console.error('Error loading voice channels:', error);
-                this.voiceChannelMessage = {
-                    text: `Failed to load voice channels: ${error.message}`,
-                    type: 'error',
-                };
+                this.showToast(`Failed to load voice channels: ${error.message}`, 'error');
             } finally {
                 this.voiceChannelLoading = false;
             }
@@ -65,7 +55,6 @@ export function dj() {
         async joinVoiceChannel() {
             await this.runAction({
                 saving: 'voiceChannelSaving',
-                message: 'guildMessage',
                 label: 'joining voice channel',
                 request: () =>
                     apiRequest(`/api/guilds/${this.route.name}/voice-channels/${this.voiceChannelSelection}/join`, {
@@ -84,7 +73,6 @@ export function dj() {
         async leaveVoiceChannel() {
             await this.runAction({
                 saving: 'voiceChannelSaving',
-                message: 'guildMessage',
                 label: 'leaving voice channel',
                 request: () =>
                     apiRequest(`/api/guilds/${this.route.name}/voice-channels/leave`, {
@@ -119,10 +107,7 @@ export function dj() {
                 }
             } catch (error) {
                 console.error('Error loading channels:', error);
-                this.announcementMessage = {
-                    text: `Failed to load channels: ${error.message}`,
-                    type: 'error',
-                };
+                this.showToast(`Failed to load channels: ${error.message}`, 'error');
             } finally {
                 this.announcementLoading = false;
             }
@@ -131,7 +116,6 @@ export function dj() {
         async addAnnouncementChannel() {
             await this.runAction({
                 saving: 'announcementSaving',
-                message: 'announcementMessage',
                 label: 'adding announcement channel',
                 request: () =>
                     apiRequest(`/api/guilds/${this.route.name}/dj/announcement-channels`, {
@@ -150,7 +134,6 @@ export function dj() {
         async removeAnnouncementChannel(channelId) {
             await this.runAction({
                 saving: 'announcementSaving',
-                message: 'announcementMessage',
                 label: 'removing announcement channel',
                 request: () =>
                     apiRequest(`/api/guilds/${this.route.name}/dj/announcement-channels/${channelId}`, {
@@ -165,7 +148,6 @@ export function dj() {
         async advanceDJState() {
             await this.runAction({
                 saving: 'djSaving',
-                message: 'djMessage',
                 label: 'advancing DJ state',
                 request: () =>
                     apiRequest(`/api/guilds/${this.route.name}/dj/advance`, {
@@ -186,7 +168,6 @@ export function dj() {
 
             await this.runAction({
                 saving: 'idleSaving',
-                message: 'idleMessage',
                 label: 'making the DJ idle',
                 request: () =>
                     apiRequest(`/api/guilds/${this.route.name}/dj/idle`, {
@@ -206,7 +187,6 @@ export function dj() {
             }
             await this.runAction({
                 saving: 'djConfigSaving',
-                message: 'djConfigMessage',
                 label: 'configuring DJ',
                 request: () =>
                     apiRequest(`/api/guilds/${this.route.name}/dj/config`, {
@@ -233,7 +213,6 @@ export function dj() {
 
             await this.runAction({
                 saving: 'hexSaving',
-                message: 'hexMessage',
                 label: 'playing hex message',
                 request: () =>
                     apiRequest(`/api/guilds/${this.route.name}/hex/play`, {
@@ -259,7 +238,6 @@ export function dj() {
 
             await this.runAction({
                 saving: 'channelStatusSaving',
-                message: 'channelStatusMessage',
                 label: 'changing channel status',
                 request: () =>
                     apiRequest(`/api/guilds/${this.route.name}/dj/channel-status`, {

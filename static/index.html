@@ -281,11 +281,6 @@
                     </div>
                     <template x-if="route.kind && route.kind !== 'files'">
                         <section class="card draft-bar" x-show="!editorStatus(route.kind).loading" x-stuck>
-                            <div
-                                x-show="editorStatus(route.kind).message.text"
-                                :class="editorStatus(route.kind).message.type === 'error' ? 'error-message' : 'success-message'"
-                                x-text="editorStatus(route.kind).message.text"
-                            ></div>
                             <template
                                 x-for="error in changeCount(route.kind, route.name) > 0 ? draftErrors(route.kind) : []"
                                 :key="error"
@@ -1576,11 +1571,6 @@
                     <section class="card" x-show="route.kind === 'files'">
                         <!-- biome-ignore lint/a11y/useHeadingContent: the heading text comes from x-text -->
                         <h2 class="card-title" x-text="fileBrowserKind() ? fileBrowserKind().noun + 's' : 'Files'"></h2>
-                        <div
-                            x-show="fileBrowser.message.text"
-                            :class="fileBrowser.message.type === 'error' ? 'error-message' : 'success-message'"
-                            x-text="fileBrowser.message.text"
-                        ></div>
                         <div x-include="#file-browser-list"></div>
                     </section>
                 </div>
@@ -1642,11 +1632,6 @@
                                 </button>
                             </div>
                         </div>
-                        <div
-                            x-show="guildMessage.text"
-                            :class="guildMessage.type === 'error' ? 'error-message' : 'success-message'"
-                            x-text="guildMessage.text"
-                        ></div>
                         <div class="voice-picker" x-show="!guild.in_voice && voicePickerOpen">
                             <div x-include="#voice-channel-join"></div>
                         </div>
@@ -1681,11 +1666,6 @@
                                     @toggle="$el.open && (djConfigSelection = guild.dj_config)"
                                 >
                                     <summary x-text="'DJ config: ' + guild.dj_config"></summary>
-                                    <div
-                                        x-show="djConfigMessage.text"
-                                        :class="djConfigMessage.type === 'error' ? 'error-message' : 'success-message'"
-                                        x-text="djConfigMessage.text"
-                                    ></div>
                                     <form class="row-center-8" @submit.prevent="configureDJ()">
                                         <select class="form-input" aria-label="DJ config" x-model="djConfigSelection">
                                             <template
@@ -1777,11 +1757,6 @@
                             <div class="section">
                                 <div class="section-title">Advance DJ State</div>
                                 <form @submit.prevent="advanceDJState()">
-                                    <div
-                                        x-show="djMessage.text"
-                                        :class="djMessage.type === 'error' ? 'error-message' : 'success-message'"
-                                        x-text="djMessage.text"
-                                    ></div>
                                     <div class="form-group">
                                         <label class="form-label" for="advance-pool">Pool (Optional)</label>
                                         <select id="advance-pool" class="form-input" x-model="djAdvancePool">
@@ -1822,11 +1797,6 @@
                             <div class="section">
                                 <div class="section-title">Go Idle</div>
                                 <form @submit.prevent="idleDJ()">
-                                    <div
-                                        x-show="idleMessage.text"
-                                        :class="idleMessage.type === 'error' ? 'error-message' : 'success-message'"
-                                        x-text="idleMessage.text"
-                                    ></div>
                                     <div class="form-row">
                                         <div class="form-group">
                                             <label class="form-label" for="idle-noise-profile">Noise Profile</label>
@@ -1866,11 +1836,6 @@
                             <div class="section">
                                 <div class="section-title">Play Hex Message</div>
                                 <form @submit.prevent="playHexMessage()">
-                                    <div
-                                        x-show="hexMessage.text"
-                                        :class="hexMessage.type === 'error' ? 'error-message' : 'success-message'"
-                                        x-text="hexMessage.text"
-                                    ></div>
                                     <div class="form-group">
                                         <label class="form-label" for="hex-message">Message</label>
                                         <input
@@ -1933,11 +1898,6 @@
                             <div class="section">
                                 <div class="section-title">Play Track</div>
                                 <form @submit.prevent="playTrack()">
-                                    <div
-                                        x-show="playTrackMessage.text"
-                                        :class="playTrackMessage.type === 'error' ? 'error-message' : 'success-message'"
-                                        x-text="playTrackMessage.text"
-                                    ></div>
                                     <div class="form-group">
                                         <label class="form-label" for="play-track-file">Audio File</label>
                                         <button
@@ -2053,11 +2013,6 @@
                             <div class="section">
                                 <div class="section-title">Start, Update or Stop a Track</div>
                                 <form @submit.prevent="changeTrackState()">
-                                    <div
-                                        x-show="trackMessage.text"
-                                        :class="trackMessage.type === 'error' ? 'error-message' : 'success-message'"
-                                        x-text="trackMessage.text"
-                                    ></div>
                                     <fieldset class="form-group">
                                         <legend class="form-label">Action</legend>
                                         <div class="segmented">
@@ -2188,11 +2143,6 @@
                             <div class="section">
                                 <div class="section-title">Signal Profile</div>
                                 <form @submit.prevent="changeSignalProfile()">
-                                    <div
-                                        x-show="signalProfileMessage.text"
-                                        :class="signalProfileMessage.type === 'error' ? 'error-message' : 'success-message'"
-                                        x-text="signalProfileMessage.text"
-                                    ></div>
                                     <fieldset class="form-group">
                                         <legend class="form-label">Setting</legend>
                                         <div class="segmented">
@@ -2275,11 +2225,6 @@
                             <div class="section">
                                 <div class="section-title">Voice Channel Status</div>
                                 <form @submit.prevent="changeChannelStatus()">
-                                    <div
-                                        x-show="channelStatusMessage.text"
-                                        :class="channelStatusMessage.type === 'error' ? 'error-message' : 'success-message'"
-                                        x-text="channelStatusMessage.text"
-                                    ></div>
                                     <fieldset class="form-group">
                                         <legend class="form-label">Setting</legend>
                                         <div class="segmented">
@@ -2356,11 +2301,6 @@
                         <div class="guild-content" x-show="route.tab === 'announcements'">
                             <div class="section">
                                 <div class="section-title">Announcement Channels</div>
-                                <div
-                                    x-show="announcementMessage.text"
-                                    :class="announcementMessage.type === 'error' ? 'error-message' : 'success-message'"
-                                    x-text="announcementMessage.text"
-                                ></div>
                                 <div class="loading" x-show="announcementLoading">Loading...</div>
                                 <div x-show="!announcementLoading">
                                     <template
@@ -2538,11 +2478,6 @@
                 <template x-if="!currentGuild()">
                     <div class="no-guilds">
                         <p x-text="guildName(route.name) + ' is not active.'"></p>
-                        <div
-                            x-show="guildMessage.text"
-                            :class="guildMessage.type === 'error' ? 'error-message' : 'success-message'"
-                            x-text="guildMessage.text"
-                        ></div>
                         <button
                             type="button"
                             class="btn btn-primary"
@@ -2557,11 +2492,6 @@
             </div>
 
             <div class="guild-list" x-show="route.view === 'live' && !route.name && guildList.length > 0">
-                <div
-                    x-show="guildMessage.text"
-                    :class="guildMessage.type === 'error' ? 'error-message' : 'success-message'"
-                    x-text="guildMessage.text"
-                ></div>
                 <div class="section-title" x-show="inactiveGuilds().length > 0">Inactive guilds</div>
                 <template x-for="guild in inactiveGuilds()" :key="guild.guild_id">
                     <div class="guild-list-row">
@@ -2604,11 +2534,6 @@
         </template>
 
         <template id="voice-channel-join">
-            <div
-                x-show="voiceChannelMessage.text"
-                :class="voiceChannelMessage.type === 'error' ? 'error-message' : 'success-message'"
-                x-text="voiceChannelMessage.text"
-            ></div>
             <div class="loading" x-show="voiceChannelLoading">Loading...</div>
             <form class="form-group" x-show="!voiceChannelLoading" @submit.prevent="joinVoiceChannel()">
                 <label class="form-label" for="voice-channel-select">Join a voice channel</label>
@@ -2662,7 +2587,7 @@
         </template>
 
         <!-- Activity Management Modal -->
-        <template x-modal data-modal="activity" data-title="Manage Bot Activity" data-message="activityMessage">
+        <template x-modal data-modal="activity" data-title="Manage Bot Activity">
             <!-- Current Activity Section -->
             <div class="modal-section">
                 <div class="modal-section-title">Current Activity</div>
@@ -2945,7 +2870,6 @@
         <template
             x-modal
             data-modal="fileBrowser"
-            data-message="fileBrowser.message"
             data-overlay-class="file-browser-overlay"
             data-title-expression="fileBrowser.mode === 'folder' ? 'Select Folder' : 'Select ' + fileBrowserKind().noun + (fileBrowser.mode === 'files' ? 's' : '')"
         >
@@ -2967,6 +2891,21 @@
                 </button>
             </div>
         </template>
+
+        <div class="toast-stack">
+            <template x-for="toast in toasts" :key="toast.id">
+                <div
+                    class="toast"
+                    :class="toast.type === 'error' ? 'error-message' : 'success-message'"
+                    :role="toast.type === 'error' ? 'alert' : 'status'"
+                >
+                    <span class="toast-text" x-text="toast.text"></span>
+                    <button type="button" class="toast-close" aria-label="Dismiss" @click="dismissToast(toast.id)">
+                        &times;
+                    </button>
+                </div>
+            </template>
+        </div>
 
         <aside class="upload-widget" x-show="uploadQueue.items.length > 0" aria-label="Uploads">
             <div class="upload-widget-header">
