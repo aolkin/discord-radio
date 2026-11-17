@@ -18,6 +18,7 @@ use songbird::Songbird;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::sync::{Arc, Mutex as StdMutex, OnceLock};
+use std::time::{Duration, Instant};
 use tokio::sync::broadcast::Receiver;
 use tokio::sync::{Mutex, RwLock};
 
@@ -58,6 +59,7 @@ pub struct BotState {
     pub duration_cache: DurationCache,
     guilds: StdMutex<HashMap<GuildId, GuildRadio>>,
     lifecycles: StdMutex<HashMap<GuildId, Arc<Mutex<()>>>>,
+    last_activity: StdMutex<HashMap<GuildId, Instant>>,
     pub profile_manager: JsonRegistry<SignalProfile>,
     pub dj_config_manager: &'static DJConfigRegistry,
     pub activity_manager: ActivityManager,
@@ -83,6 +85,7 @@ impl BotState {
             state_store: state_store.clone(),
             guilds: StdMutex::new(HashMap::new()),
             lifecycles: StdMutex::new(HashMap::new()),
+            last_activity: StdMutex::new(HashMap::new()),
             profile_manager,
             dj_config_manager,
             activity_manager: ActivityManager::new(state_store),
@@ -121,6 +124,20 @@ impl BotState {
             .collect();
         guilds.sort_by_key(|(id, _)| *id);
         guilds
+    }
+
+    pub fn touch(&self, guild_id: GuildId) {
+        self.last_activity
+            .lock()
+            .unwrap()
+            .insert(guild_id, Instant::now());
+    }
+
+    pub async fn listener_count(&self, guild_id: GuildId) -> usize {
+        let Some(radio) = self.radio(guild_id) else {
+            return 0;
+        };
+        radio.audio_processor.read().await.listener_count()
     }
 
     pub async fn opus_stream(&self, guild_id: GuildId) -> Option<Receiver<Vec<u8>>> {
@@ -183,6 +200,7 @@ impl BotState {
     }
 
     async fn load_locked(&'static self, guild_id: GuildId) -> anyhow::Result<(GuildRadio, bool)> {
+        self.touch(guild_id);
         if let Some(radio) = self.radio(guild_id) {
             return Ok((radio, false));
         }
@@ -211,6 +229,28 @@ impl BotState {
         self.unload_locked(guild_id).await;
     }
 
+    pub async fn unload_if_idle(&self, guild_id: GuildId, timeout: Duration) {
+        let lifecycle = self.lifecycle(guild_id);
+        let _lifecycle = lifecycle.lock().await;
+        if self.radio(guild_id).is_none()
+            || self.get_voice_channel_id(guild_id).await.is_some()
+            || self.listener_count(guild_id).await > 0
+        {
+            return;
+        }
+        let touched_recently = self
+            .last_activity
+            .lock()
+            .unwrap()
+            .get(&guild_id)
+            .is_some_and(|touched| touched.elapsed() < timeout);
+        if touched_recently {
+            return;
+        }
+        tracing::info!("Unloading idle guild");
+        self.unload_locked(guild_id).await;
+    }
+
     #[tracing::instrument(skip_all, fields(guild_id = guild_id.get()))]
     pub async fn leave_voice(&self, guild_id: GuildId) {
         let lifecycle = self.lifecycle(guild_id);
@@ -235,6 +275,7 @@ impl BotState {
     #[tracing::instrument(skip_all, fields(guild_id = guild_id.get()))]
     async fn unload_locked(&self, guild_id: GuildId) {
         let radio = self.guilds.lock().unwrap().remove(&guild_id);
+        self.last_activity.lock().unwrap().remove(&guild_id);
         if let Some(radio) = &radio {
             radio.stop_clock().await;
         }

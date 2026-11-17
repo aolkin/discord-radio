@@ -15,6 +15,7 @@ cache:
   maxBytes: 805306368
   sweepIntervalSecs: 300
   sizeLimit: 1Gi
+guildIdleUnloadSecs: 900
 metrics:
   intervalSeconds: 60
 logging:

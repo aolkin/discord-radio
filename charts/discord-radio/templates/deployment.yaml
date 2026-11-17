@@ -41,6 +41,8 @@ spec:
               value: {{ .Values.cache.maxBytes | int64 | quote }}
             - name: FILE_CACHE_SWEEP_INTERVAL_SECS
               value: {{ .Values.cache.sweepIntervalSecs | int64 | quote }}
+            - name: GUILD_IDLE_UNLOAD_SECS
+              value: {{ .Values.guildIdleUnloadSecs | int64 | quote }}
             - name: METRICS_INTERVAL_SECONDS
               value: {{ .Values.metrics.intervalSeconds | int64 | quote }}
             {{- with .Values.web.corsAllowedOrigins }}
