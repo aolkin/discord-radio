@@ -1,8 +1,8 @@
 import { apiRequest } from './api.js';
 
 export const logTypes = [
-    { id: 'members', label: '👥 Members' },
-    { id: 'dj', label: '🎧 DJ' },
+    { id: 'members', icon: '👥', label: 'Members' },
+    { id: 'dj', icon: '🎧', label: 'DJ' },
 ];
 
 const memberEmoji = { joined: '➕', left: '➖', moved: '↔️' };
@@ -64,9 +64,14 @@ export function logs() {
             return new Date(content.timestamp).toLocaleString();
         },
 
+        logIcon(content) {
+            const emoji = this.route.logType === 'dj' ? djEmoji[content.event_type] : memberEmoji[content.action];
+            return emoji || '•';
+        },
+
         memberLogTitle(content) {
             const nickname = content.nickname ? ` (${content.nickname})` : '';
-            return `${memberEmoji[content.action] || '•'} ${content.username}${nickname} ${content.action}`;
+            return `${content.username}${nickname} ${content.action}`;
         },
 
         memberLogDetail(content) {
@@ -76,7 +81,7 @@ export function logs() {
 
         djLogTitle(content) {
             const label = content.event_type.replace(/_/g, ' ');
-            return `${djEmoji[content.event_type] || '•'} ${label.charAt(0).toUpperCase()}${label.slice(1)}`;
+            return `${label.charAt(0).toUpperCase()}${label.slice(1)}`;
         },
 
         djLogDetail(content) {

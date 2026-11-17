@@ -1378,8 +1378,39 @@ fieldset.form-group {
     border-bottom: 1px solid var(--color-divider);
 }
 
-.file-browser-row > div:first-child {
+.file-browser-row > div {
     flex: 1;
+    min-width: 0;
+}
+
+.file-browser-icon {
+    flex: none;
+    width: 1.5rem;
+    text-align: center;
+}
+
+.file-browser-folder {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: var(--space-3);
+    min-width: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--color-text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.file-browser-folder:hover {
+    color: var(--color-primary);
+}
+
+.file-browser-select {
+    flex: none;
+    width: 5rem;
 }
 
 .add-select {
@@ -1393,30 +1424,29 @@ fieldset.form-group {
 
 .file-browser-row-name {
     font-weight: 500;
-    word-break: break-all;
+    overflow-wrap: anywhere;
 }
 
 .file-browser-row-meta {
     font-size: 0.8rem;
     color: var(--color-text-muted);
-    word-break: break-all;
+    overflow-wrap: anywhere;
 }
 
 .file-browser-delete {
     flex: none;
+    width: 2rem;
     padding: var(--space-1);
     border: none;
     background: none;
-    color: var(--color-text-muted);
-    font-size: 0.9rem;
+    color: var(--color-text);
+    font-size: 1rem;
     cursor: pointer;
-    opacity: 0.6;
 }
 
 .file-browser-delete:hover:not(:disabled),
 .file-browser-delete:focus-visible {
-    color: var(--color-error);
-    opacity: 1;
+    background: var(--color-error-bg);
 }
 
 .file-browser-drop {
@@ -1507,6 +1537,14 @@ fieldset.form-group {
     display: flex;
     gap: var(--space-2);
     margin-top: var(--space-4);
+}
+
+.file-browser-new-folder .btn {
+    white-space: nowrap;
+}
+
+.icon {
+    margin-inline-end: var(--space-2);
 }
 
 /* Classes replacing former inline styles. Kept last so they win over earlier rules of equal specificity, as the inline styles did. */
@@ -1764,4 +1802,18 @@ fieldset.form-group {
         display: block;
         margin-left: 0;
     }
+}
+
+.glyph-note {
+    filter: var(--glyph-filter, none);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --glyph-filter: brightness(0) invert(0.85);
+    }
+}
+
+:root[data-theme="dark"] {
+    --glyph-filter: brightness(0) invert(0.85);
 }
