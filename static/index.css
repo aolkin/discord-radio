@@ -1789,8 +1789,85 @@ fieldset.form-group {
         position: static;
     }
 
-    .pool-grid-entries {
-        min-width: 780px;
+    .pool-grid-config,
+    .pool-grid-entries,
+    .pool-grid-weights {
+        display: block;
+        min-width: 0;
+    }
+
+    .pool-grid-config colgroup,
+    .pool-grid-entries colgroup,
+    .pool-grid-weights colgroup,
+    .pool-grid-config thead,
+    .pool-grid-entries th:not(:first-child),
+    .pool-grid-weights th:not(:first-child) {
+        display: none;
+    }
+
+    .pool-grid-config tbody,
+    .pool-grid-entries tbody,
+    .pool-grid-weights tbody {
+        display: block;
+        margin-bottom: var(--space-3);
+        border: 1px solid var(--color-divider);
+        border-radius: var(--radius-md);
+    }
+
+    .pool-grid-config tr,
+    .pool-grid-entries tr,
+    .pool-grid-weights tr {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-start;
+    }
+
+    .pool-grid-config tbody td,
+    .pool-grid-entries tbody td,
+    .pool-grid-weights tbody td {
+        flex: 1 1 100%;
+        min-width: 0;
+        border-bottom: 0;
+    }
+
+    .pool-grid-config tbody td:nth-of-type(2),
+    .pool-grid-config tbody td:nth-of-type(3) {
+        flex: 1 1 40%;
+    }
+
+    .pool-grid-config tbody td:nth-of-type(5) {
+        flex: 1 1 0;
+    }
+
+    .pool-grid-config tbody td:last-child {
+        flex: 0 0 auto;
+    }
+
+    .pool-grid-entries tbody td:first-child,
+    .pool-grid-weights tbody td:first-child {
+        flex: 0 0 auto;
+    }
+
+    .pool-grid-entries tbody td:nth-of-type(2),
+    .pool-grid-weights tbody td:nth-of-type(2) {
+        flex: 1 1 0;
+    }
+
+    .pool-grid-entries tbody td:empty {
+        display: none;
+    }
+
+    .pool-grid td[data-label]::before {
+        content: attr(data-label);
+        display: block;
+        margin-bottom: var(--space-1);
+        font-size: var(--font-size-sm);
+        font-weight: 600;
+        color: var(--color-text-muted);
+    }
+
+    .pool-grid td[data-label]:not(:has(> :not(template))) {
+        display: none;
     }
 
     .draft-bar-row .row-gap-10 {
