@@ -14,7 +14,7 @@
         <div class="container">
             <header>
                 <div class="header-left">
-                    <h1>🎵 Discord Bot Portal</h1>
+                    <h1><span class="icon glyph-note" aria-hidden="true">🎵</span>Discord Bot Portal</h1>
                     <div class="version-info" x-show="version">
                         Version: <span x-text="version"></span> • Commit:
                         <span x-text="commitHash ? commitHash.substring(0, 7) : 'unknown'"></span>
@@ -33,7 +33,11 @@
                     Edit
                 </button>
                 <button type="button" class="activity-display" title="Edit bot activity" @click="openModal('activity')">
-                    <span class="activity-icon" x-text="getActivityIcon(currentActivity.activity_type)"></span>
+                    <span
+                        class="activity-icon"
+                        :class="{ 'glyph-note': getActivityIcon(currentActivity.activity_type) === '🎵' }"
+                        x-text="getActivityIcon(currentActivity.activity_type)"
+                    ></span>
                     <span class="activity-info">
                         <span
                             class="activity-type"
@@ -2000,8 +2004,13 @@
                                                 </div>
                                             </template>
                                             <div class="track-details">
-                                                <span x-text="track.loops ? '🔁 Looping' : '▶️ Once'"></span>
-                                                • 🔊
+                                                <span
+                                                    class="icon"
+                                                    aria-hidden="true"
+                                                    x-text="track.loops ? '🔁' : '▶️'"
+                                                ></span>
+                                                <span x-text="track.loops ? 'Looping' : 'Once'"></span>
+                                                • <span class="icon" aria-hidden="true">🔊</span>
                                                 <div class="volume-bar volume-bar-inline">
                                                     <div
                                                         class="volume-fill"
@@ -2418,8 +2427,9 @@
                                             class="guild-tab"
                                             :class="{ active: route.logType === type.id }"
                                             :href="'#/live/' + guild.guild_id + '/logs/' + type.id"
-                                            x-text="type.label"
-                                        ></a>
+                                            ><span class="icon" aria-hidden="true" x-text="type.icon"></span
+                                            ><span x-text="type.label"></span></a
+                                        >
                                     </template>
                                 </nav>
                                 <div class="log-header">
@@ -2456,10 +2466,17 @@
                                     <template x-for="entry in logResult?.entries ?? []" :key="entry.start_offset">
                                         <div class="log-entry" :class="route.logType">
                                             <div class="log-time" x-text="logTime(entry.content)"></div>
-                                            <div
-                                                class="log-content"
-                                                x-text="route.logType === 'dj' ? djLogTitle(entry.content) : memberLogTitle(entry.content)"
-                                            ></div>
+                                            <div class="log-content">
+                                                <span
+                                                    class="icon"
+                                                    :class="{ 'glyph-note': logIcon(entry.content) === '🎵' }"
+                                                    aria-hidden="true"
+                                                    x-text="logIcon(entry.content)"
+                                                ></span>
+                                                <span
+                                                    x-text="route.logType === 'dj' ? djLogTitle(entry.content) : memberLogTitle(entry.content)"
+                                                ></span>
+                                            </div>
                                             <div
                                                 class="log-detail"
                                                 x-text="route.logType === 'dj' ? djLogDetail(entry.content) : memberLogDetail(entry.content)"
@@ -2795,15 +2812,16 @@
                 <div x-show="!fileBrowser.loading">
                     <template x-for="folder in fileBrowser.folders" :key="folder">
                         <div class="file-browser-row">
+                            <button type="button" class="file-browser-folder" @click="browseFileBrowser(folder)">
+                                <span class="file-browser-icon" aria-hidden="true">📁</span>
+                                <span
+                                    class="file-browser-row-name"
+                                    x-text="folder.slice(fileBrowser.prefix.length)"
+                                ></span>
+                            </button>
                             <button
                                 type="button"
-                                class="btn btn-secondary"
-                                @click="browseFileBrowser(folder)"
-                                x-text="'📁 ' + folder.slice(fileBrowser.prefix.length)"
-                            ></button>
-                            <button
-                                type="button"
-                                class="btn btn-primary"
+                                class="btn btn-primary file-browser-select"
                                 x-show="fileBrowser.open && fileBrowser.mode === 'folder'"
                                 @click="selectFileBrowserEntry(folder)"
                             >
@@ -2813,6 +2831,7 @@
                     </template>
                     <template x-for="file in fileBrowser.files" :key="file.key">
                         <div class="file-browser-row">
+                            <span class="file-browser-icon" aria-hidden="true">🎧</span>
                             <div
                                 :class="{ 'file-browser-pickable': fileBrowser.open && fileBrowser.mode === 'files' }"
                                 @click="fileBrowser.open && fileBrowser.mode === 'files' && toggleFileBrowserPicked(file.key)"
@@ -2828,7 +2847,7 @@
                             </div>
                             <button
                                 type="button"
-                                class="btn btn-primary"
+                                class="btn btn-primary file-browser-select"
                                 x-show="fileBrowser.open && fileBrowser.mode === 'file'"
                                 @click="selectFileBrowserEntry(file.key)"
                             >
@@ -2850,7 +2869,7 @@
                                 :disabled="fileBrowser.deleting"
                                 @click="deleteFileBrowserFile(file.key)"
                             >
-                                🗑
+                                🗑&#xFE0F;
                             </button>
                         </div>
                     </template>
