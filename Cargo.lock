@@ -1649,7 +1649,6 @@ checksum = "52dfc19153a48bde0cbd630453615c8151bce3a5adfac7a0aebfbf0a1e1f57e3"
 dependencies = [
  "aho-corasick",
  "bstr",
- "log",
  "regex-automata",
  "regex-syntax",
 ]
@@ -2248,6 +2247,22 @@ checksum = "1c00acbd29eabad4a2392fa0e921c874934dbbf4194312ad20f04a0ed67a3cb3"
 dependencies = [
  "getrandom 0.4.3",
  "libc",
+]
+
+[[package]]
+name = "js-bundler"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "swc_bundler",
+ "swc_common",
+ "swc_ecma_ast",
+ "swc_ecma_codegen",
+ "swc_ecma_loader",
+ "swc_ecma_minifier",
+ "swc_ecma_parser",
+ "swc_ecma_transforms_base",
+ "swc_ecma_visit",
 ]
 
 [[package]]
@@ -3660,6 +3675,7 @@ dependencies = [
  "field-trait",
  "futures-util",
  "http",
+ "js-bundler",
  "moka",
  "ogg",
  "opentelemetry",
@@ -3678,15 +3694,6 @@ dependencies = [
  "serenity",
  "songbird",
  "strum 0.28.0",
- "swc_bundler",
- "swc_common",
- "swc_ecma_ast",
- "swc_ecma_codegen",
- "swc_ecma_loader",
- "swc_ecma_minifier",
- "swc_ecma_parser",
- "swc_ecma_transforms_base",
- "swc_ecma_visit",
  "symphonia 0.5.5",
  "symphonia 0.6.1",
  "tempfile",
@@ -4088,7 +4095,6 @@ version = "8.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0d84e8ba78bd384263e5922f084cbe1b081c3b7e69add59c8fb097b879ba968a"
 dependencies = [
- "globset",
  "mime_guess",
  "sha2 0.11.1",
  "walkdir",
