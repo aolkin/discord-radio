@@ -1604,11 +1604,14 @@
                                     :class="{ idle: !guild.in_voice }"
                                     :disabled="voiceChannelSaving"
                                     :aria-expanded="guild.in_voice ? null : String(voicePickerOpen)"
-                                    :title="guild.in_voice ? 'Leave the voice channel' : 'Choose a voice channel to join'"
-                                    :aria-label="guild.in_voice ? 'In Voice, leave the voice channel' : 'Not in Voice, choose a voice channel to join'"
+                                    :title="guild.in_voice ? 'Leave ' + (guild.voice_channel_name || 'the voice channel') : 'Choose a voice channel to join'"
+                                    :aria-label="guild.in_voice ? 'In Voice' + (guild.voice_channel_name ? ' in ' + guild.voice_channel_name : '') + ', leave the voice channel' : 'Not in Voice, choose a voice channel to join'"
                                     @click="guild.in_voice ? leaveVoiceChannel() : (voicePickerOpen = !voicePickerOpen)"
                                 >
-                                    <span x-text="guild.in_voice ? 'In Voice' : 'Not in Voice'"></span>
+                                    <span
+                                        class="voice-toggle-label"
+                                        x-text="guild.in_voice ? 'In Voice' + (guild.voice_channel_name ? ' · ' + guild.voice_channel_name : '') : 'Not in Voice'"
+                                    ></span>
                                     <span
                                         class="voice-toggle-icon"
                                         :class="{ open: voicePickerOpen }"

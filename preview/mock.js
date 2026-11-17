@@ -18,7 +18,7 @@
         logs: {},
         radio: null,
         active: new Set(),
-        voice: new Set(),
+        voice: new Map(),
     };
 
     const forcedMode = new URLSearchParams(window.location.search).get('dj');
@@ -61,7 +61,7 @@
         }
         const live = store.snapshots.track.guilds[0];
         store.active.add(live.guild_id);
-        store.voice.add(live.guild_id);
+        store.voice.set(live.guild_id, 'Lounge');
         store.radio = {
             mode: modes.includes(forcedMode) ? forcedMode : 'track',
             startedAt: Date.now(),
@@ -106,6 +106,7 @@
                 guild_id: entry.guild_id,
                 name: entry.name,
                 in_voice: store.voice.has(entry.guild_id),
+                voice_channel_name: store.voice.get(entry.guild_id) ?? null,
             }));
         for (const guild of snapshot.guilds) {
             decorate(guild);
@@ -235,8 +236,9 @@
         guildRoute('GET', 'channels', () => respond(store.channels)),
         guildRoute('POST', 'channels/([^/]+)/send', ok),
         guildRoute('GET', 'voice-channels', () => respond(store.voiceChannels)),
-        guildRoute('POST', 'voice-channels/([^/]+)/join', (_request, guildId) => {
-            store.voice.add(guildId);
+        guildRoute('POST', 'voice-channels/([^/]+)/join', (_request, guildId, [channelId]) => {
+            const channel = store.voiceChannels.channels.find((candidate) => candidate.channel_id === channelId);
+            store.voice.set(guildId, channel?.name ?? null);
             return ok();
         }),
         guildRoute('POST', 'voice-channels/leave', (_request, guildId) => {

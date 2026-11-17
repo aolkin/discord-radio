@@ -25,6 +25,7 @@ pub struct GuildState {
     pub guild_id: String,
     pub name: Option<String>,
     pub in_voice: bool,
+    pub voice_channel_name: Option<String>,
     pub tracks: Vec<TrackSnapshot>,
     pub dj_state: DJStateInfo,
     pub dj_config: String,
@@ -59,7 +60,15 @@ impl BotSnapshot {
 
         for (guild_id, guild) in bot_state.guild_radios() {
             // Check if guild is actually in voice
-            let in_voice = bot_state.get_voice_channel_id(guild_id).await.is_some();
+            let voice_channel_id = bot_state.get_voice_channel_id(guild_id).await;
+            let in_voice = voice_channel_id.is_some();
+            let voice_channel_name = voice_channel_id.and_then(|channel_id| {
+                bot_state.cache.get().and_then(|cache| {
+                    cache
+                        .guild(guild_id)
+                        .and_then(|g| g.channels.get(&channel_id).map(|c| c.name.clone()))
+                })
+            });
 
             let tracks = guild.track_manager.get_all_tracks().await;
 
@@ -104,6 +113,7 @@ impl BotSnapshot {
                     .get()
                     .and_then(|cache| cache.guild(guild_id).map(|guild| guild.name.clone())),
                 in_voice,
+                voice_channel_name,
                 tracks,
                 dj_state,
                 dj_config,

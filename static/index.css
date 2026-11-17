@@ -1866,3 +1866,10 @@ fieldset.form-group {
 .voice-picker {
     margin-bottom: var(--space-4);
 }
+
+.voice-toggle-label {
+    max-width: 16rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
