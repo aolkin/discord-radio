@@ -5,6 +5,7 @@ RUN apt-get update \
 WORKDIR /src
 COPY Cargo.toml Cargo.lock build.rs ./
 COPY crates/field-trait/Cargo.toml crates/field-trait/Cargo.toml
+COPY static static
 # Build dependencies against stub sources so this layer is reused until Cargo.toml or Cargo.lock changes.
 RUN mkdir -p src crates/field-trait/src \
     && echo 'fn main() {}' > src/main.rs \
@@ -14,7 +15,6 @@ ARG GITHUB_RUN_NUMBER=dev
 ARG GITHUB_SHA=unknown
 COPY src src
 COPY crates crates
-COPY static static
 RUN touch src/main.rs crates/field-trait/src/lib.rs \
     && cargo build --release --locked
 

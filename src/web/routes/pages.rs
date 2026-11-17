@@ -7,12 +7,21 @@ use rust_embed::RustEmbed;
 #[derive(RustEmbed)]
 #[folder = "static/"]
 #[exclude = "*.md"]
+#[exclude = "index.html"]
+#[exclude = "index.js"]
+#[exclude = "js/*"]
 struct StaticFiles;
+
+#[derive(RustEmbed)]
+#[folder = "$OUT_DIR/portal"]
+struct PortalFiles;
 
 const BOT_NAME_PLACEHOLDER: &str = "{{BOT_NAME}}";
 
 fn serve(path: &str) -> Result<impl IntoResponse + use<>, StatusCode> {
-    let file = StaticFiles::get(path).ok_or(StatusCode::NOT_FOUND)?;
+    let file = StaticFiles::get(path)
+        .or_else(|| PortalFiles::get(path))
+        .ok_or(StatusCode::NOT_FOUND)?;
     let content_type = format!("{}; charset=utf-8", file.metadata.mimetype());
     Ok(([(CONTENT_TYPE, content_type)], file.data))
 }
@@ -26,7 +35,7 @@ fn escape_html(text: &str) -> String {
 }
 
 pub fn render_index(bot_name: &str) -> anyhow::Result<Html<String>> {
-    let file = StaticFiles::get("index.html")
+    let file = PortalFiles::get("index.html")
         .ok_or_else(|| anyhow::anyhow!("index.html is missing from the embedded files"))?;
     let html = std::str::from_utf8(&file.data)?;
     Ok(Html(
