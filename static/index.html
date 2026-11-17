@@ -1738,35 +1738,30 @@
                                 </div>
                             </div>
 
-                            <template x-if="guild.in_voice">
-                                <div class="section">
-                                    <div class="section-title">Live Audio Stream</div>
-                                    <div class="info-item">
-                                        <div class="grow">
-                                            <!-- biome-ignore lint/a11y/useMediaCaption: live stream, no caption track exists -->
-                                            <audio
-                                                class="w-full mt-8"
-                                                x-audio-stream
-                                                :src="'/api/guilds/' + guild.guild_id + '/audio-stream'"
-                                                controls
-                                                preload="none"
-                                            >
-                                                Your browser does not support the audio element.
-                                            </audio>
-                                            <div class="track-details mt-8 text-center">
-                                                🎧 Listen to bot's audio output in real-time
-                                            </div>
+                            <div class="section">
+                                <div class="section-title">Live Audio Stream</div>
+                                <div class="info-item">
+                                    <div class="grow">
+                                        <!-- biome-ignore lint/a11y/useMediaCaption: live stream, no caption track exists -->
+                                        <audio
+                                            class="w-full mt-8"
+                                            x-audio-stream
+                                            :src="'/api/guilds/' + guild.guild_id + '/audio-stream'"
+                                            controls
+                                            preload="none"
+                                        >
+                                            Your browser does not support the audio element.
+                                        </audio>
+                                        <div class="track-details mt-8 text-center">
+                                            🎧 Listen to bot's audio output in real-time
                                         </div>
                                     </div>
                                 </div>
-                            </template>
+                            </div>
                         </div>
 
                         <div class="guild-content" x-show="route.tab === 'play'">
-                            <div class="track-details" x-show="!guild.in_voice">
-                                Join a voice channel from the Status tab to use playback controls.
-                            </div>
-                            <div class="section" x-show="guild.in_voice">
+                            <div class="section">
                                 <div class="section-title">Advance DJ State</div>
                                 <form @submit.prevent="advanceDJState()">
                                     <div
@@ -1811,7 +1806,7 @@
                                 </form>
                             </div>
 
-                            <div class="section" x-show="guild.in_voice">
+                            <div class="section">
                                 <div class="section-title">Go Idle</div>
                                 <form @submit.prevent="idleDJ()">
                                     <div
@@ -1855,7 +1850,7 @@
                                 </form>
                             </div>
 
-                            <div class="section" x-show="guild.in_voice">
+                            <div class="section">
                                 <div class="section-title">Play Hex Message</div>
                                 <form @submit.prevent="playHexMessage()">
                                     <div
@@ -1922,7 +1917,7 @@
                                 </form>
                             </div>
 
-                            <div class="section" x-show="guild.in_voice">
+                            <div class="section">
                                 <div class="section-title">Play Track</div>
                                 <form @submit.prevent="playTrack()">
                                     <div
