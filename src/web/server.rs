@@ -103,6 +103,10 @@ pub async fn run_web_server(bot_state: Data, port: u16) -> anyhow::Result<()> {
         )
         .route("/voice-channels", get(routes::discord::get_voice_channels))
         .route(
+            "/voice-channels/leave",
+            post(routes::discord::leave_voice_channel),
+        )
+        .route(
             "/voice-channels/{channel_id}/join",
             post(routes::discord::join_voice_channel),
         )

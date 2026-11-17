@@ -212,6 +212,14 @@ pub async fn join_voice_channel(
     Ok(StatusCode::OK)
 }
 
+pub async fn leave_voice_channel(
+    State(bot_state): State<Data>,
+    Path(guild_id): Path<GuildId>,
+) -> StatusCode {
+    bot_state.leave_voice(guild_id).await;
+    StatusCode::OK
+}
+
 #[derive(Debug, Deserialize)]
 pub struct SendChannelMessageRequest {
     pub message: Option<String>,

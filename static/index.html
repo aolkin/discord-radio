@@ -1598,7 +1598,27 @@
                         <div class="guild-header">
                             <div class="guild-id" x-text="guildName(guild.guild_id)"></div>
                             <div class="row-center-8">
-                                <span class="voice-badge" x-show="guild.in_voice">In Voice</span>
+                                <button
+                                    type="button"
+                                    class="voice-badge voice-toggle"
+                                    :class="{ idle: !guild.in_voice }"
+                                    :disabled="voiceChannelSaving"
+                                    :aria-expanded="guild.in_voice ? null : String(voicePickerOpen)"
+                                    :title="guild.in_voice ? 'Leave ' + (guild.voice_channel_name || 'the voice channel') : 'Choose a voice channel to join'"
+                                    :aria-label="guild.in_voice ? 'In Voice' + (guild.voice_channel_name ? ' in ' + guild.voice_channel_name : '') + ', leave the voice channel' : 'Not in Voice, choose a voice channel to join'"
+                                    @click="guild.in_voice ? leaveVoiceChannel() : (voicePickerOpen = !voicePickerOpen)"
+                                >
+                                    <span
+                                        class="voice-toggle-label"
+                                        x-text="guild.in_voice ? 'In Voice' + (guild.voice_channel_name ? ' · ' + guild.voice_channel_name : '') : 'Not in Voice'"
+                                    ></span>
+                                    <span
+                                        class="voice-toggle-icon"
+                                        :class="{ open: voicePickerOpen }"
+                                        aria-hidden="true"
+                                        x-text="guild.in_voice ? '×' : '▾'"
+                                    ></span>
+                                </button>
                                 <button
                                     type="button"
                                     class="btn btn-secondary btn-sm"
@@ -1614,6 +1634,9 @@
                             :class="guildMessage.type === 'error' ? 'error-message' : 'success-message'"
                             x-text="guildMessage.text"
                         ></div>
+                        <div class="voice-picker" x-show="!guild.in_voice && voicePickerOpen">
+                            <div x-include="#voice-channel-join"></div>
+                        </div>
 
                         <nav class="guild-tabs">
                             <template x-for="tab in guildTabs" :key="tab.id">
@@ -1667,11 +1690,6 @@
                                         ></button>
                                     </form>
                                 </details>
-                            </div>
-
-                            <div class="section">
-                                <div class="section-title">Voice Channel</div>
-                                <div x-include="#voice-channel-join"></div>
                             </div>
 
                             <div class="section">

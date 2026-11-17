@@ -37,6 +37,7 @@ export function dj() {
         voiceChannelOptions: [],
         voiceChannelLoading: false,
         voiceChannelSaving: false,
+        voicePickerOpen: false,
 
         async loadVoiceChannelOptions() {
             const guildId = this.route.name;
@@ -64,7 +65,7 @@ export function dj() {
         async joinVoiceChannel() {
             await this.runAction({
                 saving: 'voiceChannelSaving',
-                message: 'voiceChannelMessage',
+                message: 'guildMessage',
                 label: 'joining voice channel',
                 request: () =>
                     apiRequest(`/api/guilds/${this.route.name}/voice-channels/${this.voiceChannelSelection}/join`, {
@@ -75,7 +76,23 @@ export function dj() {
                 failure: 'Failed to join the voice channel',
                 onSuccess: () => {
                     this.voiceChannelSelection = '';
+                    this.voicePickerOpen = false;
                 },
+            });
+        },
+
+        async leaveVoiceChannel() {
+            await this.runAction({
+                saving: 'voiceChannelSaving',
+                message: 'guildMessage',
+                label: 'leaving voice channel',
+                request: () =>
+                    apiRequest(`/api/guilds/${this.route.name}/voice-channels/leave`, {
+                        method: 'POST',
+                        errorMessage: bodyOrStatus,
+                    }),
+                success: 'Left the voice channel.',
+                failure: 'Failed to leave the voice channel',
             });
         },
 
