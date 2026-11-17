@@ -118,6 +118,8 @@ async fn main() -> anyhow::Result<()> {
         .and_then(|s| s.parse::<u16>().ok())
         .unwrap_or(3000);
 
+    let bot_name = std::env::var("BOT_NAME").unwrap_or_else(|_| "Discord Bot Portal".to_string());
+
     let content_path = args
         .get(1)
         .expect("Usage: radio-bot <content_path>")
@@ -323,7 +325,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Start web server in background
     tokio::spawn(async move {
-        if let Err(e) = web::run_web_server(data, web_port).await {
+        if let Err(e) = web::run_web_server(data, web_port, &bot_name).await {
             tracing::error!("Web server error: {e:#}");
         }
     });

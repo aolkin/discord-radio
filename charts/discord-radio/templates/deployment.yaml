@@ -49,6 +49,10 @@ spec:
             - name: WEB_CORS_ALLOWED_ORIGINS
               value: {{ join "," . | quote }}
             {{- end }}
+            {{- with .Values.web.botName }}
+            - name: BOT_NAME
+              value: {{ . | quote }}
+            {{- end }}
             {{- with .Values.hexAudioFolder }}
             - name: HEX_AUDIO_FOLDER
               value: {{ . | quote }}

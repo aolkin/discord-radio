@@ -36,6 +36,7 @@ sudo apt update && sudo apt install -y cmake libopus-dev pkg-config
    ```
    DISCORD_TOKEN=your_discord_bot_token_here
    WEB_PORT=3000  # Optional, defaults to 3000
+   BOT_NAME="Discord Bot Portal"  # Optional, portal heading and tab title, defaults to Discord Bot Portal
    RUST_LOG=info  # Optional, log filter, defaults to info
    ```
 

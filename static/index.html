@@ -3,7 +3,7 @@
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Discord Bot Portal</title>
+        <title>{{BOT_NAME}}</title>
         <script src="/static/theme.js"></script>
         <script type="module" src="/static/index.js"></script>
         <script defer src="/static/alpine.min.js"></script>
@@ -14,7 +14,7 @@
         <div class="container">
             <header>
                 <div class="header-left">
-                    <h1><span class="icon glyph-note" aria-hidden="true">🎵</span>Discord Bot Portal</h1>
+                    <h1><span class="icon glyph-note" aria-hidden="true">🎵</span>{{BOT_NAME}}</h1>
                     <div class="version-info" x-show="version">
                         Version: <span x-text="version"></span> • Commit:
                         <span x-text="commitHash ? commitHash.substring(0, 7) : 'unknown'"></span>

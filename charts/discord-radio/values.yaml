@@ -9,6 +9,7 @@ secret:
   # Only the Discord token is required.
 web:
   port: 3000
+  botName: ""
   corsAllowedOrigins: []
 cache:
   ttlSecs: 2592000
