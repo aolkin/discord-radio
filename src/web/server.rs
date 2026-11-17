@@ -3,6 +3,7 @@ use crate::audio::profiles::SignalProfile;
 use crate::state::Data;
 use crate::web::routes::registries;
 use crate::web::{audio_stream, routes, websocket};
+use anyhow::Context;
 use axum::{
     Router,
     extract::{DefaultBodyLimit, Path, Request, State},
@@ -39,7 +40,10 @@ async fn request_span(request: Request, next: Next) -> Response {
     next.run(request).instrument(span).await
 }
 
-pub async fn run_web_server(bot_state: Data, port: u16) -> anyhow::Result<()> {
+pub async fn run_web_server(bot_state: Data, port: u16, bot_name: &str) -> anyhow::Result<()> {
+    let index =
+        routes::pages::render_index(bot_name).context("Failed to render the portal page")?;
+
     // Configure CORS - secure by default (localhost only), configurable via env var
     let localhost_predicate = AllowOrigin::predicate(|origin: &http::header::HeaderValue, _| {
         origin.as_bytes().starts_with(b"http://localhost:")
@@ -113,7 +117,7 @@ pub async fn run_web_server(bot_state: Data, port: u16) -> anyhow::Result<()> {
         .route_layer(middleware::from_fn_with_state(bot_state, guild_scope));
 
     let app = Router::new()
-        .route("/", get(routes::pages::index))
+        .route("/", get(move || std::future::ready(index.clone())))
         .route("/static/{*path}", get(routes::pages::static_file))
         .route("/api/status", get(routes::status::get_status))
         .route("/api/health", get(routes::status::health))

@@ -29,7 +29,7 @@ Object storage is used only when all four `BUCKET_*` keys are present. Metrics a
 
 ## Settings
 
-- `web.port` is the port the bot listens on. `web.corsAllowedOrigins` lists the origins allowed by CORS.
+- `web.port` is the port the bot listens on. `web.corsAllowedOrigins` lists the origins allowed by CORS. `web.botName` sets the portal heading and tab title (`BOT_NAME`); when empty, the bot uses `Discord Bot Portal`.
 - `cache.ttlSecs`, `cache.maxBytes` and `cache.sweepIntervalSecs` set how long cached files live, how large the cache may grow, and how often expired files are removed.
 - `guildIdleUnloadSecs` sets how long a loaded guild must be idle before the bot unloads it (`0` disables this). A guild is idle when the bot is not in a voice channel, nobody is listening to its audio stream, and no portal change or command has touched it.
 - `hexAudioFolder` sets the folder hex audio files load from (`HEX_AUDIO_FOLDER`), such as `s3://hex/`. The bot adds a trailing `/` when it is missing; when empty, the bot uses `audio/hex/`.
