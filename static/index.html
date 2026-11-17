@@ -1605,9 +1605,17 @@
                                     :disabled="voiceChannelSaving"
                                     :aria-expanded="guild.in_voice ? null : String(voicePickerOpen)"
                                     :title="guild.in_voice ? 'Leave the voice channel' : 'Choose a voice channel to join'"
+                                    :aria-label="guild.in_voice ? 'In Voice, leave the voice channel' : 'Not in Voice, choose a voice channel to join'"
                                     @click="guild.in_voice ? leaveVoiceChannel() : (voicePickerOpen = !voicePickerOpen)"
-                                    x-text="guild.in_voice ? 'In Voice' : 'Not in Voice'"
-                                ></button>
+                                >
+                                    <span x-text="guild.in_voice ? 'In Voice' : 'Not in Voice'"></span>
+                                    <span
+                                        class="voice-toggle-icon"
+                                        :class="{ open: voicePickerOpen }"
+                                        aria-hidden="true"
+                                        x-text="guild.in_voice ? '×' : '▾'"
+                                    ></span>
+                                </button>
                                 <button
                                     type="button"
                                     class="btn btn-secondary btn-sm"

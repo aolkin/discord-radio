@@ -1824,6 +1824,33 @@ fieldset.form-group {
     font-family: inherit;
 }
 
+.voice-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    box-shadow: inset 0 0 0 1px currentColor;
+    transition: filter 0.15s ease, box-shadow 0.15s ease;
+}
+
+.voice-toggle:hover:not(:disabled) {
+    filter: brightness(0.94);
+    box-shadow: inset 0 0 0 2px currentColor;
+}
+
+.voice-toggle:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+.voice-toggle-icon {
+    font-size: 1.4em;
+    line-height: 0.8;
+}
+
+.voice-toggle-icon.open {
+    transform: rotate(180deg);
+}
+
 .voice-toggle:disabled {
     cursor: not-allowed;
     opacity: 0.6;
