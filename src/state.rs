@@ -45,8 +45,10 @@ impl GuildRadio {
     }
 
     fn start_clock(&self, guild_id: GuildId) {
-        *self.audio_clock.lock().unwrap() =
-            Some(AudioClock::start(guild_id, self.audio_processor.clone()));
+        self.audio_clock
+            .lock()
+            .unwrap()
+            .get_or_insert_with(|| AudioClock::start(guild_id, self.audio_processor.clone()));
     }
 }
 
@@ -215,7 +217,6 @@ impl BotState {
         let _lifecycle = lifecycle.lock().await;
         self.leave_voice_locked(guild_id).await;
         if let Some(radio) = self.radio(guild_id) {
-            radio.stop_clock().await;
             radio.start_clock(guild_id);
         }
     }
