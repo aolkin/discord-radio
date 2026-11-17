@@ -34,11 +34,11 @@ pub fn init_from_env() -> Option<Box<s3::Bucket>> {
         None,
         None,
     )
-    .map_err(|e| tracing::warn!("Failed to create bucket credentials: {e}"))
+    .map_err(|e| tracing::warn!("Failed to create bucket credentials: {e:#}"))
     .ok()?;
 
     s3::Bucket::new(&bucket_name, region, credentials)
         .map(|b| b.with_path_style())
-        .map_err(|e| tracing::warn!("Failed to create bucket: {e}"))
+        .map_err(|e| tracing::warn!("Failed to create bucket: {e:#}"))
         .ok()
 }

@@ -7,18 +7,20 @@ use std::io::{Read, Seek, SeekFrom};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio::sync::RwLock;
+use tracing::Span;
 
 const SAMPLE_RATE: u32 = 48000;
 const CHANNELS: u16 = 2;
 
 pub struct ProcessedAudioAdapter {
     processor: Arc<RwLock<AudioProcessor>>,
+    span: Span,
 }
 
 impl ProcessedAudioAdapter {
     /// Create a new adapter with an existing processor
-    pub fn new(processor: Arc<RwLock<AudioProcessor>>) -> Self {
-        Self { processor }
+    pub fn new(processor: Arc<RwLock<AudioProcessor>>, span: Span) -> Self {
+        Self { processor, span }
     }
 
     pub async fn start(
@@ -30,7 +32,7 @@ impl ProcessedAudioAdapter {
         // Create audio reader that generates on-demand
         // Use a std::sync::Mutex wrapper for the processor to allow sync access from Read::read()
         let sync_processor = Arc::new(Mutex::new(processor.clone()));
-        let reader = AudioChannelReader::new(sync_processor);
+        let reader = AudioChannelReader::new(sync_processor, self.span.clone());
 
         // Create RawAdapter for Songbird (expects interleaved f32 PCM)
         let raw_input = RawAdapter::new(reader, SAMPLE_RATE, CHANNELS as u32);
@@ -39,18 +41,24 @@ impl ProcessedAudioAdapter {
         {
             let mut call_guard = call.lock().await;
             let handle = call_guard.play_input(raw_input.into());
-            let _ = handle.add_event(Event::Track(TrackEvent::Error), TrackErrorLogger);
+            let _ = handle.add_event(
+                Event::Track(TrackEvent::Error),
+                TrackErrorLogger { span: self.span },
+            );
         }
 
         processor
     }
 }
 
-struct TrackErrorLogger;
+struct TrackErrorLogger {
+    span: Span,
+}
 
 #[async_trait]
 impl EventHandler for TrackErrorLogger {
     async fn act(&self, ctx: &EventContext<'_>) -> Option<Event> {
+        let _entered = self.span.enter();
         if let EventContext::Track(tracks) = ctx {
             for (state, _) in *tracks {
                 tracing::warn!("Voice track failed: {:?}", state.playing);
@@ -67,16 +75,18 @@ struct AudioChannelReader {
     position: usize,
     last_generation_time: Option<Instant>,
     total_frames_generated: u64,
+    span: Span,
 }
 
 impl AudioChannelReader {
-    fn new(processor: Arc<Mutex<Arc<RwLock<AudioProcessor>>>>) -> Self {
+    fn new(processor: Arc<Mutex<Arc<RwLock<AudioProcessor>>>>, span: Span) -> Self {
         Self {
             processor,
             buffer: Vec::new(),
             position: 0,
             last_generation_time: None,
             total_frames_generated: 0,
+            span,
         }
     }
 
@@ -165,6 +175,8 @@ impl AudioChannelReader {
 impl Read for AudioChannelReader {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         // If we've consumed the current buffer, generate more audio
+        let span = self.span.clone();
+        let _entered = span.enter();
         if self.position >= self.buffer.len() {
             self.generate_audio_chunk();
         }

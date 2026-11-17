@@ -161,7 +161,7 @@ impl AudioProcessor {
                 .encode(&buffer)
                 .map(|packet| self.opus_stream.send(packet))
         {
-            tracing::error!("Opus encoding error: {:?}", e);
+            tracing::error!("Opus encoding error: {e:#}");
         }
 
         // Check if generation is keeping up with real-time

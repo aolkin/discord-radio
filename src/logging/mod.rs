@@ -1,8 +1,10 @@
 mod json_logger;
 mod log_reader;
+mod span;
 
 pub use json_logger::JsonLogger;
 pub use log_reader::{LogReadResult, LogReader};
+pub(crate) use span::guild_span;
 
 use std::path::{Path, PathBuf};
 

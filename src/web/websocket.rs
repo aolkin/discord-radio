@@ -4,9 +4,11 @@ use axum::extract::ws::{Message, WebSocket};
 use axum::extract::{State, WebSocketUpgrade};
 use axum::response::Response;
 use tokio::time::{Duration, interval};
+use tracing::Instrument;
 
 pub async fn websocket_handler(ws: WebSocketUpgrade, State(bot_state): State<Data>) -> Response {
-    ws.on_upgrade(|socket| handle_socket(socket, bot_state))
+    let span = tracing::Span::current();
+    ws.on_upgrade(|socket| handle_socket(socket, bot_state).instrument(span))
 }
 
 async fn handle_socket(mut socket: WebSocket, bot_state: Data) {
@@ -19,7 +21,7 @@ async fn handle_socket(mut socket: WebSocket, bot_state: Data) {
         let json = match serde_json::to_string(&snapshot) {
             Ok(j) => j,
             Err(e) => {
-                tracing::error!("Failed to serialize snapshot: {}", e);
+                tracing::error!("Failed to serialize snapshot: {e:#}");
                 continue;
             }
         };

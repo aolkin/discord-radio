@@ -1,4 +1,5 @@
 use crate::audio::tracks::StartTrackArgs;
+use crate::logging::guild_span;
 use crate::persistence::MultiTrackPlaybackState;
 use crate::state::Data;
 use anyhow::Context;
@@ -20,12 +21,12 @@ pub async fn restore_voice_channels(bot_state: Data) -> anyhow::Result<()> {
     }
 
     for (guild_id, channel_id) in saved_channels {
-        let span = tracing::info_span!("restore_voice", guild_id = %guild_id);
+        let span = guild_span!("restore_voice", guild_id);
         async {
             match bot_state.join_voice_channel(guild_id, channel_id).await {
                 Ok(()) => tracing::info!("Rejoined voice channel {}", channel_id),
                 Err(e) => {
-                    tracing::error!("Failed to rejoin voice channel {}: {:?}", channel_id, e);
+                    tracing::error!("Failed to rejoin voice channel {}: {e:#}", channel_id);
                     let _ = bot_state.state_store.remove_voice_channel(guild_id).await;
                 }
             }
@@ -61,7 +62,7 @@ pub async fn restore_multitrack_playback(bot_state: Data) -> anyhow::Result<()> 
     Ok(())
 }
 
-#[tracing::instrument(skip_all, fields(guild_id = %guild_id))]
+#[tracing::instrument(skip_all, fields(guild_id = guild_id.get()))]
 async fn restore_guild_multitrack(
     bot_state: Data,
     guild_id: GuildId,
@@ -139,7 +140,7 @@ async fn restore_guild_multitrack(
             })
             .await
         {
-            tracing::warn!("Failed to restore track '{}': {}", track.name, e);
+            tracing::warn!("Failed to restore track '{}': {e:#}", track.name);
         }
     }
 }
