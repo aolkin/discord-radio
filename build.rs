@@ -1,14 +1,13 @@
+use std::collections::hash_map::DefaultHasher;
 use std::env;
 use std::fs;
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
 fn content_hash(bytes: &[u8]) -> String {
-    let mut hash: u64 = 0xcbf29ce484222325;
-    for byte in bytes {
-        hash ^= u64::from(*byte);
-        hash = hash.wrapping_mul(0x100000001b3);
-    }
-    format!("{hash:016x}")
+    let mut hasher = DefaultHasher::new();
+    bytes.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
 }
 
 fn read(path: &Path) -> Vec<u8> {
@@ -32,7 +31,11 @@ fn main() {
 
     let minify = env::var("PROFILE").is_ok_and(|profile| profile == "release");
     let entry = static_dir.join("index.js");
-    let js = js_bundler::bundle(&entry, minify)
+    let options = js_bundler::Options {
+        minify,
+        ..Default::default()
+    };
+    let js = js_bundler::bundle(&entry, &options)
         .unwrap_or_else(|e| panic!("bundling {}: {e:#}", entry.display()));
     fs::write(out_dir.join("index.js"), &js).expect("writing the bundled JavaScript");
 

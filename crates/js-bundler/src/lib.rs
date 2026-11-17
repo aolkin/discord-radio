@@ -31,6 +31,7 @@ impl Hook for NoMetaHook {
 
 struct FileLoader {
     cm: Lrc<SourceMap>,
+    es_version: EsVersion,
 }
 
 impl Load for FileLoader {
@@ -45,7 +46,7 @@ impl Load for FileLoader {
         let module = parse_file_as_module(
             &fm,
             Syntax::Es(Default::default()),
-            EsVersion::Es2020,
+            self.es_version,
             None,
             &mut Vec::new(),
         )
@@ -58,17 +59,39 @@ impl Load for FileLoader {
     }
 }
 
-pub fn bundle(entry: &Path, minify: bool) -> Result<String, Error> {
+pub struct Options {
+    pub minify: bool,
+    pub es_version: EsVersion,
+    pub inline: bool,
+    pub mangle_top_level: bool,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            minify: false,
+            es_version: EsVersion::latest(),
+            inline: false,
+            mangle_top_level: true,
+        }
+    }
+}
+
+pub fn bundle(entry: &Path, options: &Options) -> Result<String, Error> {
+    let minify = options.minify;
     let cm: Lrc<SourceMap> = Default::default();
     let globals = Box::leak(Box::<Globals>::default());
     let mut bundler = Bundler::new(
         globals,
         cm.clone(),
-        FileLoader { cm: cm.clone() },
+        FileLoader {
+            cm: cm.clone(),
+            es_version: options.es_version,
+        },
         NodeModulesResolver::new(TargetEnv::Node, Default::default(), true),
         swc_bundler::Config {
             require: false,
-            disable_inliner: true,
+            disable_inliner: !options.inline,
             external_modules: Default::default(),
             disable_fixer: minify,
             disable_hygiene: minify,
@@ -93,11 +116,13 @@ pub fn bundle(entry: &Path, minify: bool) -> Result<String, Error> {
                 None,
                 &MinifyOptions {
                     compress: Some(CompressOptions {
-                        top_level: Some(TopLevelOptions { functions: true }),
+                        top_level: Some(TopLevelOptions {
+                            functions: options.mangle_top_level,
+                        }),
                         ..Default::default()
                     }),
                     mangle: Some(MangleOptions {
-                        top_level: Some(true),
+                        top_level: Some(options.mangle_top_level),
                         ..Default::default()
                     }),
                     ..Default::default()
