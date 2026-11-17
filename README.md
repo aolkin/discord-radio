@@ -96,9 +96,9 @@ The portal provides:
 - Hex playback status with loop counters
 - DJ state visualization
 - Save as for signal profiles, pools and DJ configs
-- Joining a voice channel from a guild's page
+- Joining and leaving a voice channel from a guild's page
 
-`GET /api/guilds/{guild_id}/voice-channels` lists the voice channels the bot can join, and `POST /api/guilds/{guild_id}/voice-channels/{channel_id}/join` joins one the same way `/dj join` does, moving the bot if it is already in another channel of that guild.
+`GET /api/guilds/{guild_id}/voice-channels` lists the voice channels the bot can join, and `POST /api/guilds/{guild_id}/voice-channels/{channel_id}/join` joins one the same way `/dj join` does, moving the bot if it is already in another channel of that guild. `POST /api/guilds/{guild_id}/voice-channels/leave` leaves voice and keeps the guild loaded.
 
 `POST /api/guilds/{guild_id}/dj/config` with `{"config": "<name>"}` restarts the guild's DJ with that DJ config, the same way `/dj configure` does.
 

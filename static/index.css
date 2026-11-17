@@ -1817,3 +1817,23 @@ fieldset.form-group {
 :root[data-theme="dark"] {
     --glyph-filter: brightness(0) invert(0.85);
 }
+
+.voice-toggle {
+    border: 0;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.voice-toggle:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.voice-toggle.idle {
+    background: var(--color-surface-muted);
+    color: var(--color-text-muted);
+}
+
+.voice-picker {
+    margin-bottom: var(--space-4);
+}

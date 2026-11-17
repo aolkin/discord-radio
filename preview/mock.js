@@ -239,6 +239,10 @@
             store.voice.add(guildId);
             return ok();
         }),
+        guildRoute('POST', 'voice-channels/leave', (_request, guildId) => {
+            store.voice.delete(guildId);
+            return ok();
+        }),
         guildRoute('GET', 'bot-profile', (_request, guildId) => respond(store.botProfiles[guildId] ?? {})),
         guildRoute('PUT', 'bot-profile', ({ body }, guildId) => {
             const current = store.botProfiles[guildId] ?? {};
