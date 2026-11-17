@@ -1624,7 +1624,7 @@
                             </template>
                         </nav>
 
-                        <div class="guild-content" x-show="route.tab === 'status'">
+                        <div class="guild-content guild-content-columns" x-show="route.tab === 'status'">
                             <div class="section">
                                 <div class="section-title">DJ State</div>
                                 <div class="dj-state">
@@ -2452,19 +2452,21 @@
                                 >
                                     No log entries found
                                 </div>
-                                <template x-for="entry in logResult?.entries ?? []" :key="entry.start_offset">
-                                    <div class="log-entry" :class="route.logType">
-                                        <div class="log-time" x-text="logTime(entry.content)"></div>
-                                        <div
-                                            class="log-content"
-                                            x-text="route.logType === 'dj' ? djLogTitle(entry.content) : memberLogTitle(entry.content)"
-                                        ></div>
-                                        <div
-                                            class="log-detail"
-                                            x-text="route.logType === 'dj' ? djLogDetail(entry.content) : memberLogDetail(entry.content)"
-                                        ></div>
-                                    </div>
-                                </template>
+                                <div class="log-list">
+                                    <template x-for="entry in logResult?.entries ?? []" :key="entry.start_offset">
+                                        <div class="log-entry" :class="route.logType">
+                                            <div class="log-time" x-text="logTime(entry.content)"></div>
+                                            <div
+                                                class="log-content"
+                                                x-text="route.logType === 'dj' ? djLogTitle(entry.content) : memberLogTitle(entry.content)"
+                                            ></div>
+                                            <div
+                                                class="log-detail"
+                                                x-text="route.logType === 'dj' ? djLogDetail(entry.content) : memberLogDetail(entry.content)"
+                                            ></div>
+                                        </div>
+                                    </template>
+                                </div>
                                 <div class="button-group" x-show="logResult?.entries.length">
                                     <button
                                         type="button"
@@ -2575,7 +2577,7 @@
                 </select>
                 <button
                     type="submit"
-                    class="btn btn-primary mt-12 w-full"
+                    class="btn btn-primary mt-12"
                     :disabled="voiceChannelSaving || !voiceChannelSelection"
                 >
                     Join Channel
