@@ -6,8 +6,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DJStateInfo {
-    #[serde(rename = "type")]
-    pub kind: String,
+    pub segment_type: String,
     pub details: String,
     pub pool: Option<String>,
     pub progress: Option<PoolProgress>,
@@ -148,7 +147,7 @@ fn dj_state_to_info(
         None => time,
     };
     DJStateInfo {
-        kind: state.segment.typetag_name().to_string(),
+        segment_type: state.segment.typetag_name().to_string(),
         details,
         pool: state.segment.pool.clone(),
         progress: state.pool_progress(bot_state.dj_config_manager),

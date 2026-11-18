@@ -220,7 +220,7 @@ impl Segment for HexSegment {
     async fn restore(&self, ctx: &SegmentCtx, _elapsed: Duration) -> anyhow::Result<()> {
         self.start_run(ctx).await;
         tracing::info!(
-            "Restored DJ hex_message '{}' at loop {}/{}",
+            "Restored DJ hex message '{}' at loop {}/{}",
             self.message,
             self.progress.loops.load(Ordering::Relaxed),
             self.target_loops
@@ -231,7 +231,7 @@ impl Segment for HexSegment {
     async fn enter(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
         self.start_run(ctx).await;
         tracing::info!(
-            "DJ starting hex_message '{}' ({} loops)",
+            "DJ playing hex message '{}' ({} loops)",
             self.message,
             self.target_loops
         );

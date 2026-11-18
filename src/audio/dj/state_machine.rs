@@ -444,6 +444,7 @@ impl DJStateMachine {
         pool_name: Option<&str>,
     ) -> anyhow::Result<()> {
         let next_state = self.next_segment(pool_name, bot_state).await?;
+        tracing::info!("DJ transitioning to state: {}", next_state.typetag_name());
         self.enter_state(next_state, bot_state).await
     }
 
@@ -523,7 +524,10 @@ impl DJStateMachine {
         bot_state: &Data,
         request: HexMessageRequest,
     ) -> anyhow::Result<()> {
-        tracing::info!("DJ forcing hex_message: {}", request.message);
+        tracing::info!(
+            "DJ force transitioning to hex message with custom text: {}",
+            request.message
+        );
         let segment_defaults = request
             .pool
             .as_deref()
@@ -549,7 +553,7 @@ impl DJStateMachine {
     }
 
     pub async fn force_track(&self, bot_state: &Data, request: TrackRequest) -> anyhow::Result<()> {
-        tracing::info!("DJ forcing track: {}", request.filename);
+        tracing::info!("DJ force transitioning to track: {}", request.filename);
         let start_position = request
             .start_position
             .map(Duration::try_from_secs_f32)
@@ -575,7 +579,7 @@ impl DJStateMachine {
 
     pub async fn force_idle(&self, bot_state: &Data, request: IdleRequest) -> anyhow::Result<()> {
         tracing::info!(
-            "DJ forcing noise with signal profile {:?} for {:?}s",
+            "DJ force transitioning to idle with noise profile {:?} for {:?}s",
             request.noise_profile,
             request.duration
         );
@@ -612,7 +616,6 @@ impl DJStateMachine {
         segment.enter(&self.segment_ctx()).await?;
 
         let to_state = segment.typetag_name().to_string();
-        tracing::info!(from = %from_state, to = %to_state, "DJ segment changed");
         let mut state = self.state.write().await;
         state.segment = segment;
         state.apply_segment_playback();
