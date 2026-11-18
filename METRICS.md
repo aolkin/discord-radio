@@ -28,9 +28,9 @@ If these environment variables are not set, the bot will run normally without me
   - Labels: `guild_id`, `from_state`, `to_state`
   
 - **dj_state_duration** (histogram): Time spent in each DJ state (in seconds)
-  - Labels: `guild_id`, `state`, and `signal_profile` (only when the state has a signal profile)
+  - Labels: `guild_id`, `state`, and `signal_preset` (only when the state has a signal preset)
   - Recorded states: `track`, `hex_message`, `noise`
-  - Idle time is recorded as `noise` without a `signal_profile` label
+  - Idle time is recorded as `noise` without a `signal_preset` label
 
 ### Hex Message Metrics
 

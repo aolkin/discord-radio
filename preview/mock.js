@@ -2,11 +2,11 @@
     const realFetch = window.fetch.bind(window);
     const fixtureBase = '/preview/fixtures';
     const registries = {
-        profiles: ['clear_signal', 'weak_signal', 'fading_signal'],
+        'signal-presets': ['clear_signal', 'weak_signal', 'fading_signal'],
         pools: ['noise', 'hex', 'track'],
         'dj-configs': ['default', 'quiet'],
     };
-    const defaultProfiles = new Set(registries.profiles);
+    const defaultPresets = new Set(registries['signal-presets']);
     const modes = ['track', 'hex', 'noise'];
 
     const store = {
@@ -66,7 +66,7 @@
             mode: modes.includes(forcedMode) ? forcedMode : 'track',
             startedAt: Date.now(),
             text: null,
-            profile: null,
+            preset: null,
             channelStatus: null,
             djConfig: live.dj_config,
             announcements: structuredClone(live.announcement_channels),
@@ -129,11 +129,11 @@
         const timing = `(${Math.min(elapsed, total).toFixed(1)}s / ${total.toFixed(1)}s)`;
         const label = radio.text && radio.mode === 'hex' ? radio.text : guild.dj_state.details.replace(/ \(.*$/, '');
         guild.dj_state.details = `${label} ${timing}`;
-        if (radio.profile) {
-            guild.audio_profile = {
-                ...guild.audio_profile,
-                name: radio.profile,
-                expected_name: radio.profile,
+        if (radio.preset) {
+            guild.signal_preset = {
+                ...guild.signal_preset,
+                name: radio.preset,
+                expected_name: radio.preset,
                 transitioning: false,
             };
         }
@@ -185,7 +185,7 @@
             () => {
                 const names = Object.keys(store.registries[kind]);
                 return respond(
-                    kind === 'profiles' ? names.map((name) => ({ name, default: defaultProfiles.has(name) })) : names,
+                    kind === 'signal-presets' ? names.map((name) => ({ name, default: defaultPresets.has(name) })) : names,
                 );
             },
         ],
@@ -202,7 +202,7 @@
             new RegExp(`^/api/${kind}/([^/]+)$`),
             ([, name], { body }) => {
                 const key = decodeURIComponent(name);
-                if (kind === 'profiles' && defaultProfiles.has(key)) {
+                if (kind === 'signal-presets' && defaultPresets.has(key)) {
                     return fail(409, 'default entries cannot be overwritten; use Save as');
                 }
                 store.registries[kind][key] = { ...body, name: key };
@@ -298,8 +298,8 @@
             return ok();
         }),
         guildRoute('POST', 'dj/idle', ({ body }) => {
-            if (body.noise_profile && !(body.noise_profile in store.registries.profiles)) {
-                return fail(404, `signal profile "${body.noise_profile}" not found`);
+            if (body.signal_preset && !(body.signal_preset in store.registries['signal-presets'])) {
+                return fail(404, `signal preset "${body.signal_preset}" not found`);
             }
             setMode('noise');
             return ok();
@@ -321,8 +321,8 @@
             store.radio.djConfig = body.config;
             return ok();
         }),
-        guildRoute('POST', 'dj/profile', ({ body }) => {
-            store.radio.profile = body.profile ?? null;
+        guildRoute('POST', 'dj/signal-preset', ({ body }) => {
+            store.radio.preset = body.preset ?? null;
             return ok();
         }),
         guildRoute('POST', 'dj/announcement-channels', ({ body }) => {

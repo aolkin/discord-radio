@@ -1,5 +1,5 @@
 use crate::audio::dj::config::{DJConfig, Pool};
-use crate::audio::profiles::SignalProfile;
+use crate::audio::presets::SignalParameters;
 use crate::bucket::registry::{JsonRegistry, RegistryEntry, RegistryError};
 use crate::state::Data;
 use crate::web::error::{ApiError, WithStatus};
@@ -25,12 +25,12 @@ pub trait RoutedEntry: RegistryEntry + Send + Sync + 'static {
     }
 }
 
-impl RoutedEntry for SignalProfile {
-    const PATH: &'static str = "/api/profiles";
+impl RoutedEntry for SignalParameters {
+    const PATH: &'static str = "/api/signal-presets";
     const FLAG_DEFAULTS: bool = true;
 
     fn registry(bot_state: Data) -> &'static JsonRegistry<Self> {
-        &bot_state.profile_manager
+        &bot_state.preset_manager
     }
 }
 

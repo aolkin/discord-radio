@@ -7,7 +7,7 @@
       "tracks": [],
       "dj_state": { "segment_type": "hex_message", "details": "once upon a time (3.5s / 12.0s)", "pool": "hex", "progress": null },
       "dj_config": "default",
-      "audio_profile": { "name": "fading_signal", "expected_name": "fading_signal", "transitioning": false, "source": "background" },
+      "signal_preset": { "name": "fading_signal", "expected_name": "fading_signal", "transitioning": false, "source": "background" },
       "channel_status": { "status": "On air", "source": "background" },
       "announcement_channels": [
         { "channel_id": "200000000000000002", "name": "announcements" }

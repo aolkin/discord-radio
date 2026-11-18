@@ -255,7 +255,7 @@ impl Segment for HexSegment {
         serde_json::json!({
             "message": self.message,
             "target_loops": self.target_loops,
-            "signal_profile": self.signal_profile().map(|profile| profile.name),
+            "signal_preset": self.signal_preset().map(|preset| preset.name),
         })
     }
 

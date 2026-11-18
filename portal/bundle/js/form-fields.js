@@ -1,7 +1,7 @@
 export const weight = { key: 'weight', label: 'Weight', type: 'number', step: 1, min: 0, default: 1 };
 const seconds = (key, label, value) => ({ key, label, type: 'number', step: 'any', min: 0, default: value });
 export const optionalSeconds = (key, label) => ({ ...seconds(key, label), optional: true });
-export const profileText = (key, label, optional = false) => ({ key, label, type: 'text', optional, profile: true });
+export const presetText = (key, label, optional = false) => ({ key, label, type: 'text', optional, preset: true });
 export const optionalText = (key, label) => ({ key, label, type: 'text', optional: true });
 
 export const minDuration = seconds('min_duration_seconds', 'Min Duration (s)', 60);
@@ -14,10 +14,10 @@ export const noisePeriodFields = [
     optionalSeconds('fade_duration_seconds', 'Fade Duration (s)'),
 ];
 
-export const signalProfileEntryFields = [profileText('signal_profile', 'Signal Profile'), ...noisePeriodFields];
+export const signalPresetEntryFields = [presetText('signal_preset', 'Signal Preset'), ...noisePeriodFields];
 
 export const entryPlaybackFields = [
-    profileText('signal_profile', 'Signal Profile', true),
+    presetText('signal_preset', 'Signal Preset', true),
     optionalText('channel_status', 'Channel Status'),
     optionalText('announcement', 'Announcement'),
 ];
@@ -82,7 +82,7 @@ export function blankRow(fields) {
 const loops = (key, label) => ({ key, label, type: 'number', step: 1, min: 0, default: 1 });
 
 const segmentDefaultsFields = [
-    profileText('signal_profile', 'Signal Profile', true),
+    presetText('signal_preset', 'Signal Preset', true),
     optionalText('channel_status', 'Channel Status'),
     { key: 'announcements', label: 'Announcements', type: 'strings' },
 ];

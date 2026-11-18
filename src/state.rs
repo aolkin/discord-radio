@@ -3,8 +3,8 @@ use crate::audio::connection::{AudioClock, connect_voice_channel};
 use crate::audio::dj::config::registry::DJConfigRegistry;
 use crate::audio::dj::manager::DJManager;
 use crate::audio::duration::DurationCache;
+use crate::audio::presets::SignalParameters;
 use crate::audio::processing::processor::{AudioProcessor, ProcessorRef};
-use crate::audio::profiles::SignalProfile;
 use crate::audio::tracks::TrackManager;
 use crate::bucket::FileResolver;
 use crate::bucket::registry::JsonRegistry;
@@ -60,7 +60,7 @@ pub struct BotState {
     guilds: StdMutex<HashMap<GuildId, GuildRadio>>,
     lifecycles: StdMutex<HashMap<GuildId, Arc<Mutex<()>>>>,
     last_activity: StdMutex<HashMap<GuildId, Instant>>,
-    pub profile_manager: JsonRegistry<SignalProfile>,
+    pub preset_manager: JsonRegistry<SignalParameters>,
     pub dj_config_manager: &'static DJConfigRegistry,
     pub activity_manager: ActivityManager,
     pub file_resolver: FileResolver,
@@ -74,7 +74,7 @@ impl BotState {
         file_resolver: FileResolver,
         hex_audio_folder: String,
         state_store: Arc<dyn StateStore>,
-        profile_manager: JsonRegistry<SignalProfile>,
+        preset_manager: JsonRegistry<SignalParameters>,
         dj_config_manager: &'static DJConfigRegistry,
         bot_user_id: UserId,
         songbird: Arc<Songbird>,
@@ -86,7 +86,7 @@ impl BotState {
             guilds: StdMutex::new(HashMap::new()),
             lifecycles: StdMutex::new(HashMap::new()),
             last_activity: StdMutex::new(HashMap::new()),
-            profile_manager,
+            preset_manager,
             dj_config_manager,
             activity_manager: ActivityManager::new(state_store),
             file_resolver,
@@ -211,7 +211,7 @@ impl BotState {
             return Ok((radio, false));
         }
         let audio_processor = Arc::new(RwLock::new(AudioProcessor::new(
-            self.profile_manager.default_profile(),
+            self.preset_manager.default_preset(),
         )));
         let dj_manager = Arc::new(DJManager::new(guild_id, self, audio_processor.clone()));
         dj_manager.start().await.context("starting the DJ")?;

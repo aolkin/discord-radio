@@ -2,14 +2,14 @@ import { botProfileForms } from './bot-profile.js';
 import { playForms } from './dj.js';
 import { logTypes } from './logs.js';
 import { newItem } from './registry-editor.js';
-import { signalProfileForms } from './signal-profiles.js';
+import { signalPresetForms } from './signal-presets.js';
 import { trackForms } from './tracks.js';
 
 export const guildTabs = [
     { id: 'status', label: 'Status' },
     { id: 'play', label: 'Play' },
     { id: 'tracks', label: 'Tracks' },
-    { id: 'signal-profile', label: 'Signal profile' },
+    { id: 'signal-preset', label: 'Signal preset' },
     { id: 'channel-status', label: 'Channel status' },
     { id: 'announcements', label: 'Announcements' },
     { id: 'bot-profile', label: 'Bot profile' },
@@ -19,7 +19,7 @@ export const guildTabs = [
 const editors = {
     'dj-configs': 'openDjConfigEditor',
     pools: 'openPoolEditor',
-    'signal-profiles': 'openProfileEditor',
+    'signal-presets': 'openPresetEditor',
 };
 
 function parseRoute(hash) {
@@ -82,7 +82,7 @@ export function router() {
 
             if (this.route.view !== 'edit') {
                 if (previous.name !== this.route.name || previous.tab !== this.route.tab) {
-                    Object.assign(this, playForms(), trackForms(), signalProfileForms(), botProfileForms());
+                    Object.assign(this, playForms(), trackForms(), signalPresetForms(), botProfileForms());
                     this.enterGuildTab();
                 }
                 if (

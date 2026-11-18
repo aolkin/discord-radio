@@ -4,6 +4,6 @@ pub mod dj;
 pub mod dsp;
 pub mod duration;
 pub mod helpers;
+pub mod presets;
 pub mod processing;
-pub mod profiles;
 pub mod tracks;

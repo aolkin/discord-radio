@@ -11,7 +11,7 @@ The DSP system processes audio in real-time to simulate radio signal effects lik
 ```
 Audio Files (Symphonia) → Custom Mixer → DSP Effects Chain → Songbird → Discord
                               ↑               ↑
-                         Track Manager   Profile System
+                         Track Manager   Preset System
 ```
 
 ## Component Details
@@ -61,7 +61,7 @@ Noise levels use perceptual (dB-based) scaling for natural-sounding volume contr
   - `1.0` = reference level (0dB, amplitude = 1.0)
   - `2.0` = boosted (+18dB, amplitude ≈ 7.9)
 - Internally converted to amplitude using: `amplitude = 10^(dB/20)`
-- Profile transitions interpolate linearly in the perceptual (0.0-2.0) space. The dB-per-unit slope changes at 1.0, so a transition is linear in dB only while both levels stay on the same side of it
+- Preset transitions interpolate linearly in the perceptual (0.0-2.0) space. The dB-per-unit slope changes at 1.0, so a transition is linear in dB only while both levels stay on the same side of it
 
 #### Modulation (`audio/dsp/modulation.rs`)
 
@@ -71,13 +71,13 @@ Noise levels use perceptual (dB-based) scaling for natural-sounding volume contr
 - **Bitcrusher**: Reduces sample bit depth
 - **DropoutGenerator**: Random silence periods
 
-### 5. Profile System (`audio/profiles.rs`)
+### 5. Preset System (`audio/presets.rs`)
 
 JSON-based effect presets with smooth transitions.
 
-- **SignalProfile**: Complete effect parameter set
-- **ProfileManager**: Loads profiles from the `SIGNAL_PROFILES_PATH` directory (default `signal_profiles/`; the value must end with a slash), under both the content root and the object storage bucket root
-- **Profile Interpolation**: Smooth transitions between profiles
+- **SignalParameters**: Complete effect parameter set
+- **PresetManager**: Loads presets from the `SIGNAL_PRESETS_PATH` directory (default `signal_presets/`; the value must end with a slash), under both the content root and the object storage bucket root
+- **Preset Interpolation**: Smooth transitions between presets
 
 ### 6. Audio Processing Thread (`audio/processing_thread.rs`)
 
@@ -85,7 +85,7 @@ Continuous audio generation at 48kHz stereo, 20ms frames (960 samples).
 
 - **AudioProcessor**: Owns mixer and DSP chain
 - **ProcessingThread**: Async loop generating frames
-- **ProfileTransition**: Smooth parameter interpolation
+- **SignalParametersTransition**: Smooth parameter interpolation
 
 ### 7. Songbird Integration (`audio/raw_adapter.rs`)
 
@@ -94,11 +94,11 @@ Bridges the DSP output to Songbird's voice system.
 - **ProcessedAudioAdapter**: Manages processor lifecycle
 - **State Integration**: Per-guild processors in BotState
 
-## Signal Profiles
+## Signal Presets
 
-The bot ships seven default profiles, embedded from `src/audio/default_profiles/`: `clear_signal`, `strong_signal`, `fading_signal`, `weak_signal`, `noise_pink`, `noise_brown` and `noise_white`. Defaults are read-only: saving over one returns 409 (use Save as), and a stored file with a default's name is skipped with a warning.
+The bot ships seven default presets, embedded from `src/audio/default_presets/`: `clear_signal`, `strong_signal`, `fading_signal`, `weak_signal`, `noise_pink`, `noise_brown` and `noise_white`. Defaults are read-only: saving over one returns 409 (use Save as), and a stored file with a default's name is skipped with a warning.
 
-More sample presets are in `examples/audio_profiles/`. The bot loads profiles from the `SIGNAL_PROFILES_PATH` directory (default `signal_profiles/`, under the content root); it does not load them from `examples/`.
+More sample presets are in `examples/signal_presets/`. The bot loads presets from the `SIGNAL_PRESETS_PATH` directory (default `signal_presets/`, under the content root); it does not load them from `examples/`.
 
 ### `clear_signal`
 
@@ -132,19 +132,19 @@ More sample presets are in `examples/audio_profiles/`. The bot loads profiles fr
 ### Discord Command
 
 ```
-/dj signal_profile profile:clear_signal fade_duration:2.0
+/dj signal_preset preset:clear_signal fade_duration:2.0
 ```
 
 **Parameters:**
 
-- `profile`: Profile name (for example clear_signal, strong_signal, fading_signal, weak_signal)
+- `preset`: Preset name (for example clear_signal, strong_signal, fading_signal, weak_signal)
 - `fade_duration`: Transition time in seconds (default: 2.0)
 
-### Profile Format
+### Preset Format
 
 ```json
 {
-  "name": "profile_name",
+  "name": "preset_name",
   "bandpass_low": 500.0,
   "bandpass_high": 5000.0,
   "white_noise_level": 0.3,
@@ -184,10 +184,10 @@ This provides natural-feeling volume control matching human loudness perception.
 ### ✅ Completed
 
 - All DSP components implemented and compiling
-- Profile system with JSON loading
-- Command interface (`/dj signal_profile`)
+- Preset system with JSON loading
+- Command interface (`/dj signal_preset`)
 - State management in BotState
-- Profile switching with smooth transitions
+- Preset switching with smooth transitions
 
 ## Performance Considerations
 

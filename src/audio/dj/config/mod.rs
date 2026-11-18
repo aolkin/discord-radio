@@ -16,20 +16,20 @@ use field_trait::field_trait_impl;
 use rand::RngExt;
 use rand::seq::IndexedRandom;
 use serde::{Deserialize, Serialize};
-use signal_profiles::SignalProfiles;
+use signal_presets::SignalPresets;
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
 pub mod registry;
-pub mod signal_profiles;
+pub mod signal_presets;
 
 #[derive(Deserialize, Serialize, Debug, Default)]
 pub struct DJConfig {
     pub name: String,
     pub pools: BTreeMap<String, PoolConfig>,
-    pub signal_profiles: SignalProfiles,
+    pub signal_presets: SignalPresets,
     pub channel_statuses: ChannelStatuses,
 }
 
@@ -93,7 +93,7 @@ pub struct SegmentDefaults {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hex_config: Option<HexMessageDefaults>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub signal_profile: Option<String>,
+    pub signal_preset: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub channel_status: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -113,9 +113,9 @@ impl SegmentDefaults {
 
     pub fn playback_config(&self, entry: EntryPlaybackConfig) -> CommonSegmentPlaybackConfig {
         CommonSegmentPlaybackConfig {
-            signal_profile: entry
-                .signal_profile
-                .or_else(|| self.signal_profile.clone())
+            signal_preset: entry
+                .signal_preset
+                .or_else(|| self.signal_preset.clone())
                 .map(Into::into),
             channel_status: entry.channel_status.or_else(|| self.channel_status.clone()),
             announcement: self
@@ -130,10 +130,10 @@ impl SegmentDefaults {
                 .hex_config
                 .clone()
                 .or_else(|| fallback.hex_config.clone()),
-            signal_profile: self
-                .signal_profile
+            signal_preset: self
+                .signal_preset
                 .clone()
-                .or_else(|| fallback.signal_profile.clone()),
+                .or_else(|| fallback.signal_preset.clone()),
             channel_status: self
                 .channel_status
                 .clone()
@@ -203,7 +203,7 @@ impl PoolEntry {
             )
             .with_context(|| format!("hex message {:?}", message.text))?,
             PoolEntry::Noise(noise) => {
-                let context = || format!("noise period {:?}", noise.playback.signal_profile);
+                let context = || format!("noise period {:?}", noise.playback.signal_preset);
                 noise.duration.validate(context)?;
                 if let Some(seconds) = noise.fade_duration_seconds {
                     ensure_seconds(seconds, context)?;
@@ -312,12 +312,12 @@ impl RegistryEntry for DJConfig {
 
     /// Rejects values that would make the DJ panic when it picks them.
     fn validate(&self) -> anyhow::Result<()> {
-        for profile in self.signal_profiles.entries.iter() {
-            let context = || format!("signal profile {:?}", profile.signal_profile);
-            if let Some(seconds) = profile.fade_duration_seconds {
+        for preset in self.signal_presets.entries.iter() {
+            let context = || format!("signal preset {:?}", preset.signal_preset);
+            if let Some(seconds) = preset.fade_duration_seconds {
                 ensure_seconds(seconds, context)?;
             }
-            profile.duration.validate(context)?;
+            preset.duration.validate(context)?;
         }
         for status in self.channel_statuses.entries.iter() {
             status
@@ -330,7 +330,7 @@ impl RegistryEntry for DJConfig {
 
 #[derive(Deserialize, Serialize, Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct EntryPlaybackConfig {
-    pub signal_profile: Option<String>,
+    pub signal_preset: Option<String>,
     pub channel_status: Option<String>,
     pub announcement: Option<String>,
 }

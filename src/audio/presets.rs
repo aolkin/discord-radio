@@ -2,7 +2,7 @@ use crate::bucket::registry::{JsonRegistry, RegistryEntry};
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct SignalProfile {
+pub struct SignalParameters {
     pub name: String,
 
     pub bandpass_low: f32,
@@ -29,7 +29,7 @@ pub struct SignalProfile {
     pub dropout_duration_ms: (f32, f32),
 }
 
-impl SignalProfile {
+impl SignalParameters {
     pub fn interpolate(&self, other: &Self, t: f32) -> Self {
         let t = t.clamp(0.0, 1.0);
         let inv_t = 1.0 - t;
@@ -63,16 +63,16 @@ impl SignalProfile {
     }
 }
 
-impl RegistryEntry for SignalProfile {
-    const KIND: &'static str = "signal profile";
+impl RegistryEntry for SignalParameters {
+    const KIND: &'static str = "signal preset";
     const DEFAULTS: &'static [&'static str] = &[
-        include_str!("default_profiles/clear_signal.json"),
-        include_str!("default_profiles/strong_signal.json"),
-        include_str!("default_profiles/fading_signal.json"),
-        include_str!("default_profiles/weak_signal.json"),
-        include_str!("default_profiles/noise_pink.json"),
-        include_str!("default_profiles/noise_brown.json"),
-        include_str!("default_profiles/noise_white.json"),
+        include_str!("default_presets/clear_signal.json"),
+        include_str!("default_presets/strong_signal.json"),
+        include_str!("default_presets/fading_signal.json"),
+        include_str!("default_presets/weak_signal.json"),
+        include_str!("default_presets/noise_pink.json"),
+        include_str!("default_presets/noise_brown.json"),
+        include_str!("default_presets/noise_white.json"),
     ];
 
     fn name(&self) -> &str {
@@ -80,11 +80,11 @@ impl RegistryEntry for SignalProfile {
     }
 }
 
-impl JsonRegistry<SignalProfile> {
-    pub fn default_profile(&self) -> SignalProfile {
+impl JsonRegistry<SignalParameters> {
+    pub fn default_preset(&self) -> SignalParameters {
         (*self
             .get("clear_signal")
-            .expect("clear_signal is a default profile"))
+            .expect("clear_signal is a default preset"))
         .clone()
     }
 }

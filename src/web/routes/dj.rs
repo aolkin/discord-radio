@@ -1,6 +1,6 @@
 use crate::audio::dj::manager::{
     ChannelStatusRequest, ConfigureRequest, DJCommand, DjBusy, HexMessageRequest, IdleRequest,
-    ProfileNotFound, SignalProfileRequest, TrackRequest, ensure_pool,
+    PresetNotFound, SignalPresetRequest, TrackRequest, ensure_pool,
 };
 use crate::state::{Data, GuildInactive};
 use crate::web::error::ApiError;
@@ -53,7 +53,7 @@ fn send_dj_command(
 }
 
 fn invalid_request(error: anyhow::Error) -> ApiError {
-    let status = if error.is::<ProfileNotFound>() {
+    let status = if error.is::<PresetNotFound>() {
         StatusCode::NOT_FOUND
     } else {
         StatusCode::BAD_REQUEST
@@ -103,10 +103,10 @@ pub async fn configure_dj(
     send_dj_command(&bot_state, guild_id, command)
 }
 
-pub async fn set_dj_profile(
+pub async fn set_dj_preset(
     State(bot_state): State<Data>,
     Path(guild_id): Path<GuildId>,
-    AxumJson(request): AxumJson<SignalProfileRequest>,
+    AxumJson(request): AxumJson<SignalPresetRequest>,
 ) -> Result<StatusCode, ApiError> {
     let command = request.into_command(bot_state).map_err(invalid_request)?;
     send_dj_command(&bot_state, guild_id, command)

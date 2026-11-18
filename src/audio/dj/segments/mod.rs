@@ -10,7 +10,7 @@ pub use noise::{NoiseEntry, NoiseSegment};
 pub use track::{TrackEntry, TrackSegment};
 
 use crate::audio::dj::announcement::Announcement;
-use crate::audio::dj::signal_profile::SignalProfilePlayback;
+use crate::audio::dj::signal_preset::SignalPresetPlayback;
 use crate::audio::processing::mixer::{TrackCommand, TrackHandle};
 use crate::audio::processing::processor::ProcessorRef;
 use crate::bucket::FileResolver;
@@ -53,7 +53,7 @@ impl<'a> SegmentCtx<'a> {
 }
 
 pub trait SegmentPlaybackConfig {
-    fn signal_profile(&self) -> Option<SignalProfilePlayback> {
+    fn signal_preset(&self) -> Option<SignalPresetPlayback> {
         None
     }
 
@@ -97,14 +97,14 @@ pub trait Segment: Send + Sync + Debug + SegmentPlaybackConfig {
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct CommonSegmentPlaybackConfig {
-    pub signal_profile: Option<SignalProfilePlayback>,
+    pub signal_preset: Option<SignalPresetPlayback>,
     pub channel_status: Option<String>,
     pub announcement: Option<Announcement>,
 }
 
 impl<T: Deref<Target = CommonSegmentPlaybackConfig>> SegmentPlaybackConfig for T {
-    fn signal_profile(&self) -> Option<SignalProfilePlayback> {
-        self.deref().signal_profile.to_owned()
+    fn signal_preset(&self) -> Option<SignalPresetPlayback> {
+        self.deref().signal_preset.to_owned()
     }
 
     fn channel_status(&self) -> Option<String> {

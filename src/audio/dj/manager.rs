@@ -1,5 +1,5 @@
 use crate::audio::dj::config::{LoadedConfig, optional_seconds};
-use crate::audio::dj::signal_profile::{SignalProfilePlayback, default_profile_fade};
+use crate::audio::dj::signal_preset::{SignalPresetPlayback, default_preset_fade};
 use crate::audio::dj::state_machine::{ChannelStatus, DJState, DJStateMachine};
 use crate::audio::dj::tiered::{ConfigurableTier, TimedValue};
 use crate::audio::processing::processor::ProcessorRef;
@@ -28,13 +28,13 @@ pub enum DJCommand {
     SetConfig(watch::Receiver<Arc<LoadedConfig>>),
     AddAnnouncementChannel(ChannelId),
     RemoveAnnouncementChannel(ChannelId),
-    SetSignalProfile(ConfigurableTier, Option<TimedValue<SignalProfilePlayback>>),
+    SetSignalPreset(ConfigurableTier, Option<TimedValue<SignalPresetPlayback>>),
     SetChannelStatus(ConfigurableTier, Option<TimedValue<ChannelStatus>>),
 }
 
 #[derive(Debug, thiserror::Error)]
-#[error("signal profile {0:?} not found")]
-pub struct ProfileNotFound(pub String);
+#[error("signal preset {0:?} not found")]
+pub struct PresetNotFound(pub String);
 
 pub fn ensure_pool(bot_state: Data, pool: Option<&str>) -> anyhow::Result<()> {
     if let Some(pool) = pool {
@@ -43,11 +43,11 @@ pub fn ensure_pool(bot_state: Data, pool: Option<&str>) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn ensure_profile(bot_state: Data, profile: Option<&str>) -> anyhow::Result<()> {
-    if let Some(profile) = profile
-        && bot_state.profile_manager.get(profile).is_none()
+pub fn ensure_preset(bot_state: Data, preset: Option<&str>) -> anyhow::Result<()> {
+    if let Some(preset) = preset
+        && bot_state.preset_manager.get(preset).is_none()
     {
-        return Err(ProfileNotFound(profile.to_string()).into());
+        return Err(PresetNotFound(preset.to_string()).into());
     }
     Ok(())
 }
@@ -85,18 +85,18 @@ impl TrackRequest {
     }
 }
 
-/// An idle segment for the DJ to enter, forcing `noise_profile` when set.
+/// An idle segment for the DJ to enter, forcing `signal_preset` when set.
 /// `duration` is in seconds; without it the segment never ends on its own.
 #[derive(Debug, Deserialize)]
 pub struct IdleRequest {
-    pub noise_profile: Option<String>,
+    pub signal_preset: Option<String>,
     pub duration: Option<f32>,
 }
 
 impl IdleRequest {
     pub fn validate(&self, bot_state: Data) -> anyhow::Result<()> {
         optional_seconds(self.duration, "duration")?;
-        ensure_profile(bot_state, self.noise_profile.as_deref())
+        ensure_preset(bot_state, self.signal_preset.as_deref())
     }
 }
 
@@ -112,25 +112,25 @@ impl ConfigureRequest {
     }
 }
 
-/// Sets (or, with `profile` unset, clears) the signal profile of `tier`.
+/// Sets (or, with `preset` unset, clears) the signal preset of `tier`.
 /// `fade_duration` and `duration` are in seconds and apply only when setting.
 #[derive(Debug, Deserialize)]
-pub struct SignalProfileRequest {
+pub struct SignalPresetRequest {
     pub tier: ConfigurableTier,
-    pub profile: Option<String>,
+    pub preset: Option<String>,
     pub fade_duration: Option<f32>,
     pub duration: Option<f32>,
 }
 
-impl SignalProfileRequest {
+impl SignalPresetRequest {
     pub fn into_command(self, bot_state: Data) -> anyhow::Result<DJCommand> {
-        ensure_profile(bot_state, self.profile.as_deref())?;
+        ensure_preset(bot_state, self.preset.as_deref())?;
         let fade = optional_seconds(self.fade_duration, "fade_duration")?
-            .or(default_profile_fade(self.tier));
+            .or(default_preset_fade(self.tier));
         let duration = optional_seconds(self.duration, "duration")?;
-        let playback = self.profile.map(|name| {
+        let playback = self.preset.map(|name| {
             TimedValue::new(
-                SignalProfilePlayback {
+                SignalPresetPlayback {
                     name,
                     fade_in_duration: fade,
                     fade_out_duration: fade,
@@ -138,7 +138,7 @@ impl SignalProfileRequest {
                 duration,
             )
         });
-        Ok(DJCommand::SetSignalProfile(self.tier, playback))
+        Ok(DJCommand::SetSignalPreset(self.tier, playback))
     }
 }
 

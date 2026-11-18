@@ -2,31 +2,31 @@
   "name": "noise",
   "entries": [
     {
-      "signal_profile": "noise_pink",
+      "signal_preset": "noise_pink",
       "min_duration_seconds": 0.5,
       "max_duration_seconds": 1.5,
       "weight": 20
     },
     {
-      "signal_profile": "noise_pink",
+      "signal_preset": "noise_pink",
       "min_duration_seconds": 1.0,
       "max_duration_seconds": 3.0,
       "weight": 5
     },
     {
-      "signal_profile": "noise_brown",
+      "signal_preset": "noise_brown",
       "min_duration_seconds": 2.0,
       "max_duration_seconds": 4.0,
       "weight": 2
     },
     {
-      "signal_profile": "noise_brown",
+      "signal_preset": "noise_brown",
       "min_duration_seconds": 0.5,
       "max_duration_seconds": 1.5,
       "weight": 8
     },
     {
-      "signal_profile": "noise_white",
+      "signal_preset": "noise_white",
       "min_duration_seconds": 0.5,
       "max_duration_seconds": 1.0,
       "weight": 2

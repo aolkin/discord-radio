@@ -2,14 +2,14 @@ import { apiRequest } from './api.js';
 import { blankRow, convertObject, fieldFromServer, fieldToServer } from './form-fields.js';
 import { registryEditor } from './registry-editor.js';
 
-export const signalProfileForms = () => ({
-    signalProfileSetting: 'manual',
-    signalProfileName: '',
-    signalProfileFade: null,
-    signalProfileDuration: null,
+export const signalPresetForms = () => ({
+    signalPresetSetting: 'manual',
+    signalPresetName: '',
+    signalPresetFade: null,
+    signalPresetDuration: null,
 });
 
-const profileFields = [
+const presetFields = [
     { key: 'bandpass_low', label: 'Bandpass Low (Hz)', type: 'number', step: 'any', min: 0, default: 20 },
     { key: 'bandpass_high', label: 'Bandpass High (Hz)', type: 'number', step: 'any', min: 0, default: 20000 },
     { key: 'white_noise_level', label: 'White Noise Level (0-2)', type: 'number', step: 'any', min: 0, max: 2 },
@@ -31,79 +31,79 @@ const dropoutFields = [
 
 function blocks(form) {
     return [
-        { row: form, fields: profileFields, path: [] },
+        { row: form, fields: presetFields, path: [] },
         { row: form.dropout_duration_ms, fields: dropoutFields, path: ['dropout_duration_ms'] },
     ];
 }
 
-function toForm(name, profile) {
+function toForm(name, preset) {
     return {
         name,
-        ...convertObject(profileFields, profile, fieldFromServer),
-        dropout_duration_ms: [...profile.dropout_duration_ms],
+        ...convertObject(presetFields, preset, fieldFromServer),
+        dropout_duration_ms: [...preset.dropout_duration_ms],
     };
 }
 
 function toBody(form) {
     return {
-        ...convertObject(profileFields, form, fieldToServer),
+        ...convertObject(presetFields, form, fieldToServer),
         dropout_duration_ms: form.dropout_duration_ms,
     };
 }
 
 function blankForm() {
-    return { name: '', ...blankRow(profileFields), dropout_duration_ms: [0, 0] };
+    return { name: '', ...blankRow(presetFields), dropout_duration_ms: [0, 0] };
 }
 
-const profileEditor = registryEditor({
-    path: '/api/profiles',
-    prefix: 'profile',
+const presetEditor = registryEditor({
+    path: '/api/signal-presets',
+    prefix: 'preset',
     flagsDefaults: true,
-    nameInput: 'profile-editor-name',
-    list: 'profiles',
-    kind: 'signal-profiles',
-    label: 'signal profile',
+    nameInput: 'preset-editor-name',
+    list: 'presets',
+    kind: 'signal-presets',
+    label: 'signal preset',
     toForm,
     toBody,
     blankForm,
     blocks,
 });
 
-export function signalProfiles() {
+export function signalPresets() {
     return {
-        ...profileEditor.state(),
-        ...profileEditor.methods,
-        ...signalProfileForms(),
-        signalProfileSaving: false,
-        profileFieldRows() {
-            return blocks(this.profileForm).flatMap(({ row, fields, path }) =>
+        ...presetEditor.state(),
+        ...presetEditor.methods,
+        ...signalPresetForms(),
+        signalPresetSaving: false,
+        presetFieldRows() {
+            return blocks(this.presetForm).flatMap(({ row, fields, path }) =>
                 fields.map((field) => ({ row, field, path: [...path, field.key] })),
             );
         },
 
-        async changeSignalProfile() {
+        async changeSignalPreset() {
             const body = {
-                tier: this.signalProfileSetting,
-                profile: this.signalProfileName || null,
+                tier: this.signalPresetSetting,
+                preset: this.signalPresetName || null,
             };
 
-            if (body.profile && this.signalProfileFade !== null && this.signalProfileFade !== '') {
-                body.fade_duration = Number.parseFloat(this.signalProfileFade);
+            if (body.preset && this.signalPresetFade !== null && this.signalPresetFade !== '') {
+                body.fade_duration = Number.parseFloat(this.signalPresetFade);
             }
-            if (body.profile && this.signalProfileDuration !== null && this.signalProfileDuration !== '') {
-                body.duration = Number.parseFloat(this.signalProfileDuration);
+            if (body.preset && this.signalPresetDuration !== null && this.signalPresetDuration !== '') {
+                body.duration = Number.parseFloat(this.signalPresetDuration);
             }
 
             await this.runAction({
-                saving: 'signalProfileSaving',
-                label: 'changing signal profile',
+                saving: 'signalPresetSaving',
+                label: 'changing signal preset',
                 request: () =>
-                    apiRequest(`/api/guilds/${this.route.name}/dj/profile`, {
+                    apiRequest(`/api/guilds/${this.route.name}/dj/signal-preset`, {
                         method: 'POST',
                         body,
                     }),
-                success: 'Signal profile changed successfully!',
-                failure: 'Failed to change signal profile',
+                success: 'Signal preset changed successfully!',
+                failure: 'Failed to change signal preset',
             });
         },
     };

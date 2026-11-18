@@ -2,23 +2,23 @@ use crate::audio::dj::tiered::ConfigurableTier;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-pub const DEFAULT_PROFILE_FADE: Duration = Duration::from_secs(2);
+pub const DEFAULT_PRESET_FADE: Duration = Duration::from_secs(2);
 
-pub fn default_profile_fade(tier: ConfigurableTier) -> Option<Duration> {
+pub fn default_preset_fade(tier: ConfigurableTier) -> Option<Duration> {
     match tier {
         ConfigurableTier::Manual => None,
-        ConfigurableTier::Override => Some(DEFAULT_PROFILE_FADE),
+        ConfigurableTier::Override => Some(DEFAULT_PRESET_FADE),
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SignalProfilePlayback {
+pub struct SignalPresetPlayback {
     pub name: String,
     pub fade_in_duration: Option<Duration>,
     pub fade_out_duration: Option<Duration>,
 }
 
-impl SignalProfilePlayback {
+impl SignalPresetPlayback {
     pub fn fade_in(&self) -> Duration {
         self.fade_in_duration
             .unwrap_or_else(|| Duration::from_secs(1))
@@ -30,7 +30,7 @@ impl SignalProfilePlayback {
     }
 }
 
-impl From<String> for SignalProfilePlayback {
+impl From<String> for SignalPresetPlayback {
     fn from(name: String) -> Self {
         Self {
             name,
@@ -40,7 +40,7 @@ impl From<String> for SignalProfilePlayback {
     }
 }
 
-impl<T> From<&T> for SignalProfilePlayback
+impl<T> From<&T> for SignalPresetPlayback
 where
     T: Clone + Into<String>,
 {

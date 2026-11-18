@@ -211,8 +211,8 @@ export function pools() {
             return kinds[entry.kind][column].map((key) => entryFields.find((field) => field.key === key));
         },
 
-        poolProfileOptions(value) {
-            return value === '' || this.profiles.includes(value) ? this.profiles : [...this.profiles, value];
+        poolPresetOptions(value) {
+            return value === '' || this.presets.includes(value) ? this.presets : [...this.presets, value];
         },
 
         poolEntryName: entryName,
