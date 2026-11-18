@@ -1280,11 +1280,20 @@ fieldset.form-group {
     align-items: center;
 }
 
-.weight-control .form-input {
+.slider-control {
+    display: grid;
+    grid-template-columns: 6em minmax(48px, 1fr);
+    gap: var(--space-2);
+    align-items: center;
+}
+
+.weight-control .form-input,
+.slider-control .form-input {
     min-width: 0;
 }
 
-.weight-control input[type="range"] {
+.weight-control input[type="range"],
+.slider-control input[type="range"] {
     width: 100%;
     accent-color: var(--color-primary);
 }

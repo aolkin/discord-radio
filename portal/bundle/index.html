@@ -462,18 +462,31 @@
                                             :for="'preset-field-' + item.path.join('-')"
                                             x-text="item.field.label"
                                         ></label>
-                                        <input
-                                            :id="'preset-field-' + item.path.join('-')"
-                                            type="number"
-                                            class="form-input"
-                                            x-model.number="item.row[item.field.key]"
-                                            :step="item.field.step"
-                                            :min="item.field.min"
-                                            :max="item.field.max"
-                                            :required="!item.field.optional"
-                                            :placeholder="item.field.optional ? 'Off' : ''"
-                                            :aria-invalid="fieldInvalid(item.field, item.row[item.field.key])"
-                                        >
+                                        <div :class="item.field.slider && 'slider-control'">
+                                            <input
+                                                :id="'preset-field-' + item.path.join('-')"
+                                                type="number"
+                                                class="form-input"
+                                                x-model.number="item.row[item.field.key]"
+                                                :step="item.field.step"
+                                                :min="item.field.min"
+                                                :max="item.field.max"
+                                                :required="!item.field.optional"
+                                                :placeholder="item.field.optional ? 'Off' : ''"
+                                                :aria-invalid="fieldInvalid(item.field, item.row[item.field.key])"
+                                            >
+                                            <template x-if="item.field.slider">
+                                                <input
+                                                    type="range"
+                                                    min="0"
+                                                    max="1000"
+                                                    step="1"
+                                                    :aria-label="item.field.label + ' slider'"
+                                                    :value="sliderPosition(item.field, item.row[item.field.key])"
+                                                    @input="item.row[item.field.key] = sliderValue(item.field, Number($event.target.value))"
+                                                >
+                                            </template>
+                                        </div>
                                         <span
                                             class="field-was"
                                             x-show="isChanged('signal-presets', item.path)"
