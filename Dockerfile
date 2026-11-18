@@ -6,11 +6,10 @@ WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY crates/field-trait/Cargo.toml crates/field-trait/Cargo.toml
 COPY crates/js-bundler/Cargo.toml crates/js-bundler/Cargo.toml
-COPY docker/stub-main.rs docker/stub-main.rs
 # Build dependencies (including build-dependencies) against stub sources so this layer is reused until Cargo.toml or Cargo.lock changes.
 RUN mkdir -p src crates/field-trait/src crates/js-bundler/src \
-    && cp docker/stub-main.rs src/main.rs \
-    && cp docker/stub-main.rs build.rs \
+    && echo 'fn main() {}' > src/main.rs \
+    && echo 'fn main() {}' > build.rs \
     && touch crates/field-trait/src/lib.rs crates/js-bundler/src/lib.rs \
     && cargo build --release --locked
 ARG GITHUB_RUN_NUMBER=dev

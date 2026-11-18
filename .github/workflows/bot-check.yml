@@ -27,7 +27,6 @@ jobs:
           filters: |
             bot:
               - Dockerfile
-              - docker/**
               - Cargo.toml
               - Cargo.lock
               - build.rs
