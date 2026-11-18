@@ -41,19 +41,16 @@ fn main() {
     fs::write(out_dir.join("index.js"), &js).expect("writing the bundled JavaScript");
 
     let mut assets = vec![("index.js".to_string(), content_hash(js.as_bytes()))];
-    let mut static_names: Vec<String> = fs::read_dir(&static_dir)
+    for entry in fs::read_dir(&static_dir)
         .unwrap_or_else(|e| panic!("listing {}: {e}", static_dir.display()))
-        .map(|entry| entry.expect("reading a static directory entry").path())
-        .filter(|path| {
-            path.extension()
-                .is_some_and(|ext| ext == "js" || ext == "css" || ext == "png")
-        })
-        .filter_map(|path| Some(path.file_name()?.to_str()?.to_string()))
-        .collect();
-    static_names.sort();
-    for name in static_names {
-        let hash = content_hash(&read(&static_dir.join(&name)));
-        assets.push((name, hash));
+    {
+        let path = entry.expect("reading a static directory entry").path();
+        let hashed = path
+            .extension()
+            .is_some_and(|ext| ext == "js" || ext == "css" || ext == "png");
+        if let (true, Some(name)) = (hashed, path.file_name().and_then(|n| n.to_str())) {
+            assets.push((name.to_string(), content_hash(&read(&path))));
+        }
     }
 
     let mut html = String::from_utf8(read(&bundle_dir.join("index.html")))
