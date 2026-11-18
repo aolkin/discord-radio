@@ -27,6 +27,7 @@ jobs:
           filters: |
             image:
               - Dockerfile
+              - docker/**
               - Cargo.toml
               - '**/Cargo.toml'
               - Cargo.lock
