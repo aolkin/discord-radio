@@ -68,7 +68,7 @@
                     >
                         <button type="button" class="strip-open" @click="openGuild(guild.guild_id)">
                             <span class="strip-name" x-text="guildName(guild.guild_id)"></span>
-                            <span class="strip-state" x-text="guild.dj_state.state_type"></span>
+                            <span class="strip-state" x-text="guild.dj_state.segment_type"></span>
                             <span
                                 class="strip-state"
                                 x-show="guild.dj_state.progress"
@@ -1637,7 +1637,7 @@
                             <div class="section">
                                 <div class="section-title">DJ State</div>
                                 <div class="dj-state">
-                                    <div class="dj-type" x-text="guild.dj_state.state_type"></div>
+                                    <div class="dj-type" x-text="guild.dj_state.segment_type"></div>
                                     <div class="dj-details" x-text="guild.dj_state.details"></div>
                                     <div
                                         class="dj-details"

@@ -13,7 +13,7 @@ use serenity::model::id::{ChannelId, GuildId};
 
 #[derive(Debug, Deserialize)]
 pub struct AdvanceDjStateRequest {
-    pub state_type: Option<String>,
+    pub pool: Option<String>,
 }
 
 pub async fn advance_dj_state(
@@ -21,12 +21,8 @@ pub async fn advance_dj_state(
     Path(guild_id): Path<GuildId>,
     AxumJson(request): AxumJson<AdvanceDjStateRequest>,
 ) -> Result<StatusCode, ApiError> {
-    ensure_pool(bot_state, request.state_type.as_deref()).map_err(invalid_request)?;
-    send_dj_command(
-        &bot_state,
-        guild_id,
-        DJCommand::ForceAdvance(request.state_type),
-    )
+    ensure_pool(bot_state, request.pool.as_deref()).map_err(invalid_request)?;
+    send_dj_command(&bot_state, guild_id, DJCommand::ForceAdvance(request.pool))
 }
 
 fn send_dj_command(

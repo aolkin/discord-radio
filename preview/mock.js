@@ -294,7 +294,7 @@
             return ok();
         }),
         guildRoute('POST', 'dj/advance',({ body }) => {
-            setMode(modes.includes(body.state_type) ? body.state_type : nextMode(store.radio.mode));
+            setMode(modes.includes(body.pool) ? body.pool : nextMode(store.radio.mode));
             return ok();
         }),
         guildRoute('POST', 'dj/idle', ({ body }) => {

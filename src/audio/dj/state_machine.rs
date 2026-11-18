@@ -444,7 +444,7 @@ impl DJStateMachine {
         pool_name: Option<&str>,
     ) -> anyhow::Result<()> {
         let next_state = self.next_segment(pool_name, bot_state).await?;
-        tracing::info!("DJ transitioning to state: {}", next_state.state_name());
+        tracing::info!("DJ transitioning to state: {}", next_state.typetag_name());
         self.enter_state(next_state, bot_state).await
     }
 
@@ -604,13 +604,18 @@ impl DJStateMachine {
 
     async fn enter_state(&self, segment: SegmentContainer, bot_state: &Data) -> anyhow::Result<()> {
         // Record the previous state before transitioning
-        let from_state = self.current_state().await.segment.state_name().to_string();
+        let from_state = self
+            .current_state()
+            .await
+            .segment
+            .typetag_name()
+            .to_string();
 
         self.cleanup_current_state().await;
 
         segment.enter(&self.segment_ctx()).await?;
 
-        let to_state = segment.state_name().to_string();
+        let to_state = segment.typetag_name().to_string();
         let mut state = self.state.write().await;
         state.segment = segment;
         state.apply_segment_playback();
@@ -630,7 +635,7 @@ impl DJStateMachine {
         if let Some(metrics) = crate::metrics::get() {
             metrics.record_dj_state_duration(
                 self.guild_id.get(),
-                segment.state_name(),
+                segment.typetag_name(),
                 segment.signal_profile().as_ref().map(|p| p.name.as_str()),
                 current.segment.started_at.elapsed().as_secs_f64(),
             );
@@ -703,7 +708,7 @@ impl DJStateMachine {
 
     async fn log_state_transition(&self, bot_state: &Data) {
         let state = self.state.read().await;
-        let event_type = state.segment.state_name().to_string();
+        let event_type = state.segment.typetag_name().to_string();
         let mut details = state.segment.loggable_properties();
         if let Some(pool) = state.segment.pool.as_deref()
             && let Some(details) = details.as_object_mut()

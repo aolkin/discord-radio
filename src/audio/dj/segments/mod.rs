@@ -67,7 +67,6 @@ pub trait SegmentPlaybackConfig {
 }
 
 pub struct StateDisplay {
-    pub name: &'static str,
     pub subject: Option<String>,
     pub total: Option<Duration>,
 }
@@ -93,7 +92,6 @@ pub trait Segment: Send + Sync + Debug + SegmentPlaybackConfig {
         serde_json::json!({})
     }
 
-    fn state_name(&self) -> &'static str;
     fn state_display(&self) -> StateDisplay;
 }
 

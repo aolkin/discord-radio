@@ -612,6 +612,7 @@ pub async fn status(ctx: Context<'_>) -> anyhow::Result<()> {
         format!("\nAnnouncement Channels: {}", mentions.join(", "))
     };
 
+    let kind = state.segment.typetag_name();
     let display = state.segment.state_display();
     let elapsed = state.segment.elapsed().as_secs();
     let time = match display.total {
@@ -619,8 +620,8 @@ pub async fn status(ctx: Context<'_>) -> anyhow::Result<()> {
         None => format!("{elapsed}s elapsed"),
     };
     let state_description = match display.subject {
-        Some(subject) => format!("{}: **{subject}** ({time})", display.name),
-        None => format!("{} ({time})", display.name),
+        Some(subject) => format!("{kind}: **{subject}** ({time})"),
+        None => format!("{kind} ({time})"),
     };
 
     let pool_info = match state.segment.pool.as_deref() {
