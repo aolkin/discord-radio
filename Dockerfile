@@ -3,20 +3,22 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends cmake \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
-COPY Cargo.toml Cargo.lock build.rs ./
+COPY Cargo.toml Cargo.lock ./
 COPY crates/field-trait/Cargo.toml crates/field-trait/Cargo.toml
-COPY crates/js-bundler crates/js-bundler
-COPY portal portal
-# Build dependencies against stub sources so this layer is reused until Cargo.toml or Cargo.lock changes.
-RUN mkdir -p src crates/field-trait/src \
+COPY crates/js-bundler/Cargo.toml crates/js-bundler/Cargo.toml
+# Build dependencies (including build-dependencies) against stub sources so this layer is reused until Cargo.toml or Cargo.lock changes.
+RUN mkdir -p src crates/field-trait/src crates/js-bundler/src \
     && echo 'fn main() {}' > src/main.rs \
-    && touch crates/field-trait/src/lib.rs \
+    && echo 'fn main() {}' > build.rs \
+    && touch crates/field-trait/src/lib.rs crates/js-bundler/src/lib.rs \
     && cargo build --release --locked
 ARG GITHUB_RUN_NUMBER=dev
 ARG GITHUB_SHA=unknown
+COPY build.rs build.rs
 COPY src src
 COPY crates crates
-RUN touch src/main.rs crates/field-trait/src/lib.rs \
+COPY portal portal
+RUN touch build.rs src/main.rs crates/field-trait/src/lib.rs crates/js-bundler/src/lib.rs \
     && cargo build --release --locked
 
 # The binary links glibc dynamically, so the runtime image needs a glibc base. TLS uses bundled root certificates, so no CA store is installed.
