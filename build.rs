@@ -41,10 +41,8 @@ fn main() {
     fs::write(out_dir.join("index.js"), &js).expect("writing the bundled JavaScript");
 
     let mut assets = vec![("index.js".to_string(), content_hash(js.as_bytes()))];
-    for entry in fs::read_dir(&static_dir)
-        .unwrap_or_else(|e| panic!("listing {}: {e}", static_dir.display()))
-    {
-        let path = entry.expect("reading a static directory entry").path();
+    for entry in fs::read_dir(&static_dir).unwrap() {
+        let path = entry.unwrap().path();
         let hashed = path
             .extension()
             .is_some_and(|ext| ext == "js" || ext == "css" || ext == "png");
