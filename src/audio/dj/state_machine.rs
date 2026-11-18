@@ -1,6 +1,6 @@
 use crate::audio::dj::announcement::Announcement;
 use crate::audio::dj::config::registry::DJConfigRegistry;
-use crate::audio::dj::config::signal_profiles::SignalProfileEntry;
+use crate::audio::dj::config::signal_presets::SignalPresetEntry;
 use crate::audio::dj::config::{
     AnnouncementEntry, ChannelStatusEntry, ConfiguredPool, DurationRange, EntryPlaybackConfig,
     LoadedConfig, Order, Playback, PoolEntry, SegmentDefaults,
@@ -13,7 +13,7 @@ use crate::audio::dj::segments::{
 };
 use crate::audio::dj::segments::{Completed, HexSegment, Segment, TrackSegment};
 use crate::audio::dj::serde::{ShiftBack, deser_instant, ser_instant};
-use crate::audio::dj::signal_profile::SignalProfilePlayback;
+use crate::audio::dj::signal_preset::SignalPresetPlayback;
 use crate::audio::dj::tiered::{TieredChange, TieredStateMachine, TieredValue, TimedValue};
 use crate::audio::dj::weighted_choice::WeightedSelector;
 use crate::audio::processing::processor::ProcessorRef;
@@ -86,7 +86,7 @@ pub enum ChannelStatus {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DJState {
     pub segment: SegmentContainer,
-    pub signal_profile: TieredStateMachine<SignalProfileEntry, SignalProfilePlayback>,
+    pub signal_preset: TieredStateMachine<SignalPresetEntry, SignalPresetPlayback>,
     pub channel_status: TieredStateMachine<ChannelStatusEntry, ChannelStatus>,
     pub announcement: TieredStateMachine<AnnouncementEntry, Option<Announcement>>,
     #[serde(default)]
@@ -107,7 +107,7 @@ impl Default for DJState {
     fn default() -> Self {
         Self {
             segment: NoiseSegment::quiet(Duration::from_secs(1)).into(),
-            signal_profile: TieredStateMachine::new(&SignalProfileEntry::default()),
+            signal_preset: TieredStateMachine::new(&SignalPresetEntry::default()),
             channel_status: TieredStateMachine::new(&ChannelStatusEntry::default()),
             announcement: TieredStateMachine::new(&AnnouncementEntry::default()),
             announcement_channels: BTreeSet::new(),
@@ -172,13 +172,13 @@ impl DJState {
 
     pub fn shift_back(&mut self, by: Duration) {
         self.segment.started_at.shift_back(by);
-        self.signal_profile.shift_back(by);
+        self.signal_preset.shift_back(by);
         self.channel_status.shift_back(by);
     }
 
     fn apply_segment_playback(&mut self) {
-        self.signal_profile
-            .update_forced(self.segment.signal_profile().map(TimedValue::permanent));
+        self.signal_preset
+            .update_forced(self.segment.signal_preset().map(TimedValue::permanent));
         self.channel_status.update_forced(
             self.segment
                 .channel_status()
@@ -191,8 +191,8 @@ impl DJState {
         );
     }
 
-    pub fn signal_profile(&self) -> TieredValue<SignalProfilePlayback> {
-        self.signal_profile.value()
+    pub fn signal_preset(&self) -> TieredValue<SignalPresetPlayback> {
+        self.signal_preset.value()
     }
 
     pub fn channel_status(&self) -> TieredValue<ChannelStatus> {
@@ -261,14 +261,14 @@ impl DJStateMachine {
         let bot_state = self.bot_state;
 
         'dj: loop {
-            self.update_profile().await;
+            self.update_preset().await;
             self.update_channel_status().await;
             self.update_announcement().await;
-            let (segment_changed, profile_due, channel_status_due) = {
+            let (segment_changed, preset_due, channel_status_due) = {
                 let state = self.current_state().await;
                 (
                     state.segment.changed(),
-                    state.signal_profile.completed(),
+                    state.signal_preset.completed(),
                     state.channel_status.completed(),
                 )
             };
@@ -290,7 +290,7 @@ impl DJStateMachine {
                     }
                 }
                 _ = segment_changed => self.state.write().await.apply_segment_playback(),
-                _ = profile_due =>self.state.write().await.signal_profile.advance(),
+                _ = preset_due =>self.state.write().await.signal_preset.advance(),
                 _ = channel_status_due => self.state.write().await.channel_status.advance(),
                 Ok(()) = config.changed() => {
                     let loaded = self.config.borrow_and_update().clone();
@@ -302,11 +302,11 @@ impl DJStateMachine {
         tracing::info!("DJ task terminated");
     }
 
-    async fn update_profile(&mut self) {
+    async fn update_preset(&mut self) {
         let Some(TieredChange {
             previous,
             current: target,
-        }) = self.state.write().await.signal_profile.changed()
+        }) = self.state.write().await.signal_preset.changed()
         else {
             return;
         };
@@ -316,12 +316,12 @@ impl DJStateMachine {
             Some(previous) => previous.value.fade_out(),
         };
         let processor_arc = self.audio_processor.clone();
-        if let Some(new_profile) = self.bot_state.profile_manager.get(&target.value.name) {
+        if let Some(new_preset) = self.bot_state.preset_manager.get(&target.value.name) {
             let mut processor = processor_arc.write().await;
-            processor.start_profile_transition((*new_profile).clone(), fade.as_secs_f32() * 1000.0);
+            processor.start_preset_transition((*new_preset).clone(), fade.as_secs_f32() * 1000.0);
 
             tracing::info!(
-                "DJ transitioning to profile '{}' over {:.1}s",
+                "DJ transitioning to preset '{}' over {:.1}s",
                 target.value.name,
                 fade.as_secs_f32(),
             );
@@ -515,7 +515,7 @@ impl DJStateMachine {
         state
             .entry_selectors
             .retain(|name, _| pools.iter().any(|pool| pool.file.name == *name));
-        state.signal_profile.set_pool(&config.signal_profiles);
+        state.signal_preset.set_pool(&config.signal_presets);
         state.channel_status.set_pool(&config.channel_statuses);
     }
 
@@ -579,20 +579,20 @@ impl DJStateMachine {
 
     pub async fn force_idle(&self, bot_state: &Data, request: IdleRequest) -> anyhow::Result<()> {
         tracing::info!(
-            "DJ force transitioning to idle with noise profile {:?} for {:?}s",
-            request.noise_profile,
+            "DJ force transitioning to idle with signal preset {:?} for {:?}s",
+            request.signal_preset,
             request.duration
         );
         let duration = request
             .duration
             .map(Duration::try_from_secs_f32)
             .transpose()?;
-        let next_state = match (request.noise_profile, duration) {
-            (Some(noise_profile), duration) => NoiseSegment::new(
+        let next_state = match (request.signal_preset, duration) {
+            (Some(signal_preset), duration) => NoiseSegment::new(
                 duration,
                 None,
                 CommonSegmentPlaybackConfig {
-                    signal_profile: Some(noise_profile.into()),
+                    signal_preset: Some(signal_preset.into()),
                     ..Default::default()
                 },
             ),
@@ -636,7 +636,7 @@ impl DJStateMachine {
             metrics.record_dj_state_duration(
                 self.guild_id.get(),
                 segment.typetag_name(),
-                segment.signal_profile().as_ref().map(|p| p.name.as_str()),
+                segment.signal_preset().as_ref().map(|p| p.name.as_str()),
                 current.segment.started_at.elapsed().as_secs_f64(),
             );
         }
@@ -687,12 +687,8 @@ impl DJStateMachine {
                     .remove(&channel);
                 Ok(())
             }
-            DJCommand::SetSignalProfile(tier, profile) => {
-                self.state
-                    .write()
-                    .await
-                    .signal_profile
-                    .update(tier, profile);
+            DJCommand::SetSignalPreset(tier, preset) => {
+                self.state.write().await.signal_preset.update(tier, preset);
                 Ok(())
             }
             DJCommand::SetChannelStatus(tier, status) => {
@@ -737,7 +733,7 @@ static DEFAULT_NOISE_PERIOD: LazyLock<NoiseEntry> = LazyLock::new(|| NoiseEntry 
     weight: 1,
     fade_duration_seconds: None,
     playback: EntryPlaybackConfig {
-        signal_profile: Some("default".to_string()),
+        signal_preset: Some("default".to_string()),
         ..Default::default()
     },
 });

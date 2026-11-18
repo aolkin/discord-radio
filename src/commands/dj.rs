@@ -1,6 +1,6 @@
 use crate::audio::dj::manager::{
     ChannelStatusRequest, ConfigureRequest, DJCommand, HexMessageRequest, IdleRequest,
-    SignalProfileRequest, ensure_pool,
+    SignalPresetRequest, ensure_pool,
 };
 use crate::audio::dj::state_machine::ChannelStatus;
 use crate::audio::dj::tiered::ConfigurableTier;
@@ -179,14 +179,14 @@ pub async fn track(
     Ok(())
 }
 
-/// Have the DJ go idle now, optionally playing a noise profile
+/// Have the DJ go idle now, optionally playing a signal preset
 #[poise::command(slash_command, guild_only)]
 #[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
 pub async fn idle(
     ctx: Context<'_>,
-    #[description = "Noise profile to play (default: none)"]
-    #[autocomplete = "autocomplete_profile"]
-    noise_profile: Option<String>,
+    #[description = "Signal preset to play (default: none)"]
+    #[autocomplete = "autocomplete_preset"]
+    signal_preset: Option<String>,
     #[description = "Seconds to stay idle (default: until the DJ is advanced)"] duration: Option<
         f32,
     >,
@@ -194,23 +194,23 @@ pub async fn idle(
     let guild_id = require_guild(ctx)?;
 
     tracing::info!(
-        "User {} executed dj idle with noise profile {:?}",
+        "User {} executed dj idle with signal preset {:?}",
         ctx.author().id,
-        noise_profile,
+        signal_preset,
     );
 
     ctx.defer_ephemeral().await?;
 
     let request = IdleRequest {
-        noise_profile: noise_profile.clone(),
+        signal_preset: signal_preset.clone(),
         duration,
     };
     request.validate(ctx.data())?;
 
     send_to_dj(ctx.data(), guild_id, DJCommand::ForceIdle(request))
         .context("Failed to make the DJ idle")?;
-    let what = match &noise_profile {
-        Some(profile) => format!("playing noise profile '{profile}'"),
+    let what = match &signal_preset {
+        Some(preset) => format!("playing signal preset '{preset}'"),
         None => "idle".to_string(),
     };
     let until = match duration {
@@ -268,15 +268,15 @@ async fn autocomplete_pool(ctx: Context<'_>, partial: &'_ str) -> CreateAutocomp
     autocomplete_response(pools)
 }
 
-async fn autocomplete_profile(ctx: Context<'_>, partial: &'_ str) -> CreateAutocompleteResponse {
-    let registry = &ctx.data().profile_manager;
-    let mut profiles: Vec<String> = registry
+async fn autocomplete_preset(ctx: Context<'_>, partial: &'_ str) -> CreateAutocompleteResponse {
+    let registry = &ctx.data().preset_manager;
+    let mut presets: Vec<String> = registry
         .list()
         .into_iter()
         .filter(|name| name.starts_with(partial))
         .collect();
-    profiles.sort();
-    profiles
+    presets.sort();
+    presets
         .into_iter()
         .fold(CreateAutocompleteResponse::new(), |response, name| {
             let label = if registry.is_default(&name) {
@@ -294,9 +294,9 @@ fn for_duration(duration: Option<f32>) -> String {
         .unwrap_or_default()
 }
 
-async fn set_dj_profile(
+async fn set_dj_preset(
     ctx: Context<'_>,
-    profile: Option<String>,
+    preset: Option<String>,
     fade_duration: Option<f32>,
     duration: Option<f32>,
     label: &str,
@@ -306,13 +306,13 @@ async fn set_dj_profile(
 
     let guild_id = require_guild(ctx)?;
 
-    let message = match &profile {
-        Some(profile) => format!("DJ {label} set to '{profile}'{}", for_duration(duration)),
+    let message = match &preset {
+        Some(preset) => format!("DJ {label} set to '{preset}'{}", for_duration(duration)),
         None => format!("DJ {label} cleared"),
     };
-    let request = SignalProfileRequest {
+    let request = SignalPresetRequest {
         tier,
-        profile,
+        preset,
         fade_duration,
         duration,
     };
@@ -331,25 +331,25 @@ fn tier_for(override_tier: Option<bool>) -> ConfigurableTier {
     }
 }
 
-/// Set or clear the DJ's signal profile (background by default, or the override that beats all others)
+/// Set or clear the DJ's signal preset (background by default, or the override that beats all others)
 #[poise::command(slash_command, guild_only)]
-pub async fn signal_profile(
+pub async fn signal_preset(
     ctx: Context<'_>,
-    #[description = "Profile name (omit to clear: background returns to rotation)"]
-    #[autocomplete = "autocomplete_profile"]
-    profile: Option<String>,
+    #[description = "Preset name (omit to clear: background returns to rotation)"]
+    #[autocomplete = "autocomplete_preset"]
+    preset: Option<String>,
     #[description = "Fade duration in seconds when setting (default: 2.0 for the override)"]
     fade_duration: Option<f32>,
-    #[description = "Seconds the profile lasts (default: until cleared)"] duration: Option<f32>,
-    #[description = "Set the override instead of the background profile (default: false)"]
+    #[description = "Seconds the preset lasts (default: until cleared)"] duration: Option<f32>,
+    #[description = "Set the override instead of the background preset (default: false)"]
     r#override: Option<bool>,
 ) -> anyhow::Result<()> {
     let tier = tier_for(r#override);
     let label = match tier {
-        ConfigurableTier::Override => "profile override",
-        _ => "background profile",
+        ConfigurableTier::Override => "preset override",
+        _ => "background preset",
     };
-    set_dj_profile(ctx, profile, fade_duration, duration, label, tier).await
+    set_dj_preset(ctx, preset, fade_duration, duration, label, tier).await
 }
 
 /// Set or clear the DJ's channel status (background by default, or the override that beats all others)
@@ -426,7 +426,7 @@ pub async fn channel_status(
         "status",
         "configure",
         "announcements",
-        "signal_profile",
+        "signal_preset",
         "channel_status"
     )
 )]
@@ -594,11 +594,11 @@ pub async fn status(ctx: Context<'_>) -> anyhow::Result<()> {
 
     let state = state_arc.read().await;
 
-    // Get current signal profile information
-    let profile = state.signal_profile();
-    let profile_info = format!(
-        "\nSignal Profile: **{}** ({})",
-        profile.value.name, profile.tier
+    // Get current signal preset information
+    let preset = state.signal_preset();
+    let preset_info = format!(
+        "\nSignal Preset: **{}** ({})",
+        preset.value.name, preset.tier
     );
 
     let announcement_info = if state.announcement_channels.is_empty() {
@@ -636,7 +636,7 @@ pub async fn status(ctx: Context<'_>) -> anyhow::Result<()> {
     };
 
     ctx.say(format!(
-        "DJ State: {state_description}{pool_info}{profile_info}{announcement_info}"
+        "DJ State: {state_description}{pool_info}{preset_info}{announcement_info}"
     ))
     .await?;
 

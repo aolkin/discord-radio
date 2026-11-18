@@ -6,7 +6,7 @@
     { "key": "tracks/static-lullaby.ogg", "size": 3120456, "last_modified": "2026-10-03T08:30:00.000Z" },
     { "key": "tracks/numbers.wav", "size": 9876543, "last_modified": "2026-10-07T21:15:00.000Z" },
     { "key": "tracks/ambient/rain.ogg", "size": 2654321, "last_modified": "2026-10-08T07:10:00.000Z" },
-    { "key": "signal_profiles/weak_signal.json", "size": 412, "last_modified": "2026-10-02T09:00:00.000Z" },
+    { "key": "signal_presets/weak_signal.json", "size": 412, "last_modified": "2026-10-02T09:00:00.000Z" },
     { "key": "dj_configs/night.json", "size": 1280, "last_modified": "2026-10-04T18:45:00.000Z" },
     { "key": "pools/default.json", "size": 905, "last_modified": "2026-10-05T14:20:00.000Z" }
   ]

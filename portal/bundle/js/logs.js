@@ -86,15 +86,15 @@ export function logs() {
 
         djLogDetail(content) {
             const details = content.details;
-            const profile = details.signal_profile ? ` | Profile: ${details.signal_profile}` : '';
+            const preset = details.signal_preset ? ` | Preset: ${details.signal_preset}` : '';
             if (details.filename) {
-                return `Track: ${details.filename} (${details.duration_secs}s)${profile}`;
+                return `Track: ${details.filename} (${details.duration_secs}s)${preset}`;
             }
             if (details.message) {
-                return `Message: "${details.message}" (${details.target_loops} loops)${profile}`;
+                return `Message: "${details.message}" (${details.target_loops} loops)${preset}`;
             }
-            if (details.signal_profile) {
-                return `Profile: ${details.signal_profile} (${details.duration_secs}s)`;
+            if (details.signal_preset) {
+                return `Preset: ${details.signal_preset} (${details.duration_secs}s)`;
             }
             if (details.duration_secs) {
                 return `Duration: ${details.duration_secs}s`;

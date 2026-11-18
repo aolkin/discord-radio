@@ -3,7 +3,7 @@ use crate::audio::dj::segments::signals::Completed;
 use crate::audio::dj::segments::{
     CommonSegmentPlaybackConfig, Segment, SegmentPlaybackConfig, StateDisplay,
 };
-use crate::audio::dj::signal_profile::SignalProfilePlayback;
+use crate::audio::dj::signal_preset::SignalPresetPlayback;
 use crate::audio::dj::weighted_choice::{Identity, Weighted};
 use async_trait::async_trait;
 use field_trait::field_trait_impl;
@@ -52,9 +52,9 @@ impl NoiseSegment {
     ) -> Self {
         let fade_in_duration = fade.or_else(|| duration.map(|duration| duration.div_f32(2.0)));
         let config = CommonSegmentPlaybackConfig {
-            signal_profile: config.signal_profile.map(|profile| SignalProfilePlayback {
+            signal_preset: config.signal_preset.map(|preset| SignalPresetPlayback {
                 fade_in_duration,
-                ..profile
+                ..preset
             }),
             ..config
         };
@@ -108,13 +108,13 @@ impl Segment for NoiseSegment {
 
     fn loggable_properties(&self) -> serde_json::Value {
         serde_json::json!({
-            "signal_profile": self.signal_profile().map(|profile| profile.name),
+            "signal_preset": self.signal_preset().map(|preset| preset.name),
             "duration_secs": self.duration().map(|duration| duration.as_secs_f32()),
         })
     }
 
     fn state_display(&self) -> StateDisplay {
-        let subject = self.signal_profile().map(|profile| profile.name);
+        let subject = self.signal_preset().map(|preset| preset.name);
         StateDisplay {
             subject,
             total: self.duration(),

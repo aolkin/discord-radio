@@ -1,7 +1,7 @@
 use crate::audio::dsp::modulation::{Bitcrusher, DropoutGenerator, LFO};
 use crate::audio::dsp::noise::NoiseGenerator;
 use crate::audio::helpers::perceptual_level_to_amplitude;
-use crate::audio::profiles::SignalProfile;
+use crate::audio::presets::SignalPreset;
 use atomic_float::AtomicF32;
 use biquad::{Biquad, Coefficients, DirectForm1, ToHertz};
 use std::sync::Arc;
@@ -32,13 +32,13 @@ pub struct RadioEffectChain {
 }
 
 impl RadioEffectChain {
-    pub fn new(sample_rate: u32, profile: &SignalProfile) -> Self {
+    pub fn new(sample_rate: u32, preset: &SignalPreset) -> Self {
         // Use separate highpass and lowpass filters instead of bandpass
         // This gives true pass/reject behavior at frequency boundaries
         let hp_coeffs = Coefficients::<f32>::from_params(
             biquad::Type::HighPass,
             sample_rate.hz(),
-            profile.bandpass_low.hz(),
+            preset.bandpass_low.hz(),
             biquad::Q_BUTTERWORTH_F32,
         )
         .unwrap();
@@ -46,12 +46,12 @@ impl RadioEffectChain {
         let lp_coeffs = Coefficients::<f32>::from_params(
             biquad::Type::LowPass,
             sample_rate.hz(),
-            profile.bandpass_high.hz(),
+            preset.bandpass_high.hz(),
             biquad::Q_BUTTERWORTH_F32,
         )
         .unwrap();
 
-        let bitcrusher = profile.bitcrush_bits.map(Bitcrusher::new);
+        let bitcrusher = preset.bitcrush_bits.map(Bitcrusher::new);
 
         Self {
             highpass_l: DirectForm1::<f32>::new(hp_coeffs),
@@ -62,26 +62,26 @@ impl RadioEffectChain {
             noise_gen: NoiseGenerator::new(),
             // Convert noise levels from config values to perceptual amplitudes
             white_noise_level: Arc::new(AtomicF32::new(perceptual_level_to_amplitude(
-                profile.white_noise_level,
+                preset.white_noise_level,
             ))),
             pink_noise_level: Arc::new(AtomicF32::new(perceptual_level_to_amplitude(
-                profile.pink_noise_level,
+                preset.pink_noise_level,
             ))),
             brown_noise_level: Arc::new(AtomicF32::new(perceptual_level_to_amplitude(
-                profile.brown_noise_level,
+                preset.brown_noise_level,
             ))),
 
-            tremolo_lfo: LFO::new(sample_rate, profile.tremolo_rate, profile.tremolo_jitter),
-            tremolo_depth: Arc::new(AtomicF32::new(profile.tremolo_depth)),
+            tremolo_lfo: LFO::new(sample_rate, preset.tremolo_rate, preset.tremolo_jitter),
+            tremolo_depth: Arc::new(AtomicF32::new(preset.tremolo_depth)),
 
-            clip_pregain: Arc::new(AtomicF32::new(profile.clip_pregain)),
-            clip_threshold: Arc::new(AtomicF32::new(profile.clip_threshold)),
+            clip_pregain: Arc::new(AtomicF32::new(preset.clip_pregain)),
+            clip_threshold: Arc::new(AtomicF32::new(preset.clip_threshold)),
 
             bitcrusher,
 
             dropout_gen: DropoutGenerator::new(
-                profile.dropout_probability,
-                profile.dropout_duration_ms,
+                preset.dropout_probability,
+                preset.dropout_duration_ms,
                 sample_rate,
             ),
 
@@ -89,12 +89,12 @@ impl RadioEffectChain {
         }
     }
 
-    pub fn update_profile(&mut self, profile: &SignalProfile) {
+    pub fn update_preset(&mut self, preset: &SignalPreset) {
         // Update highpass and lowpass filters separately
         let hp_coeffs = Coefficients::<f32>::from_params(
             biquad::Type::HighPass,
             self.sample_rate.hz(),
-            profile.bandpass_low.hz(),
+            preset.bandpass_low.hz(),
             biquad::Q_BUTTERWORTH_F32,
         )
         .unwrap();
@@ -102,7 +102,7 @@ impl RadioEffectChain {
         let lp_coeffs = Coefficients::<f32>::from_params(
             biquad::Type::LowPass,
             self.sample_rate.hz(),
-            profile.bandpass_high.hz(),
+            preset.bandpass_high.hz(),
             biquad::Q_BUTTERWORTH_F32,
         )
         .unwrap();
@@ -115,31 +115,30 @@ impl RadioEffectChain {
 
         // Convert noise levels from config values to perceptual amplitudes
         self.white_noise_level.store(
-            perceptual_level_to_amplitude(profile.white_noise_level),
+            perceptual_level_to_amplitude(preset.white_noise_level),
             Ordering::Relaxed,
         );
         self.pink_noise_level.store(
-            perceptual_level_to_amplitude(profile.pink_noise_level),
+            perceptual_level_to_amplitude(preset.pink_noise_level),
             Ordering::Relaxed,
         );
         self.brown_noise_level.store(
-            perceptual_level_to_amplitude(profile.brown_noise_level),
+            perceptual_level_to_amplitude(preset.brown_noise_level),
             Ordering::Relaxed,
         );
         self.tremolo_depth
-            .store(profile.tremolo_depth, Ordering::Relaxed);
+            .store(preset.tremolo_depth, Ordering::Relaxed);
         self.tremolo_lfo
-            .set_frequency(self.sample_rate, profile.tremolo_rate);
-        self.tremolo_lfo
-            .set_amplitude_jitter(profile.tremolo_jitter);
+            .set_frequency(self.sample_rate, preset.tremolo_rate);
+        self.tremolo_lfo.set_amplitude_jitter(preset.tremolo_jitter);
         self.dropout_gen
-            .set_params(profile.dropout_probability, profile.dropout_duration_ms);
+            .set_params(preset.dropout_probability, preset.dropout_duration_ms);
         self.clip_pregain
-            .store(profile.clip_pregain, Ordering::Relaxed);
+            .store(preset.clip_pregain, Ordering::Relaxed);
         self.clip_threshold
-            .store(profile.clip_threshold, Ordering::Relaxed);
+            .store(preset.clip_threshold, Ordering::Relaxed);
 
-        if let Some(bits) = profile.bitcrush_bits {
+        if let Some(bits) = preset.bitcrush_bits {
             if let Some(ref mut bc) = self.bitcrusher {
                 bc.set_depth(bits);
             } else {

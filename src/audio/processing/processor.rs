@@ -1,7 +1,7 @@
 use crate::audio::codec::opus_encoder::OpusEncoder;
 use crate::audio::dsp::chain::RadioEffectChain;
+use crate::audio::presets::SignalPreset;
 use crate::audio::processing::mixer::{AudioSource, Mixer, TrackCommand, TrackHandle};
-use crate::audio::profiles::SignalProfile;
 use crate::logging::LogThrottle;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -14,15 +14,15 @@ const FRAME_SIZE: usize = 960; // 20ms at 48kHz
 const WARN_INTERVAL: Duration = Duration::from_secs(5);
 const CHANNEL_CAPACITY: usize = 16; // Buffer up to 16 chunks (320ms at 20ms per chunk)
 
-pub struct ProfileTransition {
-    pub from: SignalProfile,
-    pub to: SignalProfile,
+pub struct PresetTransition {
+    pub from: SignalPreset,
+    pub to: SignalPreset,
     pub progress: f32,
     pub duration_ms: f32,
 }
 
-impl ProfileTransition {
-    pub fn new(from: SignalProfile, to: SignalProfile, duration_ms: f32) -> Self {
+impl PresetTransition {
+    pub fn new(from: SignalPreset, to: SignalPreset, duration_ms: f32) -> Self {
         Self {
             from,
             to,
@@ -31,7 +31,7 @@ impl ProfileTransition {
         }
     }
 
-    pub fn advance(&mut self, delta_ms: f32) -> Option<SignalProfile> {
+    pub fn advance(&mut self, delta_ms: f32) -> Option<SignalPreset> {
         if self.progress >= 1.0 {
             return None;
         }
@@ -52,8 +52,8 @@ pub type ProcessorRef = Arc<RwLock<AudioProcessor>>;
 pub struct AudioProcessor {
     mixer: Mixer,
     dsp_chain: RadioEffectChain,
-    transition: Option<ProfileTransition>,
-    current_profile: SignalProfile,
+    transition: Option<PresetTransition>,
+    current_preset: SignalPreset,
     samples_processed: u64, // Total stereo frames processed (not individual samples)
     opus_encoder: OpusEncoder,
     opus_stream: broadcast::Sender<Vec<u8>>,
@@ -62,16 +62,16 @@ pub struct AudioProcessor {
 }
 
 impl AudioProcessor {
-    pub fn new(initial_profile: SignalProfile) -> Self {
+    pub fn new(initial_preset: SignalPreset) -> Self {
         let mixer = Mixer::new(SAMPLE_RATE);
-        let dsp_chain = RadioEffectChain::new(SAMPLE_RATE, &initial_profile);
+        let dsp_chain = RadioEffectChain::new(SAMPLE_RATE, &initial_preset);
         let opus_encoder = OpusEncoder::default();
 
         Self {
             mixer,
             dsp_chain,
             transition: None,
-            current_profile: initial_profile,
+            current_preset: initial_preset,
             samples_processed: 0,
             opus_encoder,
             opus_stream: broadcast::channel(CHANNEL_CAPACITY).0,
@@ -97,33 +97,29 @@ impl AudioProcessor {
         self.opus_stream.receiver_count()
     }
 
-    pub fn start_profile_transition(&mut self, to_profile: SignalProfile, duration_ms: f32) {
+    pub fn start_preset_transition(&mut self, to_preset: SignalPreset, duration_ms: f32) {
         // If already transitioning, start from the current interpolated position
-        // to avoid jarring jumps back to the old profile
-        let from_profile = if let Some(ref transition) = self.transition {
-            // Get current interpolated profile at this point in the transition
+        // to avoid jarring jumps back to the old preset
+        let from_preset = if let Some(ref transition) = self.transition {
+            // Get current interpolated preset at this point in the transition
             transition
                 .from
                 .interpolate(&transition.to, transition.progress)
         } else {
-            self.current_profile.clone()
+            self.current_preset.clone()
         };
 
-        self.transition = Some(ProfileTransition::new(
-            from_profile,
-            to_profile,
-            duration_ms,
-        ));
+        self.transition = Some(PresetTransition::new(from_preset, to_preset, duration_ms));
     }
 
-    pub fn set_profile_immediate(&mut self, profile: SignalProfile) {
-        self.current_profile = profile.clone();
-        self.dsp_chain.update_profile(&profile);
+    pub fn set_preset_immediate(&mut self, preset: SignalPreset) {
+        self.current_preset = preset.clone();
+        self.dsp_chain.update_preset(&preset);
         self.transition = None;
     }
 
-    pub fn current_profile_name(&self) -> &str {
-        &self.current_profile.name
+    pub fn current_preset_name(&self) -> &str {
+        &self.current_preset.name
     }
 
     pub fn is_transitioning(&self) -> bool {
@@ -137,11 +133,11 @@ impl AudioProcessor {
             let delta_ms = (frames_to_render as f32 / SAMPLE_RATE as f32) * 1000.0;
 
             if let Some(interpolated) = transition.advance(delta_ms) {
-                self.dsp_chain.update_profile(&interpolated);
+                self.dsp_chain.update_preset(&interpolated);
             }
 
             if transition.is_complete() {
-                self.current_profile = transition.to.clone();
+                self.current_preset = transition.to.clone();
                 self.transition = None;
             }
         }

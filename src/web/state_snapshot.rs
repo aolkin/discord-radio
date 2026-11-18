@@ -13,7 +13,7 @@ pub struct DJStateInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AudioProfileInfo {
+pub struct SignalPresetInfo {
     pub name: String,
     pub expected_name: String,
     pub transitioning: bool,
@@ -29,7 +29,7 @@ pub struct GuildState {
     pub tracks: Vec<TrackSnapshot>,
     pub dj_state: DJStateInfo,
     pub dj_config: String,
-    pub audio_profile: AudioProfileInfo,
+    pub signal_preset: SignalPresetInfo,
     pub channel_status: ChannelStatusInfo,
     pub announcement_channels: Vec<AnnouncementChannelInfo>,
 }
@@ -67,13 +67,13 @@ impl BotSnapshot {
 
             let tracks = guild.track_manager.get_all_tracks().await;
 
-            let (dj_state, dj_config, profile, channel_status, announcement_channels) = {
+            let (dj_state, dj_config, preset, channel_status, announcement_channels) = {
                 let dj_state_lock = guild.dj_manager.state();
                 let state = dj_state_lock.read().await;
                 (
                     dj_state_to_info(&state, bot_state),
                     state.config_name.clone(),
-                    state.signal_profile(),
+                    state.signal_preset(),
                     state.channel_status(),
                     state
                         .announcement_channels
@@ -86,15 +86,15 @@ impl BotSnapshot {
                 )
             };
 
-            // Get audio profile info
+            // Get signal preset info
             let processor = guild.audio_processor.read().await;
-            let profile_name = processor.current_profile_name().to_string();
+            let preset_name = processor.current_preset_name().to_string();
 
-            let audio_profile = AudioProfileInfo {
-                name: profile_name,
-                expected_name: profile.value.name,
+            let signal_preset = SignalPresetInfo {
+                name: preset_name,
+                expected_name: preset.value.name,
                 transitioning: processor.is_transitioning(),
-                source: profile.tier.to_string(),
+                source: preset.tier.to_string(),
             };
 
             guilds.push(GuildState {
@@ -108,7 +108,7 @@ impl BotSnapshot {
                 tracks,
                 dj_state,
                 dj_config,
-                audio_profile,
+                signal_preset,
                 channel_status: ChannelStatusInfo {
                     status: match channel_status.value {
                         ChannelStatus::Unmanaged => None,

@@ -3,7 +3,7 @@ import { apiRequest, bodyOrStatus } from './api.js';
 export const playForms = () => ({
     djAdvancePool: '',
     djConfigSelection: '',
-    idleNoiseProfile: '',
+    idleSignalPreset: '',
     idleDuration: null,
     hexMessageText: '',
     hexMessagePool: '',
@@ -161,7 +161,7 @@ export function dj() {
         },
 
         async idleDJ() {
-            const body = { noise_profile: this.idleNoiseProfile || null };
+            const body = { signal_preset: this.idleSignalPreset || null };
             if (this.idleDuration !== null && this.idleDuration !== '') {
                 body.duration = Number.parseFloat(this.idleDuration);
             }

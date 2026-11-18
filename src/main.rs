@@ -214,11 +214,11 @@ async fn main() -> anyhow::Result<()> {
     )?
     .id;
 
-    let signal_profiles_path =
-        std::env::var("SIGNAL_PROFILES_PATH").unwrap_or_else(|_| "signal_profiles/".to_string());
-    tracing::info!("Using signal profiles path: {}", signal_profiles_path);
-    let profile_manager =
-        JsonRegistry::from_storage(signal_profiles_path, file_resolver.clone()).await;
+    let signal_presets_path =
+        std::env::var("SIGNAL_PRESETS_PATH").unwrap_or_else(|_| "signal_presets/".to_string());
+    tracing::info!("Using signal presets path: {}", signal_presets_path);
+    let preset_manager =
+        JsonRegistry::from_storage(signal_presets_path, file_resolver.clone()).await;
 
     let dj_configs_path =
         std::env::var("DJ_CONFIGS_PATH").unwrap_or_else(|_| "dj_configs/".to_string());
@@ -238,7 +238,7 @@ async fn main() -> anyhow::Result<()> {
         file_resolver,
         hex_audio_folder,
         state_store,
-        profile_manager,
+        preset_manager,
         dj_config_manager,
         bot_user_id,
         songbird.clone(),

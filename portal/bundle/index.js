@@ -13,7 +13,7 @@ import { pools } from './js/pools.js';
 import { drafts } from './js/registry-editor.js';
 import { router } from './js/router.js';
 import { actionMethods } from './js/run-action.js';
-import { signalProfiles } from './js/signal-profiles.js';
+import { signalPresets } from './js/signal-presets.js';
 import { toasts } from './js/toasts.js';
 import { tracks } from './js/tracks.js';
 import { uploads } from './js/uploads.js';
@@ -27,7 +27,7 @@ function botPortal() {
         ...router(),
         ...dj(),
         ...tracks(),
-        ...signalProfiles(),
+        ...signalPresets(),
         ...pools(),
         ...weightSliders(),
         ...djConfigs(),

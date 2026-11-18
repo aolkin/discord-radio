@@ -1,5 +1,5 @@
 use crate::audio::dj::config::{DJConfig, Pool};
-use crate::audio::profiles::SignalProfile;
+use crate::audio::presets::SignalPreset;
 use crate::state::Data;
 use crate::web::routes::registries;
 use crate::web::{audio_stream, routes, websocket};
@@ -86,7 +86,7 @@ pub async fn run_web_server(bot_state: Data, port: u16, bot_name: &str) -> anyho
         .route("/track/play", post(routes::dj::play_track))
         .route("/tracks", post(routes::tracks::change_track_state))
         .route("/dj/config", post(routes::dj::configure_dj))
-        .route("/dj/profile", post(routes::dj::set_dj_profile))
+        .route("/dj/signal-preset", post(routes::dj::set_dj_preset))
         .route(
             "/dj/channel-status",
             post(routes::dj::set_dj_channel_status),
@@ -128,7 +128,7 @@ pub async fn run_web_server(bot_state: Data, port: u16, bot_name: &str) -> anyho
         .route("/api/health", get(routes::status::health))
         .route("/api/guilds", get(routes::discord::get_guilds))
         .nest("/api/guilds/{guild_id}", guild_routes)
-        .merge(registries::routes::<SignalProfile>())
+        .merge(registries::routes::<SignalPreset>())
         .merge(registries::routes::<DJConfig>())
         .merge(registries::routes::<Pool>())
         .route(

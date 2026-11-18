@@ -19,7 +19,7 @@ export function connection() {
         init() {
             this.connect();
             this.loadGuildList();
-            this.loadProfiles();
+            this.loadPresets();
             this.loadPools();
             this.loadDjConfigPools();
             this.initRouter();

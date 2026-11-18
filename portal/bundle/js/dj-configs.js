@@ -10,7 +10,7 @@ import {
     segmentDefaultsBlocks,
     segmentDefaultsFromServer,
     segmentDefaultsToServer,
-    signalProfileEntryFields,
+    signalPresetEntryFields,
     toggleHexConfig,
     weight,
 } from './form-fields.js';
@@ -29,10 +29,10 @@ const poolReferenceFields = [{ key: 'pool', label: 'Pool', type: 'text' }, poolW
 
 const rotations = [
     {
-        key: 'signal_profiles',
-        label: 'Signal Profile Rotation',
-        addLabel: '+ Add Signal Profile',
-        entryFields: signalProfileEntryFields,
+        key: 'signal_presets',
+        label: 'Signal Preset Rotation',
+        addLabel: '+ Add Signal Preset',
+        entryFields: signalPresetEntryFields,
     },
     {
         key: 'channel_statuses',
@@ -266,9 +266,9 @@ export function djConfigs() {
         addDjConfigRotationEntry(rotation) {
             const { entries } = this.djConfigForm[rotation.key];
             const row = blankRow(rotation.entryFields);
-            if ('signal_profile' in row) {
-                const used = entries.map((entry) => entry.signal_profile);
-                row.signal_profile = this.profiles.find((profile) => !used.includes(profile)) ?? '';
+            if ('signal_preset' in row) {
+                const used = entries.map((entry) => entry.signal_preset);
+                row.signal_preset = this.presets.find((preset) => !used.includes(preset)) ?? '';
             }
             entries.push(row);
             this.focusWhenShown(`[data-rotation="${rotation.key}"] .list-row:has(+ .empty-state) input`);

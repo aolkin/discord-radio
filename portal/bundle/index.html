@@ -218,32 +218,32 @@
 
                     <div class="section">
                         <div class="section-title">
-                            Signal Profiles
+                            Signal Presets
                             <button
                                 type="button"
                                 class="btn btn-text btn-sm"
-                                @click="openItem('signal-profiles', newItem)"
+                                @click="openItem('signal-presets', newItem)"
                             >
                                 + New
                             </button>
                         </div>
-                        <template x-for="profile in profiles" :key="profile">
+                        <template x-for="preset in presets" :key="preset">
                             <button
                                 type="button"
                                 class="btn tree-item"
-                                :class="isSelected('signal-profiles', profile) ? 'btn-primary' : 'btn-secondary'"
-                                @click="openItem('signal-profiles', profile)"
+                                :class="isSelected('signal-presets', preset) ? 'btn-primary' : 'btn-secondary'"
+                                @click="openItem('signal-presets', preset)"
                             >
-                                <span x-text="profile"></span>
-                                <span class="default-tag" x-show="isDefault('signal-profiles', profile)">Default</span>
+                                <span x-text="preset"></span>
+                                <span class="default-tag" x-show="isDefault('signal-presets', preset)">Default</span>
                                 <span
                                     class="draft-dot"
                                     title="Unsaved changes"
-                                    x-show="changeCount('signal-profiles', profile) > 0"
+                                    x-show="changeCount('signal-presets', preset) > 0"
                                 ></span>
                             </button>
                         </template>
-                        <div class="empty-state" x-show="profiles.length === 0">No signal profiles</div>
+                        <div class="empty-state" x-show="presets.length === 0">No signal presets</div>
                     </div>
 
                     <div class="section">
@@ -274,9 +274,9 @@
                             <button
                                 type="button"
                                 class="btn btn-secondary"
-                                @click="openItem('signal-profiles', newItem)"
+                                @click="openItem('signal-presets', newItem)"
                             >
-                                New signal profile
+                                New signal preset
                             </button>
                         </div>
                     </div>
@@ -319,7 +319,7 @@
                                         type="button"
                                         class="btn btn-primary"
                                         :disabled="changeCount(route.kind, route.name) === 0 || draftErrors(route.kind).length > 0 || isDefault(route.kind, route.name)"
-                                        :title="isDefault(route.kind, route.name) ? 'Default profiles cannot be overwritten. Use Save as.' : ''"
+                                        :title="isDefault(route.kind, route.name) ? 'Default presets cannot be overwritten. Use Save as.' : ''"
                                         @click="reviewDraft(route.kind)"
                                     >
                                         Review changes
@@ -427,43 +427,43 @@
                             </template>
                         </section>
                     </template>
-                    <section class="card" x-show="route.kind === 'signal-profiles' && !draftReviewing">
+                    <section class="card" x-show="route.kind === 'signal-presets' && !draftReviewing">
                         <!-- biome-ignore lint/a11y/useHeadingContent: the heading text comes from x-text -->
                         <h2
                             class="card-title"
-                            x-text="profileEditorIsNew ? 'New Signal Profile' : 'Edit Signal Profile'"
+                            x-text="presetEditorIsNew ? 'New Signal Preset' : 'Edit Signal Preset'"
                         ></h2>
-                        <div class="loading" x-show="profileEditorLoading">Loading...</div>
+                        <div class="loading" x-show="presetEditorLoading">Loading...</div>
                         <form
-                            x-show="!profileEditorLoading && !draftReviewing"
-                            @submit.prevent="reviewDraft('signal-profiles')"
+                            x-show="!presetEditorLoading && !draftReviewing"
+                            @submit.prevent="reviewDraft('signal-presets')"
                         >
                             <button type="submit" hidden></button>
                             <div class="form-group">
-                                <label class="form-label" for="profile-editor-name">Name</label>
+                                <label class="form-label" for="preset-editor-name">Name</label>
                                 <input
-                                    id="profile-editor-name"
+                                    id="preset-editor-name"
                                     type="text"
                                     class="form-input"
-                                    x-model="profileForm.name"
-                                    :readonly="!profileEditorIsNew"
-                                    :aria-invalid="changeCount('signal-profiles', route.name) > 0 && nameInvalid('signal-profiles')"
+                                    x-model="presetForm.name"
+                                    :readonly="!presetEditorIsNew"
+                                    :aria-invalid="changeCount('signal-presets', route.name) > 0 && nameInvalid('signal-presets')"
                                     required
                                     pattern="[A-Za-z0-9_\-]+"
                                     title="Letters, digits, - and _ only"
                                 >
                             </div>
                             <div class="form-row">
-                                <template x-for="item in profileFieldRows()" :key="item.path.join('-')">
+                                <template x-for="item in presetFieldRows()" :key="item.path.join('-')">
                                     <div class="form-group">
                                         <!-- biome-ignore lint/a11y/noLabelWithoutControl: the label text comes from x-text -->
                                         <label
                                             class="form-label"
-                                            :for="'profile-field-' + item.path.join('-')"
+                                            :for="'preset-field-' + item.path.join('-')"
                                             x-text="item.field.label"
                                         ></label>
                                         <input
-                                            :id="'profile-field-' + item.path.join('-')"
+                                            :id="'preset-field-' + item.path.join('-')"
                                             type="number"
                                             class="form-input"
                                             x-model.number="item.row[item.field.key]"
@@ -476,8 +476,8 @@
                                         >
                                         <span
                                             class="field-was"
-                                            x-show="isChanged('signal-profiles', item.path)"
-                                            x-text="'was ' + wasValue('signal-profiles', item.path)"
+                                            x-show="isChanged('signal-presets', item.path)"
+                                            x-text="'was ' + wasValue('signal-presets', item.path)"
                                         ></span>
                                     </div>
                                 </template>
@@ -494,9 +494,9 @@
                             @submit.prevent="reviewDraft('dj-configs')"
                         >
                             <button type="submit" hidden></button>
-                            <datalist id="dj-config-profile-options">
-                                <template x-for="profile in profiles" :key="profile">
-                                    <option :value="profile"></option>
+                            <datalist id="dj-config-preset-options">
+                                <template x-for="preset in presets" :key="preset">
+                                    <option :value="preset"></option>
                                 </template>
                             </datalist>
                             <div class="modal-section">
@@ -771,7 +771,7 @@
                                                                     type="text"
                                                                     class="form-input"
                                                                     x-model="row[field.key]"
-                                                                    :list="field.profile ? 'dj-config-profile-options' : null"
+                                                                    :list="field.preset ? 'dj-config-preset-options' : null"
                                                                     :required="!field.optional"
                                                                     :aria-invalid="fieldInvalid(field, row[field.key])"
                                                                     :placeholder="field.optional ? 'Optional' : ''"
@@ -862,7 +862,7 @@
                                                                         type="text"
                                                                         class="form-input"
                                                                         x-model="block.row[field.key]"
-                                                                        :list="field.profile ? 'dj-config-profile-options' : null"
+                                                                        :list="field.preset ? 'dj-config-preset-options' : null"
                                                                         :required="!field.optional"
                                                                         :aria-invalid="fieldInvalid(field, block.row[field.key])"
                                                                         :placeholder="field.optional ? 'Optional' : ''"
@@ -958,9 +958,9 @@
                         <div class="loading" x-show="poolEditorLoading">Loading...</div>
                         <form x-show="!poolEditorLoading && !draftReviewing" @submit.prevent="reviewDraft('pools')">
                             <button type="submit" hidden></button>
-                            <datalist id="pool-editor-profile-options">
-                                <template x-for="profile in profiles" :key="profile">
-                                    <option :value="profile"></option>
+                            <datalist id="pool-editor-preset-options">
+                                <template x-for="preset in presets" :key="preset">
+                                    <option :value="preset"></option>
                                 </template>
                             </datalist>
                             <div class="modal-section">
@@ -1072,7 +1072,7 @@
                                     <table class="pool-grid pool-grid-entries">
                                         <colgroup>
                                             <col class="pool-grid-col-check">
-                                            <col class="pool-grid-col-profile">
+                                            <col class="pool-grid-col-preset">
                                             <col class="pool-grid-col-kind">
                                             <col>
                                             <col class="pool-grid-col-length">
@@ -1091,7 +1091,7 @@
                                                         >
                                                     </div>
                                                 </th>
-                                                <th>Signal Profile</th>
+                                                <th>Signal Preset</th>
                                                 <th>Kind</th>
                                                 <th>What</th>
                                                 <th>Length</th>
@@ -1111,24 +1111,24 @@
                                                             >
                                                         </div>
                                                     </td>
-                                                    <td data-label="Signal Profile">
+                                                    <td data-label="Signal Preset">
                                                         <select
                                                             class="form-input"
-                                                            aria-label="Signal Profile"
-                                                            x-model="entry.signal_profile"
+                                                            aria-label="Signal Preset"
+                                                            x-model="entry.signal_preset"
                                                         >
                                                             <option value="">(not set)</option>
                                                             <template
-                                                                x-for="profile in poolProfileOptions(entry.signal_profile)"
-                                                                :key="profile"
+                                                                x-for="preset in poolPresetOptions(entry.signal_preset)"
+                                                                :key="preset"
                                                             >
-                                                                <option :value="profile" x-text="profile"></option>
+                                                                <option :value="preset" x-text="preset"></option>
                                                             </template>
                                                         </select>
                                                         <span
                                                             class="field-was"
-                                                            x-show="isChanged('pools', ['entries', index, 'signal_profile'])"
-                                                            x-text="'was ' + wasValue('pools', ['entries', index, 'signal_profile'])"
+                                                            x-show="isChanged('pools', ['entries', index, 'signal_preset'])"
+                                                            x-text="'was ' + wasValue('pools', ['entries', index, 'signal_preset'])"
                                                         ></span>
                                                     </td>
                                                     <td data-label="Kind">
@@ -1494,7 +1494,7 @@
                                                                 type="text"
                                                                 class="form-input"
                                                                 x-model="block.row[field.key]"
-                                                                :list="field.profile ? 'pool-editor-profile-options' : null"
+                                                                :list="field.preset ? 'pool-editor-preset-options' : null"
                                                                 :required="!field.optional"
                                                                 :aria-invalid="fieldInvalid(field, block.row[field.key])"
                                                                 :placeholder="field.optional ? 'Optional' : ''"
@@ -1671,18 +1671,18 @@
                             </div>
 
                             <div class="section">
-                                <div class="section-title">Audio Profile</div>
+                                <div class="section-title">Signal Preset</div>
                                 <div class="info-item">
                                     <div class="grow">
-                                        <div class="track-name" x-text="guild.audio_profile.name"></div>
+                                        <div class="track-name" x-text="guild.signal_preset.name"></div>
                                         <div
                                             class="track-details"
-                                            x-text="'Source: ' + guild.audio_profile.source"
+                                            x-text="'Source: ' + guild.signal_preset.source"
                                         ></div>
                                         <div
                                             class="track-details"
-                                            :class="{ 'profile-mismatch': !guild.audio_profile.transitioning && guild.audio_profile.expected_name !== guild.audio_profile.name }"
-                                            x-text="'DJ expects: ' + guild.audio_profile.expected_name"
+                                            :class="{ 'preset-mismatch': !guild.signal_preset.transitioning && guild.signal_preset.expected_name !== guild.signal_preset.name }"
+                                            x-text="'DJ expects: ' + guild.signal_preset.expected_name"
                                         ></div>
                                     </div>
                                 </div>
@@ -1784,15 +1784,15 @@
                                 <form @submit.prevent="idleDJ()">
                                     <div class="form-row">
                                         <div class="form-group">
-                                            <label class="form-label" for="idle-noise-profile">Noise Profile</label>
+                                            <label class="form-label" for="idle-signal-preset">Signal Preset</label>
                                             <select
-                                                id="idle-noise-profile"
+                                                id="idle-signal-preset"
                                                 class="form-input"
-                                                x-model="idleNoiseProfile"
+                                                x-model="idleSignalPreset"
                                             >
                                                 <option value="">None</option>
-                                                <template x-for="profile in profiles" :key="profile">
-                                                    <option :value="profile" x-text="profile"></option>
+                                                <template x-for="preset in presets" :key="preset">
+                                                    <option :value="preset" x-text="preset"></option>
                                                 </template>
                                             </select>
                                         </div>
@@ -2124,73 +2124,69 @@
                             </div>
                         </div>
 
-                        <div class="guild-content" x-show="route.tab === 'signal-profile'">
+                        <div class="guild-content" x-show="route.tab === 'signal-preset'">
                             <div class="section">
-                                <div class="section-title">Signal Profile</div>
-                                <form @submit.prevent="changeSignalProfile()">
+                                <div class="section-title">Signal Preset</div>
+                                <form @submit.prevent="changeSignalPreset()">
                                     <fieldset class="form-group">
                                         <legend class="form-label">Setting</legend>
                                         <div class="segmented">
                                             <label class="segment">
                                                 <input
                                                     type="radio"
-                                                    name="signal-profile-setting"
+                                                    name="signal-preset-setting"
                                                     value="manual"
-                                                    x-model="signalProfileSetting"
+                                                    x-model="signalPresetSetting"
                                                 >
                                                 <span>Background</span>
                                             </label>
                                             <label class="segment">
                                                 <input
                                                     type="radio"
-                                                    name="signal-profile-setting"
+                                                    name="signal-preset-setting"
                                                     value="override"
-                                                    x-model="signalProfileSetting"
+                                                    x-model="signalPresetSetting"
                                                 >
                                                 <span>Override</span>
                                             </label>
                                         </div>
                                         <small
                                             class="hint"
-                                            x-text="signalProfileSetting === 'override' ? 'Beats everything.' : 'Replaces the rotation.'"
+                                            x-text="signalPresetSetting === 'override' ? 'Beats everything.' : 'Replaces the rotation.'"
                                         ></small>
                                     </fieldset>
                                     <div class="form-group">
-                                        <label class="form-label" for="signal-profile-profile">Profile</label>
-                                        <select
-                                            id="signal-profile-profile"
-                                            class="form-input"
-                                            x-model="signalProfileName"
-                                        >
+                                        <label class="form-label" for="signal-preset-preset">Preset</label>
+                                        <select id="signal-preset-preset" class="form-input" x-model="signalPresetName">
                                             <option value="">None (clear)</option>
-                                            <template x-for="profile in profiles" :key="profile">
-                                                <option :value="profile" x-text="profile"></option>
+                                            <template x-for="preset in presets" :key="preset">
+                                                <option :value="preset" x-text="preset"></option>
                                             </template>
                                         </select>
                                     </div>
-                                    <div class="form-group" x-show="signalProfileName">
-                                        <label class="form-label" for="signal-profile-fade"
+                                    <div class="form-group" x-show="signalPresetName">
+                                        <label class="form-label" for="signal-preset-fade"
                                             >Fade Duration (seconds)</label
                                         >
                                         <input
-                                            id="signal-profile-fade"
+                                            id="signal-preset-fade"
                                             type="number"
                                             class="form-input"
-                                            x-model.number="signalProfileFade"
+                                            x-model.number="signalPresetFade"
                                             min="0"
                                             step="0.1"
-                                            :placeholder="signalProfileSetting === 'override' ? '2.0' : 'default'"
+                                            :placeholder="signalPresetSetting === 'override' ? '2.0' : 'default'"
                                         >
                                     </div>
-                                    <div class="form-group" x-show="signalProfileName">
-                                        <label class="form-label" for="signal-profile-duration"
+                                    <div class="form-group" x-show="signalPresetName">
+                                        <label class="form-label" for="signal-preset-duration"
                                             >Duration (seconds)</label
                                         >
                                         <input
-                                            id="signal-profile-duration"
+                                            id="signal-preset-duration"
                                             type="number"
                                             class="form-input"
-                                            x-model.number="signalProfileDuration"
+                                            x-model.number="signalPresetDuration"
                                             min="0"
                                             step="1"
                                             placeholder="Until cleared"
@@ -2199,8 +2195,8 @@
                                     <button
                                         type="submit"
                                         class="btn btn-primary"
-                                        :disabled="signalProfileSaving"
-                                        x-text="signalProfileSaving ? 'Applying...' : 'Apply Profile'"
+                                        :disabled="signalPresetSaving"
+                                        x-text="signalPresetSaving ? 'Applying...' : 'Apply Preset'"
                                     ></button>
                                 </form>
                             </div>
