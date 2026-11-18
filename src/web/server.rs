@@ -17,9 +17,14 @@ use std::net::SocketAddr;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing::Instrument;
 
+#[derive(serde::Deserialize)]
+struct GuildPath {
+    guild_id: u64,
+}
+
 async fn guild_scope(
     State(bot_state): State<Data>,
-    Path(guild_id): Path<u64>,
+    Path(GuildPath { guild_id }): Path<GuildPath>,
     request: Request,
     next: Next,
 ) -> Response {
@@ -156,4 +161,44 @@ pub async fn run_web_server(bot_state: Data, port: u16, bot_name: &str) -> anyho
     axum::serve(listener, app).await?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::Body;
+    use http::StatusCode;
+    use tower::ServiceExt;
+
+    async fn scope(
+        Path(GuildPath { guild_id }): Path<GuildPath>,
+        request: Request,
+        next: Next,
+    ) -> Response {
+        assert_eq!(guild_id, 42);
+        next.run(request).await
+    }
+
+    async fn status_of(uri: &str) -> StatusCode {
+        let guild_routes = Router::new()
+            .route("/one", get(|| async {}))
+            .route("/two/{channel_id}", get(|| async {}))
+            .route_layer(middleware::from_fn(scope));
+        Router::new()
+            .nest("/api/guilds/{guild_id}", guild_routes)
+            .oneshot(Request::get(uri).body(Body::empty()).unwrap())
+            .await
+            .unwrap()
+            .status()
+    }
+
+    #[tokio::test]
+    async fn guild_path_extracts_with_extra_path_parameters() {
+        assert_eq!(status_of("/api/guilds/42/one").await, StatusCode::OK);
+        assert_eq!(status_of("/api/guilds/42/two/7").await, StatusCode::OK);
+        assert_eq!(
+            status_of("/api/guilds/abc/two/7").await,
+            StatusCode::BAD_REQUEST
+        );
+    }
 }
