@@ -41,7 +41,13 @@ fn main() {
     fs::write(out_dir.join("index.js"), &js).expect("writing the bundled JavaScript");
 
     let mut assets = vec![("index.js".to_string(), content_hash(js.as_bytes()))];
-    for name in ["theme.js", "alpine.min.js", "base.css", "index.css"] {
+    for name in [
+        "theme.js",
+        "alpine.min.js",
+        "base.css",
+        "index.css",
+        "radio.png",
+    ] {
         assets.push((
             name.to_string(),
             content_hash(&read(&static_dir.join(name))),
