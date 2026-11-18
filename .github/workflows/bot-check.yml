@@ -32,11 +32,12 @@ jobs:
               - build.rs
               - src/**
               - crates/**
+              - portal/**
               - preview/**
               - .github/actions/setup-rust-and-cache/**
               - .github/workflows/bot-check.yml
             frontend:
-              - static/**
+              - portal/**
               - biome.json
               - tests/frontend/**
               - .github/workflows/bot-check.yml
@@ -92,7 +93,7 @@ jobs:
           version: 2.5.15
 
       - name: Lint and check formatting
-        run: biome ci static
+        run: biome ci portal
 
       - name: Setup Node
         uses: actions/setup-node@v4

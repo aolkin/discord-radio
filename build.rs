@@ -22,15 +22,16 @@ fn main() {
     println!("cargo:rerun-if-env-changed=GITHUB_RUN_NUMBER");
     println!("cargo:rerun-if-env-changed=GITHUB_SHA");
     println!("cargo:rerun-if-env-changed=PROFILE");
-    println!("cargo:rerun-if-changed=static");
+    println!("cargo:rerun-if-changed=portal");
 
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"));
-    let static_dir = manifest_dir.join("static");
-    let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR")).join("portal");
-    fs::create_dir_all(&out_dir).expect("creating the portal output directory");
+    let static_dir = manifest_dir.join("portal/static");
+    let bundle_dir = manifest_dir.join("portal/bundle");
+    let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR")).join("bundle");
+    fs::create_dir_all(&out_dir).expect("creating the bundle output directory");
 
     let minify = env::var("PROFILE").is_ok_and(|profile| profile == "release");
-    let entry = static_dir.join("index.js");
+    let entry = bundle_dir.join("index.js");
     let options = js_bundler::Options {
         minify,
         ..Default::default()
@@ -41,19 +42,19 @@ fn main() {
 
     let mut assets = vec![("index.js".to_string(), content_hash(js.as_bytes()))];
     for name in ["theme.js", "alpine.min.js", "base.css", "index.css"] {
-        let bytes = read(&static_dir.join(name));
-        fs::write(out_dir.join(name), &bytes)
-            .unwrap_or_else(|e| panic!("writing {name} to the portal output directory: {e}"));
-        assets.push((name.to_string(), content_hash(&bytes)));
+        assets.push((
+            name.to_string(),
+            content_hash(&read(&static_dir.join(name))),
+        ));
     }
 
-    let mut html = String::from_utf8(read(&static_dir.join("index.html")))
-        .expect("static/index.html is not UTF-8");
+    let mut html = String::from_utf8(read(&bundle_dir.join("index.html")))
+        .expect("portal/bundle/index.html is not UTF-8");
     for (name, hash) in assets {
         let quoted = format!("\"/static/{name}\"");
         assert!(
             html.contains(&quoted),
-            "static/index.html does not reference /static/{name}"
+            "portal/bundle/index.html does not reference /static/{name}"
         );
         html = html.replace(&quoted, &format!("\"/static/{name}?v={hash}\""));
     }

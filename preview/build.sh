@@ -12,11 +12,12 @@ fi
 
 rm -rf "$out"
 mkdir -p "$out/preview"
-cp -R "$root/static" "$out/static"
+cp -R "$root/portal/static" "$out/static"
+cp -R "$root/portal/bundle/index.js" "$root/portal/bundle/js" "$out/static/"
 cp "$root/preview/mock.js" "$out/preview/mock.js"
 cp -R "$root/preview/fixtures" "$out/preview/fixtures"
 
 "$sed_cmd" -e 's#{{BOT_NAME}}#Preview Radio#g' -e 's#^\( *\)<script type="module" src="/static/index.js"></script>#\1<script src="/preview/mock.js"></script>\n&#' \
-    "$root/static/index.html" >"$out/index.html"
+    "$root/portal/bundle/index.html" >"$out/index.html"
 
 grep -q '/preview/mock.js' "$out/index.html"

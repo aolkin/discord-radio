@@ -6,7 +6,7 @@ WORKDIR /src
 COPY Cargo.toml Cargo.lock build.rs ./
 COPY crates/field-trait/Cargo.toml crates/field-trait/Cargo.toml
 COPY crates/js-bundler crates/js-bundler
-COPY static static
+COPY portal portal
 # Build dependencies against stub sources so this layer is reused until Cargo.toml or Cargo.lock changes.
 RUN mkdir -p src crates/field-trait/src \
     && echo 'fn main() {}' > src/main.rs \
