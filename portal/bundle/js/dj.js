@@ -152,7 +152,7 @@ export function dj() {
                 request: () =>
                     apiRequest(`/api/guilds/${this.route.name}/dj/advance`, {
                         method: 'POST',
-                        body: { state_type: this.djAdvancePool || null },
+                        body: { pool: this.djAdvancePool || null },
                         errorMessage: bodyOrStatus,
                     }),
                 success: 'DJ state advanced successfully!',

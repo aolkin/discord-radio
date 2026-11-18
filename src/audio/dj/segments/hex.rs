@@ -143,8 +143,6 @@ impl Deref for HexSegment {
 }
 
 impl HexSegment {
-    pub const STATE_NAME: &'static str = "playing_hex_message";
-
     pub fn new(
         message: String,
         volume: f32,
@@ -209,7 +207,7 @@ impl HexSegment {
 }
 
 #[async_trait]
-#[typetag::serde]
+#[typetag::serde(name = "hex_message")]
 impl Segment for HexSegment {
     fn completed(&self, _elapsed: Duration) -> Completed {
         self.done.completed()
@@ -222,7 +220,7 @@ impl Segment for HexSegment {
     async fn restore(&self, ctx: &SegmentCtx, _elapsed: Duration) -> anyhow::Result<()> {
         self.start_run(ctx).await;
         tracing::info!(
-            "Restored DJ hex message '{}' at loop {}/{}",
+            "Restored DJ hex_message '{}' at loop {}/{}",
             self.message,
             self.progress.loops.load(Ordering::Relaxed),
             self.target_loops
@@ -233,7 +231,7 @@ impl Segment for HexSegment {
     async fn enter(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
         self.start_run(ctx).await;
         tracing::info!(
-            "DJ playing hex message '{}' ({} loops)",
+            "DJ starting hex_message '{}' ({} loops)",
             self.message,
             self.target_loops
         );
@@ -257,12 +255,8 @@ impl Segment for HexSegment {
         serde_json::json!({
             "message": self.message,
             "target_loops": self.target_loops,
-            "forced_profile": self.signal_profile().map(|profile| profile.name),
+            "signal_profile": self.signal_profile().map(|profile| profile.name),
         })
-    }
-
-    fn state_name(&self) -> &'static str {
-        Self::STATE_NAME
     }
 
     fn state_display(&self) -> StateDisplay {
@@ -270,7 +264,6 @@ impl Segment for HexSegment {
         let hex_len = self.message.len() * 2;
         let current_char = (self.progress.position.load(Ordering::Relaxed) + 1).min(hex_len);
         StateDisplay {
-            name: "PlayingHexMessage",
             subject: Some(format!(
                 "{} (loop {current_loop}/{}, char {current_char}/{hex_len})",
                 self.message, self.target_loops

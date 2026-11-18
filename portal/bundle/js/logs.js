@@ -6,7 +6,7 @@ export const logTypes = [
 ];
 
 const memberEmoji = { joined: '➕', left: '➖', moved: '↔️' };
-const djEmoji = { playing_track: '🎵', playing_hex_message: '📡', playing_noise: '🔊', stopped: '⏹️' };
+const djEmoji = { track: '🎵', hex_message: '📡', noise: '🔊', stopped: '⏹️' };
 
 export function logs() {
     return {
@@ -86,15 +86,15 @@ export function logs() {
 
         djLogDetail(content) {
             const details = content.details;
-            const profile = details.forced_profile ? ` | Profile: ${details.forced_profile}` : '';
+            const profile = details.signal_profile ? ` | Profile: ${details.signal_profile}` : '';
             if (details.filename) {
                 return `Track: ${details.filename} (${details.duration_secs}s)${profile}`;
             }
             if (details.message) {
                 return `Message: "${details.message}" (${details.target_loops} loops)${profile}`;
             }
-            if (details.noise_profile) {
-                return `Profile: ${details.noise_profile} (${details.duration_secs}s)`;
+            if (details.signal_profile) {
+                return `Profile: ${details.signal_profile} (${details.duration_secs}s)`;
             }
             if (details.duration_secs) {
                 return `Duration: ${details.duration_secs}s`;

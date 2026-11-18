@@ -174,7 +174,7 @@ impl TrackSegment {
 }
 
 #[async_trait]
-#[typetag::serde]
+#[typetag::serde(name = "track")]
 impl Segment for TrackSegment {
     fn completed(&self, _elapsed: Duration) -> Completed {
         self.done.completed()
@@ -228,17 +228,12 @@ impl Segment for TrackSegment {
         serde_json::json!({
             "filename": self.filename,
             "duration_secs": self.duration.as_secs_f32(),
-            "forced_profile": self.signal_profile().map(|profile| profile.name),
+            "signal_profile": self.signal_profile().map(|profile| profile.name),
         })
-    }
-
-    fn state_name(&self) -> &'static str {
-        "playing_track"
     }
 
     fn state_display(&self) -> StateDisplay {
         StateDisplay {
-            name: "PlayingTrack",
             subject: Some(self.filename.clone()),
             total: Some(self.duration),
         }

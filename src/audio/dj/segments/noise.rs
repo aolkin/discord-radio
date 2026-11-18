@@ -95,7 +95,7 @@ impl Deref for NoiseSegment {
 }
 
 #[async_trait]
-#[typetag::serde]
+#[typetag::serde(name = "noise")]
 impl Segment for NoiseSegment {
     fn completed(&self, elapsed: Duration) -> Completed {
         match self {
@@ -108,23 +108,14 @@ impl Segment for NoiseSegment {
 
     fn loggable_properties(&self) -> serde_json::Value {
         serde_json::json!({
-            "noise_profile": self.signal_profile().map(|profile| profile.name),
+            "signal_profile": self.signal_profile().map(|profile| profile.name),
             "duration_secs": self.duration().map(|duration| duration.as_secs_f32()),
         })
-    }
-
-    fn state_name(&self) -> &'static str {
-        "playing_noise"
     }
 
     fn state_display(&self) -> StateDisplay {
         let subject = self.signal_profile().map(|profile| profile.name);
         StateDisplay {
-            name: if subject.is_some() {
-                "PlayingNoise"
-            } else {
-                "Idle"
-            },
             subject,
             total: self.duration(),
         }
