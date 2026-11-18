@@ -6,16 +6,17 @@ WORKDIR /src
 COPY Cargo.toml Cargo.lock build.rs ./
 COPY crates/field-trait/Cargo.toml crates/field-trait/Cargo.toml
 COPY crates/js-bundler crates/js-bundler
-COPY portal portal
 # Build dependencies against stub sources so this layer is reused until Cargo.toml or Cargo.lock changes.
-RUN mkdir -p src crates/field-trait/src \
+RUN mkdir -p src crates/field-trait/src portal/static portal/bundle \
     && echo 'fn main() {}' > src/main.rs \
-    && touch crates/field-trait/src/lib.rs \
+    && touch crates/field-trait/src/lib.rs portal/static/theme.js portal/static/alpine.min.js portal/static/base.css portal/static/index.css portal/bundle/index.js \
+    && echo '"/static/index.js" "/static/theme.js" "/static/alpine.min.js" "/static/base.css" "/static/index.css"' > portal/bundle/index.html \
     && cargo build --release --locked
 ARG GITHUB_RUN_NUMBER=dev
 ARG GITHUB_SHA=unknown
 COPY src src
 COPY crates crates
+COPY portal portal
 RUN touch src/main.rs crates/field-trait/src/lib.rs \
     && cargo build --release --locked
 
