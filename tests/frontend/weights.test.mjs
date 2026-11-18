@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { rebalance, setAlone, shareOf } from '../../static/js/weights.js';
+import { rebalance, setAlone, shareOf } from '../../portal/bundle/js/weights.js';
 
 const total = (weights) => weights.reduce((sum, weight) => sum + (typeof weight === 'number' ? weight : 0), 0);
 

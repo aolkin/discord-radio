@@ -2,10 +2,10 @@
   "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
   "files": {
     "includes": [
-      "static/**/*.js",
-      "static/**/*.css",
-      "static/**/*.html",
-      "!static/alpine.min.js"
+      "portal/**/*.js",
+      "portal/**/*.css",
+      "portal/**/*.html",
+      "!portal/static/alpine.min.js"
     ]
   },
   "formatter": {
