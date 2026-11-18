@@ -2,7 +2,7 @@ use crate::bucket::registry::{JsonRegistry, RegistryEntry};
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct SignalPreset {
+pub struct SignalParameters {
     pub name: String,
 
     pub bandpass_low: f32,
@@ -29,7 +29,7 @@ pub struct SignalPreset {
     pub dropout_duration_ms: (f32, f32),
 }
 
-impl SignalPreset {
+impl SignalParameters {
     pub fn interpolate(&self, other: &Self, t: f32) -> Self {
         let t = t.clamp(0.0, 1.0);
         let inv_t = 1.0 - t;
@@ -63,7 +63,7 @@ impl SignalPreset {
     }
 }
 
-impl RegistryEntry for SignalPreset {
+impl RegistryEntry for SignalParameters {
     const KIND: &'static str = "signal preset";
     const DEFAULTS: &'static [&'static str] = &[
         include_str!("default_presets/clear_signal.json"),
@@ -80,8 +80,8 @@ impl RegistryEntry for SignalPreset {
     }
 }
 
-impl JsonRegistry<SignalPreset> {
-    pub fn default_preset(&self) -> SignalPreset {
+impl JsonRegistry<SignalParameters> {
+    pub fn default_preset(&self) -> SignalParameters {
         (*self
             .get("clear_signal")
             .expect("clear_signal is a default preset"))

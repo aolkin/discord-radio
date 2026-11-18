@@ -3,7 +3,7 @@ use crate::audio::connection::{AudioClock, connect_voice_channel};
 use crate::audio::dj::config::registry::DJConfigRegistry;
 use crate::audio::dj::manager::DJManager;
 use crate::audio::duration::DurationCache;
-use crate::audio::presets::SignalPreset;
+use crate::audio::presets::SignalParameters;
 use crate::audio::processing::processor::{AudioProcessor, ProcessorRef};
 use crate::audio::tracks::TrackManager;
 use crate::bucket::FileResolver;
@@ -60,7 +60,7 @@ pub struct BotState {
     guilds: StdMutex<HashMap<GuildId, GuildRadio>>,
     lifecycles: StdMutex<HashMap<GuildId, Arc<Mutex<()>>>>,
     last_activity: StdMutex<HashMap<GuildId, Instant>>,
-    pub preset_manager: JsonRegistry<SignalPreset>,
+    pub preset_manager: JsonRegistry<SignalParameters>,
     pub dj_config_manager: &'static DJConfigRegistry,
     pub activity_manager: ActivityManager,
     pub file_resolver: FileResolver,
@@ -74,7 +74,7 @@ impl BotState {
         file_resolver: FileResolver,
         hex_audio_folder: String,
         state_store: Arc<dyn StateStore>,
-        preset_manager: JsonRegistry<SignalPreset>,
+        preset_manager: JsonRegistry<SignalParameters>,
         dj_config_manager: &'static DJConfigRegistry,
         bot_user_id: UserId,
         songbird: Arc<Songbird>,

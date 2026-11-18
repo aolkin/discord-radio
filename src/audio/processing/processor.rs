@@ -1,6 +1,6 @@
 use crate::audio::codec::opus_encoder::OpusEncoder;
 use crate::audio::dsp::chain::RadioEffectChain;
-use crate::audio::presets::SignalPreset;
+use crate::audio::presets::SignalParameters;
 use crate::audio::processing::mixer::{AudioSource, Mixer, TrackCommand, TrackHandle};
 use crate::logging::LogThrottle;
 use std::sync::Arc;
@@ -14,15 +14,15 @@ const FRAME_SIZE: usize = 960; // 20ms at 48kHz
 const WARN_INTERVAL: Duration = Duration::from_secs(5);
 const CHANNEL_CAPACITY: usize = 16; // Buffer up to 16 chunks (320ms at 20ms per chunk)
 
-pub struct PresetTransition {
-    pub from: SignalPreset,
-    pub to: SignalPreset,
+pub struct SignalParametersTransition {
+    pub from: SignalParameters,
+    pub to: SignalParameters,
     pub progress: f32,
     pub duration_ms: f32,
 }
 
-impl PresetTransition {
-    pub fn new(from: SignalPreset, to: SignalPreset, duration_ms: f32) -> Self {
+impl SignalParametersTransition {
+    pub fn new(from: SignalParameters, to: SignalParameters, duration_ms: f32) -> Self {
         Self {
             from,
             to,
@@ -31,7 +31,7 @@ impl PresetTransition {
         }
     }
 
-    pub fn advance(&mut self, delta_ms: f32) -> Option<SignalPreset> {
+    pub fn advance(&mut self, delta_ms: f32) -> Option<SignalParameters> {
         if self.progress >= 1.0 {
             return None;
         }
@@ -52,8 +52,8 @@ pub type ProcessorRef = Arc<RwLock<AudioProcessor>>;
 pub struct AudioProcessor {
     mixer: Mixer,
     dsp_chain: RadioEffectChain,
-    transition: Option<PresetTransition>,
-    current_preset: SignalPreset,
+    transition: Option<SignalParametersTransition>,
+    current_preset: SignalParameters,
     samples_processed: u64, // Total stereo frames processed (not individual samples)
     opus_encoder: OpusEncoder,
     opus_stream: broadcast::Sender<Vec<u8>>,
@@ -62,7 +62,7 @@ pub struct AudioProcessor {
 }
 
 impl AudioProcessor {
-    pub fn new(initial_preset: SignalPreset) -> Self {
+    pub fn new(initial_preset: SignalParameters) -> Self {
         let mixer = Mixer::new(SAMPLE_RATE);
         let dsp_chain = RadioEffectChain::new(SAMPLE_RATE, &initial_preset);
         let opus_encoder = OpusEncoder::default();
@@ -97,7 +97,7 @@ impl AudioProcessor {
         self.opus_stream.receiver_count()
     }
 
-    pub fn start_preset_transition(&mut self, to_preset: SignalPreset, duration_ms: f32) {
+    pub fn start_preset_transition(&mut self, to_preset: SignalParameters, duration_ms: f32) {
         // If already transitioning, start from the current interpolated position
         // to avoid jarring jumps back to the old preset
         let from_preset = if let Some(ref transition) = self.transition {
@@ -109,10 +109,14 @@ impl AudioProcessor {
             self.current_preset.clone()
         };
 
-        self.transition = Some(PresetTransition::new(from_preset, to_preset, duration_ms));
+        self.transition = Some(SignalParametersTransition::new(
+            from_preset,
+            to_preset,
+            duration_ms,
+        ));
     }
 
-    pub fn set_preset_immediate(&mut self, preset: SignalPreset) {
+    pub fn set_preset_immediate(&mut self, preset: SignalParameters) {
         self.current_preset = preset.clone();
         self.dsp_chain.update_preset(&preset);
         self.transition = None;

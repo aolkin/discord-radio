@@ -75,7 +75,7 @@ Noise levels use perceptual (dB-based) scaling for natural-sounding volume contr
 
 JSON-based effect presets with smooth transitions.
 
-- **SignalPreset**: Complete effect parameter set
+- **SignalParameters**: Complete effect parameter set
 - **PresetManager**: Loads presets from the `SIGNAL_PRESETS_PATH` directory (default `signal_presets/`; the value must end with a slash), under both the content root and the object storage bucket root
 - **Preset Interpolation**: Smooth transitions between presets
 
@@ -85,7 +85,7 @@ Continuous audio generation at 48kHz stereo, 20ms frames (960 samples).
 
 - **AudioProcessor**: Owns mixer and DSP chain
 - **ProcessingThread**: Async loop generating frames
-- **PresetTransition**: Smooth parameter interpolation
+- **SignalParametersTransition**: Smooth parameter interpolation
 
 ### 7. Songbird Integration (`audio/raw_adapter.rs`)
 

@@ -1,7 +1,7 @@
 use crate::audio::dsp::modulation::{Bitcrusher, DropoutGenerator, LFO};
 use crate::audio::dsp::noise::NoiseGenerator;
 use crate::audio::helpers::perceptual_level_to_amplitude;
-use crate::audio::presets::SignalPreset;
+use crate::audio::presets::SignalParameters;
 use atomic_float::AtomicF32;
 use biquad::{Biquad, Coefficients, DirectForm1, ToHertz};
 use std::sync::Arc;
@@ -32,7 +32,7 @@ pub struct RadioEffectChain {
 }
 
 impl RadioEffectChain {
-    pub fn new(sample_rate: u32, preset: &SignalPreset) -> Self {
+    pub fn new(sample_rate: u32, preset: &SignalParameters) -> Self {
         // Use separate highpass and lowpass filters instead of bandpass
         // This gives true pass/reject behavior at frequency boundaries
         let hp_coeffs = Coefficients::<f32>::from_params(
@@ -89,7 +89,7 @@ impl RadioEffectChain {
         }
     }
 
-    pub fn update_preset(&mut self, preset: &SignalPreset) {
+    pub fn update_preset(&mut self, preset: &SignalParameters) {
         // Update highpass and lowpass filters separately
         let hp_coeffs = Coefficients::<f32>::from_params(
             biquad::Type::HighPass,

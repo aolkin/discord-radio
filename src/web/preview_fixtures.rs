@@ -1,5 +1,5 @@
 use crate::audio::dj::config::{DJConfig, Pool};
-use crate::audio::presets::SignalPreset;
+use crate::audio::presets::SignalParameters;
 use crate::web::routes::discord::{ChannelsResponse, GuildsResponse};
 use crate::web::routes::files::BrowseFilesResponse;
 use crate::web::routes::hex_folder::HexFolderResponse;
@@ -56,9 +56,9 @@ fn preview_fixtures_round_trip() {
     fixture!(BotSnapshot, "snapshots/playing-track.json");
     fixture!(BotSnapshot, "snapshots/playing-hex.json");
     fixture!(BotSnapshot, "snapshots/playing-noise.json");
-    fixture!(SignalPreset, "signal-presets/clear_signal.json");
-    fixture!(SignalPreset, "signal-presets/weak_signal.json");
-    fixture!(SignalPreset, "signal-presets/fading_signal.json");
+    fixture!(SignalParameters, "signal-presets/clear_signal.json");
+    fixture!(SignalParameters, "signal-presets/weak_signal.json");
+    fixture!(SignalParameters, "signal-presets/fading_signal.json");
     fixture!(Pool, "pools/track.json");
     fixture!(Pool, "pools/hex.json");
     fixture!(Pool, "pools/noise.json");
