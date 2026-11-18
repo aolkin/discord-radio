@@ -9,24 +9,28 @@ export const signalPresetForms = () => ({
     signalPresetDuration: null,
 });
 
+const linear = (max) => ({ scale: 'linear', min: 0, max, step: 0.01 });
+const log = (min, max, step) => ({ scale: 'log', min, max, step });
+const limited = (key, label, min, max, extra) => ({ key, label, type: 'number', step: 'any', min, max, ...extra });
+
 const presetFields = [
-    { key: 'bandpass_low', label: 'Bandpass Low (Hz)', type: 'number', step: 'any', min: 0, default: 20 },
-    { key: 'bandpass_high', label: 'Bandpass High (Hz)', type: 'number', step: 'any', min: 0, default: 20000 },
-    { key: 'white_noise_level', label: 'White Noise Level (0-2)', type: 'number', step: 'any', min: 0, max: 2 },
-    { key: 'pink_noise_level', label: 'Pink Noise Level (0-2)', type: 'number', step: 'any', min: 0, max: 2 },
-    { key: 'brown_noise_level', label: 'Brown Noise Level (0-2)', type: 'number', step: 'any', min: 0, max: 2 },
-    { key: 'tremolo_depth', label: 'Tremolo Depth', type: 'number', step: 'any' },
-    { key: 'tremolo_rate', label: 'Tremolo Rate (Hz)', type: 'number', step: 'any' },
-    { key: 'tremolo_jitter', label: 'Tremolo Jitter', type: 'number', step: 'any' },
-    { key: 'clip_pregain', label: 'Clip Pregain', type: 'number', step: 'any', default: 1 },
-    { key: 'clip_threshold', label: 'Clip Threshold', type: 'number', step: 'any', default: 1 },
-    { key: 'bitcrush_bits', label: 'Bitcrush Bits', type: 'number', step: 1, min: 1, max: 255, optional: true },
-    { key: 'dropout_probability', label: 'Dropout Probability', type: 'number', step: 'any', min: 0 },
+    limited('bandpass_low', 'Bandpass Low (Hz)', 20, 20000, { default: 20, slider: log(20, 20000, 1) }),
+    limited('bandpass_high', 'Bandpass High (Hz)', 20, 20000, { default: 20000, slider: log(20, 20000, 1) }),
+    limited('white_noise_level', 'White Noise Level (0-2)', 0, 2, { slider: linear(2) }),
+    limited('pink_noise_level', 'Pink Noise Level (0-2)', 0, 2, { slider: linear(2) }),
+    limited('brown_noise_level', 'Brown Noise Level (0-2)', 0, 2, { slider: linear(2) }),
+    limited('tremolo_depth', 'Tremolo Depth', 0, 1, { slider: linear(1) }),
+    limited('tremolo_rate', 'Tremolo Rate (Hz)', 0, 20, { slider: log(0.1, 20, 0.01) }),
+    limited('tremolo_jitter', 'Tremolo Jitter', 0, 1, { slider: linear(1) }),
+    limited('clip_pregain', 'Clip Pregain', 0, 100, { default: 1 }),
+    limited('clip_threshold', 'Clip Threshold', 0, 2, { default: 1, slider: linear(2) }),
+    { key: 'bitcrush_bits', label: 'Bitcrush Bits', type: 'number', step: 1, min: 1, max: 16, optional: true },
+    limited('dropout_probability', 'Dropout Probability', 0, 1, { slider: linear(1) }),
 ];
 
 const dropoutFields = [
-    { key: 0, label: 'Dropout Min Duration (ms)', type: 'number', step: 'any', min: 0 },
-    { key: 1, label: 'Dropout Max Duration (ms)', type: 'number', step: 'any', min: 0 },
+    limited(0, 'Dropout Min Duration (ms)', 0, 2000, { slider: log(1, 2000, 1) }),
+    limited(1, 'Dropout Max Duration (ms)', 0, 2000, { slider: log(1, 2000, 1) }),
 ];
 
 function blocks(form) {
