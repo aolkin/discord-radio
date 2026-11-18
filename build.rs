@@ -41,11 +41,14 @@ fn main() {
     fs::write(out_dir.join("index.js"), &js).expect("writing the bundled JavaScript");
 
     let mut assets = vec![("index.js".to_string(), content_hash(js.as_bytes()))];
-    for name in ["theme.js", "alpine.min.js", "base.css", "index.css"] {
-        assets.push((
-            name.to_string(),
-            content_hash(&read(&static_dir.join(name))),
-        ));
+    for entry in fs::read_dir(&static_dir).unwrap() {
+        let path = entry.unwrap().path();
+        let hashed = path
+            .extension()
+            .is_some_and(|ext| ext == "js" || ext == "css" || ext == "png");
+        if let (true, Some(name)) = (hashed, path.file_name().and_then(|n| n.to_str())) {
+            assets.push((name.to_string(), content_hash(&read(&path))));
+        }
     }
 
     let mut html = String::from_utf8(read(&bundle_dir.join("index.html")))
