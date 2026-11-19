@@ -40,7 +40,7 @@
       ],
       "dj_state": { "segment_type": "track", "details": "s3://tracks/signal.mp3 (42.0s / 187.5s)", "pool": "track", "progress": { "played": 1, "total": 2 } },
       "dj_config": "default",
-      "signal_preset": { "name": "clear_signal", "expected_name": "clear_signal", "transitioning": false, "source": "background", "remaining_seconds": 252.0 },
+      "signal_preset": { "name": "clear_signal", "expected_name": "clear_signal", "transitioning": false, "source": "background", "remaining_seconds": 252.0, "parameters": { "name": "clear_signal", "effects": [] } },
       "channel_status": { "status": "On air", "source": "background", "remaining_seconds": 252.0 },
       "announcement_channels": [
         { "channel_id": "200000000000000002", "name": "announcements" }
