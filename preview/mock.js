@@ -97,6 +97,7 @@
             setMode(forcedMode ? radio.mode : nextMode(radio.mode));
         }
         const snapshot = structuredClone(store.snapshots[radio.mode]);
+        snapshot.type = 'snapshot';
         snapshot.current_activity = radio.activity;
         const template = snapshot.guilds[0];
         snapshot.guilds = store.guilds.guilds

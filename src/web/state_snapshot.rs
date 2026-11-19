@@ -1,5 +1,6 @@
 use crate::activity::ActivityEntry;
 use crate::audio::dj::state_machine::{ChannelStatus, PoolProgress};
+use crate::audio::presets::SignalParameters;
 use crate::audio::tracks::TrackSnapshot;
 use crate::state::Data;
 use serde::{Deserialize, Serialize};
@@ -18,6 +19,7 @@ pub struct SignalPresetInfo {
     pub expected_name: String,
     pub transitioning: bool,
     pub source: String,
+    pub parameters: SignalParameters,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -95,6 +97,7 @@ impl BotSnapshot {
                 expected_name: preset.value.name,
                 transitioning: processor.is_transitioning(),
                 source: preset.tier.to_string(),
+                parameters: processor.target_preset().clone(),
             };
 
             guilds.push(GuildState {

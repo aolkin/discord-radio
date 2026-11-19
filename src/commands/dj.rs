@@ -11,7 +11,7 @@ use anyhow::{Context as _, bail};
 use serenity::all::{ChannelId, ChannelType, CreateAutocompleteResponse, GuildId};
 use std::path::Path;
 
-fn send_to_dj(
+pub fn send_to_dj(
     bot_state: crate::state::Data,
     guild_id: GuildId,
     command: DJCommand,
