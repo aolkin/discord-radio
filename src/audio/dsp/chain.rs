@@ -1,7 +1,7 @@
 use crate::audio::dsp::modulation::{Bitcrusher, DropoutGenerator, LFO};
 use crate::audio::dsp::noise::NoiseGenerator;
 use crate::audio::helpers::perceptual_level_to_amplitude;
-use crate::audio::presets::SignalParameters;
+use crate::audio::presets::{NoiseKind, SignalParameters, noise_level};
 use atomic_float::AtomicF32;
 use biquad::{Biquad, Coefficients, DirectForm1, ToHertz};
 use std::sync::Arc;
@@ -14,15 +14,15 @@ pub struct RadioEffectChain {
     lowpass_r: DirectForm1<f32>,
 
     noise_gen: NoiseGenerator,
-    white_noise_level: Arc<AtomicF32>,
-    pink_noise_level: Arc<AtomicF32>,
-    brown_noise_level: Arc<AtomicF32>,
+    white_level: Arc<AtomicF32>,
+    pink_level: Arc<AtomicF32>,
+    brown_level: Arc<AtomicF32>,
 
     tremolo_lfo: LFO,
-    tremolo_depth: Arc<AtomicF32>,
+    depth: Arc<AtomicF32>,
 
-    clip_pregain: Arc<AtomicF32>,
-    clip_threshold: Arc<AtomicF32>,
+    pregain: Arc<AtomicF32>,
+    threshold: Arc<AtomicF32>,
 
     bitcrusher: Option<Bitcrusher>,
 
@@ -38,7 +38,7 @@ impl RadioEffectChain {
         let hp_coeffs = Coefficients::<f32>::from_params(
             biquad::Type::HighPass,
             sample_rate.hz(),
-            preset.bandpass_low.hz(),
+            preset.bandpass.low.hz(),
             biquad::Q_BUTTERWORTH_F32,
         )
         .unwrap();
@@ -46,12 +46,12 @@ impl RadioEffectChain {
         let lp_coeffs = Coefficients::<f32>::from_params(
             biquad::Type::LowPass,
             sample_rate.hz(),
-            preset.bandpass_high.hz(),
+            preset.bandpass.high.hz(),
             biquad::Q_BUTTERWORTH_F32,
         )
         .unwrap();
 
-        let bitcrusher = preset.bitcrush_bits.map(Bitcrusher::new);
+        let bitcrusher = preset.bitcrush.bits.map(Bitcrusher::new);
 
         Self {
             highpass_l: DirectForm1::<f32>::new(hp_coeffs),
@@ -60,28 +60,21 @@ impl RadioEffectChain {
             lowpass_r: DirectForm1::<f32>::new(lp_coeffs),
 
             noise_gen: NoiseGenerator::new(),
-            // Convert noise levels from config values to perceptual amplitudes
-            white_noise_level: Arc::new(AtomicF32::new(perceptual_level_to_amplitude(
-                preset.white_noise_level,
-            ))),
-            pink_noise_level: Arc::new(AtomicF32::new(perceptual_level_to_amplitude(
-                preset.pink_noise_level,
-            ))),
-            brown_noise_level: Arc::new(AtomicF32::new(perceptual_level_to_amplitude(
-                preset.brown_noise_level,
-            ))),
+            white_level: Arc::new(AtomicF32::new(noise_amplitude(preset, NoiseKind::White))),
+            pink_level: Arc::new(AtomicF32::new(noise_amplitude(preset, NoiseKind::Pink))),
+            brown_level: Arc::new(AtomicF32::new(noise_amplitude(preset, NoiseKind::Brown))),
 
-            tremolo_lfo: LFO::new(sample_rate, preset.tremolo_rate, preset.tremolo_jitter),
-            tremolo_depth: Arc::new(AtomicF32::new(preset.tremolo_depth)),
+            tremolo_lfo: LFO::new(sample_rate, preset.tremolo.rate, preset.tremolo.jitter),
+            depth: Arc::new(AtomicF32::new(preset.tremolo.depth)),
 
-            clip_pregain: Arc::new(AtomicF32::new(preset.clip_pregain)),
-            clip_threshold: Arc::new(AtomicF32::new(preset.clip_threshold)),
+            pregain: Arc::new(AtomicF32::new(preset.clip.pregain)),
+            threshold: Arc::new(AtomicF32::new(preset.clip.threshold)),
 
             bitcrusher,
 
             dropout_gen: DropoutGenerator::new(
-                preset.dropout_probability,
-                preset.dropout_duration_ms,
+                preset.dropout.probability,
+                (preset.dropout.min_ms, preset.dropout.max_ms),
                 sample_rate,
             ),
 
@@ -94,7 +87,7 @@ impl RadioEffectChain {
         let hp_coeffs = Coefficients::<f32>::from_params(
             biquad::Type::HighPass,
             self.sample_rate.hz(),
-            preset.bandpass_low.hz(),
+            preset.bandpass.low.hz(),
             biquad::Q_BUTTERWORTH_F32,
         )
         .unwrap();
@@ -102,7 +95,7 @@ impl RadioEffectChain {
         let lp_coeffs = Coefficients::<f32>::from_params(
             biquad::Type::LowPass,
             self.sample_rate.hz(),
-            preset.bandpass_high.hz(),
+            preset.bandpass.high.hz(),
             biquad::Q_BUTTERWORTH_F32,
         )
         .unwrap();
@@ -114,31 +107,25 @@ impl RadioEffectChain {
         self.lowpass_r.update_coefficients(lp_coeffs);
 
         // Convert noise levels from config values to perceptual amplitudes
-        self.white_noise_level.store(
-            perceptual_level_to_amplitude(preset.white_noise_level),
-            Ordering::Relaxed,
-        );
-        self.pink_noise_level.store(
-            perceptual_level_to_amplitude(preset.pink_noise_level),
-            Ordering::Relaxed,
-        );
-        self.brown_noise_level.store(
-            perceptual_level_to_amplitude(preset.brown_noise_level),
-            Ordering::Relaxed,
-        );
-        self.tremolo_depth
-            .store(preset.tremolo_depth, Ordering::Relaxed);
+        self.white_level
+            .store(noise_amplitude(preset, NoiseKind::White), Ordering::Relaxed);
+        self.pink_level
+            .store(noise_amplitude(preset, NoiseKind::Pink), Ordering::Relaxed);
+        self.brown_level
+            .store(noise_amplitude(preset, NoiseKind::Brown), Ordering::Relaxed);
+        self.depth.store(preset.tremolo.depth, Ordering::Relaxed);
         self.tremolo_lfo
-            .set_frequency(self.sample_rate, preset.tremolo_rate);
-        self.tremolo_lfo.set_amplitude_jitter(preset.tremolo_jitter);
-        self.dropout_gen
-            .set_params(preset.dropout_probability, preset.dropout_duration_ms);
-        self.clip_pregain
-            .store(preset.clip_pregain, Ordering::Relaxed);
-        self.clip_threshold
-            .store(preset.clip_threshold, Ordering::Relaxed);
+            .set_frequency(self.sample_rate, preset.tremolo.rate);
+        self.tremolo_lfo.set_amplitude_jitter(preset.tremolo.jitter);
+        self.dropout_gen.set_params(
+            preset.dropout.probability,
+            (preset.dropout.min_ms, preset.dropout.max_ms),
+        );
+        self.pregain.store(preset.clip.pregain, Ordering::Relaxed);
+        self.threshold
+            .store(preset.clip.threshold, Ordering::Relaxed);
 
-        if let Some(bits) = preset.bitcrush_bits {
+        if let Some(bits) = preset.bitcrush.bits {
             if let Some(ref mut bc) = self.bitcrusher {
                 bc.set_depth(bits);
             } else {
@@ -155,9 +142,9 @@ impl RadioEffectChain {
         // 1. Noise mixing - Add static/interference
         // Mix in generated noise (white, pink, and brown) to simulate poor signal
         let (white_noise, pink_noise, brown_noise) = self.noise_gen.next_frame();
-        let white_level = self.white_noise_level.load(Ordering::Relaxed);
-        let pink_level = self.pink_noise_level.load(Ordering::Relaxed);
-        let brown_level = self.brown_noise_level.load(Ordering::Relaxed);
+        let white_level = self.white_level.load(Ordering::Relaxed);
+        let pink_level = self.pink_level.load(Ordering::Relaxed);
+        let brown_level = self.brown_level.load(Ordering::Relaxed);
         frame[0] += white_noise[0] * white_level
             + pink_noise[0] * pink_level
             + brown_noise[0] * brown_level;
@@ -176,15 +163,15 @@ impl RadioEffectChain {
         // 3. Tremolo - Simulate signal strength fluctuation
         // LFO modulates amplitude to create wavering effect
         let lfo = self.tremolo_lfo.next();
-        let depth = self.tremolo_depth.load(Ordering::Relaxed);
+        let depth = self.depth.load(Ordering::Relaxed);
         let tremolo_gain = 1.0 - depth + (lfo * 0.5 + 0.5) * depth;
         frame[0] *= tremolo_gain;
         frame[1] *= tremolo_gain;
 
         // 4. Soft clipping - Simulate overdriven/distorted signal
         // Apply pregain, then clip to threshold to create distortion
-        let pregain = self.clip_pregain.load(Ordering::Relaxed);
-        let threshold = self.clip_threshold.load(Ordering::Relaxed);
+        let pregain = self.pregain.load(Ordering::Relaxed);
+        let threshold = self.threshold.load(Ordering::Relaxed);
         frame[0] = soft_clip(frame[0] * pregain, threshold);
         frame[1] = soft_clip(frame[1] * pregain, threshold);
 
@@ -202,6 +189,10 @@ impl RadioEffectChain {
 
         frame
     }
+}
+
+fn noise_amplitude(preset: &SignalParameters, kind: NoiseKind) -> f32 {
+    perceptual_level_to_amplitude(noise_level(&preset.noise, kind))
 }
 
 fn soft_clip(sample: f32, threshold: f32) -> f32 {
