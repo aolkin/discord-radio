@@ -10,10 +10,16 @@
       "level": 0.5
     }
   ],
-  "bandpass": {
-    "low": 300.0,
-    "high": 4000.0
-  },
+  "filters": [
+    {
+      "kind": "highpass",
+      "frequency": 300.0
+    },
+    {
+      "kind": "lowpass",
+      "frequency": 4000.0
+    }
+  ],
   "tremolo": {
     "depth": 0.5,
     "rate": 4.0,

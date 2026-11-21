@@ -6,10 +6,16 @@
       "level": 0.333
     }
   ],
-  "bandpass": {
-    "low": 800.0,
-    "high": 4500.0
-  },
+  "filters": [
+    {
+      "kind": "highpass",
+      "frequency": 800.0
+    },
+    {
+      "kind": "lowpass",
+      "frequency": 4500.0
+    }
+  ],
   "tremolo": {
     "depth": 0.3,
     "rate": 0.3,
@@ -19,9 +25,7 @@
     "pregain": 1.0,
     "threshold": 0.95
   },
-  "bitcrush": {
-    "bits": null
-  },
+  "bitcrush": null,
   "dropout": {
     "probability": 0.0,
     "min_ms": 0.0,

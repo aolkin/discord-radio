@@ -146,15 +146,18 @@ More sample presets are in `examples/signal_presets/`. The bot loads presets fro
 {
   "name": "preset_name",
   "noise": [{ "kind": "white", "level": 0.3 }],
-  "bandpass": { "low": 500.0, "high": 5000.0 },
+  "filters": [
+    { "kind": "highpass", "frequency": 500.0 },
+    { "kind": "lowpass", "frequency": 5000.0 }
+  ],
   "tremolo": { "depth": 0.4, "rate": 2.0, "jitter": 0.3 },
   "clip": { "pregain": 1.0, "threshold": 0.8 },
-  "bitcrush": { "bits": null },
+  "bitcrush": { "bits": 8 },
   "dropout": { "probability": 0.1, "min_ms": 50.0, "max_ms": 150.0 }
 }
 ```
 
-Stages appear in processing order. `noise` lists only the kinds the preset uses (`white`, `pink`, `brown`), each at most once; a missing kind is silent.
+Stages appear in processing order. `noise` lists only the kinds the preset uses (`white`, `pink`, `brown`) and `filters` only the filters it applies (`highpass`, `lowpass`), each kind at most once; a missing noise kind is silent and a missing filter passes everything. `bitcrush` is `null` when the preset does not bitcrush.
 
 **Noise Level Parameters:**
 

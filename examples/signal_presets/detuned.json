@@ -6,10 +6,7 @@
       "level": 0.333
     }
   ],
-  "bandpass": {
-    "low": 20.0,
-    "high": 20000.0
-  },
+  "filters": [],
   "tremolo": {
     "depth": 0.0,
     "rate": 1.5,
@@ -19,9 +16,7 @@
     "pregain": 1.0,
     "threshold": 0.8
   },
-  "bitcrush": {
-    "bits": null
-  },
+  "bitcrush": null,
   "dropout": {
     "probability": 0.15,
     "min_ms": 50.0,

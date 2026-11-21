@@ -1,22 +1,28 @@
 use crate::audio::dsp::modulation::{Bitcrusher, DropoutGenerator, LFO};
-use crate::audio::dsp::noise::NoiseGenerator;
+use crate::audio::dsp::noise::NoiseSource;
 use crate::audio::helpers::perceptual_level_to_amplitude;
-use crate::audio::presets::{NoiseKind, SignalParameters, noise_level};
+use crate::audio::presets::{Filter, FilterKind, Noise, NoiseKind, SignalParameters};
 use atomic_float::AtomicF32;
 use biquad::{Biquad, Coefficients, DirectForm1, ToHertz};
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-pub struct RadioEffectChain {
-    highpass_l: DirectForm1<f32>,
-    highpass_r: DirectForm1<f32>,
-    lowpass_l: DirectForm1<f32>,
-    lowpass_r: DirectForm1<f32>,
+struct NoiseLayer {
+    kind: NoiseKind,
+    source: NoiseSource,
+    amplitude: f32,
+}
 
-    noise_gen: NoiseGenerator,
-    white_level: Arc<AtomicF32>,
-    pink_level: Arc<AtomicF32>,
-    brown_level: Arc<AtomicF32>,
+struct FilterStage {
+    kind: FilterKind,
+    left: DirectForm1<f32>,
+    right: DirectForm1<f32>,
+}
+
+pub struct RadioEffectChain {
+    noise: Vec<NoiseLayer>,
+
+    filters: Vec<FilterStage>,
 
     tremolo_lfo: LFO,
     depth: Arc<AtomicF32>,
@@ -33,36 +39,9 @@ pub struct RadioEffectChain {
 
 impl RadioEffectChain {
     pub fn new(sample_rate: u32, preset: &SignalParameters) -> Self {
-        // Use separate highpass and lowpass filters instead of bandpass
-        // This gives true pass/reject behavior at frequency boundaries
-        let hp_coeffs = Coefficients::<f32>::from_params(
-            biquad::Type::HighPass,
-            sample_rate.hz(),
-            preset.bandpass.low.hz(),
-            biquad::Q_BUTTERWORTH_F32,
-        )
-        .unwrap();
-
-        let lp_coeffs = Coefficients::<f32>::from_params(
-            biquad::Type::LowPass,
-            sample_rate.hz(),
-            preset.bandpass.high.hz(),
-            biquad::Q_BUTTERWORTH_F32,
-        )
-        .unwrap();
-
-        let bitcrusher = preset.bitcrush.bits.map(Bitcrusher::new);
-
-        Self {
-            highpass_l: DirectForm1::<f32>::new(hp_coeffs),
-            highpass_r: DirectForm1::<f32>::new(hp_coeffs),
-            lowpass_l: DirectForm1::<f32>::new(lp_coeffs),
-            lowpass_r: DirectForm1::<f32>::new(lp_coeffs),
-
-            noise_gen: NoiseGenerator::new(),
-            white_level: Arc::new(AtomicF32::new(noise_amplitude(preset, NoiseKind::White))),
-            pink_level: Arc::new(AtomicF32::new(noise_amplitude(preset, NoiseKind::Pink))),
-            brown_level: Arc::new(AtomicF32::new(noise_amplitude(preset, NoiseKind::Brown))),
+        let mut chain = Self {
+            noise: Vec::new(),
+            filters: Vec::new(),
 
             tremolo_lfo: LFO::new(sample_rate, preset.tremolo.rate, preset.tremolo.jitter),
             depth: Arc::new(AtomicF32::new(preset.tremolo.depth)),
@@ -70,69 +49,83 @@ impl RadioEffectChain {
             pregain: Arc::new(AtomicF32::new(preset.clip.pregain)),
             threshold: Arc::new(AtomicF32::new(preset.clip.threshold)),
 
-            bitcrusher,
+            bitcrusher: preset
+                .bitcrush
+                .map(|bitcrush| Bitcrusher::new(bitcrush.bits)),
 
-            dropout_gen: DropoutGenerator::new(
-                preset.dropout.probability,
-                (preset.dropout.min_ms, preset.dropout.max_ms),
-                sample_rate,
-            ),
+            dropout_gen: DropoutGenerator::new(&preset.dropout, sample_rate),
 
             sample_rate,
-        }
+        };
+        chain.update_noise(&preset.noise);
+        chain.update_filters(&preset.filters);
+        chain
     }
 
     pub fn update_preset(&mut self, preset: &SignalParameters) {
-        // Update highpass and lowpass filters separately
-        let hp_coeffs = Coefficients::<f32>::from_params(
-            biquad::Type::HighPass,
-            self.sample_rate.hz(),
-            preset.bandpass.low.hz(),
-            biquad::Q_BUTTERWORTH_F32,
-        )
-        .unwrap();
-
-        let lp_coeffs = Coefficients::<f32>::from_params(
-            biquad::Type::LowPass,
-            self.sample_rate.hz(),
-            preset.bandpass.high.hz(),
-            biquad::Q_BUTTERWORTH_F32,
-        )
-        .unwrap();
-
-        // Update coefficients without resetting filter state to avoid transients
-        self.highpass_l.update_coefficients(hp_coeffs);
-        self.highpass_r.update_coefficients(hp_coeffs);
-        self.lowpass_l.update_coefficients(lp_coeffs);
-        self.lowpass_r.update_coefficients(lp_coeffs);
-
-        // Convert noise levels from config values to perceptual amplitudes
-        self.white_level
-            .store(noise_amplitude(preset, NoiseKind::White), Ordering::Relaxed);
-        self.pink_level
-            .store(noise_amplitude(preset, NoiseKind::Pink), Ordering::Relaxed);
-        self.brown_level
-            .store(noise_amplitude(preset, NoiseKind::Brown), Ordering::Relaxed);
+        self.update_noise(&preset.noise);
+        self.update_filters(&preset.filters);
         self.depth.store(preset.tremolo.depth, Ordering::Relaxed);
         self.tremolo_lfo
             .set_frequency(self.sample_rate, preset.tremolo.rate);
         self.tremolo_lfo.set_amplitude_jitter(preset.tremolo.jitter);
-        self.dropout_gen.set_params(
-            preset.dropout.probability,
-            (preset.dropout.min_ms, preset.dropout.max_ms),
-        );
+        self.dropout_gen.set_params(&preset.dropout);
         self.pregain.store(preset.clip.pregain, Ordering::Relaxed);
         self.threshold
             .store(preset.clip.threshold, Ordering::Relaxed);
 
-        if let Some(bits) = preset.bitcrush.bits {
+        if let Some(bitcrush) = preset.bitcrush {
             if let Some(ref mut bc) = self.bitcrusher {
-                bc.set_depth(bits);
+                bc.set_depth(bitcrush.bits);
             } else {
-                self.bitcrusher = Some(Bitcrusher::new(bits));
+                self.bitcrusher = Some(Bitcrusher::new(bitcrush.bits));
             }
         } else {
             self.bitcrusher = None;
+        }
+    }
+
+    fn update_noise(&mut self, noise: &[Noise]) {
+        self.noise
+            .retain(|layer| noise.iter().any(|params| params.kind == layer.kind));
+        for params in noise {
+            let amplitude = perceptual_level_to_amplitude(params.level);
+            match self
+                .noise
+                .iter_mut()
+                .find(|layer| layer.kind == params.kind)
+            {
+                Some(layer) => layer.amplitude = amplitude,
+                None => self.noise.push(NoiseLayer {
+                    kind: params.kind,
+                    source: NoiseSource::new(params.kind),
+                    amplitude,
+                }),
+            }
+        }
+    }
+
+    fn update_filters(&mut self, filters: &[Filter]) {
+        self.filters
+            .retain(|stage| filters.iter().any(|filter| filter.kind == stage.kind));
+        for filter in filters {
+            let coefficients = filter_coefficients(self.sample_rate, filter);
+            match self
+                .filters
+                .iter_mut()
+                .find(|stage| stage.kind == filter.kind)
+            {
+                // Update coefficients without resetting filter state to avoid transients
+                Some(stage) => {
+                    stage.left.update_coefficients(coefficients);
+                    stage.right.update_coefficients(coefficients);
+                }
+                None => self.filters.push(FilterStage {
+                    kind: filter.kind,
+                    left: DirectForm1::<f32>::new(coefficients),
+                    right: DirectForm1::<f32>::new(coefficients),
+                }),
+            }
         }
     }
 
@@ -140,25 +133,18 @@ impl RadioEffectChain {
         let mut frame = input;
 
         // 1. Noise mixing - Add static/interference
-        // Mix in generated noise (white, pink, and brown) to simulate poor signal
-        let (white_noise, pink_noise, brown_noise) = self.noise_gen.next_frame();
-        let white_level = self.white_level.load(Ordering::Relaxed);
-        let pink_level = self.pink_level.load(Ordering::Relaxed);
-        let brown_level = self.brown_level.load(Ordering::Relaxed);
-        frame[0] += white_noise[0] * white_level
-            + pink_noise[0] * pink_level
-            + brown_noise[0] * brown_level;
-        frame[1] += white_noise[1] * white_level
-            + pink_noise[1] * pink_level
-            + brown_noise[1] * brown_level;
+        for layer in &mut self.noise {
+            let sample = layer.source.next() * layer.amplitude;
+            frame[0] += sample;
+            frame[1] += sample;
+        }
 
-        // 2. Highpass + Lowpass filters - Simulate radio frequency response
-        // Cuts frequencies outside the desired range
+        // 2. Filters - Simulate radio frequency response
         // e.g., 800Hz highpass + 4500Hz lowpass = "telephone" bandlimiting
-        frame[0] = self.highpass_l.run(frame[0]);
-        frame[1] = self.highpass_r.run(frame[1]);
-        frame[0] = self.lowpass_l.run(frame[0]);
-        frame[1] = self.lowpass_r.run(frame[1]);
+        for stage in &mut self.filters {
+            frame[0] = stage.left.run(frame[0]);
+            frame[1] = stage.right.run(frame[1]);
+        }
 
         // 3. Tremolo - Simulate signal strength fluctuation
         // LFO modulates amplitude to create wavering effect
@@ -191,8 +177,18 @@ impl RadioEffectChain {
     }
 }
 
-fn noise_amplitude(preset: &SignalParameters, kind: NoiseKind) -> f32 {
-    perceptual_level_to_amplitude(noise_level(&preset.noise, kind))
+fn filter_coefficients(sample_rate: u32, filter: &Filter) -> Coefficients<f32> {
+    let kind = match filter.kind {
+        FilterKind::HighPass => biquad::Type::HighPass,
+        FilterKind::LowPass => biquad::Type::LowPass,
+    };
+    Coefficients::<f32>::from_params(
+        kind,
+        sample_rate.hz(),
+        filter.frequency.hz(),
+        biquad::Q_BUTTERWORTH_F32,
+    )
+    .unwrap()
 }
 
 fn soft_clip(sample: f32, threshold: f32) -> f32 {
