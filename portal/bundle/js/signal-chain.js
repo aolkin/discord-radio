@@ -392,8 +392,8 @@ export function toBody(form) {
     const { name: _, ...body } = clone(form);
     for (const [id, value] of Object.entries(layerStages)) {
         body[id] = Object.entries(form[id])
-            .filter(([kind, level]) => level !== neutral(id)[kind])
-            .map(([kind, level]) => ({ kind, [value]: level }));
+            .filter(([kind, amount]) => amount !== neutral(id)[kind])
+            .map(([kind, amount]) => ({ kind, [value]: amount }));
     }
     body.bitcrush = form.bitcrush.bits === null ? null : { bits: form.bitcrush.bits };
     return body;
