@@ -6,12 +6,36 @@
       "in_voice": true,
       "tracks": [
         {
-          "name": "dj",
+          "name": "music",
           "filename": "s3://tracks/signal.mp3",
-          "volume": 1.0,
+          "volume": 0.75,
           "loops": false,
           "start_time": { "secs_since_epoch": 1790000000, "nanos_since_epoch": 0 },
           "duration": { "secs": 187, "nanos": 500000000 }
+        },
+        {
+          "name": "numbers",
+          "filename": "s3://tracks/numbers.wav",
+          "volume": 1.0,
+          "loops": false,
+          "start_time": { "secs_since_epoch": 1790000000, "nanos_since_epoch": 0 },
+          "duration": { "secs": 45, "nanos": 0 }
+        },
+        {
+          "name": "rain-left",
+          "filename": "s3://tracks/ambient/rain.ogg",
+          "volume": 0.5,
+          "loops": true,
+          "start_time": { "secs_since_epoch": 1790000000, "nanos_since_epoch": 0 },
+          "duration": { "secs": 60, "nanos": 0 }
+        },
+        {
+          "name": "rain-right",
+          "filename": "s3://tracks/ambient/rain.ogg",
+          "volume": 0.25,
+          "loops": true,
+          "start_time": { "secs_since_epoch": 1790000000, "nanos_since_epoch": 0 },
+          "duration": { "secs": 60, "nanos": 0 }
         }
       ],
       "dj_state": { "segment_type": "track", "details": "s3://tracks/signal.mp3 (42.0s / 187.5s)", "pool": "track", "progress": { "played": 1, "total": 2 } },
