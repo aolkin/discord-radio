@@ -131,34 +131,3 @@ export function segmentDefaultsBlocks(segmentDefaults, path) {
 export function toggleHexConfig(segmentDefaults) {
     segmentDefaults.hex_config = segmentDefaults.hex_config ? null : blankRow(hexConfigFields);
 }
-
-export const sliderSteps = 1000;
-
-const decimalsOf = (step) => (String(step).split('.')[1] ?? '').length;
-const clamp01 = (t) => Math.min(Math.max(t, 0), 1);
-const allowsZero = (field) => field.min <= 0;
-
-export function sliderPosition(field, value) {
-    const { scale, min, max } = field.slider;
-    if (typeof value !== 'number' || Number.isNaN(value) || (scale === 'log' && value <= 0)) {
-        return 0;
-    }
-    if (scale === 'linear') {
-        return Math.round(clamp01((value - min) / (max - min)) * sliderSteps);
-    }
-    const t = clamp01(Math.log(value / min) / Math.log(max / min));
-    return allowsZero(field) ? 1 + Math.round(t * (sliderSteps - 1)) : Math.round(t * sliderSteps);
-}
-
-export function sliderValue(field, position) {
-    const { scale, min, max, step } = field.slider;
-    if (scale === 'log' && allowsZero(field) && position === 0) {
-        return 0;
-    }
-    let t = position / sliderSteps;
-    if (scale === 'log' && allowsZero(field)) {
-        t = (position - 1) / (sliderSteps - 1);
-    }
-    const value = scale === 'linear' ? min + t * (max - min) : min * (max / min) ** t;
-    return Number(value.toFixed(decimalsOf(step)));
-}
