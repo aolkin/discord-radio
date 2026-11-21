@@ -1,4 +1,4 @@
-import { apiRequest } from './api.js';
+import { apiRequest, bodyOrStatus } from './api.js';
 
 export const logTypes = [
     { id: 'members', icon: '👥', label: 'Members' },
@@ -28,8 +28,7 @@ export function logs() {
             this.logError = '';
             try {
                 const response = await apiRequest(`/api/guilds/${guildId}/logs/${logType}?${params}`, {
-                    errorMessage: 'Failed to load logs',
-                    includeStatus: true,
+                    errorMessage: bodyOrStatus,
                 });
                 const result = await response.json();
                 if (this.route.name === guildId && this.route.logType === logType) {

@@ -1,9 +1,9 @@
 use crate::logging::LogReader;
 use crate::state::Data;
 use crate::web::error::ApiError;
-use anyhow::Context;
 use axum::Json as AxumJson;
 use axum::extract::{Path, Query, State};
+use axum::http::StatusCode;
 use serde::Deserialize;
 use serenity::model::id::GuildId;
 
@@ -61,5 +61,11 @@ pub async fn get_logs(
             )));
         }
     };
-    Ok(AxumJson(result.context("Failed to read logs")?))
+    let result = result.map_err(|e| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            anyhow::anyhow!("Failed to read logs: {e:#}"),
+        )
+    })?;
+    Ok(AxumJson(result))
 }
