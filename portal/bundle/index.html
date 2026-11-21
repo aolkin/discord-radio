@@ -696,6 +696,26 @@
                                                     </button>
                                                 </div>
                                                 <div class="chain-module-body" x-show="!collapsed[effect.id]">
+                                                    <template x-if="displays[effect.id]">
+                                                        <div class="chain-display">
+                                                            <svg
+                                                                class="chain-screen"
+                                                                role="img"
+                                                                aria-label="Effect display"
+                                                                x-bind:view-box.camel="'0 0 320 ' + displays[effect.id].height"
+                                                                :aria-label="displays[effect.id].label"
+                                                                x-html="displaySvg(effect)"
+                                                                @pointerdown="startHandleDrag($event, effect)"
+                                                                @pointermove="moveDrag($event)"
+                                                                @pointerup="endDrag()"
+                                                                @pointercancel="endDrag()"
+                                                            ></svg>
+                                                            <span
+                                                                class="chain-note"
+                                                                x-text="displays[effect.id].note(effectValues(effect))"
+                                                            ></span>
+                                                        </div>
+                                                    </template>
                                                     <div
                                                         class="chain-controls"
                                                         :class="effect.faders && 'chain-faders'"
