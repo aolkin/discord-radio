@@ -1711,7 +1711,7 @@
                                         ></div>
                                         <div
                                             class="track-details"
-                                            x-text="'Source: ' + guild.channel_status.source"
+                                            x-text="'Source: ' + guild.channel_status.source + (channelStatusRemaining(guild) === null ? '' : ', ' + formatTime(channelStatusRemaining(guild)) + ' left')"
                                         ></div>
                                     </div>
                                 </div>
