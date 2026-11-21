@@ -13,50 +13,83 @@ const linear = (max) => ({ scale: 'linear', min: 0, max, step: 0.01 });
 const log = (min, max, step) => ({ scale: 'log', min, max, step });
 const limited = (key, label, min, max, extra) => ({ key, label, type: 'number', step: 'any', min, max, ...extra });
 
-const presetFields = [
-    limited('bandpass_low', 'Bandpass Low (Hz)', 20, 20000, { default: 20, slider: log(20, 20000, 1) }),
-    limited('bandpass_high', 'Bandpass High (Hz)', 20, 20000, { default: 20000, slider: log(20, 20000, 1) }),
-    limited('white_noise_level', 'White Noise Level (0-2)', 0, 2, { slider: linear(2) }),
-    limited('pink_noise_level', 'Pink Noise Level (0-2)', 0, 2, { slider: linear(2) }),
-    limited('brown_noise_level', 'Brown Noise Level (0-2)', 0, 2, { slider: linear(2) }),
-    limited('tremolo_depth', 'Tremolo Depth', 0, 1, { slider: linear(1) }),
-    limited('tremolo_rate', 'Tremolo Rate (Hz)', 0, 20, { slider: log(0.1, 20, 0.01) }),
-    limited('tremolo_jitter', 'Tremolo Jitter', 0, 1, { slider: linear(1) }),
-    limited('clip_pregain', 'Clip Pregain', 0, 100, { default: 1 }),
-    limited('clip_threshold', 'Clip Threshold', 0, 2, { default: 1, slider: linear(2) }),
-    { key: 'bitcrush_bits', label: 'Bitcrush Bits', type: 'number', step: 1, min: 1, max: 16, optional: true },
-    limited('dropout_probability', 'Dropout Probability', 0, 1, { slider: linear(1) }),
-];
+const layerStages = {
+    noise: {
+        value: 'level',
+        fields: [
+            limited('white', 'White Noise Level (0-2)', 0, 2, { slider: linear(2) }),
+            limited('pink', 'Pink Noise Level (0-2)', 0, 2, { slider: linear(2) }),
+            limited('brown', 'Brown Noise Level (0-2)', 0, 2, { slider: linear(2) }),
+        ],
+    },
+    filters: {
+        value: 'frequency',
+        fields: [
+            limited('highpass', 'High-pass Cutoff (Hz)', 20, 20000, { default: 20, slider: log(20, 20000, 1) }),
+            limited('lowpass', 'Low-pass Cutoff (Hz)', 20, 20000, { default: 20000, slider: log(20, 20000, 1) }),
+        ],
+    },
+};
 
-const dropoutFields = [
-    limited(0, 'Dropout Min Duration (ms)', 0, 2000, { slider: log(1, 2000, 1) }),
-    limited(1, 'Dropout Max Duration (ms)', 0, 2000, { slider: log(1, 2000, 1) }),
-];
+const stageFields = {
+    tremolo: [
+        limited('depth', 'Tremolo Depth', 0, 1, { slider: linear(1) }),
+        limited('rate', 'Tremolo Rate (Hz)', 0, 20, { slider: log(0.1, 20, 0.01) }),
+        limited('jitter', 'Tremolo Jitter', 0, 1, { slider: linear(1) }),
+    ],
+    clip: [
+        limited('pregain', 'Clip Pregain', 0, 100, { default: 1 }),
+        limited('threshold', 'Clip Threshold', 0, 2, { default: 1, slider: linear(2) }),
+    ],
+    bitcrush: [{ key: 'bits', label: 'Bitcrush Bits', type: 'number', step: 1, min: 1, max: 16, optional: true }],
+    dropout: [
+        limited('probability', 'Dropout Probability', 0, 1, { slider: linear(1) }),
+        limited('min_ms', 'Dropout Min Duration (ms)', 0, 2000, { slider: log(1, 2000, 1) }),
+        limited('max_ms', 'Dropout Max Duration (ms)', 0, 2000, { slider: log(1, 2000, 1) }),
+    ],
+};
+
+const mapEntries = (object, convert) =>
+    Object.fromEntries(Object.entries(object).map(([key, value]) => [key, convert(value, key)]));
 
 function blocks(form) {
     return [
-        { row: form, fields: presetFields, path: [] },
-        { row: form.dropout_duration_ms, fields: dropoutFields, path: ['dropout_duration_ms'] },
+        ...Object.entries(layerStages).map(([stage, { fields }]) => ({ row: form[stage], fields, path: [stage] })),
+        ...Object.entries(stageFields).map(([stage, fields]) => ({ row: form[stage], fields, path: [stage] })),
     ];
+}
+
+function layersToForm({ value, fields }, layers) {
+    return { ...blankRow(fields), ...Object.fromEntries(layers.map((layer) => [layer.kind, layer[value]])) };
+}
+
+function layersToBody({ value, fields }, row) {
+    const neutral = blankRow(fields);
+    return fields.filter(({ key }) => row[key] !== neutral[key]).map(({ key }) => ({ kind: key, [value]: row[key] }));
 }
 
 function toForm(name, preset) {
     return {
         name,
-        ...convertObject(presetFields, preset, fieldFromServer),
-        dropout_duration_ms: [...preset.dropout_duration_ms],
+        ...mapEntries(layerStages, (stage, key) => layersToForm(stage, preset[key])),
+        ...mapEntries(stageFields, (fields, key) => convertObject(fields, preset[key] ?? {}, fieldFromServer)),
     };
 }
 
 function toBody(form) {
     return {
-        ...convertObject(presetFields, form, fieldToServer),
-        dropout_duration_ms: form.dropout_duration_ms,
+        ...mapEntries(layerStages, (stage, key) => layersToBody(stage, form[key])),
+        ...mapEntries(stageFields, (fields, key) => convertObject(fields, form[key], fieldToServer)),
+        bitcrush: form.bitcrush.bits === '' ? null : { bits: form.bitcrush.bits },
     };
 }
 
 function blankForm() {
-    return { name: '', ...blankRow(presetFields), dropout_duration_ms: [0, 0] };
+    return {
+        name: '',
+        ...mapEntries(layerStages, ({ fields }) => blankRow(fields)),
+        ...mapEntries(stageFields, (fields) => blankRow(fields)),
+    };
 }
 
 const presetEditor = registryEditor({

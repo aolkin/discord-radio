@@ -1,70 +1,219 @@
 use crate::bucket::registry::{JsonRegistry, RegistryEntry};
 use anyhow::bail;
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct SignalParameters {
     pub name: String,
+    pub noise: Vec<Noise>,
+    pub filters: Vec<Filter>,
+    pub tremolo: Tremolo,
+    pub clip: Clip,
+    pub bitcrush: Option<Bitcrush>,
+    pub dropout: Dropout,
+}
 
-    pub bandpass_low: f32,
-    pub bandpass_high: f32,
+trait Lerp {
+    fn lerp(&self, other: &Self, t: f32) -> Self;
+}
 
-    /// Noise levels (0.0-2.0) use perceptual (dB-based) scaling:
-    /// - 0.0 = silence
-    /// - 0.5 = moderate (-30dB)
-    /// - 1.0 = reference level (0dB)
-    /// - 2.0 = boosted (+18dB)
-    pub white_noise_level: f32,
-    pub pink_noise_level: f32,
-    pub brown_noise_level: f32,
+impl Lerp for f32 {
+    fn lerp(&self, other: &Self, t: f32) -> Self {
+        self * (1.0 - t) + other * t
+    }
+}
 
-    pub tremolo_depth: f32,
-    pub tremolo_rate: f32,
-    pub tremolo_jitter: f32,
+macro_rules! lerp_by_step {
+    ($($type:ty),*) => {$(
+        impl Lerp for $type {
+            fn lerp(&self, other: &Self, t: f32) -> Self {
+                if t < 0.5 { *self } else { *other }
+            }
+        }
+    )*};
+}
 
-    pub clip_pregain: f32,
-    pub clip_threshold: f32,
-    pub bitcrush_bits: Option<u8>,
+lerp_by_step!(NoiseKind, FilterKind, Option<Bitcrush>);
 
-    pub dropout_probability: f32,
-    pub dropout_duration_ms: (f32, f32),
+macro_rules! stage {
+    (
+        $(#[$meta:meta])*
+        pub struct $name:ident { $($(#[$field_meta:meta])* pub $field:ident: $type:ty,)* }
+    ) => {
+        $(#[$meta])*
+        pub struct $name { $($(#[$field_meta])* pub $field: $type,)* }
+
+        impl Lerp for $name {
+            fn lerp(&self, other: &Self, t: f32) -> Self {
+                Self { $($field: self.$field.lerp(&other.$field, t),)* }
+            }
+        }
+    };
+}
+
+#[derive(Deserialize, Serialize, Clone, Copy, Debug, PartialEq, Eq, strum::Display)]
+#[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
+pub enum NoiseKind {
+    White,
+    Pink,
+    Brown,
+}
+
+stage! {
+    #[derive(Deserialize, Serialize, Clone, Copy, Debug)]
+    pub struct Noise {
+        pub kind: NoiseKind,
+        /// Noise levels (0.0-2.0) use perceptual (dB-based) scaling:
+        /// - 0.0 = silence
+        /// - 0.5 = moderate (-30dB)
+        /// - 1.0 = reference level (0dB)
+        /// - 2.0 = boosted (+18dB)
+        pub level: f32,
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, Copy, Debug, PartialEq, Eq, strum::Display)]
+#[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
+pub enum FilterKind {
+    HighPass,
+    LowPass,
+}
+
+stage! {
+    #[derive(Deserialize, Serialize, Clone, Copy, Debug)]
+    pub struct Filter {
+        pub kind: FilterKind,
+        pub frequency: f32,
+    }
+}
+
+stage! {
+    #[derive(Deserialize, Serialize, Clone, Copy, Debug)]
+    pub struct Tremolo {
+        pub depth: f32,
+        pub rate: f32,
+        pub jitter: f32,
+    }
+}
+
+stage! {
+    #[derive(Deserialize, Serialize, Clone, Copy, Debug)]
+    pub struct Clip {
+        pub pregain: f32,
+        pub threshold: f32,
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, Copy, Debug)]
+pub struct Bitcrush {
+    pub bits: u8,
+}
+
+stage! {
+    #[derive(Deserialize, Serialize, Clone, Copy, Debug)]
+    pub struct Dropout {
+        pub probability: f32,
+        pub min_ms: f32,
+        pub max_ms: f32,
+    }
+}
+
+trait Layer: Lerp + Copy {
+    type Kind: Copy + PartialEq + Display;
+    const STAGE: &'static str;
+
+    fn kind(&self) -> Self::Kind;
+    fn neutral(kind: Self::Kind) -> Self;
+    fn check_limits(&self) -> anyhow::Result<()>;
+}
+
+impl Layer for Noise {
+    type Kind = NoiseKind;
+    const STAGE: &'static str = "noise";
+
+    fn kind(&self) -> NoiseKind {
+        self.kind
+    }
+
+    fn neutral(kind: NoiseKind) -> Self {
+        Self { kind, level: 0.0 }
+    }
+
+    fn check_limits(&self) -> anyhow::Result<()> {
+        check(
+            &format!("noise.{}.level", self.kind),
+            self.level,
+            NOISE_LEVEL,
+        )
+    }
+}
+
+impl Layer for Filter {
+    type Kind = FilterKind;
+    const STAGE: &'static str = "filter";
+
+    fn kind(&self) -> FilterKind {
+        self.kind
+    }
+
+    fn neutral(kind: FilterKind) -> Self {
+        let frequency = match kind {
+            FilterKind::HighPass => FILTER_HZ.0,
+            FilterKind::LowPass => FILTER_HZ.1,
+        };
+        Self { kind, frequency }
+    }
+
+    fn check_limits(&self) -> anyhow::Result<()> {
+        check(
+            &format!("filters.{}.frequency", self.kind),
+            self.frequency,
+            FILTER_HZ,
+        )
+    }
+}
+
+fn find<L: Layer>(layers: &[L], kind: L::Kind) -> Option<L> {
+    layers.iter().copied().find(|layer| layer.kind() == kind)
+}
+
+impl<L: Layer> Lerp for Vec<L> {
+    fn lerp(&self, other: &Self, t: f32) -> Self {
+        let added = other
+            .iter()
+            .filter(|layer| find(self, layer.kind()).is_none());
+        self.iter()
+            .chain(added)
+            .map(|layer| {
+                let kind = layer.kind();
+                let neutral = L::neutral(kind);
+                let from = find(self, kind).unwrap_or(neutral);
+                let to = find(other, kind).unwrap_or(neutral);
+                from.lerp(&to, t)
+            })
+            .collect()
+    }
 }
 
 impl SignalParameters {
     pub fn interpolate(&self, other: &Self, t: f32) -> Self {
         let t = t.clamp(0.0, 1.0);
-        let inv_t = 1.0 - t;
-
         Self {
             name: format!("{}→{}", self.name, other.name),
-            bandpass_low: self.bandpass_low * inv_t + other.bandpass_low * t,
-            bandpass_high: self.bandpass_high * inv_t + other.bandpass_high * t,
-            // Interpolate noise levels linearly in perceptual space.
-            // The perceptual scale (0.0-2.0) already maps linearly to dB,
-            // so linear interpolation here gives smooth perceptual transitions.
-            white_noise_level: self.white_noise_level * inv_t + other.white_noise_level * t,
-            pink_noise_level: self.pink_noise_level * inv_t + other.pink_noise_level * t,
-            brown_noise_level: self.brown_noise_level * inv_t + other.brown_noise_level * t,
-            tremolo_depth: self.tremolo_depth * inv_t + other.tremolo_depth * t,
-            tremolo_rate: self.tremolo_rate * inv_t + other.tremolo_rate * t,
-            tremolo_jitter: self.tremolo_jitter * inv_t + other.tremolo_jitter * t,
-            clip_pregain: self.clip_pregain * inv_t + other.clip_pregain * t,
-            clip_threshold: self.clip_threshold * inv_t + other.clip_threshold * t,
-            bitcrush_bits: if t < 0.5 {
-                self.bitcrush_bits
-            } else {
-                other.bitcrush_bits
-            },
-            dropout_probability: self.dropout_probability * inv_t + other.dropout_probability * t,
-            dropout_duration_ms: (
-                self.dropout_duration_ms.0 * inv_t + other.dropout_duration_ms.0 * t,
-                self.dropout_duration_ms.1 * inv_t + other.dropout_duration_ms.1 * t,
-            ),
+            noise: self.noise.lerp(&other.noise, t),
+            filters: self.filters.lerp(&other.filters, t),
+            tremolo: self.tremolo.lerp(&other.tremolo, t),
+            clip: self.clip.lerp(&other.clip, t),
+            bitcrush: self.bitcrush.lerp(&other.bitcrush, t),
+            dropout: self.dropout.lerp(&other.dropout, t),
         }
     }
 }
 
-const BANDPASS_HZ: (f32, f32) = (20.0, 20000.0);
+const FILTER_HZ: (f32, f32) = (20.0, 20000.0);
 const NOISE_LEVEL: (f32, f32) = (0.0, 2.0);
 const UNIT: (f32, f32) = (0.0, 1.0);
 const TREMOLO_RATE_HZ: (f32, f32) = (0.0, 20.0);
@@ -80,35 +229,78 @@ fn check(field: &str, value: f32, (min, max): (f32, f32)) -> anyhow::Result<()> 
     Ok(())
 }
 
-impl SignalParameters {
+fn check_layers<L: Layer>(layers: &[L]) -> anyhow::Result<()> {
+    for (index, layer) in layers.iter().enumerate() {
+        if find(&layers[..index], layer.kind()).is_some() {
+            bail!("{} kind {} appears more than once", L::STAGE, layer.kind());
+        }
+        layer.check_limits()?;
+    }
+    Ok(())
+}
+
+fn check_filters(filters: &[Filter]) -> anyhow::Result<()> {
+    check_layers(filters)?;
+    if let (Some(highpass), Some(lowpass)) = (
+        find(filters, FilterKind::HighPass),
+        find(filters, FilterKind::LowPass),
+    ) && highpass.frequency >= lowpass.frequency
+    {
+        bail!("highpass frequency must be below lowpass frequency");
+    }
+    Ok(())
+}
+
+impl Tremolo {
     fn check_limits(&self) -> anyhow::Result<()> {
-        check("bandpass_low", self.bandpass_low, BANDPASS_HZ)?;
-        check("bandpass_high", self.bandpass_high, BANDPASS_HZ)?;
-        if self.bandpass_low >= self.bandpass_high {
-            bail!("bandpass_low must be below bandpass_high");
-        }
-        check("white_noise_level", self.white_noise_level, NOISE_LEVEL)?;
-        check("pink_noise_level", self.pink_noise_level, NOISE_LEVEL)?;
-        check("brown_noise_level", self.brown_noise_level, NOISE_LEVEL)?;
-        check("tremolo_depth", self.tremolo_depth, UNIT)?;
-        check("tremolo_rate", self.tremolo_rate, TREMOLO_RATE_HZ)?;
-        check("tremolo_jitter", self.tremolo_jitter, UNIT)?;
-        check("clip_pregain", self.clip_pregain, CLIP_PREGAIN)?;
-        check("clip_threshold", self.clip_threshold, CLIP_THRESHOLD)?;
-        if let Some(bits) = self.bitcrush_bits {
-            let (min, max) = BITCRUSH_BITS;
-            if !(min..=max).contains(&bits) {
-                bail!("bitcrush_bits must be between {min} and {max}, got {bits}");
-            }
-        }
-        check("dropout_probability", self.dropout_probability, UNIT)?;
-        let (shortest, longest) = self.dropout_duration_ms;
-        check("dropout_duration_ms min", shortest, DROPOUT_MS)?;
-        check("dropout_duration_ms max", longest, DROPOUT_MS)?;
-        if shortest > longest {
-            bail!("dropout_duration_ms min must not exceed max");
+        check("tremolo.depth", self.depth, UNIT)?;
+        check("tremolo.rate", self.rate, TREMOLO_RATE_HZ)?;
+        check("tremolo.jitter", self.jitter, UNIT)
+    }
+}
+
+impl Clip {
+    fn check_limits(&self) -> anyhow::Result<()> {
+        check("clip.pregain", self.pregain, CLIP_PREGAIN)?;
+        check("clip.threshold", self.threshold, CLIP_THRESHOLD)
+    }
+}
+
+impl Bitcrush {
+    fn check_limits(&self) -> anyhow::Result<()> {
+        let (min, max) = BITCRUSH_BITS;
+        if !(min..=max).contains(&self.bits) {
+            bail!(
+                "bitcrush.bits must be between {min} and {max}, got {}",
+                self.bits
+            );
         }
         Ok(())
+    }
+}
+
+impl Dropout {
+    fn check_limits(&self) -> anyhow::Result<()> {
+        check("dropout.probability", self.probability, UNIT)?;
+        check("dropout.min_ms", self.min_ms, DROPOUT_MS)?;
+        check("dropout.max_ms", self.max_ms, DROPOUT_MS)?;
+        if self.min_ms > self.max_ms {
+            bail!("dropout.min_ms must not exceed dropout.max_ms");
+        }
+        Ok(())
+    }
+}
+
+impl SignalParameters {
+    fn check_limits(&self) -> anyhow::Result<()> {
+        check_layers(&self.noise)?;
+        check_filters(&self.filters)?;
+        self.tremolo.check_limits()?;
+        self.clip.check_limits()?;
+        if let Some(bitcrush) = &self.bitcrush {
+            bitcrush.check_limits()?;
+        }
+        self.dropout.check_limits()
     }
 }
 
@@ -150,20 +342,52 @@ mod tests {
         serde_json::from_str(include_str!("default_presets/clear_signal.json")).unwrap()
     }
 
+    fn filter(kind: FilterKind, frequency: f32) -> Filter {
+        Filter { kind, frequency }
+    }
+
+    fn pink(level: f32) -> Noise {
+        Noise {
+            kind: NoiseKind::Pink,
+            level,
+        }
+    }
+
     #[test]
     fn validate_rejects_values_that_break_the_dsp() {
         assert!(clear().validate().is_ok());
-        let cases: [fn(&mut SignalParameters); 5] = [
-            |p| p.bandpass_high = 24000.0,
-            |p| p.bandpass_low = 20000.0,
-            |p| p.bandpass_low = 0.0,
-            |p| p.dropout_duration_ms = (100.0, 50.0),
-            |p| p.bitcrush_bits = Some(255),
+        let cases: [fn(&mut SignalParameters); 8] = [
+            |p| p.filters = vec![filter(FilterKind::LowPass, 24000.0)],
+            |p| p.filters = vec![filter(FilterKind::HighPass, 0.0)],
+            |p| {
+                p.filters = vec![
+                    filter(FilterKind::HighPass, 5000.0),
+                    filter(FilterKind::LowPass, 500.0),
+                ]
+            },
+            |p| (p.dropout.min_ms, p.dropout.max_ms) = (100.0, 50.0),
+            |p| p.bitcrush = Some(Bitcrush { bits: 255 }),
+            |p| p.bitcrush = Some(Bitcrush { bits: 0 }),
+            |p| p.noise = vec![pink(2.5)],
+            |p| p.noise = vec![pink(0.5), pink(0.5)],
         ];
         for mutate in cases {
             let mut preset = clear();
             mutate(&mut preset);
             assert!(preset.validate().is_err());
         }
+    }
+
+    #[test]
+    fn interpolate_treats_a_missing_layer_as_neutral() {
+        let from = clear();
+        let mut to = clear();
+        to.noise = vec![pink(1.0)];
+        to.filters = vec![filter(FilterKind::HighPass, 220.0)];
+        let halfway = from.interpolate(&to, 0.5);
+        assert_eq!(halfway.noise.len(), 1);
+        assert_eq!(halfway.noise[0].level, 0.5);
+        assert_eq!(halfway.filters.len(), 1);
+        assert_eq!(halfway.filters[0].frequency, 120.0);
     }
 }

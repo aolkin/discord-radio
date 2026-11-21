@@ -145,24 +145,23 @@ More sample presets are in `examples/signal_presets/`. The bot loads presets fro
 ```json
 {
   "name": "preset_name",
-  "bandpass_low": 500.0,
-  "bandpass_high": 5000.0,
-  "white_noise_level": 0.3,
-  "pink_noise_level": 0.0,
-  "brown_noise_level": 0.0,
-  "tremolo_depth": 0.4,
-  "tremolo_rate": 2.0,
-  "clip_pregain": 1.0,
-  "clip_threshold": 0.8,
-  "bitcrush_bits": null,
-  "dropout_probability": 0.1,
-  "dropout_duration_ms": [50.0, 150.0]
+  "noise": [{ "kind": "white", "level": 0.3 }],
+  "filters": [
+    { "kind": "highpass", "frequency": 500.0 },
+    { "kind": "lowpass", "frequency": 5000.0 }
+  ],
+  "tremolo": { "depth": 0.4, "rate": 2.0, "jitter": 0.3 },
+  "clip": { "pregain": 1.0, "threshold": 0.8 },
+  "bitcrush": { "bits": 8 },
+  "dropout": { "probability": 0.1, "min_ms": 50.0, "max_ms": 150.0 }
 }
 ```
 
+Stages appear in processing order. `noise` lists only the kinds the preset uses (`white`, `pink`, `brown`) and `filters` only the filters it applies (`highpass`, `lowpass`), each kind at most once; a missing noise kind is silent and a missing filter passes everything. `bitcrush` is `null` when the preset does not bitcrush.
+
 **Noise Level Parameters:**
 
-Noise levels (`white_noise_level`, `pink_noise_level`, `brown_noise_level`) use **perceptual (dB-based) scaling**:
+Noise levels use **perceptual (dB-based) scaling**:
 
 - Range: `0.0` to `2.0` (typical usage: `0.0` to `1.0`)
 - `0.0` = silence (amplitude 0)
