@@ -19,6 +19,7 @@
         radio: null,
         active: new Set(),
         voice: new Map(),
+        tracks: new Map(),
     };
 
     const forcedMode = new URLSearchParams(window.location.search).get('dj');
@@ -82,12 +83,70 @@
         store.radio.text = null;
     };
 
-    const durationOf = (guild) => {
-        const track = guild.tracks[0];
-        if (track) {
-            return track.duration.secs + track.duration.nanos / 1e9;
+    const durationOf = (guild) => Number.parseFloat(/\/ ([\d.]+)s\)/.exec(guild.dj_state.details)?.[1] ?? '0');
+
+    const epochTime = (ms) => ({ secs_since_epoch: Math.floor(ms / 1000), nanos_since_epoch: (ms % 1000) * 1e6 });
+
+    const trackEnded = (track) => {
+        if (track.loops || !track.duration) {
+            return false;
         }
-        return Number.parseFloat(/\/ ([\d.]+)s\)/.exec(guild.dj_state.details)?.[1] ?? '0');
+        const startedAt = track.start_time.secs_since_epoch * 1000 + track.start_time.nanos_since_epoch / 1e6;
+        return Date.now() - startedAt >= (track.duration.secs + track.duration.nanos / 1e9) * 1000;
+    };
+
+    const guildTracks = (guildId) => {
+        if (!store.tracks.has(guildId)) {
+            const now = epochTime(Date.now());
+            const tracks = store.snapshots.track.guilds[0].tracks.map((track) => [
+                track.name,
+                { ...structuredClone(track), start_time: now },
+            ]);
+            store.tracks.set(guildId, new Map(tracks));
+        }
+        const tracks = store.tracks.get(guildId);
+        for (const [name, track] of tracks) {
+            if (trackEnded(track)) {
+                tracks.delete(name);
+            }
+        }
+        return tracks;
+    };
+
+    const trackDuration = (filename) =>
+        structuredClone(
+            store.snapshots.track.guilds[0].tracks.find((track) => track.filename === filename)?.duration ?? null,
+        );
+
+    const changeTrackState = ({ body }, guildId) => {
+        const tracks = guildTracks(guildId);
+        const track = tracks.get(body.name);
+        if (body.state === 'start') {
+            if (!body.filename) {
+                return fail(400, 'Starting a track needs a filename');
+            }
+            tracks.set(body.name, {
+                name: body.name,
+                filename: body.filename,
+                volume: body.volume ?? 1,
+                loops: body.loops ?? true,
+                start_time: epochTime(Date.now()),
+                duration: trackDuration(body.filename),
+            });
+            return new Response(null, { status: 200 });
+        }
+        if (!track) {
+            return body.state === 'stop'
+                ? fail(500, `Failed to stop track: Track '${body.name}' not found`)
+                : fail(404, `Track '${body.name}' not found. Use state=start to create a new track.`);
+        }
+        if (body.state === 'stop') {
+            tracks.delete(body.name);
+        } else {
+            track.volume = body.volume ?? track.volume;
+            track.loops = body.loops ?? track.loops;
+        }
+        return new Response(null, { status: 200 });
     };
 
     const buildSnapshot = () => {
@@ -118,14 +177,9 @@
         const { radio } = store;
         const elapsed = Math.max(0, (Date.now() - radio.startedAt) / 1000);
         const total = durationOf(guild);
-        const track = guild.tracks[0];
-        if (track) {
-            const startedAt = radio.startedAt;
-            track.start_time = {
-                secs_since_epoch: Math.floor(startedAt / 1000),
-                nanos_since_epoch: (startedAt % 1000) * 1e6,
-            };
-        }
+        guild.tracks = structuredClone([...guildTracks(guild.guild_id).values()]).sort((a, b) =>
+            a.name.localeCompare(b.name),
+        );
         const timing = `(${Math.min(elapsed, total).toFixed(1)}s / ${total.toFixed(1)}s)`;
         const label = radio.text && radio.mode === 'hex' ? radio.text : guild.dj_state.details.replace(/ \(.*$/, '');
         guild.dj_state.details = `${label} ${timing}`;
@@ -337,7 +391,7 @@
             return ok();
         }),
         guildRoute('POST', 'track/play', ok),
-        guildRoute('POST', 'tracks', ok),
+        guildRoute('POST', 'tracks', changeTrackState),
         [
             'POST',
             /^\/api\/activity\/set$/,

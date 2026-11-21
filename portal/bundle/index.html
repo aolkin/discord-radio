@@ -1966,7 +1966,7 @@
                                 <div class="track-details" x-show="!guild.tracks || guild.tracks.length === 0">
                                     No tracks are playing.
                                 </div>
-                                <template x-for="track in guild.tracks" :key="track.filename">
+                                <template x-for="track in guild.tracks" :key="track.name">
                                     <div class="track-item">
                                         <div class="grow">
                                             <div class="track-name" x-text="track.name"></div>
@@ -2070,7 +2070,7 @@
                                         </div>
                                     </template>
                                     <template x-if="trackMode !== 'start'">
-                                        <div class="form-group" x-init="trackName = guild.tracks[0]?.name ?? ''">
+                                        <div class="form-group" x-effect="followPlayingTracks(guild.tracks)">
                                             <label class="form-label" for="track-state-name">Track</label>
                                             <select
                                                 id="track-state-name"

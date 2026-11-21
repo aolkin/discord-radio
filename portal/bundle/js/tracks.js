@@ -1,4 +1,4 @@
-import { apiRequest } from './api.js';
+import { apiRequest, bodyOrStatus } from './api.js';
 
 export const trackForms = () => ({
     playTrackFilename: '',
@@ -72,6 +72,14 @@ export function tracks() {
             });
         },
 
+        followPlayingTracks(playing) {
+            if (playing.length === 0) {
+                this.trackMode = 'start';
+            } else if (!playing.some((track) => track.name === this.trackName)) {
+                this.trackName = playing[0].name;
+            }
+        },
+
         trackFileLabel(filename) {
             return filename.replace(/^s3:\/\/(tracks\/)?/, '');
         },
@@ -98,6 +106,7 @@ export function tracks() {
                     apiRequest(`/api/guilds/${this.route.name}/track/play`, {
                         method: 'POST',
                         body,
+                        errorMessage: bodyOrStatus,
                     }),
                 success: 'Track started successfully!',
                 failure: 'Failed to play track',
@@ -141,6 +150,7 @@ export function tracks() {
                     apiRequest(`/api/guilds/${this.route.name}/tracks`, {
                         method: 'POST',
                         body,
+                        errorMessage: bodyOrStatus,
                     }),
                 success: 'Track state updated successfully!',
                 failure: 'Failed to change track state',
