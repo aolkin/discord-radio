@@ -1,6 +1,7 @@
 use crate::bucket::registry::{JsonRegistry, RegistryEntry};
-use anyhow::bail;
+use anyhow::{Context, bail};
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct SignalParameters {
@@ -61,6 +62,24 @@ impl SignalParameters {
                 self.dropout_duration_ms.1 * inv_t + other.dropout_duration_ms.1 * t,
             ),
         }
+    }
+}
+
+impl SignalParameters {
+    pub fn patched(&self, patch: &Map<String, Value>) -> anyhow::Result<Self> {
+        let Value::Object(mut fields) = serde_json::to_value(self)? else {
+            bail!("signal parameters are not a JSON object");
+        };
+        for (field, value) in patch {
+            if field == "name" || !fields.contains_key(field) {
+                bail!("{field:?} is not an editable signal parameter");
+            }
+            fields.insert(field.clone(), value.clone());
+        }
+        let patched: Self = serde_json::from_value(Value::Object(fields))
+            .context("reading the edited signal parameters")?;
+        patched.check_limits()?;
+        Ok(patched)
     }
 }
 
@@ -165,5 +184,15 @@ mod tests {
             mutate(&mut preset);
             assert!(preset.validate().is_err());
         }
+        let patch = |value: Value| clear().patched(value.as_object().unwrap());
+        assert_eq!(
+            patch(serde_json::json!({ "tremolo_depth": 0.5 }))
+                .unwrap()
+                .tremolo_depth,
+            0.5
+        );
+        assert!(patch(serde_json::json!({ "bandpass_high": 24000.0 })).is_err());
+        assert!(patch(serde_json::json!({ "name": "other" })).is_err());
+        assert!(patch(serde_json::json!({ "volume": 1.0 })).is_err());
     }
 }

@@ -126,6 +126,12 @@ impl AudioProcessor {
         &self.current_preset.name
     }
 
+    pub fn target_preset(&self) -> &SignalParameters {
+        self.transition
+            .as_ref()
+            .map_or(&self.current_preset, |transition| &transition.to)
+    }
+
     pub fn is_transitioning(&self) -> bool {
         self.transition.is_some()
     }
