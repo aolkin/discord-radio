@@ -1694,7 +1694,7 @@
                                         <div class="track-name" x-text="guild.signal_preset.name"></div>
                                         <div
                                             class="track-details"
-                                            x-text="'Source: ' + guild.signal_preset.source"
+                                            x-text="'Source: ' + guild.signal_preset.source + (tierRemaining(guild.signal_preset) === null ? '' : ', ' + formatTime(tierRemaining(guild.signal_preset)) + ' left')"
                                         ></div>
                                         <div
                                             class="track-details"
@@ -1715,7 +1715,7 @@
                                         ></div>
                                         <div
                                             class="track-details"
-                                            x-text="'Source: ' + guild.channel_status.source + (channelStatusRemaining(guild) === null ? '' : ', ' + formatTime(channelStatusRemaining(guild)) + ' left')"
+                                            x-text="'Source: ' + guild.channel_status.source + (tierRemaining(guild.channel_status) === null ? '' : ', ' + formatTime(tierRemaining(guild.channel_status)) + ' left')"
                                         ></div>
                                     </div>
                                 </div>

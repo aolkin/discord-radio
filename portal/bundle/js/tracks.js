@@ -48,8 +48,8 @@ export function tracks() {
             return `${this.formatTime(elapsedSecs)} / ${this.formatTime(durationSecs)}`;
         },
 
-        channelStatusRemaining(guild) {
-            const remaining = guild.channel_status.remaining_seconds;
+        tierRemaining(info) {
+            const remaining = info.remaining_seconds;
             if (remaining === null) {
                 return null;
             }
