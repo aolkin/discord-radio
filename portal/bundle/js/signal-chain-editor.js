@@ -11,6 +11,7 @@ import {
     stages,
     toPosition,
 } from './signal-chain.js';
+import { displays } from './signal-chain-displays.js';
 
 const stageIds = stages.map((stage) => stage.id);
 const snapshot = (form) => JSON.stringify(Object.fromEntries(stageIds.map((id) => [id, form[id]])));
@@ -25,14 +26,23 @@ const faderTicks = [
     [0, 'off'],
 ];
 
-function point(angle, radius) {
+function svgPoint(svg, event) {
+    const rect = svg.getBoundingClientRect();
+    const box = svg.viewBox.baseVal;
+    return {
+        x: ((event.clientX - rect.left) * box.width) / rect.width,
+        y: ((event.clientY - rect.top) * box.height) / rect.height,
+    };
+}
+
+function polar(angle, radius) {
     const radians = (angle * Math.PI) / 180;
     return [30 + radius * Math.sin(radians), 30 - radius * Math.cos(radians)];
 }
 
 function arc(from, to, radius) {
-    const [x0, y0] = point(from, radius);
-    const [x1, y1] = point(to, radius);
+    const [x0, y0] = polar(from, radius);
+    const [x1, y1] = polar(to, radius);
     return `M${x0.toFixed(2)},${y0.toFixed(2)} A${radius},${radius} 0 ${to - from > 180 ? 1 : 0} 1 ${x1.toFixed(2)},${y1.toFixed(2)}`;
 }
 
@@ -40,6 +50,7 @@ export function signalChainEditor(chain) {
     return {
         chain,
         stages,
+        displays,
         hot: null,
         panel: null,
         saveName: '',
@@ -285,8 +296,8 @@ export function signalChainEditor(chain) {
             const position = toPosition(spec, this.value(spec));
             const angle = knobStart + (knobEnd - knobStart) * position;
             const color = `var(${spec.color})`;
-            const [innerX, innerY] = point(angle, 15);
-            const [outerX, outerY] = point(angle, 6);
+            const [innerX, innerY] = polar(angle, 15);
+            const [outerX, outerY] = polar(angle, 6);
             const filled =
                 position > 0.002
                     ? `<path class="chain-knob-value" stroke="${color}" d="${arc(knobStart, angle, 26)}"/>`
@@ -344,12 +355,53 @@ export function signalChainEditor(chain) {
             this.setValue(this.drag.spec, fromPosition(this.drag.spec, position));
         },
 
+        displaySvg(stage) {
+            return displays[stage.id].draw(this.stageValues(stage), this.hot);
+        },
+
+        startHandleDrag(event, stage) {
+            if (event.button !== 0) {
+                return;
+            }
+            const target = event.currentTarget;
+            const display = displays[stage.id];
+            const point = svgPoint(target, event);
+            const id =
+                event.target.closest('[data-handle]')?.dataset.handle ?? display.pick(point, this.stageValues(stage));
+            if (!id) {
+                return;
+            }
+            event.preventDefault();
+            target.setPointerCapture(event.pointerId);
+            const spec = controls.find((candidate) => candidate.id === id);
+            this.drag = {
+                spec,
+                kind: 'display',
+                display,
+                target,
+                before: snapshot(this.form()),
+                start: { y: point.y, value: this.value(spec) },
+            };
+            this.hot = id;
+            this.moveHandle(event);
+        },
+
+        moveHandle(event) {
+            const { spec, display, target, start } = this.drag;
+            const point = svgPoint(target, event);
+            this.setValue(spec, display.drag(spec.id, point, this.form()[spec.stage], start));
+        },
+
         moveDrag(event) {
             if (!this.drag) {
                 return;
             }
             if (this.drag.kind === 'fader') {
                 this.moveFader(event);
+                return;
+            }
+            if (this.drag.kind === 'display') {
+                this.moveHandle(event);
                 return;
             }
             const fine = event.shiftKey ? 0.1 : 1;

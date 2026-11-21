@@ -2648,3 +2648,90 @@ fieldset.form-group {
         transition: none;
     }
 }
+
+.chain-card {
+    --chain-silence: #ef4444;
+    --chain-screen-grid: rgba(190, 200, 255, 0.1);
+    --chain-screen-ink: #9ea6d4;
+}
+
+.chain-display {
+    display: flex;
+    flex: 1 1 320px;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+    max-width: 520px;
+}
+
+.chain-screen {
+    display: block;
+    flex: none;
+    width: 100%;
+    height: auto;
+    border-radius: 7px;
+    background: var(--chain-screen);
+    touch-action: none;
+    user-select: none;
+}
+
+.chain-screen text {
+    font-family: var(--chain-mono);
+}
+
+.chain-grid {
+    fill: none;
+    stroke: var(--chain-screen-grid);
+}
+
+.chain-ruler {
+    stroke-width: 3;
+}
+
+.chain-screen-text {
+    fill: var(--chain-screen-ink);
+    font-size: 9.5px;
+}
+
+.chain-trace {
+    fill: none;
+    stroke: var(--chain-screen-strong);
+    stroke-width: 2;
+    stroke-linejoin: round;
+}
+
+.chain-ghost {
+    fill: none;
+    stroke: var(--chain-screen-ink);
+    stroke-dasharray: 3 3;
+    opacity: 0.7;
+}
+
+.chain-handle {
+    cursor: grab;
+}
+
+.chain-handle:active {
+    cursor: grabbing;
+}
+
+.chain-handle-hit {
+    fill: transparent;
+}
+
+.chain-handle-dot {
+    stroke: var(--chain-screen);
+    stroke-width: 2;
+}
+
+.chain-handle text {
+    font-size: 10.5px;
+    font-weight: 600;
+    paint-order: stroke;
+    stroke: var(--chain-screen);
+    stroke-width: 3px;
+}
+
+.chain-handle.hot .chain-handle-dot {
+    stroke: #fff;
+}

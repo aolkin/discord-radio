@@ -692,6 +692,26 @@
                                                     </button>
                                                 </div>
                                                 <div class="chain-module-body" x-show="!collapsed[stage.id]">
+                                                    <template x-if="displays[stage.id]">
+                                                        <div class="chain-display">
+                                                            <svg
+                                                                class="chain-screen"
+                                                                role="img"
+                                                                aria-label="Stage display"
+                                                                x-bind:view-box.camel="'0 0 320 ' + displays[stage.id].height"
+                                                                :aria-label="displays[stage.id].label"
+                                                                x-html="displaySvg(stage)"
+                                                                @pointerdown="startHandleDrag($event, stage)"
+                                                                @pointermove="moveDrag($event)"
+                                                                @pointerup="endDrag()"
+                                                                @pointercancel="endDrag()"
+                                                            ></svg>
+                                                            <span
+                                                                class="chain-note"
+                                                                x-text="displays[stage.id].note(stageValues(stage))"
+                                                            ></span>
+                                                        </div>
+                                                    </template>
                                                     <div class="chain-controls" :class="stage.faders && 'chain-faders'">
                                                         <template x-for="spec in stage.controls" :key="spec.id">
                                                             <div
