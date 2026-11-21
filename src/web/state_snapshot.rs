@@ -44,6 +44,7 @@ pub struct AnnouncementChannelInfo {
 pub struct ChannelStatusInfo {
     pub status: Option<String>,
     pub source: String,
+    pub remaining_seconds: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -115,6 +116,9 @@ impl BotSnapshot {
                         ChannelStatus::Fixed(status) => Some(status),
                     },
                     source: channel_status.tier.to_string(),
+                    remaining_seconds: channel_status
+                        .remaining
+                        .map(|remaining| remaining.as_secs_f64()),
                 },
                 announcement_channels,
             });

@@ -8,7 +8,7 @@
       "dj_state": { "segment_type": "noise", "details": "weak_signal (1.0s / 2.5s)", "pool": "noise", "progress": null },
       "dj_config": "default",
       "signal_preset": { "name": "clear_signal→weak_signal", "expected_name": "weak_signal", "transitioning": true, "source": "background" },
-      "channel_status": { "status": null, "source": "background" },
+      "channel_status": { "status": null, "source": "background", "remaining_seconds": null },
       "announcement_channels": []
     }
   ],

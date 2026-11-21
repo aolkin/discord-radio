@@ -15,6 +15,7 @@ export function connection() {
         lastCommitHash: null,
         reconnectTimeout: null,
         currentTime: Date.now(),
+        snapshotReceivedAt: Date.now(),
 
         init() {
             this.connect();
@@ -105,6 +106,7 @@ export function connection() {
                 try {
                     const data = JSON.parse(event.data);
                     this.guilds = data.guilds || [];
+                    this.snapshotReceivedAt = Date.now();
                     if (this.guilds.some((guild) => !(guild.guild_id in this.guildNames))) {
                         this.loadGuildList();
                     }

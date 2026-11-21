@@ -40,6 +40,11 @@ impl<T> TimedValue<T> {
         }
     }
 
+    pub fn remaining(&self) -> Option<Duration> {
+        self.duration
+            .map(|duration| duration.saturating_sub(self.started_at.elapsed()))
+    }
+
     pub fn shift_back(&mut self, by: Duration) {
         self.started_at.shift_back(by);
     }
@@ -77,6 +82,7 @@ impl From<ConfigurableTier> for Tier {
 pub struct TieredValue<T> {
     pub value: T,
     pub tier: Tier,
+    pub remaining: Option<Duration>,
 }
 
 pub struct TieredChange<T> {
@@ -143,6 +149,7 @@ where
         TieredValue {
             value: value.value.clone(),
             tier,
+            remaining: value.remaining(),
         }
     }
 

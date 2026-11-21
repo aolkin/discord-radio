@@ -48,6 +48,14 @@ export function tracks() {
             return `${this.formatTime(elapsedSecs)} / ${this.formatTime(durationSecs)}`;
         },
 
+        channelStatusRemaining(guild) {
+            const remaining = guild.channel_status.remaining_seconds;
+            if (remaining === null) {
+                return null;
+            }
+            return Math.max(0, remaining - (this.currentTime - this.snapshotReceivedAt) / 1000);
+        },
+
         formatTime(seconds) {
             const mins = Math.floor(seconds / 60);
             const secs = Math.floor(seconds % 60);
