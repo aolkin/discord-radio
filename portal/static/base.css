@@ -58,6 +58,9 @@
     --page-gutter: var(--space-5);
     --card-padding: var(--space-5);
 
+    --z-sticky: 10;
+    --z-menu: 20;
+
     accent-color: var(--color-primary);
 }
 
