@@ -1,10 +1,7 @@
 {
   "name": "demo_bitcrush",
   "noise": [],
-  "bandpass": {
-    "low": 20.0,
-    "high": 20000.0
-  },
+  "filters": [],
   "tremolo": {
     "depth": 0.0,
     "rate": 0.0,

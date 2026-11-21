@@ -13,17 +13,25 @@ const linear = (max) => ({ scale: 'linear', min: 0, max, step: 0.01 });
 const log = (min, max, step) => ({ scale: 'log', min, max, step });
 const limited = (key, label, min, max, extra) => ({ key, label, type: 'number', step: 'any', min, max, ...extra });
 
-const noiseFields = [
-    limited('white', 'White Noise Level (0-2)', 0, 2, { slider: linear(2) }),
-    limited('pink', 'Pink Noise Level (0-2)', 0, 2, { slider: linear(2) }),
-    limited('brown', 'Brown Noise Level (0-2)', 0, 2, { slider: linear(2) }),
-];
+const layerStages = {
+    noise: {
+        value: 'level',
+        fields: [
+            limited('white', 'White Noise Level (0-2)', 0, 2, { slider: linear(2) }),
+            limited('pink', 'Pink Noise Level (0-2)', 0, 2, { slider: linear(2) }),
+            limited('brown', 'Brown Noise Level (0-2)', 0, 2, { slider: linear(2) }),
+        ],
+    },
+    filters: {
+        value: 'frequency',
+        fields: [
+            limited('highpass', 'High-pass Cutoff (Hz)', 20, 20000, { default: 20, slider: log(20, 20000, 1) }),
+            limited('lowpass', 'Low-pass Cutoff (Hz)', 20, 20000, { default: 20000, slider: log(20, 20000, 1) }),
+        ],
+    },
+};
 
 const stageFields = {
-    bandpass: [
-        limited('low', 'Bandpass Low (Hz)', 20, 20000, { default: 20, slider: log(20, 20000, 1) }),
-        limited('high', 'Bandpass High (Hz)', 20, 20000, { default: 20000, slider: log(20, 20000, 1) }),
-    ],
     tremolo: [
         limited('depth', 'Tremolo Depth', 0, 1, { slider: linear(1) }),
         limited('rate', 'Tremolo Rate (Hz)', 0, 20, { slider: log(0.1, 20, 0.01) }),
@@ -41,38 +49,47 @@ const stageFields = {
     ],
 };
 
-const mapStages = (convert) =>
-    Object.fromEntries(Object.entries(stageFields).map(([stage, fields]) => [stage, convert(stage, fields)]));
+const mapEntries = (object, convert) =>
+    Object.fromEntries(Object.entries(object).map(([key, value]) => [key, convert(value, key)]));
 
 function blocks(form) {
     return [
-        { row: form.noise, fields: noiseFields, path: ['noise'] },
+        ...Object.entries(layerStages).map(([stage, { fields }]) => ({ row: form[stage], fields, path: [stage] })),
         ...Object.entries(stageFields).map(([stage, fields]) => ({ row: form[stage], fields, path: [stage] })),
     ];
+}
+
+function layersToForm({ value, fields }, layers) {
+    return { ...blankRow(fields), ...Object.fromEntries(layers.map((layer) => [layer.kind, layer[value]])) };
+}
+
+function layersToBody({ value, fields }, row) {
+    const neutral = blankRow(fields);
+    return fields.filter(({ key }) => row[key] !== neutral[key]).map(({ key }) => ({ kind: key, [value]: row[key] }));
 }
 
 function toForm(name, preset) {
     return {
         name,
-        noise: {
-            ...blankRow(noiseFields),
-            ...Object.fromEntries(preset.noise.map(({ kind, level }) => [kind, level])),
-        },
-        ...mapStages((stage, fields) => convertObject(fields, preset[stage], fieldFromServer)),
+        ...mapEntries(layerStages, (stage, key) => layersToForm(stage, preset[key])),
+        ...mapEntries(stageFields, (fields, key) => convertObject(fields, preset[key] ?? {}, fieldFromServer)),
     };
 }
 
 function toBody(form) {
     return {
-        noise: noiseFields
-            .filter(({ key }) => form.noise[key] > 0)
-            .map(({ key }) => ({ kind: key, level: form.noise[key] })),
-        ...mapStages((stage, fields) => convertObject(fields, form[stage], fieldToServer)),
+        ...mapEntries(layerStages, (stage, key) => layersToBody(stage, form[key])),
+        ...mapEntries(stageFields, (fields, key) => convertObject(fields, form[key], fieldToServer)),
+        bitcrush: form.bitcrush.bits === '' ? null : { bits: form.bitcrush.bits },
     };
 }
 
 function blankForm() {
-    return { name: '', noise: blankRow(noiseFields), ...mapStages((_, fields) => blankRow(fields)) };
+    return {
+        name: '',
+        ...mapEntries(layerStages, ({ fields }) => blankRow(fields)),
+        ...mapEntries(stageFields, (fields) => blankRow(fields)),
+    };
 }
 
 const presetEditor = registryEditor({

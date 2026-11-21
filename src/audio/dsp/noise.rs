@@ -1,12 +1,13 @@
+use crate::audio::presets::NoiseKind;
 use rand::{RngExt, SeedableRng, rngs::StdRng};
 
-pub struct NoiseGenerator {
-    white_state: WhiteNoiseState,
-    pink_state: PinkNoiseState,
-    brown_state: BrownNoiseState,
+pub enum NoiseSource {
+    White(WhiteNoiseState),
+    Pink(PinkNoiseState),
+    Brown(BrownNoiseState),
 }
 
-struct WhiteNoiseState {
+pub struct WhiteNoiseState {
     rng: StdRng,
 }
 
@@ -16,53 +17,47 @@ impl WhiteNoiseState {
     }
 }
 
-struct PinkNoiseState {
+pub struct PinkNoiseState {
     state: [f32; 7],
     counter: u32,
     rng: StdRng,
 }
 
-struct BrownNoiseState {
+pub struct BrownNoiseState {
     last_value: f32,
     rng: StdRng,
 }
 
-impl NoiseGenerator {
-    pub fn new() -> Self {
-        use rand::Rng;
-        let mut seed_rng = rand::rng();
-        let mut seed1 = [0u8; 32];
-        let mut seed2 = [0u8; 32];
-        let mut seed3 = [0u8; 32];
-        seed_rng.fill_bytes(&mut seed1);
-        seed_rng.fill_bytes(&mut seed2);
-        seed_rng.fill_bytes(&mut seed3);
+fn seeded_rng() -> StdRng {
+    use rand::Rng;
+    let mut seed = [0u8; 32];
+    rand::rng().fill_bytes(&mut seed);
+    StdRng::from_seed(seed)
+}
 
-        Self {
-            white_state: WhiteNoiseState {
-                rng: StdRng::from_seed(seed1),
-            },
-            pink_state: PinkNoiseState {
+impl NoiseSource {
+    pub fn new(kind: NoiseKind) -> Self {
+        let rng = seeded_rng();
+        match kind {
+            NoiseKind::White => Self::White(WhiteNoiseState { rng }),
+            NoiseKind::Pink => Self::Pink(PinkNoiseState {
                 state: [0.0; 7],
                 counter: 0,
-                rng: StdRng::from_seed(seed2),
-            },
-            brown_state: BrownNoiseState {
+                rng,
+            }),
+            NoiseKind::Brown => Self::Brown(BrownNoiseState {
                 last_value: 0.0,
-                rng: StdRng::from_seed(seed3),
-            },
+                rng,
+            }),
         }
     }
 
-    pub fn next_frame(&mut self) -> ([f32; 2], [f32; 2], [f32; 2]) {
-        let white_sample = self.white_state.next();
-        let pink_sample = self.pink_state.next();
-        let brown_sample = self.brown_state.next();
-        (
-            [white_sample, white_sample],
-            [pink_sample, pink_sample],
-            [brown_sample, brown_sample],
-        )
+    pub fn next(&mut self) -> f32 {
+        match self {
+            Self::White(state) => state.next(),
+            Self::Pink(state) => state.next(),
+            Self::Brown(state) => state.next(),
+        }
     }
 }
 
