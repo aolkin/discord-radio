@@ -1,6 +1,7 @@
 import {
     clamp,
     controls,
+    effects,
     formatValue,
     formErrors,
     fromPosition,
@@ -8,7 +9,6 @@ import {
     keepOrdered,
     limitText,
     roundTo,
-    effects,
     toPosition,
 } from './signal-chain.js';
 
