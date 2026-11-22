@@ -1,5 +1,6 @@
 use crate::activity::ActivityEntry;
 use crate::audio::dj::state_machine::{ChannelStatus, PoolProgress};
+use crate::audio::dj::tiered::TieredValue;
 use crate::audio::tracks::TrackSnapshot;
 use crate::state::Data;
 use serde::{Deserialize, Serialize};
@@ -17,7 +18,8 @@ pub struct SignalPresetInfo {
     pub name: String,
     pub expected_name: String,
     pub transitioning: bool,
-    pub source: String,
+    #[serde(flatten)]
+    pub tier: TierInfo,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,8 +45,23 @@ pub struct AnnouncementChannelInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChannelStatusInfo {
     pub status: Option<String>,
+    #[serde(flatten)]
+    pub tier: TierInfo,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TierInfo {
     pub source: String,
     pub remaining_seconds: Option<f64>,
+}
+
+impl<T> From<&TieredValue<T>> for TierInfo {
+    fn from(value: &TieredValue<T>) -> Self {
+        Self {
+            source: value.tier.to_string(),
+            remaining_seconds: value.remaining.map(|remaining| remaining.as_secs_f64()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -91,13 +108,15 @@ impl BotSnapshot {
             let processor = guild.audio_processor.read().await;
             let preset_name = processor.current_preset_name().to_string();
 
+            let preset_tier = TierInfo::from(&preset);
             let signal_preset = SignalPresetInfo {
                 name: preset_name,
                 expected_name: preset.value.name,
                 transitioning: processor.is_transitioning(),
-                source: preset.tier.to_string(),
+                tier: preset_tier,
             };
 
+            let channel_status_tier = TierInfo::from(&channel_status);
             guilds.push(GuildState {
                 guild_id: guild_id.to_string(),
                 name: bot_state
@@ -115,10 +134,7 @@ impl BotSnapshot {
                         ChannelStatus::Unmanaged => None,
                         ChannelStatus::Fixed(status) => Some(status),
                     },
-                    source: channel_status.tier.to_string(),
-                    remaining_seconds: channel_status
-                        .remaining
-                        .map(|remaining| remaining.as_secs_f64()),
+                    tier: channel_status_tier,
                 },
                 announcement_channels,
             });
