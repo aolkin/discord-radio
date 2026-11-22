@@ -8,12 +8,12 @@ import {
     keepOrdered,
     limitText,
     roundTo,
-    stages,
+    effects,
     toPosition,
 } from './signal-chain.js';
 
-const stageIds = stages.map((stage) => stage.id);
-const snapshot = (form) => JSON.stringify(Object.fromEntries(stageIds.map((id) => [id, form[id]])));
+const effectIds = effects.map((effect) => effect.id);
+const snapshot = (form) => JSON.stringify(Object.fromEntries(effectIds.map((id) => [id, form[id]])));
 const same = (a, b) => (isNumber(a) && isNumber(b) ? Math.abs(a - b) < 1e-9 : a === b);
 const nudgeKeys = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1, PageUp: 1, PageDown: -1 };
 const knobStart = -135;
@@ -39,7 +39,7 @@ function arc(from, to, radius) {
 export function signalChainEditor(chain) {
     return {
         chain,
-        stages,
+        effects,
         hot: null,
         panel: null,
         saveName: '',
@@ -76,16 +76,16 @@ export function signalChainEditor(chain) {
         },
 
         value(spec) {
-            return this.form()[spec.stage][spec.key];
+            return this.form()[spec.effect][spec.key];
         },
 
         savedValue(spec) {
-            return this.chain.draft.saved[spec.stage][spec.key];
+            return this.chain.draft.saved[spec.effect][spec.key];
         },
 
         restore(text) {
             const values = JSON.parse(text);
-            for (const id of stageIds) {
+            for (const id of effectIds) {
                 this.form()[id] = values[id];
             }
         },
@@ -126,47 +126,47 @@ export function signalChainEditor(chain) {
 
         setValue(spec, value) {
             const ordered = keepOrdered(this.form(), spec, value);
-            this.form()[spec.stage][spec.key] = clamp(ordered, spec.min, spec.max);
+            this.form()[spec.effect][spec.key] = clamp(ordered, spec.min, spec.max);
         },
 
-        stageValues(stage) {
-            return this.form()[stage.id];
+        effectValues(effect) {
+            return this.form()[effect.id];
         },
 
-        isOn(stage) {
-            return stage.isOn(this.stageValues(stage));
+        isOn(effect) {
+            return effect.isOn(this.effectValues(effect));
         },
 
-        power(stage) {
+        power(effect) {
             this.change(() => {
-                const values = this.stageValues(stage);
+                const values = this.effectValues(effect);
                 const memory = this.history().memory;
-                if (stage.isOn(values)) {
-                    memory[stage.id] = Object.fromEntries(Object.keys(stage.off).map((key) => [key, values[key]]));
-                    Object.assign(values, stage.off);
-                } else if (memory[stage.id] && stage.isOn({ ...values, ...memory[stage.id] })) {
-                    Object.assign(values, memory[stage.id]);
+                if (effect.isOn(values)) {
+                    memory[effect.id] = Object.fromEntries(Object.keys(effect.off).map((key) => [key, values[key]]));
+                    Object.assign(values, effect.off);
+                } else if (memory[effect.id] && effect.isOn({ ...values, ...memory[effect.id] })) {
+                    Object.assign(values, memory[effect.id]);
                 } else {
-                    Object.assign(values, stage.on);
+                    Object.assign(values, effect.on);
                 }
-                if (stage.isOn(values)) {
-                    stage.afterOn?.(values);
+                if (effect.isOn(values)) {
+                    effect.afterOn?.(values);
                 }
             });
         },
 
-        toggleCollapsed(stage) {
-            this.collapsed[stage.id] = !this.collapsed[stage.id];
+        toggleCollapsed(effect) {
+            this.collapsed[effect.id] = !this.collapsed[effect.id];
         },
 
         setAllCollapsed(collapsed) {
-            this.collapsed = Object.fromEntries(stageIds.map((id) => [id, collapsed]));
+            this.collapsed = Object.fromEntries(effectIds.map((id) => [id, collapsed]));
         },
 
-        jump(stage) {
-            this.collapsed[stage.id] = false;
+        jump(effect) {
+            this.collapsed[effect.id] = false;
             this.$nextTick(() => {
-                const module = document.getElementById(`chain-module-${stage.id}`);
+                const module = document.getElementById(`chain-module-${effect.id}`);
                 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
                 module.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'nearest' });
                 module.querySelector('.chain-power').focus({ preventScroll: true });
@@ -368,7 +368,7 @@ export function signalChainEditor(chain) {
         nudge(spec, direction, big) {
             const value = this.value(spec);
             if (spec.nullable) {
-                this.form()[spec.stage][spec.key] = value === null ? 8 : clamp(value + direction, spec.min, spec.max);
+                this.form()[spec.effect][spec.key] = value === null ? 8 : clamp(value + direction, spec.min, spec.max);
                 return;
             }
             let next = fromPosition(spec, toPosition(spec, value) + direction * (big ? 0.1 : 0.01));
@@ -392,7 +392,7 @@ export function signalChainEditor(chain) {
 
         resetToSaved(spec) {
             this.change(() => {
-                this.form()[spec.stage][spec.key] = this.savedValue(spec);
+                this.form()[spec.effect][spec.key] = this.savedValue(spec);
             });
         },
 
@@ -429,7 +429,7 @@ export function signalChainEditor(chain) {
                     value = '';
                 }
                 this.change(() => {
-                    this.form()[spec.stage][spec.key] = value;
+                    this.form()[spec.effect][spec.key] = value;
                 });
             }
         },
