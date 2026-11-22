@@ -30,10 +30,17 @@ export function every(perSecond) {
 
 const zeroStop = 0.04;
 
-const control = (stage, key, name, field, options) => ({ id: `${stage}.${key}`, stage, key, name, field, ...options });
+const control = (effect, key, name, field, options) => ({
+    id: `${effect}.${key}`,
+    effect,
+    key,
+    name,
+    field,
+    ...options,
+});
 
 const level = (key, name, color) =>
-    control('noise', key, name, `noise.${key}.level`, {
+    control('noise', key, name, `noise[kind ${key}].level`, {
         min: 0,
         max: 2,
         scale: 'linear',
@@ -52,7 +59,7 @@ const noiseControls = [
 ];
 
 const filterControls = [
-    control('filters', 'highpass', 'Low cut', 'filters.highpass.frequency', {
+    control('filters', 'highpass', 'Low cut', 'filters[kind highpass].frequency', {
         min: 20,
         max: 20000,
         scale: 'log',
@@ -63,7 +70,7 @@ const filterControls = [
         color: '--chain-teal',
         meaning: (value) => (value <= 20 ? 'keeps all bass' : `cuts below ${hertz(value)}`),
     }),
-    control('filters', 'lowpass', 'High cut', 'filters.lowpass.frequency', {
+    control('filters', 'lowpass', 'High cut', 'filters[kind lowpass].frequency', {
         min: 20,
         max: 20000,
         scale: 'log',
@@ -234,7 +241,7 @@ export function limitText(spec) {
 
 const anyNoise = (noise) => noiseControls.some(({ key }) => noise[key] > 0);
 
-export const stages = [
+export const effects = [
     {
         id: 'noise',
         name: 'Noise',
@@ -324,21 +331,21 @@ export const stages = [
     },
 ];
 
-export const controls = stages.flatMap((stage) => stage.controls);
+export const controls = effects.flatMap((effect) => effect.controls);
 
 export function keepOrdered(form, spec, value) {
-    const stage = form[spec.stage];
-    if (spec.id === 'filters.highpass' && isNumber(stage.lowpass)) {
-        return Math.min(value, stage.lowpass - 1);
+    const effect = form[spec.effect];
+    if (spec.id === 'filters.highpass' && isNumber(effect.lowpass)) {
+        return Math.min(value, effect.lowpass - 1);
     }
-    if (spec.id === 'filters.lowpass' && isNumber(stage.highpass)) {
-        return Math.max(value, stage.highpass + 1);
+    if (spec.id === 'filters.lowpass' && isNumber(effect.highpass)) {
+        return Math.max(value, effect.highpass + 1);
     }
-    if (spec.id === 'dropout.min_ms' && isNumber(stage.max_ms)) {
-        return Math.min(value, stage.max_ms);
+    if (spec.id === 'dropout.min_ms' && isNumber(effect.max_ms)) {
+        return Math.min(value, effect.max_ms);
     }
-    if (spec.id === 'dropout.max_ms' && isNumber(stage.min_ms)) {
-        return Math.max(value, stage.min_ms);
+    if (spec.id === 'dropout.max_ms' && isNumber(effect.min_ms)) {
+        return Math.max(value, effect.min_ms);
     }
     return value;
 }
@@ -361,7 +368,7 @@ function controlError(spec, value) {
 
 export function formErrors(form) {
     const errors = controls
-        .map((spec) => ({ ids: [spec.id], text: controlError(spec, form[spec.stage][spec.key]) }))
+        .map((spec) => ({ ids: [spec.id], text: controlError(spec, form[spec.effect][spec.key]) }))
         .filter(({ text }) => text !== null);
     const { filters, dropout } = form;
     if (isNumber(filters.highpass) && isNumber(filters.lowpass) && filters.highpass >= filters.lowpass) {
@@ -375,13 +382,13 @@ export function formErrors(form) {
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
-const layerStages = { noise: 'level', filters: 'frequency' };
+const layerEffects = { noise: 'level', filters: 'frequency' };
 
-const neutral = (id) => stages.find((stage) => stage.id === id).off;
+const neutral = (id) => effects.find((effect) => effect.id === id).off;
 
 export function toForm(name, preset) {
     const form = { name, ...clone(preset) };
-    for (const [id, value] of Object.entries(layerStages)) {
+    for (const [id, value] of Object.entries(layerEffects)) {
         form[id] = { ...neutral(id), ...Object.fromEntries(preset[id].map((layer) => [layer.kind, layer[value]])) };
     }
     form.bitcrush = { bits: preset.bitcrush?.bits ?? null };
@@ -390,7 +397,7 @@ export function toForm(name, preset) {
 
 export function toBody(form) {
     const { name: _, ...body } = clone(form);
-    for (const [id, value] of Object.entries(layerStages)) {
+    for (const [id, value] of Object.entries(layerEffects)) {
         body[id] = Object.entries(form[id])
             .filter(([kind, amount]) => amount !== neutral(id)[kind])
             .map(([kind, amount]) => ({ kind, [value]: amount }));

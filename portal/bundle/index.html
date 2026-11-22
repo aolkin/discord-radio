@@ -557,7 +557,7 @@
                                             <template x-for="spec in changes()" :key="spec.id">
                                                 <div class="chain-review-row">
                                                     <span
-                                                        x-text="stages.find((stage) => stage.id === spec.stage).name + ' › ' + spec.name"
+                                                        x-text="effects.find((effect) => effect.id === spec.effect).name + ' › ' + spec.name"
                                                     ></span>
                                                     <span>
                                                         <del x-text="formatValue(spec, savedValue(spec))"></del>
@@ -617,18 +617,18 @@
                                     <div class="chain-strip-scroll">
                                         <div class="chain-strip">
                                             <span class="chain-io">music</span>
-                                            <template x-for="stage in stages" :key="stage.id">
+                                            <template x-for="effect in effects" :key="effect.id">
                                                 <span class="chain-strip-step">
                                                     <span class="chain-arrow" aria-hidden="true">→</span>
                                                     <button
                                                         type="button"
                                                         class="chain-chip"
-                                                        :class="isOn(stage) && 'on'"
-                                                        :title="stage.name + (isOn(stage) ? ' is on' : ' is off')"
-                                                        @click="jump(stage)"
+                                                        :class="isOn(effect) && 'on'"
+                                                        :title="effect.name + (isOn(effect) ? ' is on' : ' is off')"
+                                                        @click="jump(effect)"
                                                     >
                                                         <span class="chain-led"></span>
-                                                        <span x-text="stage.name"></span>
+                                                        <span x-text="effect.name"></span>
                                                     </button>
                                                 </span>
                                             </template>
@@ -648,21 +648,21 @@
 
                                 <div class="chain-rack">
                                     <div class="chain-cable">music in</div>
-                                    <template x-for="(stage, index) in stages" :key="stage.id">
+                                    <template x-for="(effect, index) in effects" :key="effect.id">
                                         <div>
                                             <section
                                                 class="chain-module"
-                                                :id="'chain-module-' + stage.id"
-                                                :class="{ off: !isOn(stage), collapsed: collapsed[stage.id] }"
+                                                :id="'chain-module-' + effect.id"
+                                                :class="{ off: !isOn(effect), collapsed: collapsed[effect.id] }"
                                             >
                                                 <div class="chain-module-head">
                                                     <button
                                                         type="button"
                                                         class="chain-power"
-                                                        :aria-pressed="String(isOn(stage))"
-                                                        :aria-label="stage.name + ' on or off'"
-                                                        :title="(isOn(stage) ? 'Turn off ' : 'Turn on ') + stage.name"
-                                                        @click="power(stage)"
+                                                        :aria-pressed="String(isOn(effect))"
+                                                        :aria-label="effect.name + ' on or off'"
+                                                        :title="(isOn(effect) ? 'Turn off ' : 'Turn on ') + effect.name"
+                                                        @click="power(effect)"
                                                     >
                                                         <svg viewBox="0 0 16 16" aria-hidden="true">
                                                             <path d="M8 1.5v6" />
@@ -672,32 +672,35 @@
                                                     <div class="chain-module-title">
                                                         <span class="chain-module-name">
                                                             <small x-text="index + 1"></small>
-                                                            <span x-text="stage.name"></span>
+                                                            <span x-text="effect.name"></span>
                                                         </span>
                                                         <span
                                                             class="chain-module-description"
-                                                            x-text="stage.description"
+                                                            x-text="effect.description"
                                                         ></span>
                                                     </div>
                                                     <span
                                                         class="chain-readout"
-                                                        x-text="stage.readout(stageValues(stage))"
+                                                        x-text="effect.readout(effectValues(effect))"
                                                     ></span>
                                                     <button
                                                         type="button"
                                                         class="chain-fold"
-                                                        :aria-label="(collapsed[stage.id] ? 'Expand ' : 'Collapse ') + stage.name"
-                                                        :aria-expanded="String(!collapsed[stage.id])"
-                                                        @click="toggleCollapsed(stage)"
+                                                        :aria-label="(collapsed[effect.id] ? 'Expand ' : 'Collapse ') + effect.name"
+                                                        :aria-expanded="String(!collapsed[effect.id])"
+                                                        @click="toggleCollapsed(effect)"
                                                     >
                                                         <svg viewBox="0 0 16 16" aria-hidden="true">
                                                             <path d="M4 6l4 4 4-4" />
                                                         </svg>
                                                     </button>
                                                 </div>
-                                                <div class="chain-module-body" x-show="!collapsed[stage.id]">
-                                                    <div class="chain-controls" :class="stage.faders && 'chain-faders'">
-                                                        <template x-for="spec in stage.controls" :key="spec.id">
+                                                <div class="chain-module-body" x-show="!collapsed[effect.id]">
+                                                    <div
+                                                        class="chain-controls"
+                                                        :class="effect.faders && 'chain-faders'"
+                                                    >
+                                                        <template x-for="spec in effect.controls" :key="spec.id">
                                                             <div
                                                                 class="chain-control"
                                                                 :class="hot === spec.id && 'hot'"
@@ -706,15 +709,15 @@
                                                                 <div
                                                                     role="slider"
                                                                     tabindex="0"
-                                                                    :class="stage.faders ? 'chain-fader' : 'chain-knob'"
+                                                                    :class="effect.faders ? 'chain-fader' : 'chain-knob'"
                                                                     :aria-label="spec.name"
-                                                                    :aria-orientation="stage.faders ? 'vertical' : null"
+                                                                    :aria-orientation="effect.faders ? 'vertical' : null"
                                                                     :aria-valuemin="spec.min"
                                                                     :aria-valuemax="spec.max"
                                                                     aria-valuenow="0"
                                                                     :aria-valuenow="value(spec) ?? spec.min"
                                                                     :aria-valuetext="valueText(spec)"
-                                                                    @pointerdown="startDrag($event, spec, stage.faders ? 'fader' : 'knob')"
+                                                                    @pointerdown="startDrag($event, spec, effect.faders ? 'fader' : 'knob')"
                                                                     @pointermove="moveDrag($event)"
                                                                     @pointerup="endDrag()"
                                                                     @pointercancel="endDrag()"
@@ -722,7 +725,7 @@
                                                                     @dblclick="resetToSaved(spec)"
                                                                     @keydown="sliderKey($event, spec)"
                                                                 >
-                                                                    <template x-if="!stage.faders">
+                                                                    <template x-if="!effect.faders">
                                                                         <svg
                                                                             class="chain-dial"
                                                                             viewBox="0 0 60 60"
@@ -730,7 +733,7 @@
                                                                             x-html="knobSvg(spec)"
                                                                         ></svg>
                                                                     </template>
-                                                                    <template x-if="stage.faders">
+                                                                    <template x-if="effect.faders">
                                                                         <div class="chain-fader-parts">
                                                                             <div
                                                                                 class="chain-fader-fill"
@@ -787,7 +790,7 @@
                                                                 ></span>
                                                             </div>
                                                         </template>
-                                                        <span class="chain-note" x-show="stage.faders">
+                                                        <span class="chain-note" x-show="effect.faders">
                                                             Faders show the level in dB; 0 dB is full scale.
                                                         </span>
                                                     </div>
@@ -795,7 +798,7 @@
                                             </section>
                                             <div
                                                 class="chain-cable"
-                                                x-text="stage.id === 'noise' ? 'music + noise' : ''"
+                                                x-text="effect.id === 'noise' ? 'music + noise' : ''"
                                             ></div>
                                         </div>
                                     </template>
