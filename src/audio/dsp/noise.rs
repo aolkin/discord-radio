@@ -1,13 +1,15 @@
-use crate::audio::presets::NoiseKind;
-use rand::{RngExt, SeedableRng, rngs::StdRng};
+use crate::audio::dsp::{FrameProcessor, LayerProcessor};
+use crate::audio::helpers::perceptual_level_to_amplitude;
+use crate::audio::presets::{Noise, NoiseKind};
+use rand::{RngExt, rngs::StdRng};
 
-pub enum NoiseSource {
+enum NoiseSource {
     White(WhiteNoiseState),
     Pink(PinkNoiseState),
     Brown(BrownNoiseState),
 }
 
-pub struct WhiteNoiseState {
+struct WhiteNoiseState {
     rng: StdRng,
 }
 
@@ -17,27 +19,20 @@ impl WhiteNoiseState {
     }
 }
 
-pub struct PinkNoiseState {
+struct PinkNoiseState {
     state: [f32; 7],
     counter: u32,
     rng: StdRng,
 }
 
-pub struct BrownNoiseState {
+struct BrownNoiseState {
     last_value: f32,
     rng: StdRng,
 }
 
-fn seeded_rng() -> StdRng {
-    use rand::Rng;
-    let mut seed = [0u8; 32];
-    rand::rng().fill_bytes(&mut seed);
-    StdRng::from_seed(seed)
-}
-
 impl NoiseSource {
-    pub fn new(kind: NoiseKind) -> Self {
-        let rng = seeded_rng();
+    fn new(kind: NoiseKind) -> Self {
+        let rng = rand::make_rng();
         match kind {
             NoiseKind::White => Self::White(WhiteNoiseState { rng }),
             NoiseKind::Pink => Self::Pink(PinkNoiseState {
@@ -52,12 +47,51 @@ impl NoiseSource {
         }
     }
 
-    pub fn next(&mut self) -> f32 {
+    fn kind(&self) -> NoiseKind {
+        match self {
+            Self::White(_) => NoiseKind::White,
+            Self::Pink(_) => NoiseKind::Pink,
+            Self::Brown(_) => NoiseKind::Brown,
+        }
+    }
+
+    fn next(&mut self) -> f32 {
         match self {
             Self::White(state) => state.next(),
             Self::Pink(state) => state.next(),
             Self::Brown(state) => state.next(),
         }
+    }
+}
+
+pub struct NoiseProcessor {
+    source: NoiseSource,
+    amplitude: f32,
+}
+
+impl LayerProcessor for NoiseProcessor {
+    type Layer = Noise;
+
+    fn new(_sample_rate: u32, noise: &Noise) -> Self {
+        Self {
+            source: NoiseSource::new(noise.kind),
+            amplitude: perceptual_level_to_amplitude(noise.level),
+        }
+    }
+
+    fn kind(&self) -> NoiseKind {
+        self.source.kind()
+    }
+
+    fn update(&mut self, noise: &Noise) {
+        self.amplitude = perceptual_level_to_amplitude(noise.level);
+    }
+}
+
+impl FrameProcessor for NoiseProcessor {
+    fn process_frame(&mut self, frame: [f32; 2]) -> [f32; 2] {
+        let sample = self.source.next() * self.amplitude;
+        [frame[0] + sample, frame[1] + sample]
     }
 }
 

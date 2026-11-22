@@ -13,7 +13,7 @@ const linear = (max) => ({ scale: 'linear', min: 0, max, step: 0.01 });
 const log = (min, max, step) => ({ scale: 'log', min, max, step });
 const limited = (key, label, min, max, extra) => ({ key, label, type: 'number', step: 'any', min, max, ...extra });
 
-const layerStages = {
+const layerEffects = {
     noise: {
         value: 'level',
         fields: [
@@ -31,7 +31,7 @@ const layerStages = {
     },
 };
 
-const stageFields = {
+const effectFields = {
     tremolo: [
         limited('depth', 'Tremolo Depth', 0, 1, { slider: linear(1) }),
         limited('rate', 'Tremolo Rate (Hz)', 0, 20, { slider: log(0.1, 20, 0.01) }),
@@ -54,8 +54,8 @@ const mapEntries = (object, convert) =>
 
 function blocks(form) {
     return [
-        ...Object.entries(layerStages).map(([stage, { fields }]) => ({ row: form[stage], fields, path: [stage] })),
-        ...Object.entries(stageFields).map(([stage, fields]) => ({ row: form[stage], fields, path: [stage] })),
+        ...Object.entries(layerEffects).map(([effect, { fields }]) => ({ row: form[effect], fields, path: [effect] })),
+        ...Object.entries(effectFields).map(([effect, fields]) => ({ row: form[effect], fields, path: [effect] })),
     ];
 }
 
@@ -71,15 +71,15 @@ function layersToBody({ value, fields }, row) {
 function toForm(name, preset) {
     return {
         name,
-        ...mapEntries(layerStages, (stage, key) => layersToForm(stage, preset[key])),
-        ...mapEntries(stageFields, (fields, key) => convertObject(fields, preset[key] ?? {}, fieldFromServer)),
+        ...mapEntries(layerEffects, (effect, key) => layersToForm(effect, preset[key])),
+        ...mapEntries(effectFields, (fields, key) => convertObject(fields, preset[key] ?? {}, fieldFromServer)),
     };
 }
 
 function toBody(form) {
     return {
-        ...mapEntries(layerStages, (stage, key) => layersToBody(stage, form[key])),
-        ...mapEntries(stageFields, (fields, key) => convertObject(fields, form[key], fieldToServer)),
+        ...mapEntries(layerEffects, (effect, key) => layersToBody(effect, form[key])),
+        ...mapEntries(effectFields, (fields, key) => convertObject(fields, form[key], fieldToServer)),
         bitcrush: form.bitcrush.bits === '' ? null : { bits: form.bitcrush.bits },
     };
 }
@@ -87,8 +87,8 @@ function toBody(form) {
 function blankForm() {
     return {
         name: '',
-        ...mapEntries(layerStages, ({ fields }) => blankRow(fields)),
-        ...mapEntries(stageFields, (fields) => blankRow(fields)),
+        ...mapEntries(layerEffects, ({ fields }) => blankRow(fields)),
+        ...mapEntries(effectFields, (fields) => blankRow(fields)),
     };
 }
 

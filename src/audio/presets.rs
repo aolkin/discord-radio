@@ -1,7 +1,6 @@
 use crate::bucket::registry::{JsonRegistry, RegistryEntry};
 use anyhow::bail;
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct SignalParameters {
@@ -14,7 +13,7 @@ pub struct SignalParameters {
     pub dropout: Dropout,
 }
 
-trait Lerp {
+pub trait Lerp {
     fn lerp(&self, other: &Self, t: f32) -> Self;
 }
 
@@ -36,7 +35,7 @@ macro_rules! lerp_by_step {
 
 lerp_by_step!(NoiseKind, FilterKind, Option<Bitcrush>);
 
-macro_rules! stage {
+macro_rules! lerp_struct {
     (
         $(#[$meta:meta])*
         pub struct $name:ident { $($(#[$field_meta:meta])* pub $field:ident: $type:ty,)* }
@@ -61,7 +60,7 @@ pub enum NoiseKind {
     Brown,
 }
 
-stage! {
+lerp_struct! {
     #[derive(Deserialize, Serialize, Clone, Copy, Debug)]
     pub struct Noise {
         pub kind: NoiseKind,
@@ -82,7 +81,7 @@ pub enum FilterKind {
     LowPass,
 }
 
-stage! {
+lerp_struct! {
     #[derive(Deserialize, Serialize, Clone, Copy, Debug)]
     pub struct Filter {
         pub kind: FilterKind,
@@ -90,7 +89,7 @@ stage! {
     }
 }
 
-stage! {
+lerp_struct! {
     #[derive(Deserialize, Serialize, Clone, Copy, Debug)]
     pub struct Tremolo {
         pub depth: f32,
@@ -99,7 +98,7 @@ stage! {
     }
 }
 
-stage! {
+lerp_struct! {
     #[derive(Deserialize, Serialize, Clone, Copy, Debug)]
     pub struct Clip {
         pub pregain: f32,
@@ -112,7 +111,7 @@ pub struct Bitcrush {
     pub bits: u8,
 }
 
-stage! {
+lerp_struct! {
     #[derive(Deserialize, Serialize, Clone, Copy, Debug)]
     pub struct Dropout {
         pub probability: f32,
@@ -121,18 +120,18 @@ stage! {
     }
 }
 
-trait Layer: Lerp + Copy {
-    type Kind: Copy + PartialEq + Display;
-    const STAGE: &'static str;
+pub trait Layer: Lerp + Copy {
+    type Kind: Copy + PartialEq;
+    const LIST: &'static str;
 
     fn kind(&self) -> Self::Kind;
     fn neutral(kind: Self::Kind) -> Self;
-    fn check_limits(&self) -> anyhow::Result<()>;
+    fn check_limits(&self, path: &str) -> anyhow::Result<()>;
 }
 
 impl Layer for Noise {
     type Kind = NoiseKind;
-    const STAGE: &'static str = "noise";
+    const LIST: &'static str = "noise";
 
     fn kind(&self) -> NoiseKind {
         self.kind
@@ -142,18 +141,14 @@ impl Layer for Noise {
         Self { kind, level: 0.0 }
     }
 
-    fn check_limits(&self) -> anyhow::Result<()> {
-        check(
-            &format!("noise.{}.level", self.kind),
-            self.level,
-            NOISE_LEVEL,
-        )
+    fn check_limits(&self, path: &str) -> anyhow::Result<()> {
+        check(&format!("{path}.level"), self.level, NOISE_LEVEL)
     }
 }
 
 impl Layer for Filter {
     type Kind = FilterKind;
-    const STAGE: &'static str = "filter";
+    const LIST: &'static str = "filters";
 
     fn kind(&self) -> FilterKind {
         self.kind
@@ -167,34 +162,26 @@ impl Layer for Filter {
         Self { kind, frequency }
     }
 
-    fn check_limits(&self) -> anyhow::Result<()> {
-        check(
-            &format!("filters.{}.frequency", self.kind),
-            self.frequency,
-            FILTER_HZ,
-        )
+    fn check_limits(&self, path: &str) -> anyhow::Result<()> {
+        check(&format!("{path}.frequency"), self.frequency, FILTER_HZ)
     }
-}
-
-fn find<L: Layer>(layers: &[L], kind: L::Kind) -> Option<L> {
-    layers.iter().copied().find(|layer| layer.kind() == kind)
 }
 
 impl<L: Layer> Lerp for Vec<L> {
     fn lerp(&self, other: &Self, t: f32) -> Self {
-        let added = other
-            .iter()
-            .filter(|layer| find(self, layer.kind()).is_none());
-        self.iter()
-            .chain(added)
-            .map(|layer| {
-                let kind = layer.kind();
-                let neutral = L::neutral(kind);
-                let from = find(self, kind).unwrap_or(neutral);
-                let to = find(other, kind).unwrap_or(neutral);
-                from.lerp(&to, t)
-            })
-            .collect()
+        let mut layers = Vec::new();
+        for index in 0..self.len().max(other.len()) {
+            match (self.get(index), other.get(index)) {
+                (Some(from), Some(to)) if from.kind() == to.kind() => {
+                    layers.push(from.lerp(to, t));
+                }
+                (from, to) => {
+                    layers.extend(from.map(|from| from.lerp(&L::neutral(from.kind()), t)));
+                    layers.extend(to.map(|to| L::neutral(to.kind()).lerp(to, t)));
+                }
+            }
+        }
+        layers
     }
 }
 
@@ -231,22 +218,22 @@ fn check(field: &str, value: f32, (min, max): (f32, f32)) -> anyhow::Result<()> 
 
 fn check_layers<L: Layer>(layers: &[L]) -> anyhow::Result<()> {
     for (index, layer) in layers.iter().enumerate() {
-        if find(&layers[..index], layer.kind()).is_some() {
-            bail!("{} kind {} appears more than once", L::STAGE, layer.kind());
-        }
-        layer.check_limits()?;
+        layer.check_limits(&format!("{}[{index}]", L::LIST))?;
     }
     Ok(())
 }
 
 fn check_filters(filters: &[Filter]) -> anyhow::Result<()> {
     check_layers(filters)?;
-    if let (Some(highpass), Some(lowpass)) = (
-        find(filters, FilterKind::HighPass),
-        find(filters, FilterKind::LowPass),
-    ) && highpass.frequency >= lowpass.frequency
-    {
-        bail!("highpass frequency must be below lowpass frequency");
+    let frequencies = |kind| {
+        filters
+            .iter()
+            .filter(move |filter| filter.kind == kind)
+            .map(|filter| filter.frequency)
+    };
+    let lowest_lowpass = frequencies(FilterKind::LowPass).fold(f32::INFINITY, f32::min);
+    if frequencies(FilterKind::HighPass).any(|highpass| highpass >= lowest_lowpass) {
+        bail!("every highpass frequency must be below every lowpass frequency");
     }
     Ok(())
 }
@@ -368,8 +355,14 @@ mod tests {
             |p| (p.dropout.min_ms, p.dropout.max_ms) = (100.0, 50.0),
             |p| p.bitcrush = Some(Bitcrush { bits: 255 }),
             |p| p.bitcrush = Some(Bitcrush { bits: 0 }),
-            |p| p.noise = vec![pink(2.5)],
-            |p| p.noise = vec![pink(0.5), pink(0.5)],
+            |p| {
+                p.filters = vec![
+                    filter(FilterKind::HighPass, 100.0),
+                    filter(FilterKind::LowPass, 4000.0),
+                    filter(FilterKind::HighPass, 5000.0),
+                ]
+            },
+            |p| p.noise = vec![pink(0.5), pink(2.5)],
         ];
         for mutate in cases {
             let mut preset = clear();

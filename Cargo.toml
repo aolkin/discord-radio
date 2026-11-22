@@ -32,7 +32,6 @@ rubato = "5"
 
 # Audio DSP processing
 biquad = "0.6"
-atomic_float = "1.0"
 
 # Opus encoding for audio streaming
 opus = "0.4"

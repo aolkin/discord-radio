@@ -33,10 +33,10 @@ Wraps Symphonia decoder as an AudioSource.
 
 ### 3. DSP Effects Chain (`audio/dsp/chain.rs`)
 
-Applies radio signal effects in sequence:
+Applies radio signal effects in sequence. Each effect implements `FrameProcessor`, which takes a stereo frame and returns the processed frame:
 
-1. **Bandpass Filter** - Limits frequency range (typically 500Hz-5kHz for AM radio)
-2. **Noise Mixing** - Adds white, pink, or brown noise
+1. **Noise Mixing** - Adds one white, pink, or brown noise source per `noise` entry
+2. **Filters** - One high-pass or low-pass filter per `filters` entry (typically 500Hz-5kHz for AM radio)
 3. **Tremolo/Amplitude Modulation** - Simulates signal fading with frequency and amplitude jitter
 4. **Soft Clipping** - Signal distortion
 5. **Bitcrushing** (optional) - Reduces bit depth
@@ -68,7 +68,8 @@ Noise levels use perceptual (dB-based) scaling for natural-sounding volume contr
 - **LFO**: Low-frequency oscillator for tremolo with dual jitter:
   - Frequency jitter: Randomly varies LFO rate (±70% at 50-200ms intervals)
   - Amplitude jitter: Randomly varies LFO depth (±30% at 30-150ms intervals) to make tremolo less predictable
-- **Bitcrusher**: Reduces sample bit depth
+- **TremoloProcessor**: Applies the LFO to the signal amplitude
+- **Clip** and **Bitcrush**: The preset settings process frames directly (soft clipping and bit depth reduction)
 - **DropoutGenerator**: Random silence periods
 
 ### 5. Preset System (`audio/presets.rs`)
@@ -157,7 +158,7 @@ More sample presets are in `examples/signal_presets/`. The bot loads presets fro
 }
 ```
 
-Stages appear in processing order. `noise` lists only the kinds the preset uses (`white`, `pink`, `brown`) and `filters` only the filters it applies (`highpass`, `lowpass`), each kind at most once; a missing noise kind is silent and a missing filter passes everything. `bitcrush` is `null` when the preset does not bitcrush.
+Effects appear in processing order. `noise` lists the noise sources the preset mixes in (`white`, `pink`, `brown`) and `filters` the filters it applies (`highpass`, `lowpass`); a kind may appear more than once, and an empty list adds no noise or passes everything. During a transition, list entries pair up by position: entries of the same kind interpolate, and otherwise the old entry fades out while the new one fades in. `bitcrush` is `null` when the preset does not bitcrush.
 
 **Noise Level Parameters:**
 

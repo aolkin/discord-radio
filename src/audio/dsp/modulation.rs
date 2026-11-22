@@ -1,5 +1,6 @@
-use crate::audio::presets::Dropout;
-use rand::{RngExt, SeedableRng, rngs::StdRng};
+use crate::audio::dsp::FrameProcessor;
+use crate::audio::presets::{Bitcrush, Clip, Dropout, Tremolo};
+use rand::{RngExt, rngs::StdRng};
 
 #[allow(clippy::upper_case_acronyms)]
 pub struct LFO {
@@ -18,11 +19,6 @@ pub struct LFO {
 
 impl LFO {
     pub fn new(sample_rate: u32, frequency: f32, amplitude_jitter_amount: f32) -> Self {
-        use rand::Rng;
-        let mut seed_rng = rand::rng();
-        let mut seed = [0u8; 32];
-        seed_rng.fill_bytes(&mut seed);
-
         let phase_increment = (frequency as f64) / (sample_rate as f64);
         Self {
             phase: 0.0,
@@ -30,7 +26,7 @@ impl LFO {
             base_phase_increment: phase_increment,
             jitter_amount: 0.7,
             sample_rate,
-            rng: StdRng::from_seed(seed),
+            rng: rand::make_rng(),
             frames_until_jitter: 0,
             amplitude_jitter_amount: amplitude_jitter_amount as f64,
             frames_until_amplitude_jitter: 0,
@@ -38,9 +34,8 @@ impl LFO {
         }
     }
 
-    pub fn set_frequency(&mut self, sample_rate: u32, frequency: f32) {
-        self.sample_rate = sample_rate;
-        self.base_phase_increment = (frequency as f64) / (sample_rate as f64);
+    pub fn set_frequency(&mut self, frequency: f32) {
+        self.base_phase_increment = (frequency as f64) / (self.sample_rate as f64);
         self.phase_increment = self.base_phase_increment;
     }
 
@@ -94,26 +89,52 @@ impl LFO {
     }
 }
 
-pub struct Bitcrusher {
-    depth: u8,
+pub struct TremoloProcessor {
+    lfo: LFO,
+    depth: f32,
 }
 
-impl Bitcrusher {
-    pub fn new(depth: u8) -> Self {
-        Self { depth }
+impl TremoloProcessor {
+    pub fn new(sample_rate: u32, tremolo: &Tremolo) -> Self {
+        Self {
+            lfo: LFO::new(sample_rate, tremolo.rate, tremolo.jitter),
+            depth: tremolo.depth,
+        }
     }
 
-    pub fn set_depth(&mut self, depth: u8) {
-        self.depth = depth;
+    pub fn update(&mut self, tremolo: &Tremolo) {
+        self.depth = tremolo.depth;
+        self.lfo.set_frequency(tremolo.rate);
+        self.lfo.set_amplitude_jitter(tremolo.jitter);
     }
+}
 
-    pub fn process(&self, sample: f32) -> f32 {
-        let step_size = 1.0 / 2.0_f32.powi(self.depth as i32 - 1);
-        (sample / step_size).round() * step_size
+impl FrameProcessor for TremoloProcessor {
+    fn process_frame(&mut self, frame: [f32; 2]) -> [f32; 2] {
+        let lfo = self.lfo.next();
+        let gain = 1.0 - self.depth + (lfo * 0.5 + 0.5) * self.depth;
+        [frame[0] * gain, frame[1] * gain]
     }
+}
 
-    pub fn process_frame(&self, frame: [f32; 2]) -> [f32; 2] {
-        [self.process(frame[0]), self.process(frame[1])]
+fn soft_clip(sample: f32, threshold: f32) -> f32 {
+    if sample.abs() < threshold {
+        sample
+    } else {
+        threshold * sample.signum() * (1.0 - (-sample.abs() / threshold).exp())
+    }
+}
+
+impl FrameProcessor for Clip {
+    fn process_frame(&mut self, frame: [f32; 2]) -> [f32; 2] {
+        frame.map(|sample| soft_clip(sample * self.pregain, self.threshold))
+    }
+}
+
+impl FrameProcessor for Bitcrush {
+    fn process_frame(&mut self, frame: [f32; 2]) -> [f32; 2] {
+        let step_size = 1.0 / 2.0_f32.powi(self.bits as i32 - 1);
+        frame.map(|sample| (sample / step_size).round() * step_size)
     }
 }
 
@@ -127,25 +148,20 @@ pub struct DropoutGenerator {
 
 impl DropoutGenerator {
     pub fn new(dropout: &Dropout, sample_rate: u32) -> Self {
-        use rand::Rng;
-        let mut seed_rng = rand::rng();
-        let mut seed = [0u8; 32];
-        seed_rng.fill_bytes(&mut seed);
-
         Self {
             dropout: *dropout,
             sample_rate: sample_rate as f32,
             frames_until_next_check: 0,
             dropout_frames_remaining: 0,
-            rng: StdRng::from_seed(seed),
+            rng: rand::make_rng(),
         }
     }
 
-    pub fn set_params(&mut self, dropout: &Dropout) {
+    pub fn update(&mut self, dropout: &Dropout) {
         self.dropout = *dropout;
     }
 
-    pub fn should_dropout(&mut self) -> bool {
+    fn should_dropout(&mut self) -> bool {
         if self.dropout_frames_remaining > 0 {
             self.dropout_frames_remaining -= 1;
             return true;
@@ -171,5 +187,15 @@ impl DropoutGenerator {
         }
 
         false
+    }
+}
+
+impl FrameProcessor for DropoutGenerator {
+    fn process_frame(&mut self, frame: [f32; 2]) -> [f32; 2] {
+        if self.should_dropout() {
+            [0.0, 0.0]
+        } else {
+            frame
+        }
     }
 }
