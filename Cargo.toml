@@ -32,7 +32,6 @@ rubato = "5"
 
 # Audio DSP processing
 biquad = "0.6"
-atomic_float = "1.0"
 
 # Opus encoding for audio streaming
 opus = "0.4"
@@ -60,6 +59,7 @@ strum = { version = "0.28.0", features = ["derive"] }
 rust-embed = { version = "8.13.0", features = ["interpolate-folder-path", "mime-guess"] }
 field-trait = { path = "crates/field-trait" }
 ambassador = "0.5.1"
+garde = { version = "0.23", features = ["derive"] }
 
 [build-dependencies]
 js-bundler = { path = "crates/js-bundler" }

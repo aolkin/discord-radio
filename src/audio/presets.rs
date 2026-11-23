@@ -1,114 +1,108 @@
+use crate::audio::dsp::effects::bitcrush::Bitcrush;
+use crate::audio::dsp::effects::clip::Clip;
+use crate::audio::dsp::effects::dropout::Dropout;
+use crate::audio::dsp::effects::filter::{Filter, FilterBounds};
+use crate::audio::dsp::effects::noise::Noise;
+use crate::audio::dsp::effects::tremolo::Tremolo;
 use crate::bucket::registry::{JsonRegistry, RegistryEntry};
-use anyhow::bail;
+use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, garde::Validate)]
 pub struct SignalParameters {
+    #[garde(skip)]
     pub name: String,
+    #[garde(dive)]
+    pub noise: Vec<Noise>,
+    #[garde(dive(FilterBounds::of(&self.filters)))]
+    pub filters: Vec<Filter>,
+    #[garde(dive)]
+    pub tremolo: Tremolo,
+    #[garde(dive)]
+    pub clip: Clip,
+    #[garde(dive)]
+    pub bitcrush: Option<Bitcrush>,
+    #[garde(dive)]
+    pub dropout: Dropout,
+}
 
-    pub bandpass_low: f32,
-    pub bandpass_high: f32,
+pub trait Lerp {
+    fn lerp(&self, other: &Self, t: f32) -> Self;
+}
 
-    /// Noise levels (0.0-2.0) use perceptual (dB-based) scaling:
-    /// - 0.0 = silence
-    /// - 0.5 = moderate (-30dB)
-    /// - 1.0 = reference level (0dB)
-    /// - 2.0 = boosted (+18dB)
-    pub white_noise_level: f32,
-    pub pink_noise_level: f32,
-    pub brown_noise_level: f32,
+impl Lerp for f32 {
+    fn lerp(&self, other: &Self, t: f32) -> Self {
+        self * (1.0 - t) + other * t
+    }
+}
 
-    pub tremolo_depth: f32,
-    pub tremolo_rate: f32,
-    pub tremolo_jitter: f32,
+macro_rules! lerp_by_step {
+    ($($type:ty),*) => {$(
+        impl $crate::audio::presets::Lerp for $type {
+            fn lerp(&self, other: &Self, t: f32) -> Self {
+                if t < 0.5 { *self } else { *other }
+            }
+        }
+    )*};
+}
 
-    pub clip_pregain: f32,
-    pub clip_threshold: f32,
-    pub bitcrush_bits: Option<u8>,
+pub(crate) use lerp_by_step;
 
-    pub dropout_probability: f32,
-    pub dropout_duration_ms: (f32, f32),
+macro_rules! lerp_struct {
+    (
+        $(#[$meta:meta])*
+        pub struct $name:ident { $($(#[$field_meta:meta])* pub $field:ident: $type:ty,)* }
+    ) => {
+        $(#[$meta])*
+        pub struct $name { $($(#[$field_meta])* pub $field: $type,)* }
+
+        impl $crate::audio::presets::Lerp for $name {
+            fn lerp(&self, other: &Self, t: f32) -> Self {
+                Self { $($field: self.$field.lerp(&other.$field, t),)* }
+            }
+        }
+    };
+}
+
+pub(crate) use lerp_struct;
+
+pub trait ListEntry: Lerp + Copy {
+    type Kind: Copy + PartialEq;
+
+    fn kind(&self) -> Self::Kind;
+    fn neutral(kind: Self::Kind) -> Self;
+}
+
+impl<E: ListEntry> Lerp for Vec<E> {
+    fn lerp(&self, other: &Self, t: f32) -> Self {
+        let mut entries = Vec::new();
+        for index in 0..self.len().max(other.len()) {
+            match (self.get(index), other.get(index)) {
+                (Some(from), Some(to)) if from.kind() == to.kind() => {
+                    entries.push(from.lerp(to, t));
+                }
+                (from, to) => {
+                    entries.extend(from.map(|from| from.lerp(&E::neutral(from.kind()), t)));
+                    entries.extend(to.map(|to| E::neutral(to.kind()).lerp(to, t)));
+                }
+            }
+        }
+        entries
+    }
 }
 
 impl SignalParameters {
     pub fn interpolate(&self, other: &Self, t: f32) -> Self {
         let t = t.clamp(0.0, 1.0);
-        let inv_t = 1.0 - t;
-
         Self {
             name: format!("{}→{}", self.name, other.name),
-            bandpass_low: self.bandpass_low * inv_t + other.bandpass_low * t,
-            bandpass_high: self.bandpass_high * inv_t + other.bandpass_high * t,
-            // Interpolate noise levels linearly in perceptual space.
-            // The perceptual scale (0.0-2.0) already maps linearly to dB,
-            // so linear interpolation here gives smooth perceptual transitions.
-            white_noise_level: self.white_noise_level * inv_t + other.white_noise_level * t,
-            pink_noise_level: self.pink_noise_level * inv_t + other.pink_noise_level * t,
-            brown_noise_level: self.brown_noise_level * inv_t + other.brown_noise_level * t,
-            tremolo_depth: self.tremolo_depth * inv_t + other.tremolo_depth * t,
-            tremolo_rate: self.tremolo_rate * inv_t + other.tremolo_rate * t,
-            tremolo_jitter: self.tremolo_jitter * inv_t + other.tremolo_jitter * t,
-            clip_pregain: self.clip_pregain * inv_t + other.clip_pregain * t,
-            clip_threshold: self.clip_threshold * inv_t + other.clip_threshold * t,
-            bitcrush_bits: if t < 0.5 {
-                self.bitcrush_bits
-            } else {
-                other.bitcrush_bits
-            },
-            dropout_probability: self.dropout_probability * inv_t + other.dropout_probability * t,
-            dropout_duration_ms: (
-                self.dropout_duration_ms.0 * inv_t + other.dropout_duration_ms.0 * t,
-                self.dropout_duration_ms.1 * inv_t + other.dropout_duration_ms.1 * t,
-            ),
+            noise: self.noise.lerp(&other.noise, t),
+            filters: self.filters.lerp(&other.filters, t),
+            tremolo: self.tremolo.lerp(&other.tremolo, t),
+            clip: self.clip.lerp(&other.clip, t),
+            bitcrush: self.bitcrush.lerp(&other.bitcrush, t),
+            dropout: self.dropout.lerp(&other.dropout, t),
         }
-    }
-}
-
-const BANDPASS_HZ: (f32, f32) = (20.0, 20000.0);
-const NOISE_LEVEL: (f32, f32) = (0.0, 2.0);
-const UNIT: (f32, f32) = (0.0, 1.0);
-const TREMOLO_RATE_HZ: (f32, f32) = (0.0, 20.0);
-const CLIP_PREGAIN: (f32, f32) = (0.0, 100.0);
-const CLIP_THRESHOLD: (f32, f32) = (0.0, 2.0);
-const BITCRUSH_BITS: (u8, u8) = (1, 16);
-const DROPOUT_MS: (f32, f32) = (0.0, 2000.0);
-
-fn check(field: &str, value: f32, (min, max): (f32, f32)) -> anyhow::Result<()> {
-    if !(min..=max).contains(&value) {
-        bail!("{field} must be between {min} and {max}, got {value}");
-    }
-    Ok(())
-}
-
-impl SignalParameters {
-    fn check_limits(&self) -> anyhow::Result<()> {
-        check("bandpass_low", self.bandpass_low, BANDPASS_HZ)?;
-        check("bandpass_high", self.bandpass_high, BANDPASS_HZ)?;
-        if self.bandpass_low >= self.bandpass_high {
-            bail!("bandpass_low must be below bandpass_high");
-        }
-        check("white_noise_level", self.white_noise_level, NOISE_LEVEL)?;
-        check("pink_noise_level", self.pink_noise_level, NOISE_LEVEL)?;
-        check("brown_noise_level", self.brown_noise_level, NOISE_LEVEL)?;
-        check("tremolo_depth", self.tremolo_depth, UNIT)?;
-        check("tremolo_rate", self.tremolo_rate, TREMOLO_RATE_HZ)?;
-        check("tremolo_jitter", self.tremolo_jitter, UNIT)?;
-        check("clip_pregain", self.clip_pregain, CLIP_PREGAIN)?;
-        check("clip_threshold", self.clip_threshold, CLIP_THRESHOLD)?;
-        if let Some(bits) = self.bitcrush_bits {
-            let (min, max) = BITCRUSH_BITS;
-            if !(min..=max).contains(&bits) {
-                bail!("bitcrush_bits must be between {min} and {max}, got {bits}");
-            }
-        }
-        check("dropout_probability", self.dropout_probability, UNIT)?;
-        let (shortest, longest) = self.dropout_duration_ms;
-        check("dropout_duration_ms min", shortest, DROPOUT_MS)?;
-        check("dropout_duration_ms max", longest, DROPOUT_MS)?;
-        if shortest > longest {
-            bail!("dropout_duration_ms min must not exceed max");
-        }
-        Ok(())
     }
 }
 
@@ -129,7 +123,8 @@ impl RegistryEntry for SignalParameters {
     }
 
     fn validate(&self) -> anyhow::Result<()> {
-        self.check_limits()
+        garde::Validate::validate(self)
+            .map_err(|report| anyhow!(report.to_string().trim_end().to_owned()))
     }
 }
 
@@ -145,25 +140,65 @@ impl JsonRegistry<SignalParameters> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::audio::dsp::effects::filter::FilterKind;
+    use crate::audio::dsp::effects::noise::NoiseKind;
 
     fn clear() -> SignalParameters {
         serde_json::from_str(include_str!("default_presets/clear_signal.json")).unwrap()
     }
 
+    fn filter(kind: FilterKind, frequency: f32) -> Filter {
+        Filter { kind, frequency }
+    }
+
+    fn pink(level: f32) -> Noise {
+        Noise {
+            kind: NoiseKind::Pink,
+            level,
+        }
+    }
+
     #[test]
     fn validate_rejects_values_that_break_the_dsp() {
         assert!(clear().validate().is_ok());
-        let cases: [fn(&mut SignalParameters); 5] = [
-            |p| p.bandpass_high = 24000.0,
-            |p| p.bandpass_low = 20000.0,
-            |p| p.bandpass_low = 0.0,
-            |p| p.dropout_duration_ms = (100.0, 50.0),
-            |p| p.bitcrush_bits = Some(255),
+        let cases: [fn(&mut SignalParameters); 8] = [
+            |p| p.filters = vec![filter(FilterKind::LowPass, 24000.0)],
+            |p| p.filters = vec![filter(FilterKind::HighPass, 0.0)],
+            |p| {
+                p.filters = vec![
+                    filter(FilterKind::HighPass, 5000.0),
+                    filter(FilterKind::LowPass, 500.0),
+                ]
+            },
+            |p| (p.dropout.min_ms, p.dropout.max_ms) = (100.0, 50.0),
+            |p| p.bitcrush = Some(Bitcrush { bits: 255 }),
+            |p| p.bitcrush = Some(Bitcrush { bits: 0 }),
+            |p| {
+                p.filters = vec![
+                    filter(FilterKind::HighPass, 100.0),
+                    filter(FilterKind::LowPass, 4000.0),
+                    filter(FilterKind::HighPass, 5000.0),
+                ]
+            },
+            |p| p.noise = vec![pink(0.5), pink(2.5)],
         ];
         for mutate in cases {
             let mut preset = clear();
             mutate(&mut preset);
             assert!(preset.validate().is_err());
         }
+    }
+
+    #[test]
+    fn interpolate_treats_a_missing_entry_as_neutral() {
+        let from = clear();
+        let mut to = clear();
+        to.noise = vec![pink(1.0)];
+        to.filters = vec![filter(FilterKind::HighPass, 220.0)];
+        let halfway = from.interpolate(&to, 0.5);
+        assert_eq!(halfway.noise.len(), 1);
+        assert_eq!(halfway.noise[0].level, 0.5);
+        assert_eq!(halfway.filters.len(), 1);
+        assert_eq!(halfway.filters[0].frequency, 120.0);
     }
 }

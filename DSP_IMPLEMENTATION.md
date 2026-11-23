@@ -33,10 +33,10 @@ Wraps Symphonia decoder as an AudioSource.
 
 ### 3. DSP Effects Chain (`audio/dsp/chain.rs`)
 
-Applies radio signal effects in sequence:
+Applies radio signal effects in sequence. Each effect implements `FrameProcessor`, which takes a stereo frame and returns the processed frame:
 
-1. **Bandpass Filter** - Limits frequency range (typically 500Hz-5kHz for AM radio)
-2. **Noise Mixing** - Adds white, pink, or brown noise
+1. **Noise Mixing** - Adds one white, pink, or brown noise source per `noise` entry
+2. **Filters** - One high-pass or low-pass filter per `filters` entry (typically 500Hz-5kHz for AM radio)
 3. **Tremolo/Amplitude Modulation** - Simulates signal fading with frequency and amplitude jitter
 4. **Soft Clipping** - Signal distortion
 5. **Bitcrushing** (optional) - Reduces bit depth
@@ -44,7 +44,7 @@ Applies radio signal effects in sequence:
 
 ### 4. DSP Modules
 
-#### Noise Generation (`audio/dsp/noise.rs`)
+#### Noise Generation (`audio/dsp/effects/noise.rs`)
 
 - **White Noise**: Uniform random noise across all frequencies
 - **Pink Noise**: 1/f noise using Voss-McCartney algorithm
@@ -63,13 +63,14 @@ Noise levels use perceptual (dB-based) scaling for natural-sounding volume contr
 - Internally converted to amplitude using: `amplitude = 10^(dB/20)`
 - Preset transitions interpolate linearly in the perceptual (0.0-2.0) space. The dB-per-unit slope changes at 1.0, so a transition is linear in dB only while both levels stay on the same side of it
 
-#### Modulation (`audio/dsp/modulation.rs`)
+#### Other Effects (`audio/dsp/effects/`)
 
-- **LFO**: Low-frequency oscillator for tremolo with dual jitter:
+- **FilterProcessor** (`filter.rs`): High-pass or low-pass biquad filter
+- **TremoloProcessor** (`tremolo.rs`): Applies the LFO (`audio/dsp/lfo.rs`) to the signal amplitude. The LFO has dual jitter:
   - Frequency jitter: Randomly varies LFO rate (±70% at 50-200ms intervals)
   - Amplitude jitter: Randomly varies LFO depth (±30% at 30-150ms intervals) to make tremolo less predictable
-- **Bitcrusher**: Reduces sample bit depth
-- **DropoutGenerator**: Random silence periods
+- **Clip** (`clip.rs`) and **Bitcrush** (`bitcrush.rs`): The preset settings process frames directly (soft clipping and bit depth reduction)
+- **DropoutGenerator** (`dropout.rs`): Random silence periods
 
 ### 5. Preset System (`audio/presets.rs`)
 
@@ -145,24 +146,23 @@ More sample presets are in `examples/signal_presets/`. The bot loads presets fro
 ```json
 {
   "name": "preset_name",
-  "bandpass_low": 500.0,
-  "bandpass_high": 5000.0,
-  "white_noise_level": 0.3,
-  "pink_noise_level": 0.0,
-  "brown_noise_level": 0.0,
-  "tremolo_depth": 0.4,
-  "tremolo_rate": 2.0,
-  "clip_pregain": 1.0,
-  "clip_threshold": 0.8,
-  "bitcrush_bits": null,
-  "dropout_probability": 0.1,
-  "dropout_duration_ms": [50.0, 150.0]
+  "noise": [{ "kind": "white", "level": 0.3 }],
+  "filters": [
+    { "kind": "highpass", "frequency": 500.0 },
+    { "kind": "lowpass", "frequency": 5000.0 }
+  ],
+  "tremolo": { "depth": 0.4, "rate": 2.0, "jitter": 0.3 },
+  "clip": { "pregain": 1.0, "threshold": 0.8 },
+  "bitcrush": { "bits": 8 },
+  "dropout": { "probability": 0.1, "min_ms": 50.0, "max_ms": 150.0 }
 }
 ```
 
+Effects appear in processing order. `noise` lists the noise sources the preset mixes in (`white`, `pink`, `brown`) and `filters` the filters it applies (`highpass`, `lowpass`); a kind may appear more than once, and an empty list adds no noise or passes everything. During a transition, list entries pair up by position: entries of the same kind interpolate, and otherwise the old entry fades out while the new one fades in. `bitcrush` is `null` when the preset does not bitcrush.
+
 **Noise Level Parameters:**
 
-Noise levels (`white_noise_level`, `pink_noise_level`, `brown_noise_level`) use **perceptual (dB-based) scaling**:
+Noise levels use **perceptual (dB-based) scaling**:
 
 - Range: `0.0` to `2.0` (typical usage: `0.0` to `1.0`)
 - `0.0` = silence (amplitude 0)

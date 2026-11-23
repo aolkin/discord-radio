@@ -1,4 +1,4 @@
-use rand::{RngExt, SeedableRng, rngs::StdRng};
+use rand::{RngExt, rngs::StdRng};
 
 #[allow(clippy::upper_case_acronyms)]
 pub struct LFO {
@@ -17,11 +17,6 @@ pub struct LFO {
 
 impl LFO {
     pub fn new(sample_rate: u32, frequency: f32, amplitude_jitter_amount: f32) -> Self {
-        use rand::Rng;
-        let mut seed_rng = rand::rng();
-        let mut seed = [0u8; 32];
-        seed_rng.fill_bytes(&mut seed);
-
         let phase_increment = (frequency as f64) / (sample_rate as f64);
         Self {
             phase: 0.0,
@@ -29,7 +24,7 @@ impl LFO {
             base_phase_increment: phase_increment,
             jitter_amount: 0.7,
             sample_rate,
-            rng: StdRng::from_seed(seed),
+            rng: rand::make_rng(),
             frames_until_jitter: 0,
             amplitude_jitter_amount: amplitude_jitter_amount as f64,
             frames_until_amplitude_jitter: 0,
@@ -37,9 +32,8 @@ impl LFO {
         }
     }
 
-    pub fn set_frequency(&mut self, sample_rate: u32, frequency: f32) {
-        self.sample_rate = sample_rate;
-        self.base_phase_increment = (frequency as f64) / (sample_rate as f64);
+    pub fn set_frequency(&mut self, frequency: f32) {
+        self.base_phase_increment = (frequency as f64) / (self.sample_rate as f64);
         self.phase_increment = self.base_phase_increment;
     }
 
@@ -90,92 +84,5 @@ impl LFO {
 
         // Apply amplitude jitter to the output
         (value * self.current_amplitude_scale) as f32
-    }
-}
-
-pub struct Bitcrusher {
-    depth: u8,
-}
-
-impl Bitcrusher {
-    pub fn new(depth: u8) -> Self {
-        Self { depth }
-    }
-
-    pub fn set_depth(&mut self, depth: u8) {
-        self.depth = depth;
-    }
-
-    pub fn process(&self, sample: f32) -> f32 {
-        let step_size = 1.0 / 2.0_f32.powi(self.depth as i32 - 1);
-        (sample / step_size).round() * step_size
-    }
-
-    pub fn process_frame(&self, frame: [f32; 2]) -> [f32; 2] {
-        [self.process(frame[0]), self.process(frame[1])]
-    }
-}
-
-pub struct DropoutGenerator {
-    probability_per_second: f32,
-    duration_range_ms: (f32, f32),
-    sample_rate: f32,
-    frames_until_next_check: u32,
-    dropout_frames_remaining: u32,
-    rng: StdRng,
-}
-
-impl DropoutGenerator {
-    pub fn new(
-        probability_per_second: f32,
-        duration_range_ms: (f32, f32),
-        sample_rate: u32,
-    ) -> Self {
-        use rand::Rng;
-        let mut seed_rng = rand::rng();
-        let mut seed = [0u8; 32];
-        seed_rng.fill_bytes(&mut seed);
-
-        Self {
-            probability_per_second,
-            duration_range_ms,
-            sample_rate: sample_rate as f32,
-            frames_until_next_check: 0,
-            dropout_frames_remaining: 0,
-            rng: StdRng::from_seed(seed),
-        }
-    }
-
-    pub fn set_params(&mut self, probability_per_second: f32, duration_range_ms: (f32, f32)) {
-        self.probability_per_second = probability_per_second;
-        self.duration_range_ms = duration_range_ms;
-    }
-
-    pub fn should_dropout(&mut self) -> bool {
-        if self.dropout_frames_remaining > 0 {
-            self.dropout_frames_remaining -= 1;
-            return true;
-        }
-
-        if self.frames_until_next_check > 0 {
-            self.frames_until_next_check -= 1;
-            return false;
-        }
-
-        let check_interval_frames = self.sample_rate / 10.0;
-        self.frames_until_next_check = check_interval_frames as u32;
-
-        let probability = self.probability_per_second / 10.0;
-
-        if self.rng.random::<f32>() < probability {
-            let duration_ms = self
-                .rng
-                .random_range(self.duration_range_ms.0..=self.duration_range_ms.1);
-            let duration_frames = (duration_ms / 1000.0 * self.sample_rate) as u32;
-            self.dropout_frames_remaining = duration_frames;
-            return true;
-        }
-
-        false
     }
 }
