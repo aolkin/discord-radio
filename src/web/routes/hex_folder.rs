@@ -1,4 +1,4 @@
-use crate::audio::dj::segments::list_missing_hex_files;
+use crate::audio::dj::encoding::{TtsEncoding, list_missing_files};
 use crate::bucket::with_trailing_slash;
 use crate::state::Data;
 use crate::web::error::ApiError;
@@ -34,7 +34,7 @@ pub async fn check_hex_folder(
             "Invalid hex audio folder {folder:?}"
         )));
     }
-    let missing_files = list_missing_hex_files(&bot_state.file_resolver, &folder)
+    let missing_files = list_missing_files(&bot_state.file_resolver, TtsEncoding::Hex, &folder)
         .await
         .map_err(ApiError::object_store)?;
     Ok(AxumJson(HexFolderResponse {

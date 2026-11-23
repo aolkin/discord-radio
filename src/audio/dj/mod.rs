@@ -1,5 +1,6 @@
 pub mod announcement;
 pub mod config;
+pub mod encoding;
 pub mod manager;
 pub mod segments;
 pub mod serde;
