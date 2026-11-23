@@ -1,4 +1,4 @@
-use crate::audio::dsp::{FrameProcessor, LayerProcessor};
+use crate::audio::dsp::{EntryProcessor, FrameProcessor};
 use crate::audio::presets::{Filter, FilterKind};
 use biquad::{Biquad, Coefficients, DirectForm1, ToHertz};
 
@@ -23,8 +23,8 @@ fn coefficients(sample_rate: u32, filter: &Filter) -> Coefficients<f32> {
     .unwrap()
 }
 
-impl LayerProcessor for FilterProcessor {
-    type Layer = Filter;
+impl EntryProcessor for FilterProcessor {
+    type Entry = Filter;
 
     fn new(sample_rate: u32, filter: &Filter) -> Self {
         let coefficients = coefficients(sample_rate, filter);

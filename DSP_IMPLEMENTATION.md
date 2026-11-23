@@ -44,7 +44,7 @@ Applies radio signal effects in sequence. Each effect implements `FrameProcessor
 
 ### 4. DSP Modules
 
-#### Noise Generation (`audio/dsp/noise.rs`)
+#### Noise Generation (`audio/dsp/effects/noise.rs`)
 
 - **White Noise**: Uniform random noise across all frequencies
 - **Pink Noise**: 1/f noise using Voss-McCartney algorithm
@@ -63,14 +63,14 @@ Noise levels use perceptual (dB-based) scaling for natural-sounding volume contr
 - Internally converted to amplitude using: `amplitude = 10^(dB/20)`
 - Preset transitions interpolate linearly in the perceptual (0.0-2.0) space. The dB-per-unit slope changes at 1.0, so a transition is linear in dB only while both levels stay on the same side of it
 
-#### Modulation (`audio/dsp/modulation.rs`)
+#### Other Effects (`audio/dsp/effects/`)
 
-- **LFO**: Low-frequency oscillator for tremolo with dual jitter:
+- **FilterProcessor** (`filter.rs`): High-pass or low-pass biquad filter
+- **TremoloProcessor** (`tremolo.rs`): Applies the LFO (`audio/dsp/lfo.rs`) to the signal amplitude. The LFO has dual jitter:
   - Frequency jitter: Randomly varies LFO rate (±70% at 50-200ms intervals)
   - Amplitude jitter: Randomly varies LFO depth (±30% at 30-150ms intervals) to make tremolo less predictable
-- **TremoloProcessor**: Applies the LFO to the signal amplitude
-- **Clip** and **Bitcrush**: The preset settings process frames directly (soft clipping and bit depth reduction)
-- **DropoutGenerator**: Random silence periods
+- **Clip** (`clip.rs`) and **Bitcrush** (`bitcrush.rs`): The preset settings process frames directly (soft clipping and bit depth reduction)
+- **DropoutGenerator** (`dropout.rs`): Random silence periods
 
 ### 5. Preset System (`audio/presets.rs`)
 

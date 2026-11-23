@@ -1,9 +1,8 @@
-use crate::audio::presets::Layer;
+use crate::audio::presets::ListEntry;
 
 pub mod chain;
-pub mod filter;
-pub mod modulation;
-pub mod noise;
+pub mod effects;
+pub mod lfo;
 
 pub trait FrameProcessor {
     fn process_frame(&mut self, frame: [f32; 2]) -> [f32; 2];
@@ -25,31 +24,31 @@ impl<P: FrameProcessor> FrameProcessor for Option<P> {
     }
 }
 
-pub trait LayerProcessor: FrameProcessor {
-    type Layer: Layer;
+pub trait EntryProcessor: FrameProcessor {
+    type Entry: ListEntry;
 
-    fn new(sample_rate: u32, layer: &Self::Layer) -> Self;
-    fn kind(&self) -> <Self::Layer as Layer>::Kind;
-    fn update(&mut self, layer: &Self::Layer);
+    fn new(sample_rate: u32, entry: &Self::Entry) -> Self;
+    fn kind(&self) -> <Self::Entry as ListEntry>::Kind;
+    fn update(&mut self, entry: &Self::Entry);
 }
 
-pub fn update_layers<P: LayerProcessor>(
+pub fn update_entries<P: EntryProcessor>(
     processors: &mut Vec<P>,
-    layers: &[P::Layer],
+    entries: &[P::Entry],
     sample_rate: u32,
 ) {
     let mut unused = std::mem::take(processors);
-    for layer in layers {
+    for entry in entries {
         match unused
             .iter()
-            .position(|processor| processor.kind() == layer.kind())
+            .position(|processor| processor.kind() == entry.kind())
         {
             Some(index) => {
                 let mut processor = unused.remove(index);
-                processor.update(layer);
+                processor.update(entry);
                 processors.push(processor);
             }
-            None => processors.push(P::new(sample_rate, layer)),
+            None => processors.push(P::new(sample_rate, entry)),
         }
     }
 }

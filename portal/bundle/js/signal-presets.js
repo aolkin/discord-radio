@@ -13,7 +13,7 @@ const linear = (max) => ({ scale: 'linear', min: 0, max, step: 0.01 });
 const log = (min, max, step) => ({ scale: 'log', min, max, step });
 const limited = (key, label, min, max, extra) => ({ key, label, type: 'number', step: 'any', min, max, ...extra });
 
-const layerEffects = {
+const listEffects = {
     noise: {
         value: 'level',
         fields: [
@@ -54,16 +54,16 @@ const mapEntries = (object, convert) =>
 
 function blocks(form) {
     return [
-        ...Object.entries(layerEffects).map(([effect, { fields }]) => ({ row: form[effect], fields, path: [effect] })),
+        ...Object.entries(listEffects).map(([effect, { fields }]) => ({ row: form[effect], fields, path: [effect] })),
         ...Object.entries(effectFields).map(([effect, fields]) => ({ row: form[effect], fields, path: [effect] })),
     ];
 }
 
-function layersToForm({ value, fields }, layers) {
-    return { ...blankRow(fields), ...Object.fromEntries(layers.map((layer) => [layer.kind, layer[value]])) };
+function entriesToForm({ value, fields }, entries) {
+    return { ...blankRow(fields), ...Object.fromEntries(entries.map((entry) => [entry.kind, entry[value]])) };
 }
 
-function layersToBody({ value, fields }, row) {
+function entriesToBody({ value, fields }, row) {
     const neutral = blankRow(fields);
     return fields.filter(({ key }) => row[key] !== neutral[key]).map(({ key }) => ({ kind: key, [value]: row[key] }));
 }
@@ -71,14 +71,14 @@ function layersToBody({ value, fields }, row) {
 function toForm(name, preset) {
     return {
         name,
-        ...mapEntries(layerEffects, (effect, key) => layersToForm(effect, preset[key])),
+        ...mapEntries(listEffects, (effect, key) => entriesToForm(effect, preset[key])),
         ...mapEntries(effectFields, (fields, key) => convertObject(fields, preset[key] ?? {}, fieldFromServer)),
     };
 }
 
 function toBody(form) {
     return {
-        ...mapEntries(layerEffects, (effect, key) => layersToBody(effect, form[key])),
+        ...mapEntries(listEffects, (effect, key) => entriesToBody(effect, form[key])),
         ...mapEntries(effectFields, (fields, key) => convertObject(fields, form[key], fieldToServer)),
         bitcrush: form.bitcrush.bits === '' ? null : { bits: form.bitcrush.bits },
     };
@@ -87,7 +87,7 @@ function toBody(form) {
 function blankForm() {
     return {
         name: '',
-        ...mapEntries(layerEffects, ({ fields }) => blankRow(fields)),
+        ...mapEntries(listEffects, ({ fields }) => blankRow(fields)),
         ...mapEntries(effectFields, (fields) => blankRow(fields)),
     };
 }

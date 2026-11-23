@@ -120,7 +120,7 @@ lerp_struct! {
     }
 }
 
-pub trait Layer: Lerp + Copy {
+pub trait ListEntry: Lerp + Copy {
     type Kind: Copy + PartialEq;
     const LIST: &'static str;
 
@@ -129,7 +129,7 @@ pub trait Layer: Lerp + Copy {
     fn check_limits(&self, path: &str) -> anyhow::Result<()>;
 }
 
-impl Layer for Noise {
+impl ListEntry for Noise {
     type Kind = NoiseKind;
     const LIST: &'static str = "noise";
 
@@ -146,7 +146,7 @@ impl Layer for Noise {
     }
 }
 
-impl Layer for Filter {
+impl ListEntry for Filter {
     type Kind = FilterKind;
     const LIST: &'static str = "filters";
 
@@ -167,21 +167,21 @@ impl Layer for Filter {
     }
 }
 
-impl<L: Layer> Lerp for Vec<L> {
+impl<E: ListEntry> Lerp for Vec<E> {
     fn lerp(&self, other: &Self, t: f32) -> Self {
-        let mut layers = Vec::new();
+        let mut entries = Vec::new();
         for index in 0..self.len().max(other.len()) {
             match (self.get(index), other.get(index)) {
                 (Some(from), Some(to)) if from.kind() == to.kind() => {
-                    layers.push(from.lerp(to, t));
+                    entries.push(from.lerp(to, t));
                 }
                 (from, to) => {
-                    layers.extend(from.map(|from| from.lerp(&L::neutral(from.kind()), t)));
-                    layers.extend(to.map(|to| L::neutral(to.kind()).lerp(to, t)));
+                    entries.extend(from.map(|from| from.lerp(&E::neutral(from.kind()), t)));
+                    entries.extend(to.map(|to| E::neutral(to.kind()).lerp(to, t)));
                 }
             }
         }
-        layers
+        entries
     }
 }
 
@@ -216,15 +216,15 @@ fn check(field: &str, value: f32, (min, max): (f32, f32)) -> anyhow::Result<()> 
     Ok(())
 }
 
-fn check_layers<L: Layer>(layers: &[L]) -> anyhow::Result<()> {
-    for (index, layer) in layers.iter().enumerate() {
-        layer.check_limits(&format!("{}[{index}]", L::LIST))?;
+fn check_entries<E: ListEntry>(entries: &[E]) -> anyhow::Result<()> {
+    for (index, entry) in entries.iter().enumerate() {
+        entry.check_limits(&format!("{}[{index}]", E::LIST))?;
     }
     Ok(())
 }
 
 fn check_filters(filters: &[Filter]) -> anyhow::Result<()> {
-    check_layers(filters)?;
+    check_entries(filters)?;
     let frequencies = |kind| {
         filters
             .iter()
@@ -280,7 +280,7 @@ impl Dropout {
 
 impl SignalParameters {
     fn check_limits(&self) -> anyhow::Result<()> {
-        check_layers(&self.noise)?;
+        check_entries(&self.noise)?;
         check_filters(&self.filters)?;
         self.tremolo.check_limits()?;
         self.clip.check_limits()?;
@@ -372,7 +372,7 @@ mod tests {
     }
 
     #[test]
-    fn interpolate_treats_a_missing_layer_as_neutral() {
+    fn interpolate_treats_a_missing_entry_as_neutral() {
         let from = clear();
         let mut to = clear();
         to.noise = vec![pink(1.0)];

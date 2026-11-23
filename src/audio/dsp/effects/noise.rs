@@ -1,4 +1,4 @@
-use crate::audio::dsp::{FrameProcessor, LayerProcessor};
+use crate::audio::dsp::{EntryProcessor, FrameProcessor};
 use crate::audio::helpers::perceptual_level_to_amplitude;
 use crate::audio::presets::{Noise, NoiseKind};
 use rand::{RngExt, rngs::StdRng};
@@ -69,8 +69,8 @@ pub struct NoiseProcessor {
     amplitude: f32,
 }
 
-impl LayerProcessor for NoiseProcessor {
-    type Layer = Noise;
+impl EntryProcessor for NoiseProcessor {
+    type Entry = Noise;
 
     fn new(_sample_rate: u32, noise: &Noise) -> Self {
         Self {
