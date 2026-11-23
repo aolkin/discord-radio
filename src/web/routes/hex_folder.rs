@@ -1,4 +1,4 @@
-use crate::audio::dj::encoding::{TtsEncoding, list_missing_files};
+use crate::audio::dj::tts::{TtsEncoding, list_missing_files};
 use crate::bucket::with_trailing_slash;
 use crate::state::Data;
 use crate::web::error::ApiError;

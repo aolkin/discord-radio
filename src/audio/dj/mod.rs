@@ -1,10 +1,10 @@
 pub mod announcement;
 pub mod config;
-pub mod encoding;
 pub mod manager;
 pub mod segments;
 pub mod serde;
 pub mod signal_preset;
 pub mod state_machine;
 pub mod tiered;
+pub mod tts;
 pub mod weighted_choice;

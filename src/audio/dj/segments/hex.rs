@@ -3,8 +3,8 @@ use super::{
     TrackSlot,
 };
 use crate::audio::dj::config::{EntryPlaybackConfig, SegmentDefaults};
-use crate::audio::dj::encoding::{EncodedMessage, EncodedStep, TtsEncoding};
 use crate::audio::dj::segments::signals::{ChangedSignal, Completed, CompletedSignal};
+use crate::audio::dj::tts::{EncodedMessage, EncodedStep, TtsEncoding};
 use crate::audio::dj::weighted_choice::{Identity, Weighted};
 use crate::audio::processing::mixer::{TrackCallback, TrackCommand};
 use crate::audio::processing::processor::AudioProcessor;
