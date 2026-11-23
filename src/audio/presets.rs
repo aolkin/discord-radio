@@ -1,7 +1,7 @@
 use crate::audio::dsp::effects::bitcrush::Bitcrush;
 use crate::audio::dsp::effects::clip::Clip;
 use crate::audio::dsp::effects::dropout::Dropout;
-use crate::audio::dsp::effects::filter::{Filter, highpass_below_lowpass};
+use crate::audio::dsp::effects::filter::{Filter, FilterBounds};
 use crate::audio::dsp::effects::noise::Noise;
 use crate::audio::dsp::effects::tremolo::Tremolo;
 use crate::bucket::registry::{JsonRegistry, RegistryEntry};
@@ -14,7 +14,7 @@ pub struct SignalParameters {
     pub name: String,
     #[garde(dive)]
     pub noise: Vec<Noise>,
-    #[garde(dive, custom(highpass_below_lowpass))]
+    #[garde(dive(FilterBounds::of(&self.filters)))]
     pub filters: Vec<Filter>,
     #[garde(dive)]
     pub tremolo: Tremolo,
@@ -103,15 +103,6 @@ impl SignalParameters {
             bitcrush: self.bitcrush.lerp(&other.bitcrush, t),
             dropout: self.dropout.lerp(&other.dropout, t),
         }
-    }
-}
-
-pub fn not_below(name: &'static str, min: f32) -> impl FnOnce(&f32, &()) -> garde::Result {
-    move |value, _| {
-        if *value < min {
-            return Err(garde::Error::new(format!("lower than {name} ({min})")));
-        }
-        Ok(())
     }
 }
 

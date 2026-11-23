@@ -1,5 +1,5 @@
 use crate::audio::dsp::FrameProcessor;
-use crate::audio::presets::{lerp_struct, not_below};
+use crate::audio::presets::lerp_struct;
 use rand::{RngExt, rngs::StdRng};
 use serde::{Deserialize, Serialize};
 
@@ -10,7 +10,7 @@ lerp_struct! {
         pub probability: f32,
         #[garde(range(min = 0.0, max = 2000.0))]
         pub min_ms: f32,
-        #[garde(range(min = 0.0, max = 2000.0), custom(not_below("min_ms", self.min_ms)))]
+        #[garde(range(min = self.min_ms, max = 2000.0))]
         pub max_ms: f32,
     }
 }

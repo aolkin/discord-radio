@@ -17,11 +17,41 @@ lerp_by_step!(FilterKind);
 
 lerp_struct! {
     #[derive(Deserialize, Serialize, Clone, Copy, Debug, garde::Validate)]
+    #[garde(context(FilterBounds as bounds))]
     pub struct Filter {
         #[garde(skip)]
         pub kind: FilterKind,
-        #[garde(range(min = FILTER_HZ.0, max = FILTER_HZ.1))]
+        #[garde(
+            range(min = FILTER_HZ.0, max = FILTER_HZ.1),
+            if(cond = self.kind == FilterKind::HighPass, custom(below_lowpass(bounds.lowest_lowpass)))
+        )]
         pub frequency: f32,
+    }
+}
+
+pub struct FilterBounds {
+    lowest_lowpass: f32,
+}
+
+impl FilterBounds {
+    pub fn of(filters: &[Filter]) -> Self {
+        let lowest_lowpass = filters
+            .iter()
+            .filter(|filter| filter.kind == FilterKind::LowPass)
+            .map(|filter| filter.frequency)
+            .fold(f32::INFINITY, f32::min);
+        Self { lowest_lowpass }
+    }
+}
+
+fn below_lowpass(lowest_lowpass: f32) -> impl FnOnce(&f32, &FilterBounds) -> garde::Result {
+    move |frequency, _| {
+        if *frequency >= lowest_lowpass {
+            return Err(garde::Error::new(format!(
+                "not below the lowest lowpass frequency ({lowest_lowpass})"
+            )));
+        }
+        Ok(())
     }
 }
 
@@ -39,22 +69,6 @@ impl ListEntry for Filter {
         };
         Self { kind, frequency }
     }
-}
-
-pub fn highpass_below_lowpass(filters: &[Filter], _: &()) -> garde::Result {
-    let frequencies = |kind| {
-        filters
-            .iter()
-            .filter(move |filter| filter.kind == kind)
-            .map(|filter| filter.frequency)
-    };
-    let lowest_lowpass = frequencies(FilterKind::LowPass).fold(f32::INFINITY, f32::min);
-    if frequencies(FilterKind::HighPass).any(|highpass| highpass >= lowest_lowpass) {
-        return Err(garde::Error::new(
-            "every highpass frequency must be below every lowpass frequency",
-        ));
-    }
-    Ok(())
 }
 
 pub struct FilterProcessor {
