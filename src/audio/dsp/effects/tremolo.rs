@@ -1,6 +1,26 @@
 use crate::audio::dsp::FrameProcessor;
 use crate::audio::dsp::lfo::LFO;
-use crate::audio::presets::Tremolo;
+use crate::audio::presets::{UNIT, check, lerp_struct};
+use serde::{Deserialize, Serialize};
+
+const TREMOLO_RATE_HZ: (f32, f32) = (0.0, 20.0);
+
+lerp_struct! {
+    #[derive(Deserialize, Serialize, Clone, Copy, Debug)]
+    pub struct Tremolo {
+        pub depth: f32,
+        pub rate: f32,
+        pub jitter: f32,
+    }
+}
+
+impl Tremolo {
+    pub fn check_limits(&self) -> anyhow::Result<()> {
+        check("tremolo.depth", self.depth, UNIT)?;
+        check("tremolo.rate", self.rate, TREMOLO_RATE_HZ)?;
+        check("tremolo.jitter", self.jitter, UNIT)
+    }
+}
 
 pub struct TremoloProcessor {
     lfo: LFO,

@@ -1,9 +1,11 @@
+use crate::audio::dsp::effects::bitcrush::Bitcrush;
+use crate::audio::dsp::effects::clip::Clip;
 use crate::audio::dsp::effects::dropout::DropoutGenerator;
 use crate::audio::dsp::effects::filter::FilterProcessor;
 use crate::audio::dsp::effects::noise::NoiseProcessor;
 use crate::audio::dsp::effects::tremolo::TremoloProcessor;
 use crate::audio::dsp::{FrameProcessor, update_entries};
-use crate::audio::presets::{Bitcrush, Clip, SignalParameters};
+use crate::audio::presets::SignalParameters;
 
 pub struct RadioEffectChain {
     sample_rate: u32,

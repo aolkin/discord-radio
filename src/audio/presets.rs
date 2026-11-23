@@ -1,3 +1,9 @@
+use crate::audio::dsp::effects::bitcrush::Bitcrush;
+use crate::audio::dsp::effects::clip::Clip;
+use crate::audio::dsp::effects::dropout::Dropout;
+use crate::audio::dsp::effects::filter::{Filter, check_filters};
+use crate::audio::dsp::effects::noise::Noise;
+use crate::audio::dsp::effects::tremolo::Tremolo;
 use crate::bucket::registry::{JsonRegistry, RegistryEntry};
 use anyhow::bail;
 use serde::{Deserialize, Serialize};
@@ -25,7 +31,7 @@ impl Lerp for f32 {
 
 macro_rules! lerp_by_step {
     ($($type:ty),*) => {$(
-        impl Lerp for $type {
+        impl $crate::audio::presets::Lerp for $type {
             fn lerp(&self, other: &Self, t: f32) -> Self {
                 if t < 0.5 { *self } else { *other }
             }
@@ -33,7 +39,7 @@ macro_rules! lerp_by_step {
     )*};
 }
 
-lerp_by_step!(NoiseKind, FilterKind, Option<Bitcrush>);
+pub(crate) use lerp_by_step;
 
 macro_rules! lerp_struct {
     (
@@ -43,7 +49,7 @@ macro_rules! lerp_struct {
         $(#[$meta])*
         pub struct $name { $($(#[$field_meta])* pub $field: $type,)* }
 
-        impl Lerp for $name {
+        impl $crate::audio::presets::Lerp for $name {
             fn lerp(&self, other: &Self, t: f32) -> Self {
                 Self { $($field: self.$field.lerp(&other.$field, t),)* }
             }
@@ -51,74 +57,7 @@ macro_rules! lerp_struct {
     };
 }
 
-#[derive(Deserialize, Serialize, Clone, Copy, Debug, PartialEq, Eq, strum::Display)]
-#[serde(rename_all = "lowercase")]
-#[strum(serialize_all = "lowercase")]
-pub enum NoiseKind {
-    White,
-    Pink,
-    Brown,
-}
-
-lerp_struct! {
-    #[derive(Deserialize, Serialize, Clone, Copy, Debug)]
-    pub struct Noise {
-        pub kind: NoiseKind,
-        /// Noise levels (0.0-2.0) use perceptual (dB-based) scaling:
-        /// - 0.0 = silence
-        /// - 0.5 = moderate (-30dB)
-        /// - 1.0 = reference level (0dB)
-        /// - 2.0 = boosted (+18dB)
-        pub level: f32,
-    }
-}
-
-#[derive(Deserialize, Serialize, Clone, Copy, Debug, PartialEq, Eq, strum::Display)]
-#[serde(rename_all = "lowercase")]
-#[strum(serialize_all = "lowercase")]
-pub enum FilterKind {
-    HighPass,
-    LowPass,
-}
-
-lerp_struct! {
-    #[derive(Deserialize, Serialize, Clone, Copy, Debug)]
-    pub struct Filter {
-        pub kind: FilterKind,
-        pub frequency: f32,
-    }
-}
-
-lerp_struct! {
-    #[derive(Deserialize, Serialize, Clone, Copy, Debug)]
-    pub struct Tremolo {
-        pub depth: f32,
-        pub rate: f32,
-        pub jitter: f32,
-    }
-}
-
-lerp_struct! {
-    #[derive(Deserialize, Serialize, Clone, Copy, Debug)]
-    pub struct Clip {
-        pub pregain: f32,
-        pub threshold: f32,
-    }
-}
-
-#[derive(Deserialize, Serialize, Clone, Copy, Debug)]
-pub struct Bitcrush {
-    pub bits: u8,
-}
-
-lerp_struct! {
-    #[derive(Deserialize, Serialize, Clone, Copy, Debug)]
-    pub struct Dropout {
-        pub probability: f32,
-        pub min_ms: f32,
-        pub max_ms: f32,
-    }
-}
+pub(crate) use lerp_struct;
 
 pub trait ListEntry: Lerp + Copy {
     type Kind: Copy + PartialEq;
@@ -127,44 +66,6 @@ pub trait ListEntry: Lerp + Copy {
     fn kind(&self) -> Self::Kind;
     fn neutral(kind: Self::Kind) -> Self;
     fn check_limits(&self, path: &str) -> anyhow::Result<()>;
-}
-
-impl ListEntry for Noise {
-    type Kind = NoiseKind;
-    const LIST: &'static str = "noise";
-
-    fn kind(&self) -> NoiseKind {
-        self.kind
-    }
-
-    fn neutral(kind: NoiseKind) -> Self {
-        Self { kind, level: 0.0 }
-    }
-
-    fn check_limits(&self, path: &str) -> anyhow::Result<()> {
-        check(&format!("{path}.level"), self.level, NOISE_LEVEL)
-    }
-}
-
-impl ListEntry for Filter {
-    type Kind = FilterKind;
-    const LIST: &'static str = "filters";
-
-    fn kind(&self) -> FilterKind {
-        self.kind
-    }
-
-    fn neutral(kind: FilterKind) -> Self {
-        let frequency = match kind {
-            FilterKind::HighPass => FILTER_HZ.0,
-            FilterKind::LowPass => FILTER_HZ.1,
-        };
-        Self { kind, frequency }
-    }
-
-    fn check_limits(&self, path: &str) -> anyhow::Result<()> {
-        check(&format!("{path}.frequency"), self.frequency, FILTER_HZ)
-    }
 }
 
 impl<E: ListEntry> Lerp for Vec<E> {
@@ -200,82 +101,20 @@ impl SignalParameters {
     }
 }
 
-const FILTER_HZ: (f32, f32) = (20.0, 20000.0);
-const NOISE_LEVEL: (f32, f32) = (0.0, 2.0);
-const UNIT: (f32, f32) = (0.0, 1.0);
-const TREMOLO_RATE_HZ: (f32, f32) = (0.0, 20.0);
-const CLIP_PREGAIN: (f32, f32) = (0.0, 100.0);
-const CLIP_THRESHOLD: (f32, f32) = (0.0, 2.0);
-const BITCRUSH_BITS: (u8, u8) = (1, 16);
-const DROPOUT_MS: (f32, f32) = (0.0, 2000.0);
+pub const UNIT: (f32, f32) = (0.0, 1.0);
 
-fn check(field: &str, value: f32, (min, max): (f32, f32)) -> anyhow::Result<()> {
+pub fn check(field: &str, value: f32, (min, max): (f32, f32)) -> anyhow::Result<()> {
     if !(min..=max).contains(&value) {
         bail!("{field} must be between {min} and {max}, got {value}");
     }
     Ok(())
 }
 
-fn check_entries<E: ListEntry>(entries: &[E]) -> anyhow::Result<()> {
+pub fn check_entries<E: ListEntry>(entries: &[E]) -> anyhow::Result<()> {
     for (index, entry) in entries.iter().enumerate() {
         entry.check_limits(&format!("{}[{index}]", E::LIST))?;
     }
     Ok(())
-}
-
-fn check_filters(filters: &[Filter]) -> anyhow::Result<()> {
-    check_entries(filters)?;
-    let frequencies = |kind| {
-        filters
-            .iter()
-            .filter(move |filter| filter.kind == kind)
-            .map(|filter| filter.frequency)
-    };
-    let lowest_lowpass = frequencies(FilterKind::LowPass).fold(f32::INFINITY, f32::min);
-    if frequencies(FilterKind::HighPass).any(|highpass| highpass >= lowest_lowpass) {
-        bail!("every highpass frequency must be below every lowpass frequency");
-    }
-    Ok(())
-}
-
-impl Tremolo {
-    fn check_limits(&self) -> anyhow::Result<()> {
-        check("tremolo.depth", self.depth, UNIT)?;
-        check("tremolo.rate", self.rate, TREMOLO_RATE_HZ)?;
-        check("tremolo.jitter", self.jitter, UNIT)
-    }
-}
-
-impl Clip {
-    fn check_limits(&self) -> anyhow::Result<()> {
-        check("clip.pregain", self.pregain, CLIP_PREGAIN)?;
-        check("clip.threshold", self.threshold, CLIP_THRESHOLD)
-    }
-}
-
-impl Bitcrush {
-    fn check_limits(&self) -> anyhow::Result<()> {
-        let (min, max) = BITCRUSH_BITS;
-        if !(min..=max).contains(&self.bits) {
-            bail!(
-                "bitcrush.bits must be between {min} and {max}, got {}",
-                self.bits
-            );
-        }
-        Ok(())
-    }
-}
-
-impl Dropout {
-    fn check_limits(&self) -> anyhow::Result<()> {
-        check("dropout.probability", self.probability, UNIT)?;
-        check("dropout.min_ms", self.min_ms, DROPOUT_MS)?;
-        check("dropout.max_ms", self.max_ms, DROPOUT_MS)?;
-        if self.min_ms > self.max_ms {
-            bail!("dropout.min_ms must not exceed dropout.max_ms");
-        }
-        Ok(())
-    }
 }
 
 impl SignalParameters {
@@ -324,6 +163,8 @@ impl JsonRegistry<SignalParameters> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::audio::dsp::effects::filter::FilterKind;
+    use crate::audio::dsp::effects::noise::NoiseKind;
 
     fn clear() -> SignalParameters {
         serde_json::from_str(include_str!("default_presets/clear_signal.json")).unwrap()

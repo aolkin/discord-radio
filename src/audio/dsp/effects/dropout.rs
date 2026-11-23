@@ -1,6 +1,31 @@
 use crate::audio::dsp::FrameProcessor;
-use crate::audio::presets::Dropout;
+use crate::audio::presets::{UNIT, check, lerp_struct};
+use anyhow::bail;
 use rand::{RngExt, rngs::StdRng};
+use serde::{Deserialize, Serialize};
+
+const DROPOUT_MS: (f32, f32) = (0.0, 2000.0);
+
+lerp_struct! {
+    #[derive(Deserialize, Serialize, Clone, Copy, Debug)]
+    pub struct Dropout {
+        pub probability: f32,
+        pub min_ms: f32,
+        pub max_ms: f32,
+    }
+}
+
+impl Dropout {
+    pub fn check_limits(&self) -> anyhow::Result<()> {
+        check("dropout.probability", self.probability, UNIT)?;
+        check("dropout.min_ms", self.min_ms, DROPOUT_MS)?;
+        check("dropout.max_ms", self.max_ms, DROPOUT_MS)?;
+        if self.min_ms > self.max_ms {
+            bail!("dropout.min_ms must not exceed dropout.max_ms");
+        }
+        Ok(())
+    }
+}
 
 pub struct DropoutGenerator {
     dropout: Dropout,
