@@ -1,6 +1,5 @@
 use crate::audio::dsp::{EntryProcessor, FrameProcessor};
-use crate::audio::presets::{ListEntry, check, check_entries, lerp_by_step, lerp_struct};
-use anyhow::bail;
+use crate::audio::presets::{ListEntry, lerp_by_step, lerp_struct};
 use biquad::{Biquad, Coefficients, DirectForm1, ToHertz};
 use serde::{Deserialize, Serialize};
 
@@ -17,16 +16,17 @@ pub enum FilterKind {
 lerp_by_step!(FilterKind);
 
 lerp_struct! {
-    #[derive(Deserialize, Serialize, Clone, Copy, Debug)]
+    #[derive(Deserialize, Serialize, Clone, Copy, Debug, garde::Validate)]
     pub struct Filter {
+        #[garde(skip)]
         pub kind: FilterKind,
+        #[garde(range(min = FILTER_HZ.0, max = FILTER_HZ.1))]
         pub frequency: f32,
     }
 }
 
 impl ListEntry for Filter {
     type Kind = FilterKind;
-    const LIST: &'static str = "filters";
 
     fn kind(&self) -> FilterKind {
         self.kind
@@ -39,14 +39,9 @@ impl ListEntry for Filter {
         };
         Self { kind, frequency }
     }
-
-    fn check_limits(&self, path: &str) -> anyhow::Result<()> {
-        check(&format!("{path}.frequency"), self.frequency, FILTER_HZ)
-    }
 }
 
-pub fn check_filters(filters: &[Filter]) -> anyhow::Result<()> {
-    check_entries(filters)?;
+pub fn highpass_below_lowpass(filters: &[Filter], _: &()) -> garde::Result {
     let frequencies = |kind| {
         filters
             .iter()
@@ -55,7 +50,9 @@ pub fn check_filters(filters: &[Filter]) -> anyhow::Result<()> {
     };
     let lowest_lowpass = frequencies(FilterKind::LowPass).fold(f32::INFINITY, f32::min);
     if frequencies(FilterKind::HighPass).any(|highpass| highpass >= lowest_lowpass) {
-        bail!("every highpass frequency must be below every lowpass frequency");
+        return Err(garde::Error::new(
+            "every highpass frequency must be below every lowpass frequency",
+        ));
     }
     Ok(())
 }

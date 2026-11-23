@@ -1,22 +1,14 @@
 use crate::audio::dsp::FrameProcessor;
-use crate::audio::presets::{check, lerp_struct};
+use crate::audio::presets::lerp_struct;
 use serde::{Deserialize, Serialize};
 
-const CLIP_PREGAIN: (f32, f32) = (0.0, 100.0);
-const CLIP_THRESHOLD: (f32, f32) = (0.0, 2.0);
-
 lerp_struct! {
-    #[derive(Deserialize, Serialize, Clone, Copy, Debug)]
+    #[derive(Deserialize, Serialize, Clone, Copy, Debug, garde::Validate)]
     pub struct Clip {
+        #[garde(range(min = 0.0, max = 100.0))]
         pub pregain: f32,
+        #[garde(range(min = 0.0, max = 2.0))]
         pub threshold: f32,
-    }
-}
-
-impl Clip {
-    pub fn check_limits(&self) -> anyhow::Result<()> {
-        check("clip.pregain", self.pregain, CLIP_PREGAIN)?;
-        check("clip.threshold", self.threshold, CLIP_THRESHOLD)
     }
 }
 

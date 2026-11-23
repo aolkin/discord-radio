@@ -1,10 +1,8 @@
 use crate::audio::dsp::{EntryProcessor, FrameProcessor};
 use crate::audio::helpers::perceptual_level_to_amplitude;
-use crate::audio::presets::{ListEntry, check, lerp_by_step, lerp_struct};
+use crate::audio::presets::{ListEntry, lerp_by_step, lerp_struct};
 use rand::{RngExt, rngs::StdRng};
 use serde::{Deserialize, Serialize};
-
-const NOISE_LEVEL: (f32, f32) = (0.0, 2.0);
 
 #[derive(Deserialize, Serialize, Clone, Copy, Debug, PartialEq, Eq, strum::Display)]
 #[serde(rename_all = "lowercase")]
@@ -18,21 +16,22 @@ pub enum NoiseKind {
 lerp_by_step!(NoiseKind);
 
 lerp_struct! {
-    #[derive(Deserialize, Serialize, Clone, Copy, Debug)]
+    #[derive(Deserialize, Serialize, Clone, Copy, Debug, garde::Validate)]
     pub struct Noise {
+        #[garde(skip)]
         pub kind: NoiseKind,
         /// Noise levels (0.0-2.0) use perceptual (dB-based) scaling:
         /// - 0.0 = silence
         /// - 0.5 = moderate (-30dB)
         /// - 1.0 = reference level (0dB)
         /// - 2.0 = boosted (+18dB)
+        #[garde(range(min = 0.0, max = 2.0))]
         pub level: f32,
     }
 }
 
 impl ListEntry for Noise {
     type Kind = NoiseKind;
-    const LIST: &'static str = "noise";
 
     fn kind(&self) -> NoiseKind {
         self.kind
@@ -40,10 +39,6 @@ impl ListEntry for Noise {
 
     fn neutral(kind: NoiseKind) -> Self {
         Self { kind, level: 0.0 }
-    }
-
-    fn check_limits(&self, path: &str) -> anyhow::Result<()> {
-        check(&format!("{path}.level"), self.level, NOISE_LEVEL)
     }
 }
 

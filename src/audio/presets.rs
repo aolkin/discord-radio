@@ -1,21 +1,28 @@
 use crate::audio::dsp::effects::bitcrush::Bitcrush;
 use crate::audio::dsp::effects::clip::Clip;
 use crate::audio::dsp::effects::dropout::Dropout;
-use crate::audio::dsp::effects::filter::{Filter, check_filters};
+use crate::audio::dsp::effects::filter::{Filter, highpass_below_lowpass};
 use crate::audio::dsp::effects::noise::Noise;
 use crate::audio::dsp::effects::tremolo::Tremolo;
 use crate::bucket::registry::{JsonRegistry, RegistryEntry};
-use anyhow::bail;
+use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, garde::Validate)]
 pub struct SignalParameters {
+    #[garde(skip)]
     pub name: String,
+    #[garde(dive)]
     pub noise: Vec<Noise>,
+    #[garde(dive, custom(highpass_below_lowpass))]
     pub filters: Vec<Filter>,
+    #[garde(dive)]
     pub tremolo: Tremolo,
+    #[garde(dive)]
     pub clip: Clip,
+    #[garde(dive)]
     pub bitcrush: Option<Bitcrush>,
+    #[garde(dive)]
     pub dropout: Dropout,
 }
 
@@ -61,11 +68,9 @@ pub(crate) use lerp_struct;
 
 pub trait ListEntry: Lerp + Copy {
     type Kind: Copy + PartialEq;
-    const LIST: &'static str;
 
     fn kind(&self) -> Self::Kind;
     fn neutral(kind: Self::Kind) -> Self;
-    fn check_limits(&self, path: &str) -> anyhow::Result<()>;
 }
 
 impl<E: ListEntry> Lerp for Vec<E> {
@@ -101,32 +106,12 @@ impl SignalParameters {
     }
 }
 
-pub const UNIT: (f32, f32) = (0.0, 1.0);
-
-pub fn check(field: &str, value: f32, (min, max): (f32, f32)) -> anyhow::Result<()> {
-    if !(min..=max).contains(&value) {
-        bail!("{field} must be between {min} and {max}, got {value}");
-    }
-    Ok(())
-}
-
-pub fn check_entries<E: ListEntry>(entries: &[E]) -> anyhow::Result<()> {
-    for (index, entry) in entries.iter().enumerate() {
-        entry.check_limits(&format!("{}[{index}]", E::LIST))?;
-    }
-    Ok(())
-}
-
-impl SignalParameters {
-    fn check_limits(&self) -> anyhow::Result<()> {
-        check_entries(&self.noise)?;
-        check_filters(&self.filters)?;
-        self.tremolo.check_limits()?;
-        self.clip.check_limits()?;
-        if let Some(bitcrush) = &self.bitcrush {
-            bitcrush.check_limits()?;
+pub fn not_below(name: &'static str, min: f32) -> impl FnOnce(&f32, &()) -> garde::Result {
+    move |value, _| {
+        if *value < min {
+            return Err(garde::Error::new(format!("lower than {name} ({min})")));
         }
-        self.dropout.check_limits()
+        Ok(())
     }
 }
 
@@ -147,7 +132,8 @@ impl RegistryEntry for SignalParameters {
     }
 
     fn validate(&self) -> anyhow::Result<()> {
-        self.check_limits()
+        garde::Validate::validate(self)
+            .map_err(|report| anyhow!(report.to_string().trim_end().to_owned()))
     }
 }
 
