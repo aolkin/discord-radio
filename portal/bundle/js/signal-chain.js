@@ -382,14 +382,14 @@ export function formErrors(form) {
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
-const layerEffects = { noise: 'level', filters: 'frequency' };
+const listEffects = { noise: 'level', filters: 'frequency' };
 
 const neutral = (id) => effects.find((effect) => effect.id === id).off;
 
 export function toForm(name, preset) {
     const form = { name, ...clone(preset) };
-    for (const [id, value] of Object.entries(layerEffects)) {
-        form[id] = { ...neutral(id), ...Object.fromEntries(preset[id].map((layer) => [layer.kind, layer[value]])) };
+    for (const [id, value] of Object.entries(listEffects)) {
+        form[id] = { ...neutral(id), ...Object.fromEntries(preset[id].map((entry) => [entry.kind, entry[value]])) };
     }
     form.bitcrush = { bits: preset.bitcrush?.bits ?? null };
     return form;
@@ -397,7 +397,7 @@ export function toForm(name, preset) {
 
 export function toBody(form) {
     const { name: _, ...body } = clone(form);
-    for (const [id, value] of Object.entries(layerEffects)) {
+    for (const [id, value] of Object.entries(listEffects)) {
         body[id] = Object.entries(form[id])
             .filter(([kind, amount]) => amount !== neutral(id)[kind])
             .map(([kind, amount]) => ({ kind, [value]: amount }));
