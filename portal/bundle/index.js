@@ -13,6 +13,7 @@ import { pools } from './js/pools.js';
 import { drafts } from './js/registry-editor.js';
 import { router } from './js/router.js';
 import { actionMethods } from './js/run-action.js';
+import './js/signal-chain-editor.js';
 import { signalPresets } from './js/signal-presets.js';
 import { toasts } from './js/toasts.js';
 import { tracks } from './js/tracks.js';

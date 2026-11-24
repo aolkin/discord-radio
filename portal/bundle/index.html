@@ -284,7 +284,7 @@
                             </button>
                         </div>
                     </div>
-                    <template x-if="route.kind && route.kind !== 'files'">
+                    <template x-if="route.kind && route.kind !== 'files' && route.kind !== 'signal-presets'">
                         <section class="card draft-bar" x-show="!editorStatus(route.kind).loading" x-stuck>
                             <template
                                 x-for="error in changeCount(route.kind, route.name) > 0 ? draftErrors(route.kind) : []"
@@ -391,7 +391,9 @@
                             ></div>
                         </section>
                     </template>
-                    <template x-if="route.kind && route.kind !== 'files' && draftReviewing">
+                    <template
+                        x-if="route.kind && route.kind !== 'files' && route.kind !== 'signal-presets' && draftReviewing"
+                    >
                         <section class="card review">
                             <template x-for="group in reviewGroups(route.kind)" :key="group.key">
                                 <div class="review-group">
@@ -431,75 +433,278 @@
                             </template>
                         </section>
                     </template>
-                    <section class="card" x-show="route.kind === 'signal-presets' && !draftReviewing">
+                    <section
+                        class="card chain-card"
+                        x-show="route.kind === 'signal-presets'"
+                        x-data="signalChainEditor(presetChain())"
+                    >
                         <!-- biome-ignore lint/a11y/useHeadingContent: the heading text comes from x-text -->
-                        <h2
-                            class="card-title"
-                            x-text="presetEditorIsNew ? 'New Signal Preset' : 'Edit Signal Preset'"
-                        ></h2>
-                        <div class="loading" x-show="presetEditorLoading">Loading...</div>
-                        <form
-                            x-show="!presetEditorLoading && !draftReviewing"
-                            @submit.prevent="reviewDraft('signal-presets')"
-                        >
-                            <button type="submit" hidden></button>
-                            <div class="form-group">
-                                <label class="form-label" for="preset-editor-name">Name</label>
-                                <input
-                                    id="preset-editor-name"
-                                    type="text"
-                                    class="form-input"
-                                    x-model="presetForm.name"
-                                    :readonly="!presetEditorIsNew"
-                                    :aria-invalid="changeCount('signal-presets', route.name) > 0 && nameInvalid('signal-presets')"
-                                    required
-                                    pattern="[A-Za-z0-9_\-]+"
-                                    title="Letters, digits, - and _ only"
-                                >
-                            </div>
-                            <div class="form-row">
-                                <template x-for="item in presetFieldRows()" :key="item.path.join('-')">
-                                    <div class="form-group">
-                                        <!-- biome-ignore lint/a11y/noLabelWithoutControl: the label text comes from x-text -->
-                                        <label
-                                            class="form-label"
-                                            :for="'preset-field-' + item.path.join('-')"
-                                            x-text="item.field.label"
-                                        ></label>
-                                        <div :class="item.field.slider && 'slider-control'">
-                                            <input
-                                                :id="'preset-field-' + item.path.join('-')"
-                                                type="number"
-                                                class="form-input"
-                                                x-model.number="item.row[item.field.key]"
-                                                :step="item.field.step"
-                                                :min="item.field.min"
-                                                :max="item.field.max"
-                                                :required="!item.field.optional"
-                                                :placeholder="item.field.optional ? 'Off' : ''"
-                                                :aria-invalid="fieldInvalid(item.field, item.row[item.field.key])"
+                        <h2 class="card-title" x-text="chain.isNew ? 'New Signal Preset' : 'Edit Signal Preset'"></h2>
+                        <div class="loading" x-show="!chain.draft">Loading...</div>
+                        <template x-if="chain.draft">
+                            <div class="chain-editor">
+                                <div class="chain-head">
+                                    <div class="chain-row">
+                                        <div class="chain-group chain-name" x-show="!chain.isNew">
+                                            <button
+                                                type="button"
+                                                class="btn chain-button"
+                                                aria-label="Previous preset"
+                                                @click="step(-1)"
                                             >
-                                            <template x-if="item.field.slider">
-                                                <input
-                                                    type="range"
-                                                    min="0"
-                                                    max="1000"
-                                                    step="1"
-                                                    :aria-label="item.field.label + ' slider'"
-                                                    :value="sliderPosition(item.field, item.row[item.field.key])"
-                                                    @input="item.row[item.field.key] = sliderValue(item.field, Number($event.target.value))"
-                                                >
-                                            </template>
+                                                ◀
+                                            </button>
+                                            <select aria-label="Preset" @change="chain.open($event.target.value)">
+                                                <template x-for="name in chain.names" :key="name">
+                                                    <option
+                                                        :value="name"
+                                                        :selected="name === chain.name"
+                                                        x-text="name + (chain.isDefault(name) ? ' · Default' : '')"
+                                                    ></option>
+                                                </template>
+                                            </select>
+                                            <span class="default-tag" x-show="chain.isDefault(chain.name)"
+                                                >Default</span
+                                            >
+                                            <button
+                                                type="button"
+                                                class="btn chain-button"
+                                                aria-label="Next preset"
+                                                @click="step(1)"
+                                            >
+                                                ▶
+                                            </button>
                                         </div>
-                                        <span
-                                            class="field-was"
-                                            x-show="isChanged('signal-presets', item.path)"
-                                            x-text="'was ' + wasValue('signal-presets', item.path)"
-                                        ></span>
+                                        <div class="chain-group chain-name" x-show="chain.isNew">
+                                            <label class="chain-label" for="chain-new-name">Name</label>
+                                            <input
+                                                id="chain-new-name"
+                                                type="text"
+                                                class="form-input"
+                                                autocomplete="off"
+                                                spellcheck="false"
+                                                x-model="form().name"
+                                                :aria-invalid="form().name !== '' && nameError() !== ''"
+                                                title="Letters, digits, - and _ only"
+                                            >
+                                        </div>
+                                        <span class="chain-spacer"></span>
+                                        <div class="chain-group">
+                                            <button
+                                                type="button"
+                                                class="btn chain-button"
+                                                :disabled="saveDisabled()"
+                                                :title="!chain.isNew && chain.isDefault(chain.name) ? 'Default presets cannot be overwritten.' : ''"
+                                                @click="save()"
+                                                x-text="chain.isNew ? (chain.saving ? 'Creating...' : 'Create') : (chain.saving ? 'Saving...' : 'Save')"
+                                            ></button>
+                                        </div>
                                     </div>
-                                </template>
+                                    <div class="chain-status">
+                                        <span
+                                            :class="dirty() && 'chain-dirty'"
+                                            x-show="!chain.isNew"
+                                            x-text="dirty() ? 'Unsaved changes' : 'No unsaved changes'"
+                                        ></span>
+                                        <button
+                                            type="button"
+                                            class="btn btn-text btn-sm"
+                                            x-show="!chain.isNew && dirty()"
+                                            @click="discard()"
+                                        >
+                                            Discard changes
+                                        </button>
+                                        <span x-show="chain.isNew && nameError() !== ''" x-text="nameError()"></span>
+                                        <span x-show="!chain.isNew && chain.isDefault(chain.name)">
+                                            Default presets cannot be overwritten.
+                                        </span>
+                                    </div>
+                                    <template x-for="(error, errorIndex) in errors()" :key="errorIndex">
+                                        <div class="error-message" x-text="error.text"></div>
+                                    </template>
+                                </div>
+
+                                <div class="chain-rack">
+                                    <div class="chain-cable">music in</div>
+                                    <template x-for="(effect, index) in form().effects" :key="index">
+                                        <div>
+                                            <section class="chain-module">
+                                                <div class="chain-module-head">
+                                                    <div class="chain-module-title">
+                                                        <span class="chain-module-name">
+                                                            <small x-text="index + 1"></small>
+                                                            <span x-text="effect.name"></span>
+                                                            <span
+                                                                class="chain-kind"
+                                                                x-text="kindOf(effect).name"
+                                                            ></span>
+                                                        </span>
+                                                        <span
+                                                            class="chain-module-description"
+                                                            x-text="kindOf(effect).description"
+                                                        ></span>
+                                                    </div>
+                                                    <span
+                                                        class="chain-readout"
+                                                        x-text="kindOf(effect).readout(effect.params)"
+                                                    ></span>
+                                                    <button
+                                                        type="button"
+                                                        class="chain-remove"
+                                                        :aria-label="'Remove ' + effect.name"
+                                                        :title="'Remove ' + effect.name"
+                                                        @click="remove(index)"
+                                                    >
+                                                        <svg viewBox="0 0 16 16" aria-hidden="true">
+                                                            <path d="M4 4l8 8M12 4l-8 8" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                                <div class="chain-module-body">
+                                                    <div
+                                                        class="chain-controls"
+                                                        :class="kindOf(effect).faders && 'chain-faders'"
+                                                    >
+                                                        <template x-if="effect.kind === 'noise'">
+                                                            <label class="chain-color">
+                                                                <span class="chain-control-name">Color</span>
+                                                                <select
+                                                                    :value="effect.params.color"
+                                                                    @change="effect.params.color = $event.target.value"
+                                                                >
+                                                                    <template x-for="color in noiseColors" :key="color">
+                                                                        <option
+                                                                            :value="color"
+                                                                            :selected="color === effect.params.color"
+                                                                            x-text="color"
+                                                                        ></option>
+                                                                    </template>
+                                                                </select>
+                                                            </label>
+                                                        </template>
+                                                        <template
+                                                            x-for="spec in kindOf(effect).controls"
+                                                            :key="effect.kind + spec.key"
+                                                        >
+                                                            <div
+                                                                class="chain-control"
+                                                                :class="hot === slot(index, spec.key) && 'hot'"
+                                                                :style="'--chain-color: var(' + spec.color + ')'"
+                                                            >
+                                                                <div
+                                                                    role="slider"
+                                                                    tabindex="0"
+                                                                    :class="kindOf(effect).faders ? 'chain-fader' : 'chain-knob'"
+                                                                    :aria-label="effect.name + ' ' + spec.name"
+                                                                    :aria-orientation="kindOf(effect).faders ? 'vertical' : null"
+                                                                    :aria-valuemin="spec.min"
+                                                                    :aria-valuemax="spec.max"
+                                                                    aria-valuenow="0"
+                                                                    :aria-valuenow="value(effect, spec) ?? spec.min"
+                                                                    :aria-valuetext="valueText(effect, spec)"
+                                                                    @pointerdown="startDrag($event, effect, index, spec)"
+                                                                    @pointermove="moveDrag($event)"
+                                                                    @pointerup="endDrag()"
+                                                                    @pointercancel="endDrag()"
+                                                                    @wheel.prevent="wheel($event, effect, spec)"
+                                                                    @dblclick="resetToSaved(effect, spec)"
+                                                                    @keydown="sliderKey($event, effect, index, spec)"
+                                                                >
+                                                                    <template x-if="!kindOf(effect).faders">
+                                                                        <svg
+                                                                            class="chain-dial"
+                                                                            viewBox="0 0 60 60"
+                                                                            aria-hidden="true"
+                                                                            x-html="knobSvg(effect, spec)"
+                                                                        ></svg>
+                                                                    </template>
+                                                                    <template x-if="kindOf(effect).faders">
+                                                                        <div class="chain-fader-parts">
+                                                                            <div
+                                                                                class="chain-fader-fill"
+                                                                                :style="'height: calc((100% - 12px) * ' + toPosition(spec, value(effect, spec)) + ')'"
+                                                                            ></div>
+                                                                            <div
+                                                                                class="chain-fader-cap"
+                                                                                :style="'bottom: ' + faderOffset(spec, value(effect, spec))"
+                                                                            ></div>
+                                                                            <template
+                                                                                x-for="[level, label] in faderTicks"
+                                                                                :key="label"
+                                                                            >
+                                                                                <span
+                                                                                    class="chain-fader-tick"
+                                                                                    :style="'bottom: ' + faderOffset(spec, level)"
+                                                                                    x-text="label"
+                                                                                ></span>
+                                                                            </template>
+                                                                        </div>
+                                                                    </template>
+                                                                </div>
+                                                                <span
+                                                                    class="chain-control-name"
+                                                                    :title="limitText(spec)"
+                                                                    x-text="spec.name"
+                                                                ></span>
+                                                                <button
+                                                                    type="button"
+                                                                    class="chain-value"
+                                                                    :class="isBad(index, spec) && 'bad'"
+                                                                    x-show="typing !== slot(index, spec.key)"
+                                                                    :aria-label="'Type a value for ' + effect.name + ' ' + spec.name"
+                                                                    @click="startTyping(effect, index, spec)"
+                                                                    x-text="formatValue(spec, value(effect, spec))"
+                                                                ></button>
+                                                                <template x-if="typing === slot(index, spec.key)">
+                                                                    <input
+                                                                        class="chain-type"
+                                                                        type="text"
+                                                                        inputmode="decimal"
+                                                                        x-init="$nextTick(() => $el.select())"
+                                                                        :aria-label="effect.name + ' ' + spec.name + ' value'"
+                                                                        x-model="typed"
+                                                                        @keydown.enter.prevent="finishTyping(effect, index, spec, true)"
+                                                                        @keydown.escape="finishTyping(effect, index, spec, false)"
+                                                                        @blur="finishTyping(effect, index, spec, true)"
+                                                                    >
+                                                                </template>
+                                                                <span
+                                                                    class="chain-meaning"
+                                                                    x-text="meaning(effect, spec)"
+                                                                ></span>
+                                                            </div>
+                                                        </template>
+                                                        <span class="chain-note" x-show="kindOf(effect).faders">
+                                                            The fader shows the level in dB; 0 dB is full scale.
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </section>
+                                            <div
+                                                class="chain-cable"
+                                                x-text="effect.kind === 'noise' ? 'music + noise' : ''"
+                                            ></div>
+                                        </div>
+                                    </template>
+                                    <div class="chain-group chain-add">
+                                        <select aria-label="Effect kind" x-model="addKind">
+                                            <template x-for="entry in kinds" :key="entry.kind">
+                                                <option :value="entry.kind" x-text="entry.name"></option>
+                                            </template>
+                                        </select>
+                                        <button
+                                            type="button"
+                                            class="btn chain-button"
+                                            :disabled="!canAdd()"
+                                            :title="canAdd() ? '' : 'A preset holds at most ' + maxEffects + ' effects.'"
+                                            @click="add()"
+                                        >
+                                            Add effect
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
-                        </form>
+                        </template>
                     </section>
 
                     <section class="card" x-show="route.kind === 'dj-configs' && !draftReviewing">
