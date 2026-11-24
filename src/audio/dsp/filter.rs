@@ -1,8 +1,15 @@
+use crate::audio::presets::lerp_struct;
 use biquad::{Biquad, Coefficients, DirectForm1, ToHertz, Type};
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug)]
-pub struct FilterParams {
-    pub frequency: f32,
+pub const FILTER_HZ: (f32, f32) = (20.0, 20000.0);
+
+lerp_struct! {
+    #[derive(Deserialize, Serialize, Clone, Copy, Debug, PartialEq, garde::Validate)]
+    pub struct FilterParams {
+        #[garde(range(min = FILTER_HZ.0, max = FILTER_HZ.1))]
+        pub frequency: f32,
+    }
 }
 
 pub struct StereoFilter {

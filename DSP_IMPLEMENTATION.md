@@ -33,14 +33,14 @@ Wraps Symphonia decoder as an AudioSource.
 
 ### 3. DSP Effects Chain (`audio/dsp/chain.rs`)
 
-Applies radio signal effects in sequence. Each effect kind has its own processor under `audio/dsp/effects/`, created from the kind's params and updated in place from new params:
+Runs a preset's effects in list order. Each effect kind has its own processor under `audio/dsp/effects/`, created from the kind's params. When the preset changes, the chain updates an effect's processor in place if the new preset has an effect with the same name and kind, creates a processor for every other effect, and drops processors whose name is gone. The effect kinds:
 
-1. **Noise Mixing** - Adds white, pink, and brown noise
-2. **Highpass and Lowpass Filters** - Limit the frequency range (typically 500Hz-5kHz for AM radio)
-3. **Tremolo/Amplitude Modulation** - Simulates signal fading with frequency and amplitude jitter
-4. **Soft Clipping** - Signal distortion
-5. **Bitcrushing** (optional) - Reduces bit depth
-6. **Random Dropouts** - Simulates signal interruptions
+- **noise** - Adds white, pink or brown noise
+- **highpass** and **lowpass** - Limit the frequency range (typically 500Hz-5kHz for AM radio)
+- **tremolo** - Simulates signal fading with frequency and amplitude jitter
+- **clip** - Soft clipping distortion
+- **bitcrush** - Reduces bit depth
+- **dropout** - Simulates signal interruptions
 
 ### 4. DSP Modules
 
@@ -79,7 +79,8 @@ JSON-based effect presets with smooth transitions.
 
 - **SignalParameters**: Complete effect parameter set
 - **PresetManager**: Loads presets from the `SIGNAL_PRESETS_PATH` directory (default `signal_presets/`; the value must end with a slash), under both the content root and the object storage bucket root
-- **Preset Interpolation**: Smooth transitions between presets
+- **Preset Interpolation**: Smooth transitions between presets. Effects with the same name and kind fade their params from the old preset to the new one. An effect missing from the new preset fades to its kind's neutral params and is then dropped; an effect new to the new preset fades in from neutral at its list position. An effect that keeps its name but changes kind (or noise color) fades out while its replacement fades in. A reordered preset takes the new order at the start of the fade.
+- **Neutral params**: noise level 0, highpass 20Hz, lowpass 20kHz, tremolo depth 0, clip pregain 1 and threshold 2, bitcrush 16 bits, dropout probability 0
 
 ### 6. Audio Processing Thread (`audio/processing_thread.rs`)
 
@@ -147,24 +148,23 @@ More sample presets are in `examples/signal_presets/`. The bot loads presets fro
 ```json
 {
   "name": "preset_name",
-  "bandpass_low": 500.0,
-  "bandpass_high": 5000.0,
-  "white_noise_level": 0.3,
-  "pink_noise_level": 0.0,
-  "brown_noise_level": 0.0,
-  "tremolo_depth": 0.4,
-  "tremolo_rate": 2.0,
-  "clip_pregain": 1.0,
-  "clip_threshold": 0.8,
-  "bitcrush_bits": null,
-  "dropout_probability": 0.1,
-  "dropout_duration_ms": [50.0, 150.0]
+  "effects": [
+    { "name": "noise", "kind": "noise", "params": { "color": "white", "level": 0.3 } },
+    { "name": "highpass", "kind": "highpass", "params": { "frequency": 500.0 } },
+    { "name": "lowpass", "kind": "lowpass", "params": { "frequency": 5000.0 } },
+    { "name": "tremolo", "kind": "tremolo", "params": { "depth": 0.4, "rate": 2.0, "jitter": 0.3 } },
+    { "name": "clip", "kind": "clip", "params": { "pregain": 1.0, "threshold": 0.8 } },
+    { "name": "bitcrush", "kind": "bitcrush", "params": { "bits": 8 } },
+    { "name": "dropout", "kind": "dropout", "params": { "probability": 0.1, "min_ms": 50.0, "max_ms": 150.0 } }
+  ]
 }
 ```
 
+A preset holds at most 16 effects. Effect names are unique within the preset, 1 to 32 characters of letters, digits, `-` and `_`. A kind may appear more than once. Every highpass frequency must be below the lowest lowpass frequency.
+
 **Noise Level Parameters:**
 
-Noise levels (`white_noise_level`, `pink_noise_level`, `brown_noise_level`) use **perceptual (dB-based) scaling**:
+Noise `level` uses **perceptual (dB-based) scaling**:
 
 - Range: `0.0` to `2.0` (typical usage: `0.0` to `1.0`)
 - `0.0` = silence (amplitude 0)

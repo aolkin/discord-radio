@@ -1,16 +1,30 @@
 {
   "name": "noise_pink",
-  "bandpass_low": 20.0,
-  "bandpass_high": 20000.0,
-  "white_noise_level": 0.0,
-  "pink_noise_level": 0.615,
-  "brown_noise_level": 0.0,
-  "tremolo_depth": 0.3,
-  "tremolo_rate": 1.0,
-  "tremolo_jitter": 0.3,
-  "clip_pregain": 1.0,
-  "clip_threshold": 1.0,
-  "bitcrush_bits": null,
-  "dropout_probability": 0.0,
-  "dropout_duration_ms": [0.0, 0.0]
+  "effects": [
+    {
+      "name": "noise",
+      "kind": "noise",
+      "params": {
+        "color": "pink",
+        "level": 0.615
+      }
+    },
+    {
+      "name": "tremolo",
+      "kind": "tremolo",
+      "params": {
+        "depth": 0.3,
+        "rate": 1.0,
+        "jitter": 0.3
+      }
+    },
+    {
+      "name": "clip",
+      "kind": "clip",
+      "params": {
+        "pregain": 1.0,
+        "threshold": 1.0
+      }
+    }
+  ]
 }

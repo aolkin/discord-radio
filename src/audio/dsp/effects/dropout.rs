@@ -1,11 +1,18 @@
 use crate::audio::dsp::{Effect, FrameProcessor};
+use crate::audio::presets::lerp_struct;
 use rand::{RngExt, rngs::StdRng};
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug)]
-pub struct DropoutParams {
-    pub probability: f32,
-    pub min_ms: f32,
-    pub max_ms: f32,
+lerp_struct! {
+    #[derive(Deserialize, Serialize, Clone, Copy, Debug, PartialEq, garde::Validate)]
+    pub struct DropoutParams {
+        #[garde(range(min = 0.0, max = 1.0))]
+        pub probability: f32,
+        #[garde(range(min = 0.0, max = 2000.0))]
+        pub min_ms: f32,
+        #[garde(range(min = self.min_ms, max = 2000.0))]
+        pub max_ms: f32,
+    }
 }
 
 pub struct Dropout {

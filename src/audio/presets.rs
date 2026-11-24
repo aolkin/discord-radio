@@ -1,114 +1,222 @@
-use crate::bucket::registry::{JsonRegistry, RegistryEntry};
-use anyhow::bail;
+use crate::audio::dsp::effects::bitcrush::BitcrushParams;
+use crate::audio::dsp::effects::clip::ClipParams;
+use crate::audio::dsp::effects::dropout::DropoutParams;
+use crate::audio::dsp::effects::noise::NoiseParams;
+use crate::audio::dsp::effects::tremolo::TremoloParams;
+use crate::audio::dsp::filter::{FILTER_HZ, FilterParams};
+use crate::bucket::registry::{JsonRegistry, RegistryEntry, is_valid_name};
+use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, garde::Validate)]
 pub struct SignalParameters {
+    #[garde(skip)]
     pub name: String,
+    #[garde(
+        length(max = 16),
+        custom(unique_names),
+        dive(FilterBounds::of(&self.effects))
+    )]
+    pub effects: Vec<EffectEntry>,
+}
 
-    pub bandpass_low: f32,
-    pub bandpass_high: f32,
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, garde::Validate)]
+#[garde(context(FilterBounds))]
+pub struct EffectEntry {
+    #[garde(length(min = 1, max = 32), custom(registry_name))]
+    pub name: String,
+    #[serde(flatten)]
+    #[garde(dive)]
+    pub effect: EffectParams,
+}
 
-    /// Noise levels (0.0-2.0) use perceptual (dB-based) scaling:
-    /// - 0.0 = silence
-    /// - 0.5 = moderate (-30dB)
-    /// - 1.0 = reference level (0dB)
-    /// - 2.0 = boosted (+18dB)
-    pub white_noise_level: f32,
-    pub pink_noise_level: f32,
-    pub brown_noise_level: f32,
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, garde::Validate)]
+#[serde(tag = "kind", content = "params", rename_all = "snake_case")]
+#[garde(context(FilterBounds))]
+pub enum EffectParams {
+    Noise(#[garde(dive(()))] NoiseParams),
+    Highpass(#[garde(dive(()), custom(below_lowest_lowpass))] FilterParams),
+    Lowpass(#[garde(dive(()))] FilterParams),
+    Tremolo(#[garde(dive(()))] TremoloParams),
+    Clip(#[garde(dive(()))] ClipParams),
+    Bitcrush(#[garde(dive(()))] BitcrushParams),
+    Dropout(#[garde(dive(()))] DropoutParams),
+}
 
-    pub tremolo_depth: f32,
-    pub tremolo_rate: f32,
-    pub tremolo_jitter: f32,
+pub struct FilterBounds {
+    lowest_lowpass: f32,
+}
 
-    pub clip_pregain: f32,
-    pub clip_threshold: f32,
-    pub bitcrush_bits: Option<u8>,
+impl FilterBounds {
+    fn of(effects: &[EffectEntry]) -> Self {
+        let lowest_lowpass = effects
+            .iter()
+            .filter_map(|entry| match &entry.effect {
+                EffectParams::Lowpass(filter) => Some(filter.frequency),
+                _ => None,
+            })
+            .fold(f32::INFINITY, f32::min);
+        Self { lowest_lowpass }
+    }
+}
 
-    pub dropout_probability: f32,
-    pub dropout_duration_ms: (f32, f32),
+fn below_lowest_lowpass(filter: &FilterParams, bounds: &FilterBounds) -> garde::Result {
+    if filter.frequency >= bounds.lowest_lowpass {
+        return Err(garde::Error::new(format!(
+            "not below the lowest lowpass frequency ({})",
+            bounds.lowest_lowpass
+        )));
+    }
+    Ok(())
+}
+
+fn registry_name(name: &str, _: &FilterBounds) -> garde::Result {
+    if !is_valid_name(name) {
+        return Err(garde::Error::new(
+            "may only contain letters, digits, '-' and '_'",
+        ));
+    }
+    Ok(())
+}
+
+fn unique_names(effects: &[EffectEntry], _: &()) -> garde::Result {
+    let mut names = HashSet::new();
+    match effects.iter().find(|entry| !names.insert(&entry.name)) {
+        Some(entry) => Err(garde::Error::new(format!(
+            "effect name `{}` is used more than once",
+            entry.name
+        ))),
+        None => Ok(()),
+    }
+}
+
+pub trait Lerp {
+    fn lerp(&self, other: &Self, t: f32) -> Self;
+}
+
+impl Lerp for f32 {
+    fn lerp(&self, other: &Self, t: f32) -> Self {
+        self * (1.0 - t) + other * t
+    }
+}
+
+macro_rules! lerp_struct {
+    (
+        $(#[$meta:meta])*
+        pub struct $name:ident { $($(#[$field_meta:meta])* pub $field:ident: $type:ty,)* }
+    ) => {
+        $(#[$meta])*
+        pub struct $name { $($(#[$field_meta])* pub $field: $type,)* }
+
+        impl $crate::audio::presets::Lerp for $name {
+            fn lerp(&self, other: &Self, t: f32) -> Self {
+                Self { $($field: self.$field.lerp(&other.$field, t),)* }
+            }
+        }
+    };
+}
+
+pub(crate) use lerp_struct;
+
+impl EffectParams {
+    fn neutral(&self) -> Self {
+        match *self {
+            Self::Noise(noise) => Self::Noise(NoiseParams {
+                level: 0.0,
+                ..noise
+            }),
+            Self::Highpass(_) => Self::Highpass(FilterParams {
+                frequency: FILTER_HZ.0,
+            }),
+            Self::Lowpass(_) => Self::Lowpass(FilterParams {
+                frequency: FILTER_HZ.1,
+            }),
+            Self::Tremolo(tremolo) => Self::Tremolo(TremoloParams {
+                depth: 0.0,
+                ..tremolo
+            }),
+            Self::Clip(_) => Self::Clip(ClipParams {
+                pregain: 1.0,
+                threshold: 2.0,
+            }),
+            Self::Bitcrush(_) => Self::Bitcrush(BitcrushParams { bits: 16 }),
+            Self::Dropout(dropout) => Self::Dropout(DropoutParams {
+                probability: 0.0,
+                ..dropout
+            }),
+        }
+    }
+
+    fn lerp(&self, other: &Self, t: f32) -> Option<Self> {
+        Some(match (self, other) {
+            (Self::Noise(a), Self::Noise(b)) if a.color == b.color => Self::Noise(a.lerp(b, t)),
+            (Self::Highpass(a), Self::Highpass(b)) => Self::Highpass(a.lerp(b, t)),
+            (Self::Lowpass(a), Self::Lowpass(b)) => Self::Lowpass(a.lerp(b, t)),
+            (Self::Tremolo(a), Self::Tremolo(b)) => Self::Tremolo(a.lerp(b, t)),
+            (Self::Clip(a), Self::Clip(b)) => Self::Clip(a.lerp(b, t)),
+            (Self::Bitcrush(a), Self::Bitcrush(b)) => Self::Bitcrush(a.lerp(b, t)),
+            (Self::Dropout(a), Self::Dropout(b)) => Self::Dropout(a.lerp(b, t)),
+            _ => return None,
+        })
+    }
+
+    fn fade_in(&self, t: f32) -> Self {
+        self.neutral()
+            .lerp(self, t)
+            .expect("neutral params keep the effect's kind")
+    }
+}
+
+impl EffectEntry {
+    fn with_effect(&self, effect: EffectParams) -> Self {
+        Self {
+            name: self.name.clone(),
+            effect,
+        }
+    }
 }
 
 impl SignalParameters {
     pub fn interpolate(&self, other: &Self, t: f32) -> Self {
         let t = t.clamp(0.0, 1.0);
-        let inv_t = 1.0 - t;
-
+        let mut unmatched: Vec<Option<&EffectEntry>> = self.effects.iter().map(Some).collect();
+        let mut effects: Vec<(Option<usize>, EffectEntry)> = other
+            .effects
+            .iter()
+            .map(|to| {
+                let matched = unmatched.iter_mut().enumerate().find_map(|(index, from)| {
+                    let effect = from
+                        .filter(|from| from.name == to.name)?
+                        .effect
+                        .lerp(&to.effect, t)?;
+                    *from = None;
+                    Some((index, effect))
+                });
+                match matched {
+                    Some((index, effect)) => (Some(index), to.with_effect(effect)),
+                    None => (None, to.with_effect(to.effect.fade_in(t))),
+                }
+            })
+            .collect();
+        for (index, from) in unmatched.into_iter().enumerate() {
+            let Some(from) = from else { continue };
+            let position = match index.checked_sub(1) {
+                Some(previous) => effects
+                    .iter()
+                    .position(|(source, _)| *source == Some(previous))
+                    .map_or(0, |position| position + 1),
+                None => 0,
+            };
+            effects.insert(
+                position,
+                (Some(index), from.with_effect(from.effect.fade_in(1.0 - t))),
+            );
+        }
         Self {
             name: format!("{}→{}", self.name, other.name),
-            bandpass_low: self.bandpass_low * inv_t + other.bandpass_low * t,
-            bandpass_high: self.bandpass_high * inv_t + other.bandpass_high * t,
-            // Interpolate noise levels linearly in perceptual space.
-            // The perceptual scale (0.0-2.0) already maps linearly to dB,
-            // so linear interpolation here gives smooth perceptual transitions.
-            white_noise_level: self.white_noise_level * inv_t + other.white_noise_level * t,
-            pink_noise_level: self.pink_noise_level * inv_t + other.pink_noise_level * t,
-            brown_noise_level: self.brown_noise_level * inv_t + other.brown_noise_level * t,
-            tremolo_depth: self.tremolo_depth * inv_t + other.tremolo_depth * t,
-            tremolo_rate: self.tremolo_rate * inv_t + other.tremolo_rate * t,
-            tremolo_jitter: self.tremolo_jitter * inv_t + other.tremolo_jitter * t,
-            clip_pregain: self.clip_pregain * inv_t + other.clip_pregain * t,
-            clip_threshold: self.clip_threshold * inv_t + other.clip_threshold * t,
-            bitcrush_bits: if t < 0.5 {
-                self.bitcrush_bits
-            } else {
-                other.bitcrush_bits
-            },
-            dropout_probability: self.dropout_probability * inv_t + other.dropout_probability * t,
-            dropout_duration_ms: (
-                self.dropout_duration_ms.0 * inv_t + other.dropout_duration_ms.0 * t,
-                self.dropout_duration_ms.1 * inv_t + other.dropout_duration_ms.1 * t,
-            ),
+            effects: effects.into_iter().map(|(_, entry)| entry).collect(),
         }
-    }
-}
-
-const BANDPASS_HZ: (f32, f32) = (20.0, 20000.0);
-const NOISE_LEVEL: (f32, f32) = (0.0, 2.0);
-const UNIT: (f32, f32) = (0.0, 1.0);
-const TREMOLO_RATE_HZ: (f32, f32) = (0.0, 20.0);
-const CLIP_PREGAIN: (f32, f32) = (0.0, 100.0);
-const CLIP_THRESHOLD: (f32, f32) = (0.0, 2.0);
-const BITCRUSH_BITS: (u8, u8) = (1, 16);
-const DROPOUT_MS: (f32, f32) = (0.0, 2000.0);
-
-fn check(field: &str, value: f32, (min, max): (f32, f32)) -> anyhow::Result<()> {
-    if !(min..=max).contains(&value) {
-        bail!("{field} must be between {min} and {max}, got {value}");
-    }
-    Ok(())
-}
-
-impl SignalParameters {
-    fn check_limits(&self) -> anyhow::Result<()> {
-        check("bandpass_low", self.bandpass_low, BANDPASS_HZ)?;
-        check("bandpass_high", self.bandpass_high, BANDPASS_HZ)?;
-        if self.bandpass_low >= self.bandpass_high {
-            bail!("bandpass_low must be below bandpass_high");
-        }
-        check("white_noise_level", self.white_noise_level, NOISE_LEVEL)?;
-        check("pink_noise_level", self.pink_noise_level, NOISE_LEVEL)?;
-        check("brown_noise_level", self.brown_noise_level, NOISE_LEVEL)?;
-        check("tremolo_depth", self.tremolo_depth, UNIT)?;
-        check("tremolo_rate", self.tremolo_rate, TREMOLO_RATE_HZ)?;
-        check("tremolo_jitter", self.tremolo_jitter, UNIT)?;
-        check("clip_pregain", self.clip_pregain, CLIP_PREGAIN)?;
-        check("clip_threshold", self.clip_threshold, CLIP_THRESHOLD)?;
-        if let Some(bits) = self.bitcrush_bits {
-            let (min, max) = BITCRUSH_BITS;
-            if !(min..=max).contains(&bits) {
-                bail!("bitcrush_bits must be between {min} and {max}, got {bits}");
-            }
-        }
-        check("dropout_probability", self.dropout_probability, UNIT)?;
-        let (shortest, longest) = self.dropout_duration_ms;
-        check("dropout_duration_ms min", shortest, DROPOUT_MS)?;
-        check("dropout_duration_ms max", longest, DROPOUT_MS)?;
-        if shortest > longest {
-            bail!("dropout_duration_ms min must not exceed max");
-        }
-        Ok(())
     }
 }
 
@@ -129,7 +237,8 @@ impl RegistryEntry for SignalParameters {
     }
 
     fn validate(&self) -> anyhow::Result<()> {
-        self.check_limits()
+        garde::Validate::validate(self)
+            .map_err(|report| anyhow!(report.to_string().trim_end().to_owned()))
     }
 }
 
@@ -145,25 +254,98 @@ impl JsonRegistry<SignalParameters> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::audio::dsp::effects::noise::NoiseColor;
 
-    fn clear() -> SignalParameters {
-        serde_json::from_str(include_str!("default_presets/clear_signal.json")).unwrap()
+    fn entry(name: &str, effect: EffectParams) -> EffectEntry {
+        EffectEntry {
+            name: name.to_owned(),
+            effect,
+        }
+    }
+
+    fn preset(effects: Vec<EffectEntry>) -> SignalParameters {
+        SignalParameters {
+            name: "test".to_owned(),
+            effects,
+        }
+    }
+
+    fn noise(color: NoiseColor, level: f32) -> EffectParams {
+        EffectParams::Noise(NoiseParams { color, level })
+    }
+
+    fn highpass(frequency: f32) -> EffectParams {
+        EffectParams::Highpass(FilterParams { frequency })
+    }
+
+    fn lowpass(frequency: f32) -> EffectParams {
+        EffectParams::Lowpass(FilterParams { frequency })
     }
 
     #[test]
     fn validate_rejects_values_that_break_the_dsp() {
-        assert!(clear().validate().is_ok());
-        let cases: [fn(&mut SignalParameters); 5] = [
-            |p| p.bandpass_high = 24000.0,
-            |p| p.bandpass_low = 20000.0,
-            |p| p.bandpass_low = 0.0,
-            |p| p.dropout_duration_ms = (100.0, 50.0),
-            |p| p.bitcrush_bits = Some(255),
+        let weak: SignalParameters =
+            serde_json::from_str(include_str!("default_presets/weak_signal.json")).unwrap();
+        assert!(weak.validate().is_ok());
+        let pink = || noise(NoiseColor::Pink, 0.5);
+        let cases = [
+            vec![entry("lowpass", lowpass(24000.0))],
+            vec![entry("highpass", highpass(0.0))],
+            vec![
+                entry("highpass", highpass(5000.0)),
+                entry("lowpass", lowpass(500.0)),
+            ],
+            vec![
+                entry("highpass", highpass(100.0)),
+                entry("lowpass", lowpass(4000.0)),
+                entry("highpass_2", highpass(5000.0)),
+            ],
+            vec![entry(
+                "dropout",
+                EffectParams::Dropout(DropoutParams {
+                    probability: 0.5,
+                    min_ms: 100.0,
+                    max_ms: 50.0,
+                }),
+            )],
+            vec![entry(
+                "bitcrush",
+                EffectParams::Bitcrush(BitcrushParams { bits: 0 }),
+            )],
+            vec![entry("noise", noise(NoiseColor::Pink, 2.5))],
+            vec![entry("noise", pink()), entry("noise", pink())],
+            vec![entry("bad name", pink())],
+            vec![entry("", pink())],
+            (0..17)
+                .map(|index| entry(&format!("noise{index}"), pink()))
+                .collect(),
         ];
-        for mutate in cases {
-            let mut preset = clear();
-            mutate(&mut preset);
-            assert!(preset.validate().is_err());
+        for effects in cases {
+            assert!(preset(effects).validate().is_err());
         }
+    }
+
+    #[test]
+    fn interpolate_pairs_effects_by_name() {
+        let from = preset(vec![
+            entry("hiss", noise(NoiseColor::Pink, 1.0)),
+            entry("gone", highpass(220.0)),
+            entry("filter", lowpass(4000.0)),
+        ]);
+        let to = preset(vec![
+            entry("filter", lowpass(2000.0)),
+            entry("hiss", noise(NoiseColor::White, 0.5)),
+            entry("new", highpass(420.0)),
+        ]);
+        assert_eq!(
+            from.interpolate(&to, 0.5).effects,
+            vec![
+                entry("hiss", noise(NoiseColor::Pink, 0.5)),
+                entry("gone", highpass(120.0)),
+                entry("filter", lowpass(3000.0)),
+                entry("hiss", noise(NoiseColor::White, 0.25)),
+                entry("new", highpass(220.0)),
+            ]
+        );
     }
 }

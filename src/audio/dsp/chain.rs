@@ -1,122 +1,95 @@
-use crate::audio::dsp::effects::bitcrush::{Bitcrush, BitcrushParams};
-use crate::audio::dsp::effects::clip::{Clip, ClipParams};
-use crate::audio::dsp::effects::dropout::{Dropout, DropoutParams};
+use crate::audio::dsp::effects::bitcrush::Bitcrush;
+use crate::audio::dsp::effects::clip::Clip;
+use crate::audio::dsp::effects::dropout::Dropout;
 use crate::audio::dsp::effects::highpass::Highpass;
 use crate::audio::dsp::effects::lowpass::Lowpass;
-use crate::audio::dsp::effects::noise::{Noise, NoiseColor, NoiseParams};
-use crate::audio::dsp::effects::tremolo::{Tremolo, TremoloParams};
-use crate::audio::dsp::filter::FilterParams;
-use crate::audio::dsp::{Effect, FrameProcessor};
-use crate::audio::presets::SignalParameters;
+use crate::audio::dsp::effects::noise::Noise;
+use crate::audio::dsp::effects::tremolo::Tremolo;
+use crate::audio::dsp::{Effect, FrameProcessor, ambassador_impl_FrameProcessor};
+use crate::audio::presets::{EffectEntry, EffectParams, SignalParameters};
+use ambassador::Delegate;
+
+#[derive(Delegate)]
+#[delegate(FrameProcessor)]
+pub enum EffectProcessor {
+    Noise(Noise),
+    Highpass(Highpass),
+    Lowpass(Lowpass),
+    Tremolo(Tremolo),
+    Clip(Clip),
+    Bitcrush(Bitcrush),
+    Dropout(Dropout),
+}
+
+impl EffectProcessor {
+    fn new(sample_rate: u32, params: &EffectParams) -> Self {
+        match params {
+            EffectParams::Noise(p) => Self::Noise(Noise::new(sample_rate, p)),
+            EffectParams::Highpass(p) => Self::Highpass(Highpass::new(sample_rate, p)),
+            EffectParams::Lowpass(p) => Self::Lowpass(Lowpass::new(sample_rate, p)),
+            EffectParams::Tremolo(p) => Self::Tremolo(Tremolo::new(sample_rate, p)),
+            EffectParams::Clip(p) => Self::Clip(Clip::new(sample_rate, p)),
+            EffectParams::Bitcrush(p) => Self::Bitcrush(Bitcrush::new(sample_rate, p)),
+            EffectParams::Dropout(p) => Self::Dropout(Dropout::new(sample_rate, p)),
+        }
+    }
+
+    fn try_update(&mut self, params: &EffectParams) -> bool {
+        match (self, params) {
+            (Self::Noise(e), EffectParams::Noise(p)) if e.color == p.color => e.update(p),
+            (Self::Highpass(e), EffectParams::Highpass(p)) => e.update(p),
+            (Self::Lowpass(e), EffectParams::Lowpass(p)) => e.update(p),
+            (Self::Tremolo(e), EffectParams::Tremolo(p)) => e.update(p),
+            (Self::Clip(e), EffectParams::Clip(p)) => e.update(p),
+            (Self::Bitcrush(e), EffectParams::Bitcrush(p)) => e.update(p),
+            (Self::Dropout(e), EffectParams::Dropout(p)) => e.update(p),
+            _ => return false,
+        }
+        true
+    }
+}
 
 pub struct RadioEffectChain {
     sample_rate: u32,
-    white_noise: Noise,
-    pink_noise: Noise,
-    brown_noise: Noise,
-    highpass: Highpass,
-    lowpass: Lowpass,
-    tremolo: Tremolo,
-    clip: Clip,
-    bitcrush: Option<Bitcrush>,
-    dropout: Dropout,
+    effects: Vec<(String, EffectProcessor)>,
 }
 
 impl RadioEffectChain {
     pub fn new(sample_rate: u32, preset: &SignalParameters) -> Self {
-        Self {
+        let mut chain = Self {
             sample_rate,
-            white_noise: Noise::new(sample_rate, &noise(NoiseColor::White, preset)),
-            pink_noise: Noise::new(sample_rate, &noise(NoiseColor::Pink, preset)),
-            brown_noise: Noise::new(sample_rate, &noise(NoiseColor::Brown, preset)),
-            highpass: Highpass::new(sample_rate, &highpass(preset)),
-            lowpass: Lowpass::new(sample_rate, &lowpass(preset)),
-            tremolo: Tremolo::new(sample_rate, &tremolo(preset)),
-            clip: Clip::new(sample_rate, &clip(preset)),
-            bitcrush: bitcrush(preset).map(|params| Bitcrush::new(sample_rate, &params)),
-            dropout: Dropout::new(sample_rate, &dropout(preset)),
-        }
+            effects: Vec::new(),
+        };
+        chain.update_preset(preset);
+        chain
     }
 
     pub fn update_preset(&mut self, preset: &SignalParameters) {
-        self.white_noise.update(&noise(NoiseColor::White, preset));
-        self.pink_noise.update(&noise(NoiseColor::Pink, preset));
-        self.brown_noise.update(&noise(NoiseColor::Brown, preset));
-        self.highpass.update(&highpass(preset));
-        self.lowpass.update(&lowpass(preset));
-        self.tremolo.update(&tremolo(preset));
-        self.clip.update(&clip(preset));
-        match (&mut self.bitcrush, bitcrush(preset)) {
-            (Some(processor), Some(params)) => processor.update(&params),
-            (processor, params) => {
-                *processor = params.map(|params| Bitcrush::new(self.sample_rate, &params))
-            }
-        }
-        self.dropout.update(&dropout(preset));
+        let mut previous = std::mem::take(&mut self.effects);
+        self.effects = preset
+            .effects
+            .iter()
+            .map(|EffectEntry { name, effect }| {
+                let reused = previous
+                    .iter_mut()
+                    .position(|(old_name, processor)| {
+                        old_name == name && processor.try_update(effect)
+                    })
+                    .map(|index| previous.remove(index).1);
+                let processor =
+                    reused.unwrap_or_else(|| EffectProcessor::new(self.sample_rate, effect));
+                (name.clone(), processor)
+            })
+            .collect();
     }
 }
 
 impl FrameProcessor for RadioEffectChain {
     fn process_frame(&mut self, frame: [f32; 2]) -> [f32; 2] {
-        let frame = self.white_noise.process_frame(frame);
-        let frame = self.pink_noise.process_frame(frame);
-        let frame = self.brown_noise.process_frame(frame);
-        let frame = self.highpass.process_frame(frame);
-        let frame = self.lowpass.process_frame(frame);
-        let frame = self.tremolo.process_frame(frame);
-        let mut frame = self.clip.process_frame(frame);
-        if let Some(bitcrush) = &mut self.bitcrush {
-            frame = bitcrush.process_frame(frame);
-        }
-        self.dropout.process_frame(frame)
-    }
-}
-
-fn noise(color: NoiseColor, preset: &SignalParameters) -> NoiseParams {
-    let level = match color {
-        NoiseColor::White => preset.white_noise_level,
-        NoiseColor::Pink => preset.pink_noise_level,
-        NoiseColor::Brown => preset.brown_noise_level,
-    };
-    NoiseParams { color, level }
-}
-
-fn highpass(preset: &SignalParameters) -> FilterParams {
-    FilterParams {
-        frequency: preset.bandpass_low,
-    }
-}
-
-fn lowpass(preset: &SignalParameters) -> FilterParams {
-    FilterParams {
-        frequency: preset.bandpass_high,
-    }
-}
-
-fn tremolo(preset: &SignalParameters) -> TremoloParams {
-    TremoloParams {
-        depth: preset.tremolo_depth,
-        rate: preset.tremolo_rate,
-        jitter: preset.tremolo_jitter,
-    }
-}
-
-fn clip(preset: &SignalParameters) -> ClipParams {
-    ClipParams {
-        pregain: preset.clip_pregain,
-        threshold: preset.clip_threshold,
-    }
-}
-
-fn bitcrush(preset: &SignalParameters) -> Option<BitcrushParams> {
-    preset.bitcrush_bits.map(|bits| BitcrushParams { bits })
-}
-
-fn dropout(preset: &SignalParameters) -> DropoutParams {
-    let (min_ms, max_ms) = preset.dropout_duration_ms;
-    DropoutParams {
-        probability: preset.dropout_probability,
-        min_ms,
-        max_ms,
+        self.effects
+            .iter_mut()
+            .fold(frame, |frame, (_, processor)| {
+                processor.process_frame(frame)
+            })
     }
 }
