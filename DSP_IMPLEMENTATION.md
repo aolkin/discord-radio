@@ -33,10 +33,10 @@ Wraps Symphonia decoder as an AudioSource.
 
 ### 3. DSP Effects Chain (`audio/dsp/chain.rs`)
 
-Applies radio signal effects in sequence:
+Applies radio signal effects in sequence. Each effect kind has its own processor under `audio/dsp/effects/`, created from the kind's params and updated in place from new params:
 
-1. **Bandpass Filter** - Limits frequency range (typically 500Hz-5kHz for AM radio)
-2. **Noise Mixing** - Adds white, pink, or brown noise
+1. **Noise Mixing** - Adds white, pink, and brown noise
+2. **Highpass and Lowpass Filters** - Limit the frequency range (typically 500Hz-5kHz for AM radio)
 3. **Tremolo/Amplitude Modulation** - Simulates signal fading with frequency and amplitude jitter
 4. **Soft Clipping** - Signal distortion
 5. **Bitcrushing** (optional) - Reduces bit depth
@@ -44,7 +44,7 @@ Applies radio signal effects in sequence:
 
 ### 4. DSP Modules
 
-#### Noise Generation (`audio/dsp/noise.rs`)
+#### Noise Generation (`audio/dsp/effects/noise.rs`)
 
 - **White Noise**: Uniform random noise across all frequencies
 - **Pink Noise**: 1/f noise using Voss-McCartney algorithm
@@ -63,13 +63,15 @@ Noise levels use perceptual (dB-based) scaling for natural-sounding volume contr
 - Internally converted to amplitude using: `amplitude = 10^(dB/20)`
 - Preset transitions interpolate linearly in the perceptual (0.0-2.0) space. The dB-per-unit slope changes at 1.0, so a transition is linear in dB only while both levels stay on the same side of it
 
-#### Modulation (`audio/dsp/modulation.rs`)
+#### Other Effects (`audio/dsp/effects/`)
 
-- **LFO**: Low-frequency oscillator for tremolo with dual jitter:
+- **Highpass** and **Lowpass** (`highpass.rs`, `lowpass.rs`): Butterworth biquad filters (`audio/dsp/filter.rs`)
+- **Tremolo** (`tremolo.rs`): Applies the LFO (`audio/dsp/lfo.rs`) to the signal amplitude. The LFO has dual jitter:
   - Frequency jitter: Randomly varies LFO rate (±70% at 50-200ms intervals)
   - Amplitude jitter: Randomly varies LFO depth (±30% at 30-150ms intervals) to make tremolo less predictable
-- **Bitcrusher**: Reduces sample bit depth
-- **DropoutGenerator**: Random silence periods
+- **Clip** (`clip.rs`): Soft clipping
+- **Bitcrush** (`bitcrush.rs`): Reduces sample bit depth
+- **Dropout** (`dropout.rs`): Random silence periods
 
 ### 5. Preset System (`audio/presets.rs`)
 

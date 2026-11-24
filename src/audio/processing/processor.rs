@@ -1,4 +1,5 @@
 use crate::audio::codec::opus_encoder::OpusEncoder;
+use crate::audio::dsp::FrameProcessor;
 use crate::audio::dsp::chain::RadioEffectChain;
 use crate::audio::presets::SignalParameters;
 use crate::audio::processing::mixer::{AudioSource, Mixer, TrackCommand, TrackHandle};
