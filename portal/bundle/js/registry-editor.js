@@ -1,5 +1,5 @@
 import { apiRequest, bodyOrStatus } from './api.js';
-import { fieldInvalid, sliderPosition, sliderValue } from './form-fields.js';
+import { fieldInvalid } from './form-fields.js';
 
 export const newItem = '+new';
 
@@ -238,8 +238,6 @@ export function drafts() {
         draftReviewing: false,
         saveAsName: null,
         fieldInvalid,
-        sliderPosition,
-        sliderValue,
 
         focusWhenShown(selector) {
             this.$nextTick(() =>
