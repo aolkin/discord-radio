@@ -1,25 +1,20 @@
-use crate::audio::dsp::filter::StereoFilter;
+use crate::audio::dsp::filter::{FilterParams, StereoFilter};
 use crate::audio::dsp::{Effect, FrameProcessor};
-
-#[derive(Clone, Copy, Debug)]
-pub struct LowpassParams {
-    pub frequency: f32,
-}
 
 pub struct Lowpass {
     filter: StereoFilter,
 }
 
 impl Effect for Lowpass {
-    type Params = LowpassParams;
+    type Params = FilterParams;
 
-    fn new(sample_rate: u32, params: &LowpassParams) -> Self {
+    fn new(sample_rate: u32, params: &FilterParams) -> Self {
         Self {
             filter: StereoFilter::new(biquad::Type::LowPass, sample_rate, params.frequency),
         }
     }
 
-    fn update(&mut self, params: &LowpassParams) {
+    fn update(&mut self, params: &FilterParams) {
         self.filter.set_frequency(params.frequency);
     }
 }

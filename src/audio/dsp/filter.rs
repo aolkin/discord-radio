@@ -1,5 +1,10 @@
 use biquad::{Biquad, Coefficients, DirectForm1, ToHertz, Type};
 
+#[derive(Clone, Copy, Debug)]
+pub struct FilterParams {
+    pub frequency: f32,
+}
+
 pub struct StereoFilter {
     response: Type<f32>,
     sample_rate: u32,

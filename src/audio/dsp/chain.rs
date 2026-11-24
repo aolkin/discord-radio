@@ -1,10 +1,11 @@
 use crate::audio::dsp::effects::bitcrush::{Bitcrush, BitcrushParams};
 use crate::audio::dsp::effects::clip::{Clip, ClipParams};
 use crate::audio::dsp::effects::dropout::{Dropout, DropoutParams};
-use crate::audio::dsp::effects::highpass::{Highpass, HighpassParams};
-use crate::audio::dsp::effects::lowpass::{Lowpass, LowpassParams};
+use crate::audio::dsp::effects::highpass::Highpass;
+use crate::audio::dsp::effects::lowpass::Lowpass;
 use crate::audio::dsp::effects::noise::{Noise, NoiseColor, NoiseParams};
 use crate::audio::dsp::effects::tremolo::{Tremolo, TremoloParams};
+use crate::audio::dsp::filter::FilterParams;
 use crate::audio::dsp::{Effect, FrameProcessor};
 use crate::audio::presets::SignalParameters;
 
@@ -80,14 +81,14 @@ fn noise(color: NoiseColor, preset: &SignalParameters) -> NoiseParams {
     NoiseParams { color, level }
 }
 
-fn highpass(preset: &SignalParameters) -> HighpassParams {
-    HighpassParams {
+fn highpass(preset: &SignalParameters) -> FilterParams {
+    FilterParams {
         frequency: preset.bandpass_low,
     }
 }
 
-fn lowpass(preset: &SignalParameters) -> LowpassParams {
-    LowpassParams {
+fn lowpass(preset: &SignalParameters) -> FilterParams {
+    FilterParams {
         frequency: preset.bandpass_high,
     }
 }
