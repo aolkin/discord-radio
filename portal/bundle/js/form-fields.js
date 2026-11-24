@@ -93,10 +93,13 @@ const folderKey = (encoding) => `${encoding}_audio_folder`;
 
 export const ttsEncodingField = { key: 'encoding', label: 'Encoding', type: 'select', options: ttsEncodings };
 
+export const channelStatusHintField = { key: 'channel_status_hint', label: 'Channel Status Hint', type: 'bool' };
+
 const ttsConfigFields = [
     loops('loop_min', 'Loop Min'),
     loops('loop_max', 'Loop Max'),
     { ...ttsEncodingField, default: ttsEncodings[0] },
+    { ...channelStatusHintField, default: 'true' },
     ...ttsEncodings.map((encoding) => optionalText(folderKey(encoding), `${encoding} Audio Folder`)),
 ];
 
@@ -108,11 +111,15 @@ function ttsConfigFromServer(config) {
 }
 
 function ttsConfigToServer(form) {
-    const { loop_min, loop_max, encoding, ...folders } = convertObject(ttsConfigFields, form, fieldToServer);
+    const { loop_min, loop_max, encoding, channel_status_hint, ...folders } = convertObject(
+        ttsConfigFields,
+        form,
+        fieldToServer,
+    );
     const audioFolders = ttsEncodings
         .filter((name) => folders[folderKey(name)] !== null)
         .map((name) => [name, folders[folderKey(name)]]);
-    return { loop_min, loop_max, encoding, audio_folders: Object.fromEntries(audioFolders) };
+    return { loop_min, loop_max, encoding, channel_status_hint, audio_folders: Object.fromEntries(audioFolders) };
 }
 
 export function segmentDefaultsFromServer(segmentDefaults) {

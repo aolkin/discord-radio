@@ -34,6 +34,8 @@ pub struct TtsMessageDefaults {
     pub loop_max: u32,
     #[serde(default)]
     pub encoding: TtsEncoding,
+    #[serde(default = "default_channel_status_hint")]
+    pub channel_status_hint: bool,
     #[serde(
         default,
         skip_serializing_if = "BTreeMap::is_empty",
@@ -48,9 +50,14 @@ impl Default for TtsMessageDefaults {
             loop_min: default_loops(),
             loop_max: default_loops(),
             encoding: TtsEncoding::default(),
+            channel_status_hint: default_channel_status_hint(),
             audio_folders: BTreeMap::new(),
         }
     }
+}
+
+fn default_channel_status_hint() -> bool {
+    true
 }
 
 fn default_loops() -> u32 {
@@ -75,6 +82,7 @@ pub struct TtsMessageEntry {
     pub loop_min: Option<u32>,
     pub loop_max: Option<u32>,
     pub encoding: Option<TtsEncoding>,
+    pub channel_status_hint: Option<bool>,
     #[serde(default, deserialize_with = "deserialize_audio_folder")]
     pub audio_folder: Option<String>,
     #[serde(flatten)]
@@ -89,6 +97,7 @@ impl Weighted for TtsMessageEntry {
             self.loop_min,
             self.loop_max,
             self.encoding,
+            self.channel_status_hint,
             &self.audio_folder,
             &self.playback,
         ))
@@ -98,6 +107,7 @@ impl Weighted for TtsMessageEntry {
 #[derive(Clone, Debug, Default)]
 pub struct TtsOverrides {
     pub encoding: Option<TtsEncoding>,
+    pub channel_status_hint: Option<bool>,
     pub audio_folder: Option<String>,
 }
 
@@ -184,7 +194,12 @@ impl TtsSegment {
             .unwrap_or_else(|| bot_state.tts_audio_folder(encoding));
         let encoded = encode_message(encoding, folder, &message);
         let playback_config = segment_defaults.playback_config(EntryPlaybackConfig {
-            channel_status: playback.channel_status.or(Some(encoded.hint.clone())),
+            channel_status: playback.channel_status.or_else(|| {
+                overrides
+                    .channel_status_hint
+                    .unwrap_or(defaults.channel_status_hint)
+                    .then(|| encoded.hint.clone())
+            }),
             ..playback
         });
         Self {
@@ -236,6 +251,7 @@ impl TtsSegment {
             tts_entry.playback,
             TtsOverrides {
                 encoding: tts_entry.encoding,
+                channel_status_hint: tts_entry.channel_status_hint,
                 audio_folder: tts_entry.audio_folder,
             },
             segment_defaults,
