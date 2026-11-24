@@ -406,16 +406,17 @@
             /^\/api\/files$/,
             (_match, { query }) => {
                 const key = query.get('key') ?? '';
-                const folderUsed = (defaults) => {
-                    const folder = defaults?.tts_config?.audio_folders?.hex;
-                    return folder?.startsWith('s3://') && key.startsWith(folder.slice('s3://'.length));
-                };
+                const inFolder = (folder) => folder?.startsWith('s3://') && key.startsWith(folder.slice('s3://'.length));
+                const folderUsed = (defaults) =>
+                    Object.values(defaults?.tts_config?.audio_folders ?? {}).some(inFolder);
                 const references = [
                     ...Object.values(store.registries.pools)
                         .filter(
                             (pool) =>
                                 folderUsed(pool.segment_defaults) ||
-                                pool.entries.some((entry) => entry.filename === `s3://${key}`),
+                                pool.entries.some(
+                                    (entry) => entry.filename === `s3://${key}` || inFolder(entry.audio_folder),
+                                ),
                         )
                         .map((pool) => `pool "${pool.name}"`),
                     ...Object.values(store.registries['dj-configs'])
@@ -437,12 +438,18 @@
             'GET',
             /^\/api\/tts-audio-folders$/,
             (_match, { query }) => {
-                const requested = query.get('hex') ?? store.ttsFolderCheck.hex.folder;
-                const folder = requested.endsWith('/') ? requested : `${requested}/`;
-                if (folder === 'audio/complete/') {
-                    return respond({ hex: { folder, missing_files: [] } });
-                }
-                return respond({ hex: { ...store.ttsFolderCheck.hex, folder } });
+                return respond(
+                    Object.fromEntries(
+                        Object.entries(store.ttsFolderCheck).map(([encoding, check]) => {
+                            const requested = query.get(encoding) ?? check.folder;
+                            const folder = requested.endsWith('/') ? requested : `${requested}/`;
+                            return [
+                                encoding,
+                                folder === 'audio/complete/' ? { folder, missing_files: [] } : { ...check, folder },
+                            ];
+                        }),
+                    ),
+                );
             },
         ],
         [

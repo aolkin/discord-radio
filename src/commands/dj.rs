@@ -4,6 +4,7 @@ use crate::audio::dj::manager::{
 };
 use crate::audio::dj::state_machine::ChannelStatus;
 use crate::audio::dj::tiered::ConfigurableTier;
+use crate::audio::dj::tts::TtsEncoding;
 use crate::commands::utils;
 use crate::commands::utils::{Context, require_guild};
 use crate::state::GuildInactive;
@@ -77,6 +78,7 @@ pub async fn tts(
     #[description = "Pool to take segment defaults from"]
     #[autocomplete = "autocomplete_pool"]
     pool: Option<String>,
+    #[description = "Encoding (default from the pool's TTS config)"] encoding: Option<TtsEncoding>,
 ) -> anyhow::Result<()> {
     let guild_id = require_guild(ctx)?;
     let user_id = ctx.author().id;
@@ -91,6 +93,7 @@ pub async fn tts(
         message: message.clone(),
         volume,
         loops,
+        encoding,
         pool,
     };
     request

@@ -154,9 +154,14 @@ impl DJConfigRegistry {
         let pools = self.pools.list().into_iter().filter_map(|name| {
             let pool = self.pools.get(&name)?;
             let references = uses_folder(&pool.segment_defaults)
-                || pool.entries.iter().any(|entry| {
-                    matches!(entry, PoolEntry::Track(track)
-                        if track.filename.strip_prefix("s3://") == Some(key))
+                || pool.entries.iter().any(|entry| match entry {
+                    PoolEntry::Track(track) => track.filename.strip_prefix("s3://") == Some(key),
+                    PoolEntry::Tts(tts) => tts
+                        .audio_folder
+                        .as_deref()
+                        .and_then(|folder| folder.strip_prefix("s3://"))
+                        .is_some_and(|folder| key.starts_with(folder)),
+                    PoolEntry::Noise(_) => false,
                 });
             references.then_some(FileReference { kind: "pool", name })
         });

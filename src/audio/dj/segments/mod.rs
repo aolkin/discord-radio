@@ -5,7 +5,7 @@ mod tts;
 
 pub use noise::{NoiseEntry, NoiseSegment};
 pub use track::{TrackEntry, TrackSegment};
-pub use tts::{TtsMessageDefaults, TtsMessageEntry, TtsSegment, ensure_loops};
+pub use tts::{TtsMessageDefaults, TtsMessageEntry, TtsOverrides, TtsSegment, ensure_loops};
 
 use crate::audio::dj::announcement::Announcement;
 use crate::audio::dj::signal_preset::SignalPresetPlayback;

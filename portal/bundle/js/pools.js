@@ -8,10 +8,12 @@ import {
     fieldToServer,
     noisePeriodFields,
     optionalSeconds,
+    optionalText,
     segmentDefaultsBlocks,
     segmentDefaultsFromServer,
     segmentDefaultsToServer,
     toggleTtsConfig,
+    ttsEncodingField,
     weight,
 } from './form-fields.js';
 import { registryEditor } from './registry-editor.js';
@@ -37,12 +39,14 @@ const kinds = {
         identifier: 'text',
         what: ['text'],
         length: ['loop_min', 'loop_max'],
-        expansion: ['channel_status', 'announcement'],
+        expansion: ['encoding', 'audio_folder', 'channel_status', 'announcement'],
         entryFields: [
             { key: 'text', label: 'Text', type: 'text' },
             weight,
             { key: 'loop_min', label: 'Loop Min', type: 'number', step: 1, min: 0, optional: true },
             { key: 'loop_max', label: 'Loop Max', type: 'number', step: 1, min: 0, optional: true },
+            { ...ttsEncodingField, optional: true },
+            optionalText('audio_folder', 'Audio Folder'),
             ...entryPlaybackFields,
         ],
     },
@@ -140,8 +144,19 @@ const ttsFolderDebounceMs = 400;
 const usesTts = (form) =>
     form.segment_defaults.tts_config !== null || form.entries.some((entry) => entry.kind === 'tts');
 
-function ttsFolderWarning({ folder, missing_files: missingFiles }) {
-    return missingFiles.length > 0 ? `Hex audio folder "${folder}" is missing ${missingFiles.join(', ')}.` : '';
+function ttsFolderWarning(encoding, { folder, missing_files: missingFiles }) {
+    return missingFiles.length > 0 ? `${encoding} audio folder "${folder}" is missing ${missingFiles.join(', ')}.` : '';
+}
+
+function ttsFolderChecks(form) {
+    const defaults = form.segment_defaults.tts_config;
+    const entries = form.entries.filter((entry) => entry.kind === 'tts');
+    const checks = (entries.length > 0 ? entries : [{}]).map((entry) => {
+        const encoding = entry.encoding || defaults?.encoding || 'hex';
+        const folder = (entry.audio_folder || defaults?.[`${encoding}_audio_folder`] || '').trim();
+        return { encoding, folder };
+    });
+    return [...new Map(checks.map((check) => [`${check.encoding}\n${check.folder}`, check])).values()];
 }
 
 export function pools() {
@@ -169,8 +184,8 @@ export function pools() {
 
         watchPoolTtsFolder() {
             const active = this.route.view === 'edit' && this.route.kind === 'pools' && usesTts(this.poolForm);
-            const folder = active ? (this.poolForm.segment_defaults.tts_config?.hex_audio_folder ?? '').trim() : '';
-            const key = active ? `${this.route.name}\n${folder}` : null;
+            const checks = active ? ttsFolderChecks(this.poolForm) : [];
+            const key = active ? `${this.route.name}\n${JSON.stringify(checks)}` : null;
             if (key === ttsFolderKey) {
                 return;
             }
@@ -184,18 +199,21 @@ export function pools() {
             }
             ttsFolderTimer = setTimeout(
                 async () => {
-                    let warning;
-                    try {
-                        const query = folder === '' ? '' : `?hex=${encodeURIComponent(folder)}`;
-                        const response = await apiRequest(`/api/tts-audio-folders${query}`, {
-                            errorMessage: bodyOrStatus,
-                        });
-                        warning = ttsFolderWarning((await response.json()).hex);
-                    } catch (error) {
-                        warning = `Could not check the hex audio folder: ${error.message}`;
-                    }
+                    const warnings = await Promise.all(
+                        checks.map(async ({ encoding, folder }) => {
+                            try {
+                                const query = folder === '' ? '' : `?${encoding}=${encodeURIComponent(folder)}`;
+                                const response = await apiRequest(`/api/tts-audio-folders${query}`, {
+                                    errorMessage: bodyOrStatus,
+                                });
+                                return ttsFolderWarning(encoding, (await response.json())[encoding]);
+                            } catch (error) {
+                                return `Could not check the ${encoding} audio folder: ${error.message}`;
+                            }
+                        }),
+                    );
                     if (key === ttsFolderKey) {
-                        this.poolTtsFolderWarning = warning;
+                        this.poolTtsFolderWarning = warnings.filter(Boolean).join(' ');
                     }
                 },
                 opened ? 0 : ttsFolderDebounceMs,

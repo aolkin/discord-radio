@@ -12,6 +12,11 @@
     {
       "text": "hello world",
       "weight": 1
+    },
+    {
+      "text": "hello again",
+      "weight": 1,
+      "encoding": "base36"
     }
   ]
 }

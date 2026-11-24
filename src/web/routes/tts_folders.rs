@@ -19,11 +19,12 @@ pub async fn check_tts_folders(
     Query(overrides): Query<BTreeMap<TtsEncoding, String>>,
 ) -> Result<AxumJson<BTreeMap<TtsEncoding, TtsFolderCheck>>, ApiError> {
     let mut checks = BTreeMap::new();
-    for encoding in [TtsEncoding::Hex] {
+    for encoding in [TtsEncoding::Hex, TtsEncoding::Base36] {
         let folder = with_trailing_slash(
             overrides
                 .get(&encoding)
-                .unwrap_or(&bot_state.hex_audio_folder),
+                .map(String::as_str)
+                .unwrap_or_else(|| bot_state.tts_audio_folder(encoding)),
         );
         let location = folder.strip_prefix("s3://").unwrap_or(&folder);
         if !is_plain_path(location) {

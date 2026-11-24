@@ -2,6 +2,7 @@ use crate::activity::ActivityManager;
 use crate::audio::connection::{AudioClock, connect_voice_channel};
 use crate::audio::dj::config::registry::DJConfigRegistry;
 use crate::audio::dj::manager::DJManager;
+use crate::audio::dj::tts::TtsEncoding;
 use crate::audio::duration::DurationCache;
 use crate::audio::presets::SignalParameters;
 use crate::audio::processing::processor::{AudioProcessor, ProcessorRef};
@@ -15,7 +16,7 @@ use serde::Serialize;
 use serenity::all::{ChannelId, UserId};
 use serenity::model::id::GuildId;
 use songbird::Songbird;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Debug, Formatter};
 use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 use std::time::{Duration, Instant};
@@ -64,7 +65,7 @@ pub struct BotState {
     pub dj_config_manager: &'static DJConfigRegistry,
     pub activity_manager: ActivityManager,
     pub file_resolver: FileResolver,
-    pub hex_audio_folder: String,
+    tts_audio_folders: BTreeMap<TtsEncoding, String>,
     pub bot_user_id: UserId,
     pub cache: OnceLock<Arc<serenity::cache::Cache>>,
 }
@@ -72,7 +73,7 @@ pub struct BotState {
 impl BotState {
     pub fn new(
         file_resolver: FileResolver,
-        hex_audio_folder: String,
+        tts_audio_folders: BTreeMap<TtsEncoding, String>,
         state_store: Arc<dyn StateStore>,
         preset_manager: JsonRegistry<SignalParameters>,
         dj_config_manager: &'static DJConfigRegistry,
@@ -90,10 +91,14 @@ impl BotState {
             dj_config_manager,
             activity_manager: ActivityManager::new(state_store),
             file_resolver,
-            hex_audio_folder,
+            tts_audio_folders,
             bot_user_id,
             cache: OnceLock::new(),
         }
+    }
+
+    pub fn tts_audio_folder(&self, encoding: TtsEncoding) -> &str {
+        &self.tts_audio_folders[&encoding]
     }
 
     fn lifecycle(&self, guild_id: GuildId) -> Arc<Mutex<()>> {

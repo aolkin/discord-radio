@@ -57,6 +57,10 @@ spec:
             - name: HEX_AUDIO_FOLDER
               value: {{ . | quote }}
             {{- end }}
+            {{- with .Values.base36AudioFolder }}
+            - name: BASE36_AUDIO_FOLDER
+              value: {{ . | quote }}
+            {{- end }}
             {{- with .Values.logging.rustLog }}
             - name: RUST_LOG
               value: {{ . | quote }}

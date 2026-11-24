@@ -2,6 +2,7 @@ use crate::audio::dj::config::{LoadedConfig, optional_seconds};
 use crate::audio::dj::signal_preset::{SignalPresetPlayback, default_preset_fade};
 use crate::audio::dj::state_machine::{ChannelStatus, DJState, DJStateMachine};
 use crate::audio::dj::tiered::{ConfigurableTier, TimedValue};
+use crate::audio::dj::tts::TtsEncoding;
 use crate::audio::processing::processor::ProcessorRef;
 use crate::logging::guild_span;
 use crate::state::Data;
@@ -53,12 +54,13 @@ pub fn ensure_preset(bot_state: Data, preset: Option<&str>) -> anyhow::Result<()
 }
 
 /// A TTS message for the DJ to play, with TTS defaults from the pool named
-/// `pool` when set. `volume` and `loops` replace the defaults when set.
+/// `pool` when set. `volume`, `loops` and `encoding` replace the defaults when set.
 #[derive(Debug, Deserialize)]
 pub struct TtsMessageRequest {
     pub message: String,
     pub volume: Option<f32>,
     pub loops: Option<u32>,
+    pub encoding: Option<TtsEncoding>,
     pub pool: Option<String>,
 }
 

@@ -230,7 +230,7 @@ impl PoolEntry {
             PoolEntry::Tts(message) => Box::new(TtsSegment::from_entry(
                 message.clone(),
                 segment_defaults,
-                &bot_state.hex_audio_folder,
+                bot_state,
             )),
             PoolEntry::Noise(noise) => Box::new(NoiseSegment::from_entry(noise, segment_defaults)),
         }

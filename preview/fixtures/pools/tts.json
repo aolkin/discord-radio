@@ -1,11 +1,11 @@
 {
   "name": "tts",
   "segment_defaults": {
-    "tts_config": { "loop_min": 2, "loop_max": 3 },
+    "tts_config": { "loop_min": 2, "loop_max": 3, "encoding": "hex" },
     "signal_preset": "fading_signal"
   },
   "entries": [
-    { "text": "once upon a time", "weight": 1, "loop_min": null, "loop_max": null, "signal_preset": null, "channel_status": null, "announcement": null },
-    { "text": "the signal went quiet", "weight": 1, "loop_min": 1, "loop_max": 2, "signal_preset": null, "channel_status": null, "announcement": null }
+    { "text": "once upon a time", "weight": 1, "loop_min": null, "loop_max": null, "encoding": null, "audio_folder": null, "signal_preset": null, "channel_status": null, "announcement": null },
+    { "text": "the signal went quiet", "weight": 1, "loop_min": 1, "loop_max": 2, "encoding": "base36", "audio_folder": null, "signal_preset": null, "channel_status": null, "announcement": null }
   ]
 }

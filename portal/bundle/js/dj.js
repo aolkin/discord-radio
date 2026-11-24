@@ -1,4 +1,5 @@
 import { apiRequest, bodyOrStatus } from './api.js';
+import { ttsEncodings } from './form-fields.js';
 
 export const playForms = () => ({
     djAdvancePool: '',
@@ -7,6 +8,7 @@ export const playForms = () => ({
     idleDuration: null,
     ttsMessageText: '',
     ttsMessagePool: '',
+    ttsMessageEncoding: '',
     ttsMessageVolume: null,
     ttsMessageLoops: null,
     channelStatusSetting: 'background',
@@ -23,6 +25,7 @@ export function dj() {
         djConfigSaving: false,
         idleSaving: false,
         ttsSaving: false,
+        ttsEncodings,
         channelStatusSaving: false,
         announcementOptions: [],
         announcementLoading: false,
@@ -203,6 +206,9 @@ export function dj() {
             const body = { message: this.ttsMessageText };
             if (this.ttsMessagePool) {
                 body.pool = this.ttsMessagePool;
+            }
+            if (this.ttsMessageEncoding) {
+                body.encoding = this.ttsMessageEncoding;
             }
             if (this.ttsMessageVolume !== null && this.ttsMessageVolume !== '') {
                 body.volume = Number.parseFloat(this.ttsMessageVolume);

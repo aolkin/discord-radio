@@ -13,6 +13,7 @@ mod state;
 mod web;
 
 use crate::audio::dj::config::registry::DJConfigRegistry;
+use crate::audio::dj::tts::TtsEncoding;
 use crate::bucket::registry::JsonRegistry;
 use crate::logging::guild_span;
 use crate::state::{BotState, Data};
@@ -228,15 +229,24 @@ async fn main() -> anyhow::Result<()> {
     let dj_config_manager =
         DJConfigRegistry::from_storage(dj_configs_path, pools_path, file_resolver.clone()).await;
 
-    let hex_audio_folder = bucket::with_trailing_slash(
-        &std::env::var("HEX_AUDIO_FOLDER").unwrap_or_else(|_| "audio/hex/".to_string()),
-    );
-    tracing::info!("Using hex audio folder: {}", hex_audio_folder);
+    let tts_audio_folders = [
+        (TtsEncoding::Hex, "HEX_AUDIO_FOLDER", "audio/hex/"),
+        (TtsEncoding::Base36, "BASE36_AUDIO_FOLDER", "audio/base36/"),
+    ]
+    .into_iter()
+    .map(|(encoding, variable, default)| {
+        let folder = bucket::with_trailing_slash(
+            &std::env::var(variable).unwrap_or_else(|_| default.to_string()),
+        );
+        tracing::info!("Using {} audio folder: {}", encoding.name(), folder);
+        (encoding, folder)
+    })
+    .collect();
 
     let songbird = songbird::Songbird::serenity();
     let data: Data = Box::leak(Box::new(BotState::new(
         file_resolver,
-        hex_audio_folder,
+        tts_audio_folders,
         state_store,
         preset_manager,
         dj_config_manager,

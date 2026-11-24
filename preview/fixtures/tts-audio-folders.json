@@ -2,5 +2,9 @@
   "hex": {
     "folder": "audio/hex/",
     "missing_files": ["hex_E.wav", "hex_F.wav"]
+  },
+  "base36": {
+    "folder": "audio/base36/",
+    "missing_files": ["base36_Y.wav", "base36_Z.wav"]
   }
 }
