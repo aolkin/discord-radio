@@ -232,6 +232,7 @@ async fn main() -> anyhow::Result<()> {
     let tts_audio_folders = [
         (TtsEncoding::Hex, "HEX_AUDIO_FOLDER", "audio/hex/"),
         (TtsEncoding::Base36, "BASE36_AUDIO_FOLDER", "audio/base36/"),
+        (TtsEncoding::Morse, "MORSE_AUDIO_FOLDER", "audio/morse/"),
     ]
     .into_iter()
     .map(|(encoding, variable, default)| {

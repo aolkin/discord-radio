@@ -87,7 +87,7 @@ const segmentDefaultsFields = [
     { key: 'announcements', label: 'Announcements', type: 'strings' },
 ];
 
-export const ttsEncodings = ['hex', 'base36'];
+export const ttsEncodings = ['hex', 'base36', 'morse'];
 
 const folderKey = (encoding) => `${encoding}_audio_folder`;
 

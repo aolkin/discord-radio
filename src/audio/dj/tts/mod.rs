@@ -1,4 +1,5 @@
 mod digits;
+mod morse;
 
 use crate::bucket::FileResolver;
 use anyhow::Context;
@@ -26,6 +27,8 @@ pub enum TtsEncoding {
     Hex,
     #[name = "base36"]
     Base36,
+    #[name = "morse"]
+    Morse,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -59,6 +62,7 @@ impl TtsEncoding {
         match self {
             Self::Hex => &digits::HEX,
             Self::Base36 => &digits::BASE36,
+            Self::Morse => &morse::MORSE,
         }
     }
 
@@ -66,6 +70,7 @@ impl TtsEncoding {
         match self {
             Self::Hex => "hex",
             Self::Base36 => "base36",
+            Self::Morse => "morse",
         }
     }
 

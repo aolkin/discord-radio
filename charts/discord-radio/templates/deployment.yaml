@@ -61,6 +61,10 @@ spec:
             - name: BASE36_AUDIO_FOLDER
               value: {{ . | quote }}
             {{- end }}
+            {{- with .Values.morseAudioFolder }}
+            - name: MORSE_AUDIO_FOLDER
+              value: {{ . | quote }}
+            {{- end }}
             {{- with .Values.logging.rustLog }}
             - name: RUST_LOG
               value: {{ . | quote }}
