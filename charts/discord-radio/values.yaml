@@ -22,6 +22,7 @@ metrics:
 logging:
   rustLog: info,songbird=warn,symphonia_core=warn,symphonia_format_ogg=warn
 hexAudioFolder: ""
+base36AudioFolder: ""
 persistence:
   size: 64Mi
   storageClass: ""

@@ -11,7 +11,7 @@ use crate::audio::dj::manager::{
 use crate::audio::dj::segments::{
     CommonSegmentPlaybackConfig, NoiseEntry, NoiseSegment, SegmentCtx,
 };
-use crate::audio::dj::segments::{Completed, Segment, TrackSegment, TtsSegment};
+use crate::audio::dj::segments::{Completed, Segment, TrackSegment, TtsOverrides, TtsSegment};
 use crate::audio::dj::serde::{ShiftBack, deser_instant, ser_instant};
 use crate::audio::dj::signal_preset::SignalPresetPlayback;
 use crate::audio::dj::tiered::{TieredChange, TieredStateMachine, TieredValue, TimedValue};
@@ -545,8 +545,12 @@ impl DJStateMachine {
                 request.volume.unwrap_or(1.0),
                 loops,
                 EntryPlaybackConfig::default(),
+                TtsOverrides {
+                    encoding: request.encoding,
+                    audio_folder: None,
+                },
                 &segment_defaults,
-                &bot_state.hex_audio_folder,
+                bot_state,
             )),
             request.pool,
         );

@@ -87,19 +87,32 @@ const segmentDefaultsFields = [
     { key: 'announcements', label: 'Announcements', type: 'strings' },
 ];
 
+export const ttsEncodings = ['hex', 'base36'];
+
+const folderKey = (encoding) => `${encoding}_audio_folder`;
+
+export const ttsEncodingField = { key: 'encoding', label: 'Encoding', type: 'select', options: ttsEncodings };
+
 const ttsConfigFields = [
     loops('loop_min', 'Loop Min'),
     loops('loop_max', 'Loop Max'),
-    optionalText('hex_audio_folder', 'Hex Audio Folder'),
+    { ...ttsEncodingField, default: ttsEncodings[0] },
+    ...ttsEncodings.map((encoding) => optionalText(folderKey(encoding), `${encoding} Audio Folder`)),
 ];
 
 function ttsConfigFromServer(config) {
-    return convertObject(ttsConfigFields, { ...config, hex_audio_folder: config.audio_folders?.hex }, fieldFromServer);
+    const folders = Object.fromEntries(
+        ttsEncodings.map((encoding) => [folderKey(encoding), config.audio_folders?.[encoding]]),
+    );
+    return convertObject(ttsConfigFields, { ...config, ...folders }, fieldFromServer);
 }
 
 function ttsConfigToServer(form) {
-    const { hex_audio_folder: hexFolder, ...rest } = convertObject(ttsConfigFields, form, fieldToServer);
-    return { ...rest, audio_folders: hexFolder === null ? {} : { hex: hexFolder } };
+    const { loop_min, loop_max, encoding, ...folders } = convertObject(ttsConfigFields, form, fieldToServer);
+    const audioFolders = ttsEncodings
+        .filter((name) => folders[folderKey(name)] !== null)
+        .map((name) => [name, folders[folderKey(name)]]);
+    return { loop_min, loop_max, encoding, audio_folders: Object.fromEntries(audioFolders) };
 }
 
 export function segmentDefaultsFromServer(segmentDefaults) {

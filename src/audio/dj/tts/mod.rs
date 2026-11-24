@@ -1,15 +1,31 @@
-mod hex;
+mod digits;
 
 use crate::bucket::FileResolver;
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+    poise::ChoiceParameter,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum TtsEncoding {
     #[default]
+    #[name = "hex"]
     Hex,
+    #[name = "base36"]
+    Base36,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -41,13 +57,15 @@ trait Encoder {
 impl TtsEncoding {
     fn encoder(self) -> &'static dyn Encoder {
         match self {
-            Self::Hex => &hex::Hex,
+            Self::Hex => &digits::HEX,
+            Self::Base36 => &digits::BASE36,
         }
     }
 
     pub fn name(self) -> &'static str {
         match self {
             Self::Hex => "hex",
+            Self::Base36 => "base36",
         }
     }
 

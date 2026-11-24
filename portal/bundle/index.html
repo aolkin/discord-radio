@@ -885,6 +885,25 @@
                                                                         :placeholder="field.optional ? 'Optional' : ''"
                                                                     >
                                                                 </template>
+                                                                <template x-if="field.type === 'select'">
+                                                                    <select
+                                                                        class="form-input"
+                                                                        x-model="block.row[field.key]"
+                                                                    >
+                                                                        <template x-if="field.optional">
+                                                                            <option value="">Default</option>
+                                                                        </template>
+                                                                        <template
+                                                                            x-for="option in field.options"
+                                                                            :key="option"
+                                                                        >
+                                                                            <option
+                                                                                :value="option"
+                                                                                x-text="option"
+                                                                            ></option>
+                                                                        </template>
+                                                                    </select>
+                                                                </template>
                                                                 <template x-if="field.type === 'bool'">
                                                                     <select
                                                                         class="form-input"
@@ -1289,6 +1308,25 @@
                                                                                 placeholder="Optional"
                                                                             >
                                                                         </template>
+                                                                        <template x-if="field.type === 'select'">
+                                                                            <select
+                                                                                class="form-input"
+                                                                                x-model="entry[field.key]"
+                                                                            >
+                                                                                <template x-if="field.optional">
+                                                                                    <option value="">Default</option>
+                                                                                </template>
+                                                                                <template
+                                                                                    x-for="option in field.options"
+                                                                                    :key="option"
+                                                                                >
+                                                                                    <option
+                                                                                        :value="option"
+                                                                                        x-text="option"
+                                                                                    ></option>
+                                                                                </template>
+                                                                            </select>
+                                                                        </template>
                                                                         <template x-if="field.type === 'bool'">
                                                                             <select
                                                                                 class="form-input"
@@ -1516,6 +1554,16 @@
                                                                 :aria-invalid="fieldInvalid(field, block.row[field.key])"
                                                                 :placeholder="field.optional ? 'Optional' : ''"
                                                             >
+                                                        </template>
+                                                        <template x-if="field.type === 'select'">
+                                                            <select class="form-input" x-model="block.row[field.key]">
+                                                                <template x-if="field.optional">
+                                                                    <option value="">Default</option>
+                                                                </template>
+                                                                <template x-for="option in field.options" :key="option">
+                                                                    <option :value="option" x-text="option"></option>
+                                                                </template>
+                                                            </select>
                                                         </template>
                                                         <template x-if="field.type === 'bool'">
                                                             <select class="form-input" x-model="block.row[field.key]">
@@ -1860,6 +1908,15 @@
                                         <small class="hint">
                                             The pool's segment defaults set the loop count and announcements.
                                         </small>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label" for="tts-encoding">Encoding (Optional)</label>
+                                        <select id="tts-encoding" class="form-input" x-model="ttsMessageEncoding">
+                                            <option value="">Pool default</option>
+                                            <template x-for="encoding in ttsEncodings" :key="encoding">
+                                                <option :value="encoding" x-text="encoding"></option>
+                                            </template>
+                                        </select>
                                     </div>
                                     <div class="form-row">
                                         <div class="form-group">

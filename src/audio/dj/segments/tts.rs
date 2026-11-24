@@ -10,6 +10,7 @@ use crate::audio::processing::mixer::{TrackCallback, TrackCommand};
 use crate::audio::processing::processor::AudioProcessor;
 use crate::audio::tracks::open_track_source;
 use crate::bucket::{FileResolver, with_trailing_slash};
+use crate::state::BotState;
 use anyhow::{Context, bail};
 use async_trait::async_trait;
 use field_trait::field_trait_impl;
@@ -31,6 +32,8 @@ pub struct TtsMessageDefaults {
     pub loop_min: u32,
     #[serde(default = "default_loops")]
     pub loop_max: u32,
+    #[serde(default)]
+    pub encoding: TtsEncoding,
     #[serde(
         default,
         skip_serializing_if = "BTreeMap::is_empty",
@@ -44,6 +47,7 @@ impl Default for TtsMessageDefaults {
         Self {
             loop_min: default_loops(),
             loop_max: default_loops(),
+            encoding: TtsEncoding::default(),
             audio_folders: BTreeMap::new(),
         }
     }
@@ -70,6 +74,9 @@ pub struct TtsMessageEntry {
     pub weight: u32,
     pub loop_min: Option<u32>,
     pub loop_max: Option<u32>,
+    pub encoding: Option<TtsEncoding>,
+    #[serde(default, deserialize_with = "deserialize_audio_folder")]
+    pub audio_folder: Option<String>,
     #[serde(flatten)]
     pub playback: EntryPlaybackConfig,
 }
@@ -77,8 +84,27 @@ pub struct TtsMessageEntry {
 #[field_trait_impl]
 impl Weighted for TtsMessageEntry {
     fn identity(&self) -> Identity {
-        Identity::of((&self.text, self.loop_min, self.loop_max, &self.playback))
+        Identity::of((
+            &self.text,
+            self.loop_min,
+            self.loop_max,
+            self.encoding,
+            &self.audio_folder,
+            &self.playback,
+        ))
     }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct TtsOverrides {
+    pub encoding: Option<TtsEncoding>,
+    pub audio_folder: Option<String>,
+}
+
+fn deserialize_audio_folder<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<String>, D::Error> {
+    Ok(Option::<String>::deserialize(deserializer)?.map(|folder| with_trailing_slash(&folder)))
 }
 
 fn deserialize_audio_folders<'de, D: serde::Deserializer<'de>>(
@@ -90,10 +116,8 @@ fn deserialize_audio_folders<'de, D: serde::Deserializer<'de>>(
         .collect())
 }
 
-const ENCODING: TtsEncoding = TtsEncoding::Hex;
-
-fn encode_message(folder: &str, message: &str) -> EncodedMessage {
-    ENCODING
+fn encode_message(encoding: TtsEncoding, folder: &str, message: &str) -> EncodedMessage {
+    encoding
         .encode(folder, message)
         .with_context(|| format!("encoding message {message:?}"))
         .unwrap_or_else(|e| {
@@ -122,6 +146,7 @@ pub struct TtsSegment {
     playback_config: CommonSegmentPlaybackConfig,
     message: String,
     volume: f32,
+    encoding: TtsEncoding,
     encoded: EncodedMessage,
     target_loops: usize,
     progress: Arc<TtsProgress>,
@@ -146,16 +171,18 @@ impl TtsSegment {
         volume: f32,
         target_loops: usize,
         playback: EntryPlaybackConfig,
+        overrides: TtsOverrides,
         segment_defaults: &SegmentDefaults,
-        default_folder: &str,
+        bot_state: &BotState,
     ) -> Self {
-        let folder = segment_defaults
-            .tts_config()
-            .audio_folders
-            .get(&ENCODING)
-            .map(String::as_str)
-            .unwrap_or(default_folder);
-        let encoded = encode_message(folder, &message);
+        let defaults = segment_defaults.tts_config();
+        let encoding = overrides.encoding.unwrap_or(defaults.encoding);
+        let folder = overrides
+            .audio_folder
+            .as_deref()
+            .or_else(|| defaults.audio_folders.get(&encoding).map(String::as_str))
+            .unwrap_or_else(|| bot_state.tts_audio_folder(encoding));
+        let encoded = encode_message(encoding, folder, &message);
         let playback_config = segment_defaults.playback_config(EntryPlaybackConfig {
             channel_status: playback.channel_status.or(Some(encoded.hint.clone())),
             ..playback
@@ -164,6 +191,7 @@ impl TtsSegment {
             playback_config,
             message,
             volume,
+            encoding,
             encoded,
             target_loops,
             progress: Default::default(),
@@ -197,7 +225,7 @@ impl TtsSegment {
     pub fn from_entry(
         tts_entry: TtsMessageEntry,
         segment_defaults: &SegmentDefaults,
-        default_folder: &str,
+        bot_state: &BotState,
     ) -> Self {
         let defaults = segment_defaults.tts_config();
         let loops = defaults.pick_loops(tts_entry.loop_min, tts_entry.loop_max) as usize;
@@ -206,8 +234,12 @@ impl TtsSegment {
             1.0,
             loops,
             tts_entry.playback,
+            TtsOverrides {
+                encoding: tts_entry.encoding,
+                audio_folder: tts_entry.audio_folder,
+            },
             segment_defaults,
-            default_folder,
+            bot_state,
         )
     }
 }
@@ -253,7 +285,7 @@ impl Segment for TtsSegment {
         self.progress.current_track.stop(Duration::ZERO);
         if let Some(metrics) = crate::metrics::get() {
             let loops_played = self.progress.loops.load(Ordering::Relaxed) as u64;
-            metrics.record_tts_message_loops(ctx.guild_id.get(), ENCODING, loops_played);
+            metrics.record_tts_message_loops(ctx.guild_id.get(), self.encoding, loops_played);
         }
     }
 
