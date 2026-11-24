@@ -1,6 +1,6 @@
 import { apiRequest } from './api.js';
 import { newItem, registryEditor } from './registry-editor.js';
-import { blankForm, toBody, toForm } from './signal-chain.js';
+import { clone } from './signal-chain.js';
 
 export const signalPresetForms = () => ({
     signalPresetSetting: 'manual',
@@ -19,9 +19,9 @@ const presetEditor = registryEditor({
     list: 'presets',
     kind,
     label: 'signal preset',
-    toForm,
-    toBody,
-    blankForm,
+    toForm: (name, preset) => ({ name, effects: clone(preset.effects) }),
+    toBody: (form) => ({ effects: clone(form.effects) }),
+    blankForm: () => ({ name: '', effects: [] }),
 });
 
 export function signalPresets() {
@@ -57,10 +57,6 @@ export function signalPresets() {
                 isDefault: (name) => app.isDefault(kind, name),
                 open: (name) => app.openItem(kind, name),
                 save: () => app.applyDraft(kind),
-                saveAs: (name) => {
-                    app.saveAsName = name;
-                    return app.saveAs(kind);
-                },
             };
         },
 
