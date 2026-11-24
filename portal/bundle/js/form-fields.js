@@ -87,49 +87,58 @@ const segmentDefaultsFields = [
     { key: 'announcements', label: 'Announcements', type: 'strings' },
 ];
 
-const hexConfigFields = [
+const ttsConfigFields = [
     loops('loop_min', 'Loop Min'),
     loops('loop_max', 'Loop Max'),
     optionalText('hex_audio_folder', 'Hex Audio Folder'),
 ];
 
+function ttsConfigFromServer(config) {
+    return convertObject(ttsConfigFields, { ...config, hex_audio_folder: config.audio_folders?.hex }, fieldFromServer);
+}
+
+function ttsConfigToServer(form) {
+    const { hex_audio_folder: hexFolder, ...rest } = convertObject(ttsConfigFields, form, fieldToServer);
+    return { ...rest, audio_folders: hexFolder === null ? {} : { hex: hexFolder } };
+}
+
 export function segmentDefaultsFromServer(segmentDefaults) {
     const source = segmentDefaults ?? {};
     return {
         ...convertObject(segmentDefaultsFields, source, fieldFromServer),
-        hex_config: source.hex_config ? convertObject(hexConfigFields, source.hex_config, fieldFromServer) : null,
+        tts_config: source.tts_config ? ttsConfigFromServer(source.tts_config) : null,
     };
 }
 
 export function segmentDefaultsToServer(form) {
     return {
         ...convertObject(segmentDefaultsFields, form, fieldToServer),
-        hex_config: form.hex_config && convertObject(hexConfigFields, form.hex_config, fieldToServer),
+        tts_config: form.tts_config && ttsConfigToServer(form.tts_config),
     };
 }
 
 export function blankSegmentDefaults() {
-    return { ...blankRow(segmentDefaultsFields), hex_config: null };
+    return { ...blankRow(segmentDefaultsFields), tts_config: null };
 }
 
 export function segmentDefaultsBlocks(segmentDefaults, path) {
     return [
         { row: segmentDefaults, fields: segmentDefaultsFields, label: 'Segment Defaults', path },
-        ...(segmentDefaults.hex_config
+        ...(segmentDefaults.tts_config
             ? [
                   {
-                      row: segmentDefaults.hex_config,
-                      fields: hexConfigFields,
-                      label: 'Hex Config',
-                      path: [...path, 'hex_config'],
+                      row: segmentDefaults.tts_config,
+                      fields: ttsConfigFields,
+                      label: 'TTS Config',
+                      path: [...path, 'tts_config'],
                   },
               ]
             : []),
     ];
 }
 
-export function toggleHexConfig(segmentDefaults) {
-    segmentDefaults.hex_config = segmentDefaults.hex_config ? null : blankRow(hexConfigFields);
+export function toggleTtsConfig(segmentDefaults) {
+    segmentDefaults.tts_config = segmentDefaults.tts_config ? null : blankRow(ttsConfigFields);
 }
 
 export const sliderSteps = 1000;

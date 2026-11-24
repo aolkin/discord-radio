@@ -1,7 +1,7 @@
 {
-  "name": "hex",
+  "name": "tts",
   "segment_defaults": {
-    "hex_config": { "loop_min": 2, "loop_max": 3 },
+    "tts_config": { "loop_min": 2, "loop_max": 3 },
     "signal_preset": "fading_signal"
   },
   "entries": [

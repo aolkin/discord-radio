@@ -944,8 +944,8 @@
                                         <button
                                             type="button"
                                             class="btn btn-text btn-sm"
-                                            @click="toggleDjConfigReferenceHexConfig(reference)"
-                                            x-text="reference.segment_defaults.hex_config ? 'Remove Hex Config' : '+ Add Hex Config'"
+                                            @click="toggleDjConfigReferenceTtsConfig(reference)"
+                                            x-text="reference.segment_defaults.tts_config ? 'Remove TTS Config' : '+ Add TTS Config'"
                                         ></button>
                                     </div>
                                 </template>
@@ -1455,8 +1455,8 @@
                                             x-show="open"
                                             @click="open = false"
                                         >
-                                            <button type="button" role="menuitem" @click="addPoolEntry('hex')">
-                                                Hex message
+                                            <button type="button" role="menuitem" @click="addPoolEntry('tts')">
+                                                TTS message
                                             </button>
                                             <button type="button" role="menuitem" @click="addPoolEntry('noise')">
                                                 Noise
@@ -1573,16 +1573,16 @@
                                 <button
                                     type="button"
                                     class="btn btn-text btn-sm"
-                                    @click="togglePoolHexConfig()"
-                                    x-text="poolForm.segment_defaults.hex_config ? 'Remove Hex Config' : '+ Add Hex Config'"
+                                    @click="togglePoolTtsConfig()"
+                                    x-text="poolForm.segment_defaults.tts_config ? 'Remove TTS Config' : '+ Add TTS Config'"
                                 ></button>
                             </details>
                             <div
                                 class="hint hint-warning"
                                 role="status"
-                                x-effect="watchPoolHexFolder()"
-                                x-show="poolHexFolderWarning"
-                                x-text="poolHexFolderWarning"
+                                x-effect="watchPoolTtsFolder()"
+                                x-show="poolTtsFolderWarning"
+                                x-text="poolTtsFolderWarning"
                             ></div>
                         </form>
                     </section>
@@ -1836,22 +1836,22 @@
                             </div>
 
                             <div class="section">
-                                <div class="section-title">Play Hex Message</div>
-                                <form @submit.prevent="playHexMessage()">
+                                <div class="section-title">Play TTS Message</div>
+                                <form @submit.prevent="playTtsMessage()">
                                     <div class="form-group">
-                                        <label class="form-label" for="hex-message">Message</label>
+                                        <label class="form-label" for="tts-message">Message</label>
                                         <input
-                                            id="hex-message"
+                                            id="tts-message"
                                             type="text"
                                             class="form-input"
-                                            x-model="hexMessageText"
+                                            x-model="ttsMessageText"
                                             placeholder="Enter message to play..."
                                             required
                                         >
                                     </div>
                                     <div class="form-group">
-                                        <label class="form-label" for="hex-pool">Pool (Optional)</label>
-                                        <select id="hex-pool" class="form-input" x-model="hexMessagePool">
+                                        <label class="form-label" for="tts-pool">Pool (Optional)</label>
+                                        <select id="tts-pool" class="form-input" x-model="ttsMessagePool">
                                             <option value="">No pool</option>
                                             <template x-for="pool in pools" :key="pool">
                                                 <option :value="pool" x-text="pool"></option>
@@ -1863,12 +1863,12 @@
                                     </div>
                                     <div class="form-row">
                                         <div class="form-group">
-                                            <label class="form-label" for="hex-volume">Volume</label>
+                                            <label class="form-label" for="tts-volume">Volume</label>
                                             <input
-                                                id="hex-volume"
+                                                id="tts-volume"
                                                 type="number"
                                                 class="form-input"
-                                                x-model.number="hexMessageVolume"
+                                                x-model.number="ttsMessageVolume"
                                                 min="0"
                                                 max="2"
                                                 step="0.1"
@@ -1876,12 +1876,12 @@
                                             >
                                         </div>
                                         <div class="form-group">
-                                            <label class="form-label" for="hex-loops">Loops</label>
+                                            <label class="form-label" for="tts-loops">Loops</label>
                                             <input
-                                                id="hex-loops"
+                                                id="tts-loops"
                                                 type="number"
                                                 class="form-input"
-                                                x-model.number="hexMessageLoops"
+                                                x-model.number="ttsMessageLoops"
                                                 min="0"
                                                 step="1"
                                                 placeholder="Pool default"
@@ -1891,8 +1891,8 @@
                                     <button
                                         type="submit"
                                         class="btn btn-primary"
-                                        :disabled="hexSaving"
-                                        x-text="hexSaving ? 'Playing...' : 'Play Message'"
+                                        :disabled="ttsSaving"
+                                        x-text="ttsSaving ? 'Playing...' : 'Play Message'"
                                     ></button>
                                 </form>
                             </div>

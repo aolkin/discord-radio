@@ -11,7 +11,7 @@ import {
     segmentDefaultsFromServer,
     segmentDefaultsToServer,
     signalPresetEntryFields,
-    toggleHexConfig,
+    toggleTtsConfig,
     weight,
 } from './form-fields.js';
 import { poolToForm } from './pools.js';
@@ -259,8 +259,8 @@ export function djConfigs() {
                 );
         },
 
-        toggleDjConfigReferenceHexConfig(reference) {
-            toggleHexConfig(reference.segment_defaults);
+        toggleDjConfigReferenceTtsConfig(reference) {
+            toggleTtsConfig(reference.segment_defaults);
         },
 
         addDjConfigRotationEntry(rotation) {

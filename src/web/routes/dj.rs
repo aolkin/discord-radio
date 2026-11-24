@@ -1,6 +1,6 @@
 use crate::audio::dj::manager::{
-    ChannelStatusRequest, ConfigureRequest, DJCommand, DjBusy, HexMessageRequest, IdleRequest,
-    PresetNotFound, SignalPresetRequest, TrackRequest, ensure_pool,
+    ChannelStatusRequest, ConfigureRequest, DJCommand, DjBusy, IdleRequest, PresetNotFound,
+    SignalPresetRequest, TrackRequest, TtsMessageRequest, ensure_pool,
 };
 use crate::state::{Data, GuildInactive};
 use crate::web::error::ApiError;
@@ -61,13 +61,13 @@ fn invalid_request(error: anyhow::Error) -> ApiError {
     ApiError::new(status, error)
 }
 
-pub async fn play_hex_message(
+pub async fn play_tts_message(
     State(bot_state): State<Data>,
     Path(guild_id): Path<GuildId>,
-    AxumJson(request): AxumJson<HexMessageRequest>,
+    AxumJson(request): AxumJson<TtsMessageRequest>,
 ) -> Result<StatusCode, ApiError> {
     request.validate(bot_state).map_err(invalid_request)?;
-    send_dj_command(&bot_state, guild_id, DJCommand::ForceHexMessage(request))
+    send_dj_command(&bot_state, guild_id, DJCommand::ForceTtsMessage(request))
 }
 
 pub async fn play_track(

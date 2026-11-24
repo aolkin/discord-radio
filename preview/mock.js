@@ -3,11 +3,11 @@
     const fixtureBase = '/preview/fixtures';
     const registries = {
         'signal-presets': ['clear_signal', 'weak_signal', 'fading_signal'],
-        pools: ['noise', 'hex', 'track'],
+        pools: ['noise', 'tts', 'track'],
         'dj-configs': ['default', 'quiet'],
     };
     const defaultPresets = new Set(registries['signal-presets']);
-    const modes = ['track', 'hex', 'noise'];
+    const modes = ['track', 'tts', 'noise'];
 
     const store = {
         snapshots: {},
@@ -27,14 +27,14 @@
     const loadJson = async (path) => (await realFetch(`${fixtureBase}/${path}`)).json();
 
     const ready = (async () => {
-        const [guilds, channels, voiceChannels, botProfile, listing, hexFolderCheck, memberLogs, djLogs, ...snapshots] =
+        const [guilds, channels, voiceChannels, botProfile, listing, ttsFolderCheck, memberLogs, djLogs, ...snapshots] =
             await Promise.all([
                 loadJson('guilds.json'),
                 loadJson('channels.json'),
                 loadJson('voice-channels.json'),
                 loadJson('bot-profile.json'),
                 loadJson('files/tracks.json'),
-                loadJson('hex-audio-folder.json'),
+                loadJson('tts-audio-folders.json'),
                 loadJson('logs/members.json'),
                 loadJson('logs/dj.json'),
                 ...modes.map((mode) => loadJson(`snapshots/playing-${mode}.json`)),
@@ -42,7 +42,7 @@
         store.guilds = guilds;
         store.channels = channels;
         store.voiceChannels = voiceChannels;
-        store.hexFolderCheck = hexFolderCheck;
+        store.ttsFolderCheck = ttsFolderCheck;
         store.logs = { members: memberLogs, dj: djLogs };
         for (const guild of guilds.guilds) {
             store.botProfiles[guild.guild_id] = { ...botProfile };
@@ -181,7 +181,7 @@
             a.name.localeCompare(b.name),
         );
         const timing = `(${Math.min(elapsed, total).toFixed(1)}s / ${total.toFixed(1)}s)`;
-        const label = radio.text && radio.mode === 'hex' ? radio.text : guild.dj_state.details.replace(/ \(.*$/, '');
+        const label = radio.text && radio.mode === 'tts' ? radio.text : guild.dj_state.details.replace(/ \(.*$/, '');
         guild.dj_state.details = `${label} ${timing}`;
         if (radio.preset) {
             guild.signal_preset = {
@@ -358,8 +358,8 @@
             setMode('noise');
             return ok();
         }),
-        guildRoute('POST', 'hex/play', ({ body }) => {
-            setMode('hex');
+        guildRoute('POST', 'tts/play', ({ body }) => {
+            setMode('tts');
             store.radio.text = body.message;
             return ok();
         }),
@@ -407,7 +407,7 @@
             (_match, { query }) => {
                 const key = query.get('key') ?? '';
                 const folderUsed = (defaults) => {
-                    const folder = defaults?.hex_config?.hex_audio_folder;
+                    const folder = defaults?.tts_config?.audio_folders?.hex;
                     return folder?.startsWith('s3://') && key.startsWith(folder.slice('s3://'.length));
                 };
                 const references = [
@@ -435,14 +435,14 @@
         ],
         [
             'GET',
-            /^\/api\/hex-audio-folder$/,
+            /^\/api\/tts-audio-folders$/,
             (_match, { query }) => {
-                const requested = query.get('folder') ?? store.hexFolderCheck.folder;
+                const requested = query.get('hex') ?? store.ttsFolderCheck.hex.folder;
                 const folder = requested.endsWith('/') ? requested : `${requested}/`;
                 if (folder === 'audio/complete/') {
-                    return respond({ folder, missing_files: [] });
+                    return respond({ hex: { folder, missing_files: [] } });
                 }
-                return respond({ ...store.hexFolderCheck, folder });
+                return respond({ hex: { ...store.ttsFolderCheck.hex, folder } });
             },
         ],
         [

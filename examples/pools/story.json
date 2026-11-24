@@ -3,7 +3,7 @@
   "segment_defaults": {
     "signal_preset": "strong_signal",
     "announcements": [],
-    "hex_config": {
+    "tts_config": {
       "loop_min": 1,
       "loop_max": 2
     }

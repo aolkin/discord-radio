@@ -15,6 +15,7 @@ use async_trait::async_trait;
 use field_trait::field_trait_impl;
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::ops::Deref;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -25,25 +26,25 @@ use tokio::task::JoinHandle;
 use tracing::Instrument;
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct HexMessageDefaults {
+pub struct TtsMessageDefaults {
     #[serde(default = "default_loops")]
     pub loop_min: u32,
     #[serde(default = "default_loops")]
     pub loop_max: u32,
     #[serde(
         default,
-        skip_serializing_if = "Option::is_none",
-        deserialize_with = "deserialize_audio_folder"
+        skip_serializing_if = "BTreeMap::is_empty",
+        deserialize_with = "deserialize_audio_folders"
     )]
-    pub hex_audio_folder: Option<String>,
+    pub audio_folders: BTreeMap<TtsEncoding, String>,
 }
 
-impl Default for HexMessageDefaults {
+impl Default for TtsMessageDefaults {
     fn default() -> Self {
         Self {
             loop_min: default_loops(),
             loop_max: default_loops(),
-            hex_audio_folder: None,
+            audio_folders: BTreeMap::new(),
         }
     }
 }
@@ -52,7 +53,7 @@ fn default_loops() -> u32 {
     1
 }
 
-impl HexMessageDefaults {
+impl TtsMessageDefaults {
     pub fn validate(&self) -> anyhow::Result<()> {
         ensure_loops(self.loop_min, self.loop_max)
     }
@@ -64,7 +65,7 @@ impl HexMessageDefaults {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct HexMessageEntry {
+pub struct TtsMessageEntry {
     pub text: String,
     pub weight: u32,
     pub loop_min: Option<u32>,
@@ -74,16 +75,19 @@ pub struct HexMessageEntry {
 }
 
 #[field_trait_impl]
-impl Weighted for HexMessageEntry {
+impl Weighted for TtsMessageEntry {
     fn identity(&self) -> Identity {
         Identity::of((&self.text, self.loop_min, self.loop_max, &self.playback))
     }
 }
 
-fn deserialize_audio_folder<'de, D: serde::Deserializer<'de>>(
+fn deserialize_audio_folders<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
-) -> Result<Option<String>, D::Error> {
-    Ok(Option::<String>::deserialize(deserializer)?.map(|folder| with_trailing_slash(&folder)))
+) -> Result<BTreeMap<TtsEncoding, String>, D::Error> {
+    Ok(BTreeMap::<TtsEncoding, String>::deserialize(deserializer)?
+        .into_iter()
+        .map(|(encoding, folder)| (encoding, with_trailing_slash(&folder)))
+        .collect())
 }
 
 const ENCODING: TtsEncoding = TtsEncoding::Hex;
@@ -106,7 +110,7 @@ pub fn ensure_loops(min: u32, max: u32) -> anyhow::Result<()> {
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
-struct HexProgress {
+struct TtsProgress {
     position: AtomicUsize,
     loops: AtomicUsize,
     #[serde(skip)]
@@ -114,13 +118,13 @@ struct HexProgress {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct HexSegment {
+pub struct TtsSegment {
     playback_config: CommonSegmentPlaybackConfig,
     message: String,
     volume: f32,
     encoded: EncodedMessage,
     target_loops: usize,
-    progress: Arc<HexProgress>,
+    progress: Arc<TtsProgress>,
     #[serde(skip)]
     task: Mutex<Option<JoinHandle<()>>>,
     #[serde(skip)]
@@ -129,14 +133,14 @@ pub struct HexSegment {
     progressed: ChangedSignal,
 }
 
-impl Deref for HexSegment {
+impl Deref for TtsSegment {
     type Target = CommonSegmentPlaybackConfig;
     fn deref(&self) -> &Self::Target {
         &self.playback_config
     }
 }
 
-impl HexSegment {
+impl TtsSegment {
     pub fn new(
         message: String,
         volume: f32,
@@ -146,9 +150,10 @@ impl HexSegment {
         default_folder: &str,
     ) -> Self {
         let folder = segment_defaults
-            .hex_config()
-            .hex_audio_folder
-            .as_deref()
+            .tts_config()
+            .audio_folders
+            .get(&ENCODING)
+            .map(String::as_str)
             .unwrap_or(default_folder);
         let encoded = encode_message(folder, &message);
         let playback_config = segment_defaults.playback_config(EntryPlaybackConfig {
@@ -190,17 +195,17 @@ impl HexSegment {
     }
 
     pub fn from_entry(
-        hex_entry: HexMessageEntry,
+        tts_entry: TtsMessageEntry,
         segment_defaults: &SegmentDefaults,
         default_folder: &str,
     ) -> Self {
-        let defaults = segment_defaults.hex_config();
-        let loops = defaults.pick_loops(hex_entry.loop_min, hex_entry.loop_max) as usize;
+        let defaults = segment_defaults.tts_config();
+        let loops = defaults.pick_loops(tts_entry.loop_min, tts_entry.loop_max) as usize;
         Self::new(
-            hex_entry.text,
+            tts_entry.text,
             1.0,
             loops,
-            hex_entry.playback,
+            tts_entry.playback,
             segment_defaults,
             default_folder,
         )
@@ -208,8 +213,8 @@ impl HexSegment {
 }
 
 #[async_trait]
-#[typetag::serde(name = "hex_message")]
-impl Segment for HexSegment {
+#[typetag::serde(name = "tts_message")]
+impl Segment for TtsSegment {
     fn completed(&self, _elapsed: Duration) -> Completed {
         self.done.completed()
     }
@@ -221,7 +226,7 @@ impl Segment for HexSegment {
     async fn restore(&self, ctx: &SegmentCtx, _elapsed: Duration) -> anyhow::Result<()> {
         self.start_playing(ctx).await;
         tracing::info!(
-            "Restored DJ hex message '{}' at loop {}/{}",
+            "Restored DJ TTS message '{}' at loop {}/{}",
             self.message,
             self.progress.loops.load(Ordering::Relaxed),
             self.target_loops
@@ -232,7 +237,7 @@ impl Segment for HexSegment {
     async fn enter(&self, ctx: &SegmentCtx) -> anyhow::Result<()> {
         self.start_playing(ctx).await;
         tracing::info!(
-            "DJ playing hex message '{}' ({} loops)",
+            "DJ playing TTS message '{}' ({} loops)",
             self.message,
             self.target_loops
         );
@@ -248,7 +253,7 @@ impl Segment for HexSegment {
         self.progress.current_track.stop(Duration::ZERO);
         if let Some(metrics) = crate::metrics::get() {
             let loops_played = self.progress.loops.load(Ordering::Relaxed) as u64;
-            metrics.record_hex_message_loops(ctx.guild_id.get(), loops_played);
+            metrics.record_tts_message_loops(ctx.guild_id.get(), ENCODING, loops_played);
         }
     }
 
@@ -289,7 +294,7 @@ struct PlaySettings {
 
 async fn play_message(
     settings: PlaySettings,
-    progress: Arc<HexProgress>,
+    progress: Arc<TtsProgress>,
     processor: Arc<RwLock<AudioProcessor>>,
     file_resolver: FileResolver,
     done: CompletedSignal,
@@ -311,7 +316,7 @@ async fn play_message(
                         Ok(source) => source,
                         Err(e) => {
                             tracing::warn!(
-                                "Failed to start hex track for message '{message}': {e:#}"
+                                "Failed to start TTS track for message '{message}': {e:#}"
                             );
                             tokio::time::sleep(Duration::from_millis(100)).await;
                             continue;
@@ -336,7 +341,7 @@ async fn play_message(
         } else {
             progress.position.store(0, Ordering::Relaxed);
             let loops = progress.loops.fetch_add(1, Ordering::Relaxed) + 1;
-            tracing::info!("Hex message '{message}' completed loop {loops}/{target_loops}");
+            tracing::info!("TTS message '{message}' completed loop {loops}/{target_loops}");
             if loops >= target_loops {
                 break;
             }

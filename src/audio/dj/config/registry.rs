@@ -143,12 +143,12 @@ impl std::fmt::Display for FileReference {
 impl DJConfigRegistry {
     pub fn files_referencing(&self, key: &str) -> Vec<FileReference> {
         let uses_folder = |defaults: &SegmentDefaults| {
-            defaults
-                .hex_config
-                .as_ref()
-                .and_then(|hex| hex.hex_audio_folder.as_deref())
-                .and_then(|folder| folder.strip_prefix("s3://"))
-                .is_some_and(|folder| key.starts_with(folder))
+            defaults.tts_config.as_ref().is_some_and(|tts| {
+                tts.audio_folders
+                    .values()
+                    .filter_map(|folder| folder.strip_prefix("s3://"))
+                    .any(|folder| key.starts_with(folder))
+            })
         };
 
         let pools = self.pools.list().into_iter().filter_map(|name| {

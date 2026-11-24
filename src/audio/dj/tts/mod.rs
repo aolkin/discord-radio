@@ -5,7 +5,8 @@ use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum TtsEncoding {
     #[default]
     Hex,
@@ -41,6 +42,12 @@ impl TtsEncoding {
     fn encoder(self) -> &'static dyn Encoder {
         match self {
             Self::Hex => &hex::Hex,
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Hex => "hex",
         }
     }
 
