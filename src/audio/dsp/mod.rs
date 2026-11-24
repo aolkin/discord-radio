@@ -3,6 +3,9 @@ pub mod effects;
 pub mod filter;
 pub mod lfo;
 
+use ambassador::delegatable_trait;
+
+#[delegatable_trait]
 pub trait FrameProcessor {
     fn process_frame(&mut self, frame: [f32; 2]) -> [f32; 2];
 }

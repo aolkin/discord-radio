@@ -1,22 +1,36 @@
 use crate::audio::dsp::{Effect, FrameProcessor};
 use crate::audio::helpers::perceptual_level_to_amplitude;
+use crate::audio::presets::Lerp;
 use rand::{RngExt, rngs::StdRng};
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Deserialize, Serialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
 pub enum NoiseColor {
     White,
     Pink,
     Brown,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Deserialize, Serialize, Clone, Copy, Debug, PartialEq, garde::Validate)]
 pub struct NoiseParams {
+    #[garde(skip)]
     pub color: NoiseColor,
+    #[garde(range(min = 0.0, max = 2.0))]
     pub level: f32,
 }
 
+impl Lerp for NoiseParams {
+    fn lerp(&self, other: &Self, t: f32) -> Self {
+        Self {
+            color: self.color,
+            level: self.level.lerp(&other.level, t),
+        }
+    }
+}
+
 pub struct Noise {
-    color: NoiseColor,
+    pub color: NoiseColor,
     source: NoiseSource,
     amplitude: f32,
 }
@@ -33,10 +47,6 @@ impl Effect for Noise {
     }
 
     fn update(&mut self, params: &NoiseParams) {
-        if params.color != self.color {
-            self.color = params.color;
-            self.source = NoiseSource::new(params.color);
-        }
         self.amplitude = perceptual_level_to_amplitude(params.level);
     }
 }

@@ -1,9 +1,15 @@
 use crate::audio::dsp::{Effect, FrameProcessor};
+use crate::audio::presets::lerp_struct;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug)]
-pub struct ClipParams {
-    pub pregain: f32,
-    pub threshold: f32,
+lerp_struct! {
+    #[derive(Deserialize, Serialize, Clone, Copy, Debug, PartialEq, garde::Validate)]
+    pub struct ClipParams {
+        #[garde(range(min = 0.0, max = 100.0))]
+        pub pregain: f32,
+        #[garde(range(min = 0.0, max = 2.0))]
+        pub threshold: f32,
+    }
 }
 
 pub struct Clip {

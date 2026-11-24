@@ -142,6 +142,7 @@ impl AudioProcessor {
             }
 
             if transition.is_complete() {
+                self.dsp_chain.update_preset(&transition.to);
                 self.current_preset = transition.to.clone();
                 self.transition = None;
             }

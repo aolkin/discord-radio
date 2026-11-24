@@ -1,8 +1,20 @@
 use crate::audio::dsp::{Effect, FrameProcessor};
+use crate::audio::presets::Lerp;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Deserialize, Serialize, Clone, Copy, Debug, PartialEq, garde::Validate)]
 pub struct BitcrushParams {
+    #[garde(range(min = 1, max = 16))]
     pub bits: u8,
+}
+
+impl Lerp for BitcrushParams {
+    fn lerp(&self, other: &Self, t: f32) -> Self {
+        let bits = (self.bits as f32).lerp(&(other.bits as f32), t);
+        Self {
+            bits: bits.round() as u8,
+        }
+    }
 }
 
 pub struct Bitcrush {
