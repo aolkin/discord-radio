@@ -16,7 +16,7 @@ pub enum EncodedStep {
     Pause(Duration),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct EncodedMessage {
     pub hint: String,
     pub steps: Vec<EncodedStep>,
@@ -31,23 +31,34 @@ impl EncodedMessage {
     }
 }
 
+trait Encoder {
+    fn sounds(&self) -> &'static [&'static str];
+    fn file_name(&self, prefix: &str, sound: &str) -> String;
+    fn encode(&self, text: &str) -> anyhow::Result<EncodedMessage>;
+}
+
 impl TtsEncoding {
-    pub fn sounds(self) -> &'static [&'static str] {
+    fn encoder(self) -> &'static dyn Encoder {
         match self {
-            Self::Hex => hex::SOUNDS,
+            Self::Hex => &hex::Hex,
         }
     }
 
-    pub fn file_name(self, sound: &str) -> String {
-        match self {
-            Self::Hex => hex::file_name(sound),
-        }
+    pub fn file_name(self, prefix: &str, sound: &str) -> String {
+        self.encoder().file_name(prefix, sound)
+    }
+
+    pub fn file_names(self, prefix: &str) -> Vec<String> {
+        let encoder = self.encoder();
+        encoder
+            .sounds()
+            .iter()
+            .map(|sound| encoder.file_name(prefix, sound))
+            .collect()
     }
 
     pub fn encode(self, text: &str) -> anyhow::Result<EncodedMessage> {
-        match self {
-            Self::Hex => hex::encode(text),
-        }
+        self.encoder().encode(text)
     }
 }
 
@@ -61,9 +72,8 @@ pub async fn list_missing_files(
         .await
         .with_context(|| format!("listing audio folder {folder:?}"))?;
     Ok(encoding
-        .sounds()
-        .iter()
-        .map(|sound| encoding.file_name(sound))
+        .file_names("")
+        .into_iter()
         .filter(|name| !present.contains(name))
         .collect())
 }

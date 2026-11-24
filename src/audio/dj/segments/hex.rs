@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
@@ -88,10 +88,14 @@ fn deserialize_audio_folder<'de, D: serde::Deserializer<'de>>(
 
 const ENCODING: TtsEncoding = TtsEncoding::Hex;
 
-fn encode_message(message: &str) -> anyhow::Result<EncodedMessage> {
+fn encode_message(message: &str) -> EncodedMessage {
     ENCODING
         .encode(message)
         .with_context(|| format!("encoding message {message:?}"))
+        .unwrap_or_else(|e| {
+            tracing::warn!("{e:#}");
+            EncodedMessage::default()
+        })
 }
 
 pub fn ensure_loops(min: u32, max: u32) -> anyhow::Result<()> {
@@ -118,6 +122,8 @@ pub struct HexSegment {
     target_loops: usize,
     progress: Arc<HexProgress>,
     #[serde(skip)]
+    encoded: OnceLock<EncodedMessage>,
+    #[serde(skip)]
     task: Mutex<Option<JoinHandle<()>>>,
     #[serde(skip)]
     done: CompletedSignal,
@@ -140,12 +146,9 @@ impl HexSegment {
         playback: EntryPlaybackConfig,
         segment_defaults: &SegmentDefaults,
     ) -> Self {
-        let hint = encode_message(&message)
-            .map(|encoded| encoded.hint)
-            .inspect_err(|e| tracing::warn!("Failed to build hint: {e:#}"))
-            .ok();
+        let encoded = encode_message(&message);
         let playback_config = segment_defaults.playback_config(EntryPlaybackConfig {
-            channel_status: playback.channel_status.or(hint),
+            channel_status: playback.channel_status.or(Some(encoded.hint.clone())),
             ..playback
         });
         Self {
@@ -155,10 +158,15 @@ impl HexSegment {
             audio_folder: segment_defaults.hex_config().hex_audio_folder.clone(),
             target_loops,
             progress: Default::default(),
+            encoded: OnceLock::from(encoded),
             task: Default::default(),
             done: Default::default(),
             progressed: Default::default(),
         }
+    }
+
+    fn encoded(&self) -> &EncodedMessage {
+        self.encoded.get_or_init(|| encode_message(&self.message))
     }
 
     async fn start_playing(&self, ctx: &SegmentCtx<'_>) {
@@ -167,6 +175,7 @@ impl HexSegment {
             play_message(
                 PlaySettings {
                     message: self.message.clone(),
+                    steps: self.encoded().steps.clone(),
                     volume: self.volume,
                     target_loops: self.target_loops,
                     audio_folder: self
@@ -253,10 +262,7 @@ impl Segment for HexSegment {
 
     fn state_display(&self) -> StateDisplay {
         let current_loop = (self.progress.loops.load(Ordering::Relaxed) + 1).min(self.target_loops);
-        let encoded = encode_message(&self.message).unwrap_or_else(|_| EncodedMessage {
-            hint: String::new(),
-            steps: Vec::new(),
-        });
+        let encoded = self.encoded();
         let sound_total = encoded.sound_count();
         let position = self.progress.position.load(Ordering::Relaxed);
         let sounds_played = encoded.steps[..position.min(encoded.steps.len())]
@@ -276,6 +282,7 @@ impl Segment for HexSegment {
 
 struct PlaySettings {
     message: String,
+    steps: Vec<EncodedStep>,
     volume: f32,
     target_loops: usize,
     audio_folder: String,
@@ -291,24 +298,17 @@ async fn play_message(
 ) {
     let PlaySettings {
         message,
+        steps,
         volume,
         target_loops,
         audio_folder,
     } = settings;
-    let steps = match encode_message(&message) {
-        Ok(encoded) => encoded.steps,
-        Err(e) => {
-            tracing::warn!("Failed to encode hex message: {e:#}");
-            done.complete();
-            return;
-        }
-    };
     while !steps.is_empty() && progress.loops.load(Ordering::Relaxed) < target_loops {
         let position = progress.position.load(Ordering::Relaxed);
         match steps[position] {
             EncodedStep::Pause(duration) => tokio::time::sleep(duration).await,
             EncodedStep::Sound(sound) => {
-                let filename = format!("{audio_folder}{}", ENCODING.file_name(sound));
+                let filename = ENCODING.file_name(&audio_folder, sound);
                 match file_resolver.resolve(&filename).await {
                     Ok(path) if Path::new(&path).exists() => {
                         let source = match open_track_source(&path, None) {

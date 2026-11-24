@@ -1,22 +1,30 @@
-use super::{EncodedMessage, EncodedStep};
+use super::{EncodedMessage, EncodedStep, Encoder};
 use rand::RngExt;
 use std::time::Duration;
 
-pub const SOUNDS: &[&str] = &[
+const SOUNDS: &[&str] = &[
     "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F",
 ];
 const DIGIT_PAUSE: Duration = Duration::from_millis(50);
 const BYTE_PAUSE: Duration = Duration::from_millis(800);
 
-pub fn file_name(sound: &str) -> String {
-    format!("hex_{sound}.wav")
-}
+pub struct Hex;
 
-pub fn encode(text: &str) -> anyhow::Result<EncodedMessage> {
-    Ok(EncodedMessage {
-        hint: mask_text(text),
-        steps: steps(text),
-    })
+impl Encoder for Hex {
+    fn sounds(&self) -> &'static [&'static str] {
+        SOUNDS
+    }
+
+    fn file_name(&self, prefix: &str, sound: &str) -> String {
+        format!("{prefix}hex_{sound}.wav")
+    }
+
+    fn encode(&self, text: &str) -> anyhow::Result<EncodedMessage> {
+        Ok(EncodedMessage {
+            hint: mask_text(text),
+            steps: steps(text),
+        })
+    }
 }
 
 fn steps(text: &str) -> Vec<EncodedStep> {
