@@ -2,6 +2,7 @@ import { apiRequest, bodyOrStatus } from './api.js';
 import {
     blankRow,
     blankSegmentDefaults,
+    channelStatusHintField,
     convertObject,
     entryPlaybackFields,
     fieldFromServer,
@@ -39,13 +40,14 @@ const kinds = {
         identifier: 'text',
         what: ['text'],
         length: ['loop_min', 'loop_max'],
-        expansion: ['encoding', 'audio_folder', 'channel_status', 'announcement'],
+        expansion: ['encoding', 'channel_status_hint', 'audio_folder', 'channel_status', 'announcement'],
         entryFields: [
             { key: 'text', label: 'Text', type: 'text' },
             weight,
             { key: 'loop_min', label: 'Loop Min', type: 'number', step: 1, min: 0, optional: true },
             { key: 'loop_max', label: 'Loop Max', type: 'number', step: 1, min: 0, optional: true },
             { ...ttsEncodingField, optional: true },
+            { ...channelStatusHintField, optional: true },
             optionalText('audio_folder', 'Audio Folder'),
             ...entryPlaybackFields,
         ],

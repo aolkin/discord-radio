@@ -547,6 +547,7 @@ impl DJStateMachine {
                 EntryPlaybackConfig::default(),
                 TtsOverrides {
                     encoding: request.encoding,
+                    channel_status_hint: None,
                     audio_folder: None,
                 },
                 &segment_defaults,
