@@ -2,6 +2,7 @@ mod hex;
 
 use crate::bucket::FileResolver;
 use anyhow::Context;
+use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -10,13 +11,13 @@ pub enum TtsEncoding {
     Hex,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EncodedStep {
-    Sound(&'static str),
+    Sound(String),
     Pause(Duration),
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct EncodedMessage {
     pub hint: String,
     pub steps: Vec<EncodedStep>,
@@ -32,9 +33,8 @@ impl EncodedMessage {
 }
 
 trait Encoder {
-    fn sounds(&self) -> &'static [&'static str];
-    fn file_name(&self, prefix: &str, sound: &str) -> String;
-    fn encode(&self, text: &str) -> anyhow::Result<EncodedMessage>;
+    fn required_files(&self, prefix: &str) -> Vec<String>;
+    fn encode(&self, prefix: &str, text: &str) -> anyhow::Result<EncodedMessage>;
 }
 
 impl TtsEncoding {
@@ -44,21 +44,12 @@ impl TtsEncoding {
         }
     }
 
-    pub fn file_name(self, prefix: &str, sound: &str) -> String {
-        self.encoder().file_name(prefix, sound)
+    pub fn required_files(self, prefix: &str) -> Vec<String> {
+        self.encoder().required_files(prefix)
     }
 
-    pub fn file_names(self, prefix: &str) -> Vec<String> {
-        let encoder = self.encoder();
-        encoder
-            .sounds()
-            .iter()
-            .map(|sound| encoder.file_name(prefix, sound))
-            .collect()
-    }
-
-    pub fn encode(self, text: &str) -> anyhow::Result<EncodedMessage> {
-        self.encoder().encode(text)
+    pub fn encode(self, prefix: &str, text: &str) -> anyhow::Result<EncodedMessage> {
+        self.encoder().encode(prefix, text)
     }
 }
 
@@ -72,7 +63,7 @@ pub async fn list_missing_files(
         .await
         .with_context(|| format!("listing audio folder {folder:?}"))?;
     Ok(encoding
-        .file_names("")
+        .required_files("")
         .into_iter()
         .filter(|name| !present.contains(name))
         .collect())

@@ -2,38 +2,45 @@ use super::{EncodedMessage, EncodedStep, Encoder};
 use rand::RngExt;
 use std::time::Duration;
 
-const SOUNDS: &[&str] = &[
-    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F",
-];
+const DIGITS: &str = "0123456789ABCDEF";
 const DIGIT_PAUSE: Duration = Duration::from_millis(50);
 const BYTE_PAUSE: Duration = Duration::from_millis(800);
 
 pub struct Hex;
 
 impl Encoder for Hex {
-    fn sounds(&self) -> &'static [&'static str] {
-        SOUNDS
+    fn required_files(&self, prefix: &str) -> Vec<String> {
+        DIGITS
+            .chars()
+            .map(|digit| file_name(prefix, digit))
+            .collect()
     }
 
-    fn file_name(&self, prefix: &str, sound: &str) -> String {
-        format!("{prefix}hex_{sound}.wav")
-    }
-
-    fn encode(&self, text: &str) -> anyhow::Result<EncodedMessage> {
+    fn encode(&self, prefix: &str, text: &str) -> anyhow::Result<EncodedMessage> {
         Ok(EncodedMessage {
             hint: mask_text(text),
-            steps: steps(text),
+            steps: steps(prefix, text),
         })
     }
 }
 
-fn steps(text: &str) -> Vec<EncodedStep> {
+fn file_name(prefix: &str, digit: char) -> String {
+    format!("{prefix}hex_{digit}.wav")
+}
+
+fn steps(prefix: &str, text: &str) -> Vec<EncodedStep> {
+    let sound = |nibble: u8| {
+        EncodedStep::Sound(file_name(
+            prefix,
+            DIGITS.as_bytes()[usize::from(nibble)] as char,
+        ))
+    };
     text.bytes()
         .flat_map(|byte| {
             [
-                EncodedStep::Sound(SOUNDS[usize::from(byte >> 4)]),
+                sound(byte >> 4),
                 EncodedStep::Pause(DIGIT_PAUSE),
-                EncodedStep::Sound(SOUNDS[usize::from(byte & 0xF)]),
+                sound(byte & 0xF),
                 EncodedStep::Pause(BYTE_PAUSE),
             ]
         })

@@ -546,6 +546,7 @@ impl DJStateMachine {
                 loops,
                 EntryPlaybackConfig::default(),
                 &segment_defaults,
+                &bot_state.hex_audio_folder,
             )),
             request.pool,
         );

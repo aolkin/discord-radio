@@ -227,9 +227,11 @@ impl PoolEntry {
                 )
                 .await,
             ),
-            PoolEntry::Hex(message) => {
-                Box::new(HexSegment::from_entry(message.clone(), segment_defaults))
-            }
+            PoolEntry::Hex(message) => Box::new(HexSegment::from_entry(
+                message.clone(),
+                segment_defaults,
+                &bot_state.hex_audio_folder,
+            )),
             PoolEntry::Noise(noise) => Box::new(NoiseSegment::from_entry(noise, segment_defaults)),
         }
     }

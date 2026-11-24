@@ -44,10 +44,6 @@ impl<'a> SegmentCtx<'a> {
     pub fn file_resolver(&self) -> &FileResolver {
         &self.bot_state.file_resolver
     }
-
-    pub fn default_hex_audio_folder(&self) -> &str {
-        &self.bot_state.hex_audio_folder
-    }
 }
 
 pub trait SegmentPlaybackConfig {
