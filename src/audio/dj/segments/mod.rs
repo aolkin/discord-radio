@@ -3,9 +3,7 @@ mod noise;
 mod signals;
 mod track;
 
-pub use hex::{
-    HexMessageDefaults, HexMessageEntry, HexSegment, ensure_loops, list_missing_hex_files,
-};
+pub use hex::{HexMessageDefaults, HexMessageEntry, HexSegment, ensure_loops};
 pub use noise::{NoiseEntry, NoiseSegment};
 pub use track::{TrackEntry, TrackSegment};
 
@@ -45,10 +43,6 @@ impl<'a> SegmentCtx<'a> {
 
     pub fn file_resolver(&self) -> &FileResolver {
         &self.bot_state.file_resolver
-    }
-
-    pub fn default_hex_audio_folder(&self) -> &str {
-        &self.bot_state.hex_audio_folder
     }
 }
 
