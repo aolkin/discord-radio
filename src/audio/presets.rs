@@ -5,8 +5,9 @@ use crate::audio::dsp::effects::noise::NoiseParams;
 use crate::audio::dsp::effects::tremolo::TremoloParams;
 use crate::audio::dsp::filter::{FILTER_HZ, FilterParams};
 use crate::bucket::registry::{JsonRegistry, RegistryEntry, is_valid_name};
-use anyhow::anyhow;
+use anyhow::{Context, anyhow, bail};
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 use std::collections::HashSet;
 
 #[derive(Deserialize, Serialize, Clone, Debug, garde::Validate)]
@@ -218,6 +219,76 @@ impl SignalParameters {
             effects: effects.into_iter().map(|(_, entry)| entry).collect(),
         }
     }
+
+    pub fn with_effect_added(&self, index: usize, effect: EffectEntry) -> anyhow::Result<Self> {
+        self.edited(|effects| {
+            if index > effects.len() {
+                bail!("index {index} is past the end of the effects list");
+            }
+            effects.insert(index, effect);
+            Ok(())
+        })
+    }
+
+    pub fn with_params_edited(
+        &self,
+        name: &str,
+        params: Map<String, Value>,
+    ) -> anyhow::Result<Self> {
+        self.edited(|effects| {
+            let index = position(effects, name)?;
+            let entry = &mut effects[index];
+            let mut effect = serde_json::to_value(&entry.effect)?;
+            let fields = effect
+                .get_mut("params")
+                .and_then(Value::as_object_mut)
+                .with_context(|| format!("effect {name:?} has no params object"))?;
+            for (field, value) in params {
+                if !fields.contains_key(&field) {
+                    bail!("{field:?} is not a param of effect {name:?}");
+                }
+                fields.insert(field, value);
+            }
+            entry.effect = serde_json::from_value(effect)
+                .with_context(|| format!("reading the edited params of effect {name:?}"))?;
+            Ok(())
+        })
+    }
+
+    pub fn without_effect(&self, name: &str) -> anyhow::Result<Self> {
+        self.edited(|effects| {
+            effects.remove(position(effects, name)?);
+            Ok(())
+        })
+    }
+
+    pub fn with_effect_moved(&self, name: &str, index: usize) -> anyhow::Result<Self> {
+        self.edited(|effects| {
+            if index >= effects.len() {
+                bail!("index {index} is past the end of the effects list");
+            }
+            let entry = effects.remove(position(effects, name)?);
+            effects.insert(index, entry);
+            Ok(())
+        })
+    }
+
+    fn edited(
+        &self,
+        edit: impl FnOnce(&mut Vec<EffectEntry>) -> anyhow::Result<()>,
+    ) -> anyhow::Result<Self> {
+        let mut edited = self.clone();
+        edit(&mut edited.effects)?;
+        edited.validate()?;
+        Ok(edited)
+    }
+}
+
+fn position(effects: &[EffectEntry], name: &str) -> anyhow::Result<usize> {
+    effects
+        .iter()
+        .position(|entry| entry.name == name)
+        .with_context(|| format!("no effect is named {name:?}"))
 }
 
 impl RegistryEntry for SignalParameters {
@@ -347,5 +418,56 @@ mod tests {
                 entry("new", highpass(220.0)),
             ]
         );
+    }
+
+    #[test]
+    fn live_edits_target_effects_by_name() {
+        let base = preset(vec![
+            entry("hiss", noise(NoiseColor::Pink, 1.0)),
+            entry("filter", lowpass(4000.0)),
+        ]);
+        let params = |value: Value| value.as_object().unwrap().clone();
+        let edited = base
+            .with_effect_added(1, entry("cut", highpass(200.0)))
+            .unwrap()
+            .with_params_edited("hiss", params(serde_json::json!({ "level": 0.5 })))
+            .unwrap()
+            .with_effect_moved("hiss", 2)
+            .unwrap()
+            .without_effect("filter")
+            .unwrap();
+        assert_eq!(
+            edited.effects,
+            vec![
+                entry("cut", highpass(200.0)),
+                entry("hiss", noise(NoiseColor::Pink, 0.5)),
+            ]
+        );
+        assert!(
+            base.with_effect_added(3, entry("cut", highpass(200.0)))
+                .is_err()
+        );
+        assert!(
+            base.with_effect_added(0, entry("hiss", highpass(200.0)))
+                .is_err()
+        );
+        assert!(
+            base.with_effect_added(0, entry("cut", highpass(5000.0)))
+                .is_err()
+        );
+        assert!(
+            base.with_params_edited("hiss", params(serde_json::json!({ "level": 2.5 })))
+                .is_err()
+        );
+        assert!(
+            base.with_params_edited("hiss", params(serde_json::json!({ "depth": 0.5 })))
+                .is_err()
+        );
+        assert!(
+            base.with_params_edited("missing", params(serde_json::json!({})))
+                .is_err()
+        );
+        assert!(base.with_effect_moved("hiss", 2).is_err());
+        assert!(base.without_effect("missing").is_err());
     }
 }

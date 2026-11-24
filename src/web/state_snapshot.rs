@@ -1,6 +1,7 @@
 use crate::activity::ActivityEntry;
 use crate::audio::dj::state_machine::{ChannelStatus, PoolProgress};
 use crate::audio::dj::tiered::TieredValue;
+use crate::audio::presets::SignalParameters;
 use crate::audio::tracks::TrackSnapshot;
 use crate::state::Data;
 use serde::{Deserialize, Serialize};
@@ -20,6 +21,7 @@ pub struct SignalPresetInfo {
     pub transitioning: bool,
     #[serde(flatten)]
     pub tier: TierInfo,
+    pub parameters: SignalParameters,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -114,6 +116,7 @@ impl BotSnapshot {
                 expected_name: preset.value.name,
                 transitioning: processor.is_transitioning(),
                 tier: preset_tier,
+                parameters: processor.target_preset().clone(),
             };
 
             let channel_status_tier = TierInfo::from(&channel_status);

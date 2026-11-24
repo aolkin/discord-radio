@@ -7,7 +7,7 @@
       "tracks": [],
       "dj_state": { "segment_type": "noise", "details": "weak_signal (1.0s / 2.5s)", "pool": "noise", "progress": null },
       "dj_config": "default",
-      "signal_preset": { "name": "clear_signal→weak_signal", "expected_name": "weak_signal", "transitioning": true, "source": "background", "remaining_seconds": null },
+      "signal_preset": { "name": "clear_signal→weak_signal", "expected_name": "weak_signal", "transitioning": true, "source": "background", "remaining_seconds": null, "parameters": { "name": "weak_signal", "effects": [{ "name": "noise", "kind": "noise", "params": { "color": "pink", "level": 0.5 } }, { "name": "highpass", "kind": "highpass", "params": { "frequency": 500.0 } }, { "name": "lowpass", "kind": "lowpass", "params": { "frequency": 5000.0 } }, { "name": "tremolo", "kind": "tremolo", "params": { "depth": 0.25, "rate": 2.0, "jitter": 0.25 } }, { "name": "clip", "kind": "clip", "params": { "pregain": 1.0, "threshold": 0.75 } }, { "name": "bitcrush", "kind": "bitcrush", "params": { "bits": 8 } }, { "name": "dropout", "kind": "dropout", "params": { "probability": 0.25, "min_ms": 25.0, "max_ms": 100.0 } }] } },
       "channel_status": { "status": null, "source": "background", "remaining_seconds": null },
       "announcement_channels": []
     }

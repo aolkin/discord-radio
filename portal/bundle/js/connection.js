@@ -105,6 +105,9 @@ export function connection() {
             this.ws.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
+                    if (data.type !== 'snapshot') {
+                        return;
+                    }
                     this.guilds = data.guilds || [];
                     this.snapshotReceivedAt = Date.now();
                     if (this.guilds.some((guild) => !(guild.guild_id in this.guildNames))) {

@@ -10,6 +10,7 @@ use crate::bucket::FileResolver;
 use crate::bucket::registry::JsonRegistry;
 use crate::logging::JsonLogger;
 use crate::persistence::StateStore;
+use crate::web::websocket::SignalEdit;
 use anyhow::Context as _;
 use serde::Serialize;
 use serenity::all::{ChannelId, UserId};
@@ -19,10 +20,12 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 use std::time::{Duration, Instant};
-use tokio::sync::broadcast::Receiver;
+use tokio::sync::broadcast::{self, Receiver};
 use tokio::sync::{Mutex, RwLock};
 
 pub type Data = &'static BotState;
+
+const SIGNAL_EDIT_CAPACITY: usize = 64;
 
 #[derive(Debug, thiserror::Error)]
 #[error("guild {0} is not active")]
@@ -67,6 +70,7 @@ pub struct BotState {
     pub hex_audio_folder: String,
     pub bot_user_id: UserId,
     pub cache: OnceLock<Arc<serenity::cache::Cache>>,
+    pub signal_edits: broadcast::Sender<SignalEdit>,
 }
 
 impl BotState {
@@ -93,6 +97,7 @@ impl BotState {
             hex_audio_folder,
             bot_user_id,
             cache: OnceLock::new(),
+            signal_edits: broadcast::channel(SIGNAL_EDIT_CAPACITY).0,
         }
     }
 

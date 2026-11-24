@@ -7,7 +7,7 @@
       "tracks": [],
       "dj_state": { "segment_type": "hex_message", "details": "once upon a time (3.5s / 12.0s)", "pool": "hex", "progress": null },
       "dj_config": "default",
-      "signal_preset": { "name": "fading_signal", "expected_name": "fading_signal", "transitioning": false, "source": "background", "remaining_seconds": null },
+      "signal_preset": { "name": "fading_signal", "expected_name": "fading_signal", "transitioning": false, "source": "background", "remaining_seconds": null, "parameters": { "name": "fading_signal", "effects": [{ "name": "white_noise", "kind": "noise", "params": { "color": "white", "level": 0.25 } }, { "name": "pink_noise", "kind": "noise", "params": { "color": "pink", "level": 0.5 } }, { "name": "highpass", "kind": "highpass", "params": { "frequency": 300.0 } }, { "name": "lowpass", "kind": "lowpass", "params": { "frequency": 4000.0 } }, { "name": "tremolo", "kind": "tremolo", "params": { "depth": 0.5, "rate": 4.0, "jitter": 0.5 } }, { "name": "clip", "kind": "clip", "params": { "pregain": 1.5, "threshold": 0.5 } }, { "name": "bitcrush", "kind": "bitcrush", "params": { "bits": 6 } }, { "name": "dropout", "kind": "dropout", "params": { "probability": 0.5, "min_ms": 50.0, "max_ms": 200.0 } }] } },
       "channel_status": { "status": "On air", "source": "background", "remaining_seconds": null },
       "announcement_channels": [
         { "channel_id": "200000000000000002", "name": "announcements" }
