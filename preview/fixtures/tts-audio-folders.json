@@ -6,5 +6,9 @@
   "base36": {
     "folder": "audio/base36/",
     "missing_files": ["base36_Y.wav", "base36_Z.wav"]
+  },
+  "morse": {
+    "folder": "audio/morse/",
+    "missing_files": ["morse_dash.wav"]
   }
 }

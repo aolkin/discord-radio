@@ -197,11 +197,18 @@ impl PoolEntry {
                     ensure_seconds(seconds, || format!("track {:?}", track.filename))?;
                 }
             }
-            PoolEntry::Tts(message) => ensure_loops(
-                message.loop_min.unwrap_or(tts_defaults.loop_min),
-                message.loop_max.unwrap_or(tts_defaults.loop_max),
-            )
-            .with_context(|| format!("TTS message {:?}", message.text))?,
+            PoolEntry::Tts(message) => {
+                ensure_loops(
+                    message.loop_min.unwrap_or(tts_defaults.loop_min),
+                    message.loop_max.unwrap_or(tts_defaults.loop_max),
+                )
+                .with_context(|| format!("TTS message {:?}", message.text))?;
+                message
+                    .encoding
+                    .unwrap_or(tts_defaults.encoding)
+                    .encode("", &message.text)
+                    .with_context(|| format!("TTS message {:?}", message.text))?;
+            }
             PoolEntry::Noise(noise) => {
                 let context = || format!("noise period {:?}", noise.playback.signal_preset);
                 noise.duration.validate(context)?;

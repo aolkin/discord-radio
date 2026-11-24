@@ -34,6 +34,7 @@ Object storage is used only when all four `BUCKET_*` keys are present. Metrics a
 - `guildIdleUnloadSecs` sets how long a loaded guild must be idle before the bot unloads it (`0` disables this). A guild is idle when the bot is not in a voice channel, nobody is listening to its audio stream, and no portal change or command has touched it.
 - `hexAudioFolder` sets the folder hex audio files load from (`HEX_AUDIO_FOLDER`), such as `s3://hex/`. The bot adds a trailing `/` when it is missing; when empty, the bot uses `audio/hex/`.
 - `base36AudioFolder` sets the folder base36 audio files load from (`BASE36_AUDIO_FOLDER`), such as `s3://base36/`. The bot adds a trailing `/` when it is missing; when empty, the bot uses `audio/base36/`.
+- `morseAudioFolder` sets the folder morse audio files load from (`MORSE_AUDIO_FOLDER`), such as `s3://morse/`. The bot adds a trailing `/` when it is missing; when empty, the bot uses `audio/morse/`.
 - `persistence.size`, `persistence.storageClass` and `persistence.accessModes` configure the state claim.
 - `httpRoute.parentRef` (`name`, `namespace`, `listener`) selects the gateway, and `httpRoute.hostnames` sets the hostnames.
 - `resources`, `nodeSelector`, `tolerations`, `affinity` and `podAnnotations` apply to the pod.

@@ -19,7 +19,7 @@ pub async fn check_tts_folders(
     Query(overrides): Query<BTreeMap<TtsEncoding, String>>,
 ) -> Result<AxumJson<BTreeMap<TtsEncoding, TtsFolderCheck>>, ApiError> {
     let mut checks = BTreeMap::new();
-    for encoding in [TtsEncoding::Hex, TtsEncoding::Base36] {
+    for encoding in [TtsEncoding::Hex, TtsEncoding::Base36, TtsEncoding::Morse] {
         let folder = with_trailing_slash(
             overrides
                 .get(&encoding)

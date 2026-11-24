@@ -66,7 +66,23 @@ pub struct TtsMessageRequest {
 
 impl TtsMessageRequest {
     pub fn validate(&self, bot_state: Data) -> anyhow::Result<()> {
-        ensure_pool(bot_state, self.pool.as_deref())
+        let pool_encoding = match self.pool.as_deref() {
+            Some(pool) => {
+                bot_state
+                    .dj_config_manager
+                    .pools
+                    .require(pool)?
+                    .segment_defaults
+                    .tts_config()
+                    .encoding
+            }
+            None => TtsEncoding::default(),
+        };
+        self.encoding
+            .unwrap_or(pool_encoding)
+            .encode("", &self.message)
+            .with_context(|| format!("TTS message {:?}", self.message))?;
+        Ok(())
     }
 }
 

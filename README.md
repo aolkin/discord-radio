@@ -7,7 +7,7 @@ A Discord bot built with Rust using Serenity and Songbird for voice functionalit
 - Broadcast an automated "radio station" into a Discord voice channel.
 - Shuffle across uploaded audio files with repeat avoidance.
 - Set each pool's `playback` in the DJ config: `single` (default) plays one entry per pick, and `all` plays every entry once before the DJ picks another pool. With `order: weighted`, `all` plays entries by weight, skipping those already played; with `order: sequential`, it plays them in file order and ignores weight.
-- Play messages as TTS: read-aloud voicing of their bytes as hexadecimal or base36 digits.
+- Play messages as TTS: read-aloud voicing of their bytes as hexadecimal or base36 digits, or as morse code.
 - Add static and signal processing to simulate an intermittent or weak connection.
 - Dynamically update the voice channel status based on the currently playing segment.
 - Post "announcements" to a text channel at the start of selected segments.
@@ -52,7 +52,7 @@ sudo apt update && sudo apt install -y cmake libopus-dev pkg-config
 ./target/release/radio-bot <content_path>
 ```
 
-Where `<content_path>` is the path to the directory containing bot content (e.g. TTS audio files). Hex audio files are named `hex_<char>.wav` for `0`-`9` and uppercase `A`-`F`, and are resolved from the folder named by the `HEX_AUDIO_FOLDER` environment variable (default `audio/hex/`; a trailing `/` is added when missing; a value such as `s3://hex/` loads them from object storage). Base36 audio files are named `base36_<char>.wav` for `0`-`9` and `A`-`Z`, and are resolved from `BASE36_AUDIO_FOLDER` (default `audio/base36/`). Each byte of a message plays as two digits. A `tts_config` in a pool sets the default `encoding` (`hex` or `base36`) and can set `audio_folders.hex` or `audio_folders.base36` to use another folder. A `tts_config` and a pool entry can set `channel_status_hint` (default `true`; the entry wins) to turn the generated channel status hint on or off; when off, the `channel_status` of the defaults applies. A pool entry can set its own `encoding` and an `audio_folder` for that encoding. A missing file is skipped with a warning.
+Where `<content_path>` is the path to the directory containing bot content (e.g. TTS audio files). Hex audio files are named `hex_<char>.wav` for `0`-`9` and uppercase `A`-`F`, and are resolved from the folder named by the `HEX_AUDIO_FOLDER` environment variable (default `audio/hex/`; a trailing `/` is added when missing; a value such as `s3://hex/` loads them from object storage). Base36 audio files are named `base36_<char>.wav` for `0`-`9` and `A`-`Z`, and are resolved from `BASE36_AUDIO_FOLDER` (default `audio/base36/`). Morse plays two files, `morse_dot.wav` and `morse_dash.wav`, from `MORSE_AUDIO_FOLDER` (default `audio/morse/`). Morse plays only A-Z and 0-9 (any case) and spaces; a message with other characters is rejected and the error names them. A dot or dash is followed by 100 ms of silence, a letter by 300 ms, a word and the end of each loop by 700 ms (these include the silence already after the last dot or dash); the sound files set the dot and dash lengths. The channel status hint shows a random `·` or `−` for each letter. In hex and base36, each byte of a message plays as two digits. A `tts_config` in a pool sets the default `encoding` (`hex`, `base36` or `morse`) and can set `audio_folders.hex`, `audio_folders.base36` or `audio_folders.morse` to use another folder. A `tts_config` and a pool entry can set `channel_status_hint` (default `true`; the entry wins) to turn the generated channel status hint on or off; when off, the `channel_status` of the defaults applies. A pool entry can set its own `encoding` and an `audio_folder` for that encoding. A missing file is skipped with a warning.
 
 To check the build version:
 
@@ -111,7 +111,7 @@ Signal presets (`/api/signal-presets`), DJ configs (`/api/dj-configs`) and pools
 
 `DELETE /api/files?key=tracks/name.ogg` removes one file from object storage (the portal file browser has a delete action per file). It returns 409, listing the pools and DJ configs that reference the file, and 404 when the file does not exist.
 
-`GET /api/tts-audio-folders` checks the audio folder of each TTS encoding the way playback resolves it and reports which `<encoding>_<char>.wav` files are missing. The optional `hex` and `base36` parameters name the folder to check; without them, the check covers `HEX_AUDIO_FOLDER` and `BASE36_AUDIO_FOLDER`.
+`GET /api/tts-audio-folders` checks the audio folder of each TTS encoding the way playback resolves it and reports which `<encoding>_<char>.wav` files are missing. The optional `hex`, `base36` and `morse` parameters name the folder to check; without them, the check covers `HEX_AUDIO_FOLDER`, `BASE36_AUDIO_FOLDER` and `MORSE_AUDIO_FOLDER`.
 
 ## Commands
 
@@ -120,7 +120,7 @@ Signal presets (`/api/signal-presets`), DJ configs (`/api/dj-configs`) and pools
 - `/dj skip` - Skip the DJ to its next state now, optionally to a segment from a named pool in the DJ config. In a pool with `playback: all`, skipping without a pool plays that pool's next entry, and naming a pool starts that pool over
 - `/dj idle` - Have the DJ go idle now, optionally playing a signal preset, for a number of seconds or until the DJ is advanced
 - `/dj track` - Have the DJ play an audio track now
-- `/dj tts` - Have the DJ play a text message as TTS audio, optionally with an encoding (`hex` or `base36`) and the segment defaults of a named pool in the DJ config
+- `/dj tts` - Have the DJ play a text message as TTS audio, optionally with an encoding (`hex`, `base36` or `morse`) and the segment defaults of a named pool in the DJ config
 - `/dj status` - Get the current status of the DJ
 - `/dj configure` - Switch the DJ to a chosen configuration (the DJ runs whenever the guild is loaded)
 - `/dj announcements add` - Add a text channel to the DJ announcement channels (the DJ posts each announcement to every channel in the list; adding a listed channel changes nothing)
