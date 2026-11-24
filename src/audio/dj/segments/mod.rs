@@ -1,11 +1,11 @@
-mod hex;
 mod noise;
 mod signals;
 mod track;
+mod tts;
 
-pub use hex::{HexMessageDefaults, HexMessageEntry, HexSegment, ensure_loops};
 pub use noise::{NoiseEntry, NoiseSegment};
 pub use track::{TrackEntry, TrackSegment};
+pub use tts::{TtsMessageDefaults, TtsMessageEntry, TtsSegment, ensure_loops};
 
 use crate::audio::dj::announcement::Announcement;
 use crate::audio::dj::signal_preset::SignalPresetPlayback;

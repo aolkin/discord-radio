@@ -11,7 +11,7 @@ import {
     segmentDefaultsBlocks,
     segmentDefaultsFromServer,
     segmentDefaultsToServer,
-    toggleHexConfig,
+    toggleTtsConfig,
     weight,
 } from './form-fields.js';
 import { registryEditor } from './registry-editor.js';
@@ -32,8 +32,8 @@ const kinds = {
             ...entryPlaybackFields,
         ],
     },
-    hex: {
-        label: 'Hex Message',
+    tts: {
+        label: 'TTS Message',
         identifier: 'text',
         what: ['text'],
         length: ['loop_min', 'loop_max'],
@@ -135,24 +135,24 @@ const poolEditor = registryEditor({
     },
 });
 
-const hexFolderDebounceMs = 400;
+const ttsFolderDebounceMs = 400;
 
-const usesHex = (form) =>
-    form.segment_defaults.hex_config !== null || form.entries.some((entry) => entry.kind === 'hex');
+const usesTts = (form) =>
+    form.segment_defaults.tts_config !== null || form.entries.some((entry) => entry.kind === 'tts');
 
-function hexFolderWarning({ folder, missing_files: missingFiles }) {
+function ttsFolderWarning({ folder, missing_files: missingFiles }) {
     return missingFiles.length > 0 ? `Hex audio folder "${folder}" is missing ${missingFiles.join(', ')}.` : '';
 }
 
 export function pools() {
-    let hexFolderKey = null;
-    let hexFolderName = null;
-    let hexFolderTimer;
+    let ttsFolderKey = null;
+    let ttsFolderName = null;
+    let ttsFolderTimer;
 
     return {
         ...poolEditor.state(),
         ...poolEditor.methods,
-        poolHexFolderWarning: '',
+        poolTtsFolderWarning: '',
         poolMode: 'properties',
         poolExpanded: {},
         poolSelected: [],
@@ -163,42 +163,42 @@ export function pools() {
             return this.djConfigs.filter((config) => this.djConfigPools[config]?.includes(pool));
         },
 
-        togglePoolHexConfig() {
-            toggleHexConfig(this.poolForm.segment_defaults);
+        togglePoolTtsConfig() {
+            toggleTtsConfig(this.poolForm.segment_defaults);
         },
 
-        watchPoolHexFolder() {
-            const active = this.route.view === 'edit' && this.route.kind === 'pools' && usesHex(this.poolForm);
-            const folder = active ? (this.poolForm.segment_defaults.hex_config?.hex_audio_folder ?? '').trim() : '';
+        watchPoolTtsFolder() {
+            const active = this.route.view === 'edit' && this.route.kind === 'pools' && usesTts(this.poolForm);
+            const folder = active ? (this.poolForm.segment_defaults.tts_config?.hex_audio_folder ?? '').trim() : '';
             const key = active ? `${this.route.name}\n${folder}` : null;
-            if (key === hexFolderKey) {
+            if (key === ttsFolderKey) {
                 return;
             }
-            const opened = hexFolderName !== this.route.name;
-            hexFolderKey = key;
-            hexFolderName = this.route.name;
-            clearTimeout(hexFolderTimer);
+            const opened = ttsFolderName !== this.route.name;
+            ttsFolderKey = key;
+            ttsFolderName = this.route.name;
+            clearTimeout(ttsFolderTimer);
             if (key === null) {
-                this.poolHexFolderWarning = '';
+                this.poolTtsFolderWarning = '';
                 return;
             }
-            hexFolderTimer = setTimeout(
+            ttsFolderTimer = setTimeout(
                 async () => {
                     let warning;
                     try {
-                        const query = folder === '' ? '' : `?folder=${encodeURIComponent(folder)}`;
-                        const response = await apiRequest(`/api/hex-audio-folder${query}`, {
+                        const query = folder === '' ? '' : `?hex=${encodeURIComponent(folder)}`;
+                        const response = await apiRequest(`/api/tts-audio-folders${query}`, {
                             errorMessage: bodyOrStatus,
                         });
-                        warning = hexFolderWarning(await response.json());
+                        warning = ttsFolderWarning((await response.json()).hex);
                     } catch (error) {
                         warning = `Could not check the hex audio folder: ${error.message}`;
                     }
-                    if (key === hexFolderKey) {
-                        this.poolHexFolderWarning = warning;
+                    if (key === ttsFolderKey) {
+                        this.poolTtsFolderWarning = warning;
                     }
                 },
-                opened ? 0 : hexFolderDebounceMs,
+                opened ? 0 : ttsFolderDebounceMs,
             );
         },
 

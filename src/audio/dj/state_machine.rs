@@ -6,12 +6,12 @@ use crate::audio::dj::config::{
     LoadedConfig, Order, Playback, PoolEntry, SegmentDefaults,
 };
 use crate::audio::dj::manager::{
-    ADVANCE_RETRY_DELAY, DEFAULT_DJ_CONFIG, DJCommand, HexMessageRequest, IdleRequest, TrackRequest,
+    ADVANCE_RETRY_DELAY, DEFAULT_DJ_CONFIG, DJCommand, IdleRequest, TrackRequest, TtsMessageRequest,
 };
 use crate::audio::dj::segments::{
     CommonSegmentPlaybackConfig, NoiseEntry, NoiseSegment, SegmentCtx,
 };
-use crate::audio::dj::segments::{Completed, HexSegment, Segment, TrackSegment};
+use crate::audio::dj::segments::{Completed, Segment, TrackSegment, TtsSegment};
 use crate::audio::dj::serde::{ShiftBack, deser_instant, ser_instant};
 use crate::audio::dj::signal_preset::SignalPresetPlayback;
 use crate::audio::dj::tiered::{TieredChange, TieredStateMachine, TieredValue, TimedValue};
@@ -519,13 +519,13 @@ impl DJStateMachine {
         state.channel_status.set_pool(&config.channel_statuses);
     }
 
-    pub async fn force_hex_message(
+    pub async fn force_tts_message(
         &mut self,
         bot_state: &Data,
-        request: HexMessageRequest,
+        request: TtsMessageRequest,
     ) -> anyhow::Result<()> {
         tracing::info!(
-            "DJ force transitioning to hex message with custom text: {}",
+            "DJ force transitioning to TTS message with custom text: {}",
             request.message
         );
         let segment_defaults = request
@@ -535,12 +535,12 @@ impl DJStateMachine {
             .transpose()?
             .map(|pool| pool.segment_defaults)
             .unwrap_or_default();
-        let defaults = segment_defaults.hex_config();
+        let defaults = segment_defaults.tts_config();
         let loops = request
             .loops
             .unwrap_or_else(|| defaults.pick_loops(None, None)) as usize;
         let next_state = SegmentContainer::new(
-            Box::new(HexSegment::new(
+            Box::new(TtsSegment::new(
                 request.message,
                 request.volume.unwrap_or(1.0),
                 loops,
@@ -652,8 +652,8 @@ impl DJStateMachine {
             DJCommand::ForceAdvance(pool_name) => {
                 self.force_advance(&bot_state, pool_name.as_deref()).await
             }
-            DJCommand::ForceHexMessage(request) => {
-                self.force_hex_message(&bot_state, request).await
+            DJCommand::ForceTtsMessage(request) => {
+                self.force_tts_message(&bot_state, request).await
             }
             DJCommand::ForceTrack(request) => self.force_track(&bot_state, request).await,
             DJCommand::ForceIdle(request) => self.force_idle(&bot_state, request).await,

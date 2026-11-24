@@ -1,3 +1,4 @@
+use crate::audio::dj::tts::TtsEncoding;
 use anyhow::Context;
 use opentelemetry::{
     KeyValue,
@@ -20,8 +21,8 @@ pub struct BotMetrics {
     dj_state_transitions: Counter<u64>,
     dj_state_duration: Histogram<f64>,
 
-    // Hex message metrics
-    hex_message_loops: Histogram<u64>,
+    // TTS message metrics
+    tts_message_loops: Histogram<u64>,
 
     // File cache sweep metrics
     file_cache_sweep_duration: Histogram<f64>,
@@ -52,9 +53,9 @@ impl BotMetrics {
             .with_unit("s")
             .build();
 
-        let hex_message_loops = meter
-            .u64_histogram("hex_message_loops")
-            .with_description("Number of loops for hex messages")
+        let tts_message_loops = meter
+            .u64_histogram("tts_message_loops")
+            .with_description("Number of loops for TTS messages")
             .with_unit("loops")
             .build();
 
@@ -104,7 +105,7 @@ impl BotMetrics {
             _meter: meter,
             dj_state_transitions,
             dj_state_duration,
-            hex_message_loops,
+            tts_message_loops,
             file_cache_sweep_duration,
             file_cache_evictions,
             file_cache_bytes_freed,
@@ -144,10 +145,15 @@ impl BotMetrics {
         self.dj_state_duration.record(duration_secs, &attributes);
     }
 
-    // Hex message metrics
-    pub fn record_hex_message_loops(&self, guild_id: u64, loops: u64) {
-        self.hex_message_loops
-            .record(loops, &[KeyValue::new("guild_id", guild_id.to_string())]);
+    // TTS message metrics
+    pub fn record_tts_message_loops(&self, guild_id: u64, encoding: TtsEncoding, loops: u64) {
+        self.tts_message_loops.record(
+            loops,
+            &[
+                KeyValue::new("guild_id", guild_id.to_string()),
+                KeyValue::new("encoding", encoding.name()),
+            ],
+        );
     }
 
     // File cache sweep metrics

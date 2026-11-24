@@ -1,6 +1,6 @@
 use crate::audio::dj::manager::{
-    ChannelStatusRequest, ConfigureRequest, DJCommand, HexMessageRequest, IdleRequest,
-    SignalPresetRequest, ensure_pool,
+    ChannelStatusRequest, ConfigureRequest, DJCommand, IdleRequest, SignalPresetRequest,
+    TtsMessageRequest, ensure_pool,
 };
 use crate::audio::dj::state_machine::ChannelStatus;
 use crate::audio::dj::tiered::ConfigurableTier;
@@ -63,15 +63,15 @@ pub async fn join(
     Ok(())
 }
 
-/// Have the DJ play a text message as hex audio
+/// Have the DJ play a text message as TTS audio
 #[poise::command(slash_command, guild_only)]
 #[tracing::instrument(skip_all, fields(guild_id = ctx.guild_id().map(|id| id.get())))]
-pub async fn hex(
+pub async fn tts(
     ctx: Context<'_>,
-    #[description = "Message to convert to hex and play"] message: String,
+    #[description = "Message to convert to speech and play"] message: String,
     #[description = "Volume 0.0-2.0 (0=silence, 1.0=unity, 2.0=+18dB boost, default 1.0)"]
     volume: Option<f32>,
-    #[description = "Times to loop the message (default from the pool's hex config)"] loops: Option<
+    #[description = "Times to loop the message (default from the pool's TTS config)"] loops: Option<
         u32,
     >,
     #[description = "Pool to take segment defaults from"]
@@ -82,12 +82,12 @@ pub async fn hex(
     let user_id = ctx.author().id;
 
     tracing::info!(
-        "User {} executed dj hex with message '{}'",
+        "User {} executed dj tts with message '{}'",
         user_id,
         message,
     );
 
-    let request = HexMessageRequest {
+    let request = TtsMessageRequest {
         message: message.clone(),
         volume,
         loops,
@@ -105,7 +105,7 @@ pub async fn hex(
         )
         .await?;
 
-    send_to_dj(ctx.data(), guild_id, DJCommand::ForceHexMessage(request))
+    send_to_dj(ctx.data(), guild_id, DJCommand::ForceTtsMessage(request))
         .context("Failed to play message")?;
     let loops_text = match loops {
         Some(n) => format!("{n} loops"),
@@ -422,7 +422,7 @@ pub async fn channel_status(
         "skip",
         "idle",
         "track",
-        "hex",
+        "tts",
         "status",
         "configure",
         "announcements",

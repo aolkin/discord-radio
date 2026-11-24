@@ -1,12 +1,14 @@
 use crate::audio::dj::config::{DJConfig, Pool};
+use crate::audio::dj::tts::TtsEncoding;
 use crate::audio::presets::SignalParameters;
 use crate::web::routes::discord::{ChannelsResponse, GuildsResponse};
 use crate::web::routes::files::BrowseFilesResponse;
-use crate::web::routes::hex_folder::HexFolderResponse;
+use crate::web::routes::tts_folders::TtsFolderCheck;
 use crate::web::state_snapshot::BotSnapshot;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
+use std::collections::BTreeMap;
 
 fn contains(actual: &Value, expected: &Value) -> bool {
     match (actual, expected) {
@@ -52,15 +54,15 @@ fn preview_fixtures_round_trip() {
     fixture!(ChannelsResponse, "channels.json");
     fixture!(ChannelsResponse, "voice-channels.json");
     fixture!(BrowseFilesResponse, "files/tracks.json");
-    fixture!(HexFolderResponse, "hex-audio-folder.json");
+    fixture!(BTreeMap<TtsEncoding, TtsFolderCheck>, "tts-audio-folders.json");
     fixture!(BotSnapshot, "snapshots/playing-track.json");
-    fixture!(BotSnapshot, "snapshots/playing-hex.json");
+    fixture!(BotSnapshot, "snapshots/playing-tts.json");
     fixture!(BotSnapshot, "snapshots/playing-noise.json");
     fixture!(SignalParameters, "signal-presets/clear_signal.json");
     fixture!(SignalParameters, "signal-presets/weak_signal.json");
     fixture!(SignalParameters, "signal-presets/fading_signal.json");
     fixture!(Pool, "pools/track.json");
-    fixture!(Pool, "pools/hex.json");
+    fixture!(Pool, "pools/tts.json");
     fixture!(Pool, "pools/noise.json");
     fixture!(DJConfig, "dj-configs/default.json");
     fixture!(DJConfig, "dj-configs/quiet.json");

@@ -6,7 +6,7 @@ export const logTypes = [
 ];
 
 const memberEmoji = { joined: '➕', left: '➖', moved: '↔️' };
-const djEmoji = { track: '🎵', hex_message: '📡', noise: '🔊', stopped: '⏹️' };
+const djEmoji = { track: '🎵', tts_message: '📡', noise: '🔊', stopped: '⏹️' };
 
 export function logs() {
     return {

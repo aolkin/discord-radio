@@ -81,7 +81,7 @@ pub async fn run_web_server(bot_state: Data, port: u16, bot_name: &str) -> anyho
         .route("/load", post(routes::discord::load_guild))
         .route("/unload", post(routes::discord::unload_guild))
         .route("/dj/advance", post(routes::dj::advance_dj_state))
-        .route("/hex/play", post(routes::dj::play_hex_message))
+        .route("/tts/play", post(routes::dj::play_tts_message))
         .route("/dj/idle", post(routes::dj::force_dj_idle))
         .route("/track/play", post(routes::dj::play_track))
         .route("/tracks", post(routes::tracks::change_track_state))
@@ -136,8 +136,8 @@ pub async fn run_web_server(bot_state: Data, port: u16, bot_name: &str) -> anyho
             get(routes::files::browse_files).delete(routes::files::delete_file),
         )
         .route(
-            "/api/hex-audio-folder",
-            get(routes::hex_folder::check_hex_folder),
+            "/api/tts-audio-folders",
+            get(routes::tts_folders::check_tts_folders),
         )
         .route(
             "/api/files/upload",

@@ -1,7 +1,7 @@
 use crate::audio::dj::announcement::Announcement;
 use crate::audio::dj::segments::{
-    CommonSegmentPlaybackConfig, HexMessageDefaults, HexMessageEntry, HexSegment, NoiseEntry,
-    NoiseSegment, Segment, TrackEntry, TrackSegment, ensure_loops,
+    CommonSegmentPlaybackConfig, NoiseEntry, NoiseSegment, Segment, TrackEntry, TrackSegment,
+    TtsMessageDefaults, TtsMessageEntry, TtsSegment, ensure_loops,
 };
 use crate::audio::dj::state_machine::ChannelStatus;
 use crate::audio::dj::tiered::TimedValue;
@@ -91,7 +91,7 @@ pub struct Pool {
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]
 pub struct SegmentDefaults {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub hex_config: Option<HexMessageDefaults>,
+    pub tts_config: Option<TtsMessageDefaults>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signal_preset: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -100,11 +100,11 @@ pub struct SegmentDefaults {
     pub announcements: Vec<String>,
 }
 
-static BUILT_IN_HEX_DEFAULTS: LazyLock<HexMessageDefaults> = LazyLock::new(Default::default);
+static BUILT_IN_TTS_DEFAULTS: LazyLock<TtsMessageDefaults> = LazyLock::new(Default::default);
 
 impl SegmentDefaults {
-    pub fn hex_config(&self) -> &HexMessageDefaults {
-        self.hex_config.as_ref().unwrap_or(&BUILT_IN_HEX_DEFAULTS)
+    pub fn tts_config(&self) -> &TtsMessageDefaults {
+        self.tts_config.as_ref().unwrap_or(&BUILT_IN_TTS_DEFAULTS)
     }
 
     pub fn pick_announcement(&self, own: Option<String>) -> Option<String> {
@@ -126,10 +126,10 @@ impl SegmentDefaults {
 
     pub fn or(&self, fallback: &Self) -> Self {
         Self {
-            hex_config: self
-                .hex_config
+            tts_config: self
+                .tts_config
                 .clone()
-                .or_else(|| fallback.hex_config.clone()),
+                .or_else(|| fallback.tts_config.clone()),
             signal_preset: self
                 .signal_preset
                 .clone()
@@ -168,8 +168,8 @@ impl RegistryEntry for Pool {
     }
 
     fn validate(&self) -> anyhow::Result<()> {
-        let defaults = self.segment_defaults.hex_config();
-        defaults.validate().context("hex_config")?;
+        let defaults = self.segment_defaults.tts_config();
+        defaults.validate().context("tts_config")?;
         if !self.has_weighted_entry() {
             bail!("pool has no entry with weight above 0");
         }
@@ -185,23 +185,23 @@ impl RegistryEntry for Pool {
 #[delegate(Weighted)]
 pub enum PoolEntry {
     Track(TrackEntry),
-    Hex(HexMessageEntry),
+    Tts(TtsMessageEntry),
     Noise(NoiseEntry),
 }
 
 impl PoolEntry {
-    fn validate(&self, hex_defaults: &HexMessageDefaults) -> anyhow::Result<()> {
+    fn validate(&self, tts_defaults: &TtsMessageDefaults) -> anyhow::Result<()> {
         match self {
             PoolEntry::Track(track) => {
                 if let Some(seconds) = track.max_duration_seconds {
                     ensure_seconds(seconds, || format!("track {:?}", track.filename))?;
                 }
             }
-            PoolEntry::Hex(message) => ensure_loops(
-                message.loop_min.unwrap_or(hex_defaults.loop_min),
-                message.loop_max.unwrap_or(hex_defaults.loop_max),
+            PoolEntry::Tts(message) => ensure_loops(
+                message.loop_min.unwrap_or(tts_defaults.loop_min),
+                message.loop_max.unwrap_or(tts_defaults.loop_max),
             )
-            .with_context(|| format!("hex message {:?}", message.text))?,
+            .with_context(|| format!("TTS message {:?}", message.text))?,
             PoolEntry::Noise(noise) => {
                 let context = || format!("noise period {:?}", noise.playback.signal_preset);
                 noise.duration.validate(context)?;
@@ -227,7 +227,7 @@ impl PoolEntry {
                 )
                 .await,
             ),
-            PoolEntry::Hex(message) => Box::new(HexSegment::from_entry(
+            PoolEntry::Tts(message) => Box::new(TtsSegment::from_entry(
                 message.clone(),
                 segment_defaults,
                 &bot_state.hex_audio_folder,

@@ -29,13 +29,13 @@ If these environment variables are not set, the bot will run normally without me
   
 - **dj_state_duration** (histogram): Time spent in each DJ state (in seconds)
   - Labels: `guild_id`, `state`, and `signal_preset` (only when the state has a signal preset)
-  - Recorded states: `track`, `hex_message`, `noise`
+  - Recorded states: `track`, `tts_message`, `noise`
   - Idle time is recorded as `noise` without a `signal_preset` label
 
-### Hex Message Metrics
+### TTS Message Metrics
 
-- **hex_message_loops** (histogram): Number of loops for hex messages
-  - Labels: `guild_id`
+- **tts_message_loops** (histogram): Number of loops for TTS messages
+  - Labels: `guild_id`, `encoding`
 
 ### System Metrics
 

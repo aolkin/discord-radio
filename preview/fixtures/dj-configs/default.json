@@ -1,7 +1,7 @@
 {
   "name": "default",
   "pools": {
-    "hex": { "weight": 2, "playback": "single", "order": "weighted", "segment_defaults": {} },
+    "tts": { "weight": 2, "playback": "single", "order": "weighted", "segment_defaults": {} },
     "noise": { "weight": 50, "playback": "single", "order": "weighted", "segment_defaults": {} },
     "track": { "weight": 100, "playback": "all", "order": "sequential", "segment_defaults": {} }
   },

@@ -21,7 +21,7 @@ const STOP_SEND_TIMEOUT: Duration = Duration::from_secs(1);
 #[derive(strum::IntoStaticStr)]
 pub enum DJCommand {
     ForceAdvance(Option<String>),
-    ForceHexMessage(HexMessageRequest),
+    ForceTtsMessage(TtsMessageRequest),
     ForceTrack(TrackRequest),
     ForceIdle(IdleRequest),
     Stop,
@@ -52,17 +52,17 @@ pub fn ensure_preset(bot_state: Data, preset: Option<&str>) -> anyhow::Result<()
     Ok(())
 }
 
-/// A hex message for the DJ to play, with hex defaults from the pool named
+/// A TTS message for the DJ to play, with TTS defaults from the pool named
 /// `pool` when set. `volume` and `loops` replace the defaults when set.
 #[derive(Debug, Deserialize)]
-pub struct HexMessageRequest {
+pub struct TtsMessageRequest {
     pub message: String,
     pub volume: Option<f32>,
     pub loops: Option<u32>,
     pub pool: Option<String>,
 }
 
-impl HexMessageRequest {
+impl TtsMessageRequest {
     pub fn validate(&self, bot_state: Data) -> anyhow::Result<()> {
         ensure_pool(bot_state, self.pool.as_deref())
     }

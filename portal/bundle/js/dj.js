@@ -5,10 +5,10 @@ export const playForms = () => ({
     djConfigSelection: '',
     idleSignalPreset: '',
     idleDuration: null,
-    hexMessageText: '',
-    hexMessagePool: '',
-    hexMessageVolume: null,
-    hexMessageLoops: null,
+    ttsMessageText: '',
+    ttsMessagePool: '',
+    ttsMessageVolume: null,
+    ttsMessageLoops: null,
     channelStatusSetting: 'background',
     channelStatusText: '',
     channelStatusDuration: null,
@@ -22,7 +22,7 @@ export function dj() {
         djSaving: false,
         djConfigSaving: false,
         idleSaving: false,
-        hexSaving: false,
+        ttsSaving: false,
         channelStatusSaving: false,
         announcementOptions: [],
         announcementLoading: false,
@@ -199,29 +199,29 @@ export function dj() {
             });
         },
 
-        async playHexMessage() {
-            const body = { message: this.hexMessageText };
-            if (this.hexMessagePool) {
-                body.pool = this.hexMessagePool;
+        async playTtsMessage() {
+            const body = { message: this.ttsMessageText };
+            if (this.ttsMessagePool) {
+                body.pool = this.ttsMessagePool;
             }
-            if (this.hexMessageVolume !== null && this.hexMessageVolume !== '') {
-                body.volume = Number.parseFloat(this.hexMessageVolume);
+            if (this.ttsMessageVolume !== null && this.ttsMessageVolume !== '') {
+                body.volume = Number.parseFloat(this.ttsMessageVolume);
             }
-            if (this.hexMessageLoops !== null && this.hexMessageLoops !== '') {
-                body.loops = Number.parseInt(this.hexMessageLoops, 10);
+            if (this.ttsMessageLoops !== null && this.ttsMessageLoops !== '') {
+                body.loops = Number.parseInt(this.ttsMessageLoops, 10);
             }
 
             await this.runAction({
-                saving: 'hexSaving',
-                label: 'playing hex message',
+                saving: 'ttsSaving',
+                label: 'playing TTS message',
                 request: () =>
-                    apiRequest(`/api/guilds/${this.route.name}/hex/play`, {
+                    apiRequest(`/api/guilds/${this.route.name}/tts/play`, {
                         method: 'POST',
                         body,
                         errorMessage: bodyOrStatus,
                     }),
-                success: 'Hex message queued successfully!',
-                failure: 'Failed to play hex message',
+                success: 'TTS message queued successfully!',
+                failure: 'Failed to play TTS message',
             });
         },
 
